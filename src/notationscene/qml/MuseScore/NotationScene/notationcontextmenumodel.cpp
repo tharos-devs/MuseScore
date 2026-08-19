@@ -67,6 +67,12 @@ void NotationContextMenuModel::loadItems(int elementType)
               << makeMenuItem(RESET_NOTE_OFFSETS_COMMAND);
     }
 
+    const INotationNoteVelocityPtr noteVelocity = this->noteVelocity();
+    if (noteVelocity && noteVelocity->isEditModeEnabled()) {
+        items << makeSeparator()
+              << makeMenuItem(RESET_NOTE_VELOCITIES_COMMAND);
+    }
+
     setItems(items);
 }
 
@@ -546,6 +552,12 @@ INotationNoteOffsetsPtr NotationContextMenuModel::noteOffsets() const
 {
     IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     return masterNotation ? masterNotation->noteOffsets() : nullptr;
+}
+
+INotationNoteVelocityPtr NotationContextMenuModel::noteVelocity() const
+{
+    IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    return masterNotation ? masterNotation->noteVelocity() : nullptr;
 }
 
 const EngravingItem* NotationContextMenuModel::currentElement() const

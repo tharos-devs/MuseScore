@@ -41,6 +41,7 @@
 #include "notation/inotation.h"
 #include "notation/inotationautomation.h" // IWYU pragma: keep
 #include "notation/inotationnoteoffsets.h" // IWYU pragma: keep
+#include "notation/inotationnotevelocity.h" // IWYU pragma: keep
 #include "notation/inotationelements.h"
 #include "notation/inotationmidiinput.h"
 #include "notation/inotationnoteinput.h"
@@ -584,7 +585,9 @@ void NotationActionController::init()
     registerCommand(TOGGLE_AUTOMATION_COMMAND, &Controller::toggleAutomation);
     registerQueryCommand(SELECT_AUTOMATION_TYPE_COMMAND, &Controller::selectAutomationType);
     registerCommand(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, &Controller::toggleNoteOffsetEditor);
+    registerCommand(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, &Controller::toggleNoteVelocityEditor);
     registerCommand(RESET_NOTE_OFFSETS_COMMAND, &Controller::resetNoteOffsets);
+    registerCommand(RESET_NOTE_VELOCITIES_COMMAND, &Controller::resetNoteVelocities);
 
     // TAB
     registerCommand(SET_DURATION_WHOLE_TAB_COMMAND, [this]() { setDuration(DurationType::V_WHOLE); });
@@ -1057,6 +1060,7 @@ void NotationActionController::init()
             { "hammer-on-pull-off", ADD_HAMMER_ON_PULL_OFF_COMMAND, {} },
             { "toggle-automation", TOGGLE_AUTOMATION_COMMAND, {} },
             { "toggle-note-offset-editor", TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, {} },
+            { "toggle-note-velocity-editor", TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, {} },
             { "string-up", GOTO_STRING_ABOVE_COMMAND, {} },
             { "string-down", GOTO_STRING_BELOW_COMMAND, {} },
             { "move-up", MOVE_UP_COMMAND, {} },
@@ -1137,6 +1141,10 @@ void NotationActionController::init()
 
                 masterNotation->noteOffsets()->editModeEnabledChanged().onNotify(this, [this]() {
                     m_noteOffsetEditModeEnabledChanged.notify();
+                }, Asyncable::Mode::SetReplace);
+
+                masterNotation->noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
+                    m_noteVelocityEditModeEnabledChanged.notify();
                 }, Asyncable::Mode::SetReplace);
             }
         }
@@ -3206,6 +3214,16 @@ muse::async::Notification NotationActionController::noteOffsetEditModeEnabledCha
     return m_noteOffsetEditModeEnabledChanged;
 }
 
+bool NotationActionController::isNoteVelocityEditModeEnabled() const
+{
+    return currentMasterNotation() ? currentMasterNotation()->noteVelocity()->isEditModeEnabled() : false;
+}
+
+muse::async::Notification NotationActionController::noteVelocityEditModeEnabledChanged() const
+{
+    return m_noteVelocityEditModeEnabledChanged;
+}
+
 muse::async::Notification NotationActionController::automationModeEnabledChanged() const
 {
     return m_automationModeEnabledChanged;
@@ -3291,6 +3309,19 @@ void NotationActionController::toggleNoteOffsetEditor()
     masterNotation->noteOffsets()->setEditModeEnabled(!isEnabled);
 }
 
+void NotationActionController::toggleNoteVelocityEditor()
+{
+    TRACEFUNC;
+
+    IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (!masterNotation) {
+        return;
+    }
+
+    const bool isEnabled = masterNotation->noteVelocity()->isEditModeEnabled();
+    masterNotation->noteVelocity()->setEditModeEnabled(!isEnabled);
+}
+
 void NotationActionController::resetNoteOffsets()
 {
     TRACEFUNC;
@@ -3310,6 +3341,28 @@ void NotationActionController::resetNoteOffsets()
     for (Note* note : notes) {
         note->undoChangeProperty(Pid::PLAYBACK_START_OFFSET, 0, mu::engraving::PropertyFlags::NOSTYLE);
         note->undoChangeProperty(Pid::PLAYBACK_DURATION_OFFSET, 0, mu::engraving::PropertyFlags::NOSTYLE);
+    }
+    undoStack->commitChanges();
+}
+
+void NotationActionController::resetNoteVelocities()
+{
+    TRACEFUNC;
+
+    INotationSelectionPtr selection = currentNotationSelection();
+    std::vector<Note*> notes = selection ? selection->notes() : std::vector<Note*>();
+    if (notes.empty()) {
+        return;
+    }
+
+    INotationUndoStackPtr undoStack = currentNotationUndoStack();
+    if (!undoStack) {
+        return;
+    }
+
+    undoStack->prepareChanges(TranslatableString("undoableAction", "Reset note velocities"));
+    for (Note* note : notes) {
+        note->undoChangeProperty(Pid::USER_VELOCITY, 0, mu::engraving::PropertyFlags::NOSTYLE);
     }
     undoStack->commitChanges();
 }
