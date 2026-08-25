@@ -2922,9 +2922,23 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::CLOCK, rcommand::Checkable::Yes)
     },
     CommandInfo {
+        TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND,
+        TranslatableString("action", "Note velocities"),
+        TranslatableString("action", "Toggle note velocity editor"),
+        InputSchema(),
+        Decoration(IconCode::Code::DYNAMIC_FORTE, rcommand::Checkable::Yes)
+    },
+    CommandInfo {
         RESET_NOTE_OFFSETS_COMMAND,
         TranslatableString("action", "Reset note offsets"),
         TranslatableString("action", "Reset note offsets"),
+        InputSchema(),
+        Decoration()
+    },
+    CommandInfo {
+        RESET_NOTE_VELOCITIES_COMMAND,
+        TranslatableString("action", "Reset note velocities"),
+        TranslatableString("action", "Reset note velocities"),
         InputSchema(),
         Decoration()
     },

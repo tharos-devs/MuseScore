@@ -42,6 +42,7 @@
 #include "notationviewinputcontroller.h"
 #include "notationautomationcontroller.h"
 #include "notationnoteoffsetcontroller.h"
+#include "notationnotevelocitycontroller.h"
 #include "noteinputcursor.h"
 #include "notationruler.h"
 #include "playbackcursor.h"
@@ -220,6 +221,7 @@ private:
     INotationSelectionPtr notationSelection() const;
     INotationAutomationPtr notationAutomation() const;
     INotationNoteOffsetsPtr notationNoteOffsets() const;
+    INotationNoteVelocityPtr notationNoteVelocity() const;
 
     void clear();
     void initBackground();
@@ -292,6 +294,20 @@ private:
     std::unique_ptr<NotationAutomationController> m_notationAutomationController;
     QQuickItem* m_noteOffsetOverlayContainer = nullptr;
     std::unique_ptr<NotationNoteOffsetController> m_notationNoteOffsetController;
+    QQuickItem* m_noteVelocityOverlayContainer = nullptr;
+    std::unique_ptr<NotationNoteVelocityController> m_notationNoteVelocityController;
+
+    // Toggled by a standalone Cmd/Ctrl *tap* (pressed and released with nothing
+    // else happening in between - see keyPressEvent()/keyReleaseEvent()/event()), swaps which of
+    // the two containers paints (and is hit-tested) on top - lets a note-offset edge handle a
+    // velocity bar visually covers become both visible and reachable again, and vice versa. Only
+    // committing on release, and only if nothing else used Cmd/Ctrl as a modifier in the meantime
+    // (event() is the single choke point that cancels the pending toggle for that), keeps this
+    // from firing as a side effect of every other Cmd/Ctrl shortcut in the app (copy, undo,
+    // Ctrl-click to extend a selection, Ctrl-wheel zoom, ...), which all still start with the same
+    // physical key-down this feature would otherwise see first.
+    bool m_offsetOverlaysOnTop = false;
+    bool m_offsetOverlaysTogglePending = false;
     std::unique_ptr<PlaybackCursor> m_playbackCursor;
     std::unique_ptr<NoteInputCursor> m_noteInputCursor;
     std::unique_ptr<NotationRuler> m_ruler;
