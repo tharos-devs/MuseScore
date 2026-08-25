@@ -27,6 +27,8 @@
 #include <optional>
 #include <set>
 
+#include "segmentcanvasinterpolation.h"
+
 #include "uicomponents/qml/Muse/UiComponents/polylineplot.h"
 
 #include "engraving/iengravingconfiguration.h" // IWYU pragma: keep
