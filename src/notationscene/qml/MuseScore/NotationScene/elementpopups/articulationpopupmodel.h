@@ -38,6 +38,7 @@ class ArticulationPopupModel : public AbstractElementPopupModel
 
     Q_PROPERTY(QString fontFamily READ fontFamily CONSTANT)
     Q_PROPERTY(QVariantList pages READ pages NOTIFY pagesChanged)
+    Q_PROPERTY(bool placeAbove READ placeAbove NOTIFY placeAboveChanged)
 
 public:
     explicit ArticulationPopupModel(QObject* parent = nullptr);
@@ -49,9 +50,11 @@ public:
 
     QString fontFamily() const;
     QVariantList pages() const;
+    bool placeAbove() const;
 
 signals:
     void pagesChanged();
+    void placeAboveChanged();
 
 private:
     void load();
@@ -59,6 +62,8 @@ private:
     // Page 0: the 5 basic articulation types (default page)
     // Page 1: the 5 "double" combos (paginated left of the base page)
     QVariantList m_pages;
-    bool m_pagesAbove = true;
+    // Whether the popup's item is currently the "Above" variant of its symId - drives both which
+    // glyph variant each page's buttons show and which side of the note the popup itself opens on.
+    bool m_above = true;
 };
 }

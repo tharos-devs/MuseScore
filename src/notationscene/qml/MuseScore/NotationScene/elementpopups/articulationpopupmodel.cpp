@@ -197,6 +197,11 @@ QVariantList ArticulationPopupModel::pages() const
     return m_pages;
 }
 
+bool ArticulationPopupModel::placeAbove() const
+{
+    return m_above;
+}
+
 void ArticulationPopupModel::init()
 {
     AbstractElementPopupModel::init();
@@ -219,14 +224,18 @@ void ArticulationPopupModel::load()
     }
 
     bool above = isAboveSymId(toArticulation(m_item)->symId());
+    bool aboveChanged = above != m_above;
+    m_above = above;
+    if (aboveChanged) {
+        emit placeAboveChanged();
+    }
 
     // dataChanged fires for any ARTICULATION change in the score, not just this popup's own
     // item, so most reloads are redundant - skip rebuilding (and re-emitting, which would force
     // the QML Repeater to tear down and recreate its delegates) when nothing actually changed.
-    if (!m_pages.isEmpty() && above == m_pagesAbove) {
+    if (!m_pages.isEmpty() && !aboveChanged) {
         return;
     }
-    m_pagesAbove = above;
 
     m_pages.clear();
     IEngravingFontPtr engravingFont = m_item->score()->engravingFont();

@@ -29,10 +29,9 @@ AbstractElementPopup {
     showArrow: false
 
     focusPolicies: PopupView.DefaultFocus & ~PopupView.ClickFocus
-    // Always below, regardless of the articulation's own placement: matches DynamicPopup's
-    // real-world behavior, and an above-placed articulation sits close enough to its note that
-    // a popup opening above it tends to cover the mark itself.
-    placementPolicies: PopupView.PreferBelow
+    // Follows the articulation's own placement, like DynamicPopup: an always-below popup covers
+    // the staff itself when the articulation sits above it.
+    placementPolicies: articulationModel.placeAbove ? PopupView.PreferAbove : PopupView.PreferBelow
 
     model: ArticulationPopupModel {
         id: articulationModel
