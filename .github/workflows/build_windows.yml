@@ -209,7 +209,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets'
+          modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
           cache: true
       - name: Setup environment
         run: |
@@ -396,7 +396,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets'
+          modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
           cache: true
       - name: Setup environment
         run: |
