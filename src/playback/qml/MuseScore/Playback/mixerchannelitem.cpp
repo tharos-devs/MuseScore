@@ -22,6 +22,11 @@
 
 #include "mixerchannelitem.h"
 
+#include <algorithm>
+
+#include <QRandomGenerator>
+#include <QTimer>
+
 #include "defer.h"
 #include "translation.h"
 #include "log.h"
@@ -70,10 +75,17 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
     m_panel->componentComplete();
 
     connect(this, &MixerChannelItem::mutedChanged, this, [this]() {
-        if (muted()) {
+        //!NOTE Video channels reset their pressure via updateTimerState() in
+        //!     setupVideoMeterAnimation() instead, since that also covers the
+        //!     non-mute reasons (video not playing) the meter needs to go dark for.
+        if (m_type != Type::Video && muted()) {
             resetAudioChannelsVolumePressure();
         }
     });
+
+    if (m_type == Type::Video) {
+        setupVideoMeterAnimation();
+    }
 }
 
 MixerChannelItem::~MixerChannelItem()
@@ -643,6 +655,42 @@ void MixerChannelItem::resetAudioChannelsVolumePressure()
 {
     setLeftChannelPressure(MIN_DISPLAYED_DBFS);
     setRightChannelPressure(MIN_DISPLAYED_DBFS);
+}
+
+void MixerChannelItem::setupVideoMeterAnimation()
+{
+    constexpr int METER_UPDATE_INTERVAL_MS = 100;
+
+    m_videoMeterTimer = new QTimer(this);
+    m_videoMeterTimer->setInterval(METER_UPDATE_INTERVAL_MS);
+    connect(m_videoMeterTimer, &QTimer::timeout, this, &MixerChannelItem::updateFakeVideoMeter);
+
+    auto updateTimerState = [this]() {
+        if (playbackController()->isVideoPlaying() && !muted()) {
+            m_videoMeterTimer->start();
+        } else {
+            m_videoMeterTimer->stop();
+            resetAudioChannelsVolumePressure();
+        }
+    };
+
+    playbackController()->isVideoPlayingChanged().onNotify(this, updateTimerState);
+    connect(this, &MixerChannelItem::mutedChanged, this, updateTimerState);
+
+    updateTimerState();
+}
+
+void MixerChannelItem::updateFakeVideoMeter()
+{
+    float base = std::clamp(volumeLevel() - 12.f, MIN_DISPLAYED_DBFS.raw(), MAX_DISPLAYED_DBFS.raw());
+
+    auto jitteredPressure = [base]() {
+        float jitter = static_cast<float>(QRandomGenerator::global()->generateDouble()) * 6.f - 3.f;
+        return std::clamp(base + jitter, MIN_DISPLAYED_DBFS.raw(), MAX_DISPLAYED_DBFS.raw());
+    };
+
+    setLeftChannelPressure(jitteredPressure());
+    setRightChannelPressure(jitteredPressure());
 }
 
 InputResourceItem* MixerChannelItem::buildInputResourceItem()
