@@ -323,6 +323,11 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
         emit colorChanged();
     }
 
+    if (m_outParams.color != newParams.color) {
+        m_outParams.color = newParams.color;
+        emit colorChanged();
+    }
+
     loadOutputResourceItems(newParams.fxChain);
     loadAuxSendItems(newParams.auxSends);
 }
