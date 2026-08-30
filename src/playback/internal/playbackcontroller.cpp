@@ -1067,6 +1067,53 @@ mu::project::IProjectAudioSettingsPtr PlaybackController::audioSettings() const
     return project->audioSettings();
 }
 
+mu::project::IProjectVideoSettingsPtr PlaybackController::videoSettings() const
+{
+    if (!globalContext()->currentProject()) {
+        return nullptr;
+    }
+
+    return globalContext()->currentProject()->videoSettings();
+}
+
+bool PlaybackController::isMasterOutputForceMuted() const
+{
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    return videoSettingsPtr && videoSettingsPtr->attachment().isValid() && videoSettingsPtr->attachment().solo;
+}
+
+muse::async::Notification PlaybackController::masterOutputForceMuteChanged() const
+{
+    return m_masterOutputForceMuteChanged;
+}
+
+void PlaybackController::updateMasterControlParams()
+{
+    if (!globalContext()->currentProject() || !playback()) {
+        return;
+    }
+
+    IProjectAudioSettingsPtr audioSettingsPtr = audioSettings();
+    IF_ASSERT_FAILED(audioSettingsPtr) {
+        return;
+    }
+
+    bool forceMute = isMasterOutputForceMuted();
+
+    AudioOutputParams params = audioSettingsPtr->masterAudioOutputParams();
+    params.forceMute = forceMute;
+    if (forceMute) {
+        params.muted = true;
+    }
+
+    playback()->setMasterControlParams(params.control());
+
+    if (m_isMasterOutputForceMuted != forceMute) {
+        m_isMasterOutputForceMuted = forceMute;
+        m_masterOutputForceMuteChanged.notify();
+    }
+}
+
 void PlaybackController::resetPlayback()
 {
     if (currentPlayer()) {
@@ -1488,7 +1535,7 @@ void PlaybackController::setupPlayback()
     const AudioOutputParams& masterOutputParams = audioSettings()->masterAudioOutputParams();
     playback()->setMasterFxChainParams(masterOutputParams.fxChain);
     playback()->setMasterAuxSendsParams(masterOutputParams.auxSends);
-    playback()->setMasterControlParams(masterOutputParams.control());
+    updateMasterControlParams();
 
     subscribeOnAudioParamsChanges();
     setupTracks();
@@ -1607,6 +1654,22 @@ void PlaybackController::setupTracks()
         this, [this](aux_channel_idx_t, const notation::INotationSoloMuteState::SoloMuteState&) {
         updateSoloMuteStates();
     });
+
+    if (videoSettings()) {
+        videoSettings()->settingsChanged().onNotify(this, [this]() {
+            // NOTE: settingsChanged fires on ANY video-attachment mutation
+            // (renaming/retiming a hit point, volume, offset...), not just a
+            // solo toggle. updateMasterControlParams() unconditionally
+            // reapplies the *persisted* masterAudioOutputParams() to the
+            // engine, which would silently clobber a live (unsaved) Mixer
+            // master-volume/pan/mute change on every unrelated video edit.
+            // Only call it when the force-mute state this listener actually
+            // cares about has changed.
+            if (isMasterOutputForceMuted() != m_isMasterOutputForceMuted) {
+                updateMasterControlParams();
+            }
+        }, Asyncable::Mode::SetReplace);
+    }
 
     m_isPlayAllowedChanged.send(isPlayAllowed());
 }

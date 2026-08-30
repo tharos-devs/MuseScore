@@ -23,13 +23,23 @@
 #include "editstyle.h"
 
 #include <QAnyStringView>
+#include <QAbstractButton>
 #include <QButtonGroup>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidgetItem>
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSignalMapper>
+#include <QSpinBox>
 #include <QStringBuilder>
 #include <QStringLiteral>
+#include <QToolButton>
 
 #include "translation.h"
 #include "types/translatablestring.h"
@@ -106,6 +116,7 @@ static const QStringList ALL_PAGE_CODES {
     "chord-symbols",
     "fretboard-diagrams",
     "tablature-styles",
+    "video-scoring",
     "text-styles"
 };
 
@@ -136,6 +147,7 @@ static const QStringList ALL_TEXT_STYLE_SUBPAGE_CODES {
     "repeat-text-right",
     "rehearsal-mark",
     "system",
+    "video-hit-point",
     "staff",
     "staveSharing",
     "expression",
@@ -256,6 +268,63 @@ void EditStyle::classBegin()
 
     buttonApplyToAllParts = buttonBox->addButton(muse::qtrc("notation/editstyle", "Apply to all parts"), QDialogButtonBox::ApplyRole);
     WidgetUtils::setWidgetIcon(buttonTogglePagelist, IconCode::Code::ARROW_RIGHT);
+
+    const int videoScoringPageIndex = ALL_PAGE_CODES.indexOf(QStringLiteral("video-scoring"));
+    pageList->insertItem(videoScoringPageIndex, muse::qtrc("notation/editstyle", "Video Scoring"));
+    videoScoringPageListItem = pageList->item(videoScoringPageIndex);
+    QWidget* pageVideoScoring = new QWidget(pageStack);
+    QVBoxLayout* videoScoringLayout = new QVBoxLayout(pageVideoScoring);
+    videoHitPointGroup = new QGroupBox(muse::qtrc("notation/editstyle", "Video hit points"), pageVideoScoring);
+    QGridLayout* videoHitPointLayout = new QGridLayout(videoHitPointGroup);
+
+    videoHitPointLineStyle = new QButtonGroup(videoHitPointGroup);
+    QWidget* videoHitPointLineStyleButtons = new QWidget(videoHitPointGroup);
+    QHBoxLayout* videoHitPointLineStyleLayout = new QHBoxLayout(videoHitPointLineStyleButtons);
+    videoHitPointLineStyleLayout->setContentsMargins(0, 0, 0, 0);
+    videoHitPointLineStyleLayout->setSpacing(4);
+
+    auto addVideoHitPointLineStyleButton
+        = [this, videoHitPointLineStyleButtons, videoHitPointLineStyleLayout]
+          (const QString& text, LineType lineType, const QString& accessibleName) {
+        QToolButton* button = new QToolButton(videoHitPointLineStyleButtons);
+        button->setCheckable(true);
+        button->setText(text);
+        button->setAccessibleName(accessibleName);
+        button->setMinimumWidth(78);
+        button->setAutoRaise(false);
+        videoHitPointLineStyle->addButton(button, int(lineType));
+        videoHitPointLineStyleLayout->addWidget(button);
+    };
+
+    addVideoHitPointLineStyleButton(QStringLiteral("_____"), LineType::SOLID,
+                                    muse::qtrc("notation/editstyle", "Solid"));
+    addVideoHitPointLineStyleButton(QStringLiteral("- - -"), LineType::DASHED,
+                                    muse::qtrc("notation/editstyle", "Dashed"));
+    addVideoHitPointLineStyleButton(QStringLiteral(". . ."), LineType::DOTTED,
+                                    muse::qtrc("notation/editstyle", "Dotted"));
+    videoHitPointLineTransparency = new QSpinBox(videoHitPointGroup);
+    videoHitPointLineTransparency->setKeyboardTracking(false);
+    videoHitPointLineTransparency->setRange(0, 100);
+    videoHitPointLineTransparency->setSuffix(muse::qtrc("global", "%"));
+
+    resetVideoHitPointLineStyle = new QToolButton(videoHitPointGroup);
+    resetVideoHitPointLineStyle->setAccessibleName(muse::qtrc("notation/editstyle", "Reset line style"));
+    resetVideoHitPointLineTransparency = new QToolButton(videoHitPointGroup);
+    resetVideoHitPointLineTransparency->setAccessibleName(muse::qtrc("notation/editstyle", "Reset transparency"));
+
+    videoHitPointLineStyleLabel = new QLabel(muse::qtrc("notation/editstyle", "Line style:"), videoHitPointGroup);
+    videoHitPointLineTransparencyLabel = new QLabel(muse::qtrc("notation/editstyle", "Transparency:"), videoHitPointGroup);
+
+    videoHitPointLayout->addWidget(videoHitPointLineStyleLabel, 0, 0);
+    videoHitPointLayout->addWidget(videoHitPointLineStyleButtons, 0, 1);
+    videoHitPointLayout->addWidget(resetVideoHitPointLineStyle, 0, 2);
+    videoHitPointLayout->addWidget(videoHitPointLineTransparencyLabel, 1, 0);
+    videoHitPointLayout->addWidget(videoHitPointLineTransparency, 1, 1);
+    videoHitPointLayout->addWidget(resetVideoHitPointLineTransparency, 1, 2);
+    videoHitPointLayout->setColumnStretch(1, 1);
+    videoScoringLayout->addWidget(videoHitPointGroup);
+    videoScoringLayout->addStretch(1);
+    pageStack->insertWidget(videoScoringPageIndex, pageVideoScoring);
 
     // ====================================================
     // Button Groups
@@ -634,6 +703,8 @@ void EditStyle::classBegin()
         { StyleId::musicalTextFont,          false, musicalTextFont,              0 },
         { StyleId::autoplaceHairpinDynamicsDistance, false, autoplaceHairpinDynamicsDistance,
           resetAutoplaceHairpinDynamicsDistance },
+        { StyleId::videoHitPointLineStyle,        false, videoHitPointLineStyle,        resetVideoHitPointLineStyle },
+        { StyleId::videoHitPointLineTransparency, false, videoHitPointLineTransparency, resetVideoHitPointLineTransparency },
 
         { StyleId::dynamicsPosAbove,        false, dynamicsPosAbove,           resetDynamicsPosAbove },
         { StyleId::dynamicsPosBelow,        false, dynamicsPosBelow,           resetDynamicsPosBelow },
@@ -1386,6 +1457,24 @@ void EditStyle::retranslate()
 
     buttonApplyToAllParts->setText(muse::qtrc("notation/editstyle", "Apply to all parts"));
 
+    videoScoringPageListItem->setText(muse::qtrc("notation/editstyle", "Video Scoring"));
+    videoHitPointGroup->setTitle(muse::qtrc("notation/editstyle", "Video hit points"));
+    videoHitPointLineStyleLabel->setText(muse::qtrc("notation/editstyle", "Line style:"));
+    videoHitPointLineTransparencyLabel->setText(muse::qtrc("notation/editstyle", "Transparency:"));
+    resetVideoHitPointLineStyle->setAccessibleName(muse::qtrc("notation/editstyle", "Reset line style"));
+    resetVideoHitPointLineTransparency->setAccessibleName(muse::qtrc("notation/editstyle", "Reset transparency"));
+
+    static const std::vector<std::pair<int, muse::TranslatableString> > videoHitPointLineStyleAccessibleNames = {
+        { int(LineType::SOLID), muse::TranslatableString("notation/editstyle", "Solid") },
+        { int(LineType::DASHED), muse::TranslatableString("notation/editstyle", "Dashed") },
+        { int(LineType::DOTTED), muse::TranslatableString("notation/editstyle", "Dotted") },
+    };
+    for (const auto& [lineTypeId, accessibleName] : videoHitPointLineStyleAccessibleNames) {
+        if (QAbstractButton* button = videoHitPointLineStyle->button(lineTypeId)) {
+            button->setAccessibleName(accessibleName.qTranslated());
+        }
+    }
+
     for (const LineStyleSelect* lineStyleSelect : m_lineStyleSelects) {
         int idx = 0;
         for (const muse::TranslatableString& lineStyle : lineStyles) {
@@ -1427,7 +1516,7 @@ void EditStyle::retranslate()
     Score* score = globalContext()->currentNotation()->elements()->msScore();
 
     int idx = 0;
-    for (TextStyleType textStyleType : allTextStyles()) {
+    for (TextStyleType textStyleType : editableTextStyles()) {
         textStyles->item(idx)->setText(score->getTextStyleUserName(textStyleType).qTranslated());
         ++idx;
     }
@@ -1614,7 +1703,7 @@ void EditStyle::goToTextStylePage(const QString& code)
     int index = ALL_PAGE_CODES.indexOf("text-styles");
 
     int subIndex = ALL_TEXT_STYLE_SUBPAGE_CODES.indexOf(code);
-    IF_ASSERT_FAILED(index >= 0) {
+    IF_ASSERT_FAILED(index >= 0 && subIndex >= 0 && subIndex < textStyles->count()) {
         return;
     }
 
@@ -1630,6 +1719,10 @@ void EditStyle::goToTextStylePage(const QString& code)
 
 void EditStyle::goToTextStylePage(int index)
 {
+    if (index < 0 || index >= textStyles->count() || index >= ALL_TEXT_STYLE_SUBPAGE_CODES.size()) {
+        return;
+    }
+
     pageList->setCurrentRow(ALL_PAGE_CODES.indexOf("text-styles"));
     m_currentPageCode = "text-styles";
 
@@ -2444,6 +2537,10 @@ void EditStyle::resetStyleValue(int i)
 
 void EditStyle::textStyleChanged(int row)
 {
+    if (row < 0 || row >= textStyles->count()) {
+        return;
+    }
+
     TextStyleType tid = TextStyleType(textStyles->item(row)->data(Qt::UserRole).toInt());
     const TextStyle* ts = textStyle(tid);
 

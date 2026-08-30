@@ -605,6 +605,14 @@
     <seq>Shift+.</seq>
     </SC>
   <SC>
+    <key>increase-dynamic</key>
+    <seq>Alt+.</seq>
+    </SC>
+  <SC>
+    <key>decrease-dynamic</key>
+    <seq>Alt+,</seq>
+    </SC>
+  <SC>
     <key>time-delete</key>
     <seq>Ctrl+Del</seq>
     <seq>Ctrl+Backspace</seq>
@@ -769,6 +777,11 @@
   <SC>
     <key>toggle-timeline</key>
     <seq>F12</seq>
+    <autorepeat>0</autorepeat>
+    </SC>
+  <SC>
+    <key>toggle-video-panel</key>
+    <seq>Ctrl+Alt+V</seq>
     <autorepeat>0</autorepeat>
     </SC>
   <SC>

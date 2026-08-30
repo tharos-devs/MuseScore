@@ -775,6 +775,26 @@ const TextStyle systemTextStyle {
     { Sid::systemTextPosAbove, Sid::systemTextPosBelow }
 };
 
+const TextStyle videoHitPointTextStyle {
+    { {
+        { TextStylePropertyType::FontFace,             Sid::videoHitPointFontFace,                 Pid::FONT_FACE },
+        { TextStylePropertyType::FontSize,             Sid::videoHitPointFontSize,                 Pid::FONT_SIZE },
+        { TextStylePropertyType::LineSpacing,          Sid::videoHitPointLineSpacing,              Pid::TEXT_LINE_SPACING },
+        { TextStylePropertyType::SizeSpatiumDependent, Sid::videoHitPointFontSpatiumDependent,     Pid::SIZE_SPATIUM_DEPENDENT },
+        { TextStylePropertyType::FontStyle,            Sid::videoHitPointFontStyle,                Pid::FONT_STYLE },
+        { TextStylePropertyType::Color,                Sid::videoHitPointColor,                    Pid::COLOR },
+        { TextStylePropertyType::TextAlign,            Sid::videoHitPointAlign,                    Pid::ALIGN },
+        { TextStylePropertyType::FrameType,            Sid::videoHitPointFrameType,                Pid::FRAME_TYPE },
+        { TextStylePropertyType::FramePadding,         Sid::videoHitPointFramePadding,             Pid::FRAME_PADDING },
+        { TextStylePropertyType::FrameWidth,           Sid::videoHitPointFrameWidth,               Pid::FRAME_WIDTH },
+        { TextStylePropertyType::FrameRound,           Sid::videoHitPointFrameRound,               Pid::FRAME_ROUND },
+        { TextStylePropertyType::FrameBorderColor,     Sid::videoHitPointFrameFgColor,             Pid::FRAME_FG_COLOR },
+        { TextStylePropertyType::FrameFillColor,       Sid::videoHitPointFrameBgColor,             Pid::FRAME_BG_COLOR },
+        { TextStylePropertyType::Position,             Sid::videoHitPointPosition,                 Pid::POSITION },
+    } },
+    { Sid::videoHitPointPosAbove, Sid::videoHitPointPosBelow }
+};
+
 const TextStyle staffTextStyle {
     { {
         { TextStylePropertyType::FontFace,             Sid::staffTextFontFace,                      Pid::FONT_FACE },
@@ -1710,6 +1730,7 @@ const TextStyle* textStyle(TextStyleType idx)
     case TextStyleType::REPEAT_RIGHT: return &repeatRightTextStyle;
     case TextStyleType::REHEARSAL_MARK: return &rehearsalMarkTextStyle;
     case TextStyleType::SYSTEM: return &systemTextStyle;
+    case TextStyleType::VIDEO_HIT_POINT: return &videoHitPointTextStyle;
 
     case TextStyleType::STAFF: return &staffTextStyle;
     case TextStyleType::STAVE_SHARING: return &staveSharingLabelStyle;
@@ -1830,6 +1851,11 @@ const std::vector<TextStyleType>& allTextStyles()
     if (_allTextStyles.empty()) {
         _allTextStyles.reserve(int(TextStyleType::TEXT_TYPES));
         for (int t = int(TextStyleType::DEFAULT) + 1; t < int(TextStyleType::TEXT_TYPES); ++t) {
+            // Video hit point text is editor-only and rendered by the notation view;
+            // keep it out of broad score serialization/import defaults.
+            if (TextStyleType(t) == TextStyleType::VIDEO_HIT_POINT) {
+                continue;
+            }
             _allTextStyles.push_back(TextStyleType(t));
         }
     }
@@ -1850,8 +1876,26 @@ static std::vector<TextStyleType> _editableTextStyles;
 const std::vector<TextStyleType>& editableTextStyles()
 {
     if (_editableTextStyles.empty()) {
-        _editableTextStyles = allTextStyles();
-        muse::remove(_editableTextStyles, TextStyleType::DYNAMICS);
+        _editableTextStyles.reserve(allTextStyles().size() + 1);
+
+        // Video hit point text is edited here in place of Dynamics (which has its own
+        // dedicated style controls elsewhere). Substituting it at the same position
+        // -- rather than removing Dynamics and inserting elsewhere -- keeps this list
+        // in the same relative order as allTextStyles(), which other code relies on
+        // when mapping a row index between the two (e.g. EditStyle::goToTextStylePage).
+        bool inserted = false;
+        for (TextStyleType type : allTextStyles()) {
+            if (type == TextStyleType::DYNAMICS) {
+                _editableTextStyles.push_back(TextStyleType::VIDEO_HIT_POINT);
+                inserted = true;
+                continue;
+            }
+            _editableTextStyles.push_back(type);
+        }
+        if (!inserted) {
+            LOGE() << "DYNAMICS text style not found; appending VIDEO_HIT_POINT at the end instead";
+            _editableTextStyles.push_back(TextStyleType::VIDEO_HIT_POINT);
+        }
     }
     return _editableTextStyles;
 }

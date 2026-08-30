@@ -34,6 +34,7 @@
 #include "notation/inotation.h"
 #include "notation/inotationundostack.h"
 #include "notationscene/notationcommands.h"
+#include "project/inotationproject.h"
 
 #include "appshell/appshellcommands.h"
 #include "project/projectcommands.h"
@@ -67,6 +68,10 @@ using namespace muse::musesampler;
 using namespace muse::vst;
 using namespace muse::audio;
 using namespace muse::mi;
+
+static const ActionCode APP_MENU_VIDEO_TIMECODE_OFF_CODE = "video-timecode-off";
+static const ActionCode APP_MENU_VIDEO_TIMECODE_ABOVE_CODE = "video-timecode-above-bars";
+static const ActionCode APP_MENU_VIDEO_TIMECODE_BELOW_CODE = "video-timecode-below-bars";
 
 AppMenuModel::AppMenuModel(QObject* parent)
     : AbstractMenuModel(parent)
@@ -136,12 +141,12 @@ void AppMenuModel::setupConnections()
 #endif
 
     extensionsRegister()->manifestListChanged().onNotify(this, [this]() {
-        MenuItem& pluginsMenu = findMenu("menu-plugins");
+        MenuItem& pluginsMenu = findMenu("menu-extensions");
         pluginsMenu.setSubitems(makeExtensionsSubitems());
     });
 
     extensionsRegister()->enabledChanged().onReceive(this, [this](const ExtensionUri&) {
-        MenuItem& pluginsItem = findMenu("menu-plugins");
+        MenuItem& pluginsItem = findMenu("menu-extensions");
         pluginsItem.setSubitems(makeExtensionsSubitems());
     });
 
@@ -155,6 +160,22 @@ void AppMenuModel::setupConnections()
 
         updateUndoRedoItems();
     });
+
+    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+        updateTimecodeItems();
+
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
+        if (!settings) {
+            return;
+        }
+
+        settings->settingsChanged().onNotify(this, [this]() {
+            updateTimecodeItems();
+        }, Asyncable::Mode::SetReplace);
+    });
+
+    updateTimecodeItems();
 }
 
 bool AppMenuModel::isMuseSamplerModuleAdded() const
@@ -288,6 +309,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(DOCK_TOGGLE_TIMELINE_COMMAND),
         makeMenuItem(DOCK_TOGGLE_MIXER_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND),
+        makeMenuItem("toggle-video-panel"),
         makeMenuItem(DOCK_TOGGLE_PERCUSSION_COMMAND),
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
         makeSeparator(),
@@ -296,6 +318,7 @@ MenuItem* AppMenuModel::makeViewMenu()
             makeMenuItem(DOCK_TOGGLE_NOTEINPUT_COMMAND),
             makeMenuItem(DOCK_TOGGLE_STATUSBAR_COMMAND)
         }, "menu-toolbars"),
+        makeMenu(TranslatableString("appshell/menu/view", "Video &timecode"), makeTimecodeItems(), "menu-video-timecode"),
 #ifdef MUSE_MODULE_WORKSPACE
         makeMenu(TranslatableString("appshell/menu/view", "W&orkspaces"), m_workspacesMenuModel->items(), "menu-workspaces"),
 #endif
@@ -307,6 +330,7 @@ MenuItem* AppMenuModel::makeViewMenu()
             makeMenuItem(SHOW_PAGEBORDERS_COMMAND),
             makeMenuItem(SHOW_IRREGULAR_COMMAND),
             makeMenuItem(SHOW_SOUNDFLAGS_COMMAND),
+            makeMenuItem("show-video-hitpoints"),
         }, "menu-show"),
         makeSeparator(),
         makeMenuItem(DOCK_RESTORE_DEFAULT_LAYOUT_COMMAND),
@@ -419,7 +443,7 @@ muse::uicomponents::MenuItemList AppMenuModel::makeExtensionsSubitems()
 
 MenuItem* AppMenuModel::makeExtensionsMenu()
 {
-    return makeMenu(TranslatableString("appshell/menu/plugins", "&Plugins"), makeExtensionsSubitems(), "menu-plugins");
+    return makeMenu(TranslatableString("appshell/menu/plugins", "E&xtensions"), makeExtensionsSubitems(), "menu-extensions");
 }
 
 MenuItem* AppMenuModel::makeHelpMenu(bool addDiagnosticsSubMenu)
@@ -485,10 +509,7 @@ MenuItem* AppMenuModel::makeDiagnosticsMenu()
     if (globalConfiguration()->devModeEnabled()) {
         MenuItemList actionsItems {
             makeMenuItem(DIAGNOSTICS_SHOW_ACTIONS_COMMAND),
-            makeMenuItem(DIAGNOSTICS_SHOW_RCOMMANDS_COMMAND),
-            makeMenuItem(DIAGNOSTICS_ACTIONS_QUERY_COMMAND),
-            makeMenuItem(DIAGNOSTICS_ACTIONS_QUERY_PARAMS1_COMMAND),
-            makeMenuItem(DIAGNOSTICS_ACTIONS_QUERY_PARAMS2_COMMAND)
+            makeMenuItem(DIAGNOSTICS_SHOW_RCOMMANDS_COMMAND)
         };
 
         MenuItemList accessibilityItems {
@@ -537,17 +558,18 @@ MenuItem* AppMenuModel::makeDiagnosticsMenu()
             makeMenuItem(AUDIO_DEV_USE_HYBRID_MODE_COMMAND),
         };
 
-        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "A&ctions"), actionsItems, "menu-actions")
-              << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Accessibility"), accessibilityItems, "menu-accessibility")
-              << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Engraving"), engravingItems, "menu-engraving")
-              << makeMenu(TranslatableString("appshell/menu/diagnostics", "E&xtensions"), extensionsItems, "menu-extensions")
-              << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Testflow"), testflowItems, "menu-testflow");
+        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "A&ctions"), actionsItems, "menu-diagnostics-actions")
+              << makeMenu(TranslatableString("appshell/menu/diagnostics",
+                                       "&Accessibility"), accessibilityItems, "menu-diagnostics-accessibility")
+              << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Engraving"), engravingItems, "menu-diagnostics-engraving")
+              << makeMenu(TranslatableString("appshell/menu/diagnostics", "E&xtensions"), extensionsItems, "menu-diagnostics-extensions")
+              << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Testflow"), testflowItems, "menu-diagnostics-testflow");
 
 #ifdef MUSE_MODULE_VST
-        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "&VST"), vstItems, "menu-vst");
+        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "&VST"), vstItems, "menu-diagnostics-vst");
 #endif
 
-        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Audio"), audioItems, "menu-audio")
+        items << makeMenu(TranslatableString("appshell/menu/diagnostics", "&Audio"), audioItems, "menu-diagnostics-audio")
               << makeMenuItem(MULTIWINDOWS_DEV_SHOW_INFO_COMMAND);
     }
 
@@ -733,6 +755,36 @@ MenuItemList AppMenuModel::makeLinesItems()
     return items;
 }
 
+MenuItemList AppMenuModel::makeTimecodeItems()
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
+    const VideoTimecodeDisplayMode mode = settings
+                                          ? settings->attachment().timecodeDisplayMode
+                                          : VideoTimecodeDisplayMode::Off;
+
+    auto makeTimecodeItem = [this, mode](const ActionCode& actionCode, VideoTimecodeDisplayMode itemMode) {
+        MenuItem* item = makeMenuItem(actionCode);
+        item->setSelectable(true);
+        item->setSelected(mode == itemMode);
+        return item;
+    };
+
+    return {
+        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_OFF_CODE, VideoTimecodeDisplayMode::Off),
+        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_ABOVE_CODE, VideoTimecodeDisplayMode::AboveBars),
+        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_BELOW_CODE, VideoTimecodeDisplayMode::BelowBars)
+    };
+}
+
+void AppMenuModel::updateTimecodeItems()
+{
+    MenuItem& timecodeMenu = findMenu("menu-video-timecode");
+    if (timecodeMenu.isValid()) {
+        timecodeMenu.setSubitems(makeTimecodeItems());
+    }
+}
+
 MenuItemList AppMenuModel::makeExtensionsItems()
 {
     MenuItemList result;
@@ -741,16 +793,8 @@ MenuItemList AppMenuModel::makeExtensionsItems()
     ManifestList manifests = extensionsRegister()->manifestList(Filter::Enabled);
 
     auto makeMenuItem = [this](const Manifest& m, const Action& a) {
-        MenuItem* item = new MenuItem(this);
-        item->setTitle(!a.title.empty()
-                       ? TranslatableString::untranslatable(a.title)
-                       : TranslatableString::untranslatable(m.title));
-
-        rcommand::CommandQuery query = makeCommandQuery(m.uri, a.code);
-        item->setCommandQuery(query);
-        item->setCommandState(commandsState()->commandState(query.uri()));
-
-        return item;
+        rcommand::Command command = makeCommand(m.uri, a.code);
+        return this->makeMenuItem(command);
     };
 
     auto addMenuItems = [this, makeMenuItem](MenuItemList& items, const Manifest& m) {

@@ -22,9 +22,13 @@
 
 #include "abstractnotationpaintview.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include <QCoreApplication>
 #include <QCursor>
 #include <QPainter>
+#include <QFontMetrics>
 #include <QMimeData>
 #include <QQuickWindow>
 
@@ -32,7 +36,15 @@
 #include "log.h"
 
 #include "actions/actiontypes.h"
+#include "engraving/dom/measure.h"
 #include "engraving/dom/shadownote.h"
+#include "engraving/dom/score.h"
+#include "engraving/dom/system.h"
+#include "engraving/style/styledef.h"
+#include "engraving/types/types.h"
+#include "project/inotationproject.h"
+#include "project/iprojectvideosettings.h"
+#include "log.h"
 
 #include "notation/imasternotation.h" // IWYU pragma: keep
 #include "notation/inotationaccessibility.h" // IWYU pragma: keep
@@ -54,6 +66,18 @@ using namespace muse::draw;
 using namespace muse::actions;
 
 static constexpr qreal SCROLL_LIMIT_OFF_OVERSCROLL_FACTOR = 0.75;
+
+//! NOTE Only compares the fields paintVideoHitPoints()/videoHitPointRectByTick()
+//! actually read -- volume/balance/muted/solo/path/timecodeDisplayMode changes
+//! don't affect anything this view paints, so they shouldn't trigger a
+//! full-viewport redraw.
+static bool paintVideoAttachmentFieldsEqual(const project::VideoAttachmentSettings& a, const project::VideoAttachmentSettings& b)
+{
+    return a.offsetMs == b.offsetMs
+           && a.frameRate == b.frameRate
+           && a.showHitPoints == b.showHitPoints
+           && a.hitPoints == b.hitPoints;
+}
 
 AbstractNotationPaintView::AbstractNotationPaintView(QQuickItem* parent)
     : muse::uicomponents::QuickPaintedView(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
@@ -396,6 +420,18 @@ void AbstractNotationPaintView::onLoadNotation(INotationPtr)
         scheduleRedraw();
     });
 
+    if (m_notation->project() && m_notation->project()->videoSettings()) {
+        m_notation->project()->videoSettings()->settingsChanged().onNotify(this, [this]() {
+            const project::VideoAttachmentSettings& attachment = m_notation->project()->videoSettings()->attachment();
+            if (m_lastPaintedVideoAttachment && paintVideoAttachmentFieldsEqual(*m_lastPaintedVideoAttachment, attachment)) {
+                return;
+            }
+
+            m_lastPaintedVideoAttachment = std::make_unique<project::VideoAttachmentSettings>(attachment);
+            scheduleRedraw();
+        });
+    }
+
     m_notation->viewModeChanged().onNotify(this, [this]() {
         ensureViewportInsideScrollableArea();
     });
@@ -469,6 +505,9 @@ void AbstractNotationPaintView::onUnloadNotation(INotationPtr)
     interaction->dropChanged().disconnect(this);
     interaction->shadowNoteChanged().disconnect(this);
     notationPlayback()->loopBoundariesChanged().disconnect(this);
+    if (m_notation->project() && m_notation->project()->videoSettings()) {
+        m_notation->project()->videoSettings()->settingsChanged().disconnect(this);
+    }
     m_notation->viewModeChanged().disconnect(this);
     notationAutomation()->automationModeEnabledChanged().disconnect(this);
     notationNoteOffsets()->editModeEnabledChanged().disconnect(this);
@@ -581,6 +620,172 @@ void AbstractNotationPaintView::updateLoopMarkers()
         m_loopInMarker->updatePosition(loop.loopInTick);
         m_loopOutMarker->updatePosition(loop.loopOutTick);
     }
+}
+
+void AbstractNotationPaintView::paintVideoHitPoints(QPainter* painter)
+{
+    if (!m_notation || publishMode() || !m_notation->project() || !m_notation->project()->videoSettings()) {
+        return;
+    }
+
+    const project::VideoAttachmentSettings& attachment = m_notation->project()->videoSettings()->attachment();
+    if (!attachment.isValid() || !attachment.showHitPoints || attachment.hitPoints.empty()) {
+        return;
+    }
+
+    engraving::Score* score = m_notation->elements()->msScore();
+    if (!score) {
+        return;
+    }
+
+    const int transparency = std::clamp(score->style().styleI(engraving::Sid::videoHitPointLineTransparency), 0, 100);
+    const int markerAlpha = static_cast<int>(std::lround(255.0 * (100 - transparency) / 100.0));
+
+    Qt::PenStyle penStyle = Qt::SolidLine;
+    switch (score->style().styleV(engraving::Sid::videoHitPointLineStyle).value<engraving::LineType>()) {
+    case engraving::LineType::DASHED:
+        penStyle = Qt::DashLine;
+        break;
+    case engraving::LineType::DOTTED:
+        penStyle = Qt::DotLine;
+        break;
+    case engraving::LineType::SOLID:
+        penStyle = Qt::SolidLine;
+        break;
+    }
+
+    const qreal lineWidth = std::max<qreal>(0.08, 0.12 * score->style().spatium());
+    QFont labelFont(score->style().styleV(engraving::Sid::videoHitPointFontFace).value<String>().toQString());
+    qreal labelSize = score->style().styleD(engraving::Sid::videoHitPointFontSize);
+    if (score->style().styleB(engraving::Sid::videoHitPointFontSpatiumDependent)) {
+        labelSize *= score->style().spatium() / score->style().defaultSpatium();
+    }
+    labelFont.setPointSizeF(std::max<qreal>(1.0, labelSize));
+    const engraving::FontStyle fontStyle = score->style().styleV(engraving::Sid::videoHitPointFontStyle).value<engraving::FontStyle>();
+    labelFont.setBold(fontStyle & engraving::FontStyle::Bold);
+    labelFont.setItalic(fontStyle & engraving::FontStyle::Italic);
+    labelFont.setUnderline(fontStyle & engraving::FontStyle::Underline);
+    labelFont.setStrikeOut(fontStyle & engraving::FontStyle::Strike);
+    const QFontMetrics labelMetrics(labelFont);
+    const PointF labelOffset = score->style().styleV(engraving::Sid::videoHitPointPosAbove).value<PointF>();
+    const qreal labelOffsetX = labelOffset.x() * score->style().spatium();
+    const qreal labelOffsetY = labelOffset.y() * score->style().spatium();
+
+    painter->save();
+    painter->setFont(labelFont);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
+
+    for (const project::VideoHitPointSettings& hitPoint : attachment.hitPoints) {
+        const int scoreRelativeMs = hitPoint.timeMs - attachment.offsetMs;
+        if (scoreRelativeMs < 0) {
+            continue;
+        }
+
+        const double scoreTimeSeconds = static_cast<double>(scoreRelativeMs) / 1000.0;
+        const midi::tick_t tick = std::max(0, score->utime2utick(scoreTimeSeconds));
+        const RectF markerRect = videoHitPointRectByTick(tick);
+        const RectF viewMarkerRect = fromLogical(markerRect);
+        if (markerRect.isNull() || viewMarkerRect.right() < 0.0 || viewMarkerRect.left() > width()
+            || viewMarkerRect.bottom() < 0.0 || viewMarkerRect.top() > height()) {
+            continue;
+        }
+
+        QColor hitPointColor = QColor(static_cast<QRgb>(hitPoint.color));
+        hitPointColor.setAlpha(markerAlpha);
+        const QPen markerPen(hitPointColor, lineWidth, penStyle, Qt::FlatCap);
+
+        const qreal x = markerRect.left();
+        const QString label = (hitPoint.label.empty() ? String(u"Hit") : hitPoint.label).toQString();
+        const QString timecodeText = project::formatVideoTimecode(hitPoint.timeMs, attachment.frameRate);
+        const QString text = label + QLatin1Char('\n') + timecodeText;
+        const int lineCount = 2;
+        const int maxLineWidth = std::max(labelMetrics.horizontalAdvance(label), labelMetrics.horizontalAdvance(timecodeText));
+        const int labelWidth = std::max(qRound(18.0), maxLineWidth + qRound(4.0));
+        const int labelHeight = std::max(qRound(10.0), labelMetrics.lineSpacing() * lineCount + qRound(2.0));
+        const QRectF labelRect(x + labelOffsetX,
+                               markerRect.top() - labelHeight - 2.0 + labelOffsetY,
+                               labelWidth, labelHeight);
+
+        painter->setPen(markerPen);
+        painter->drawLine(QPointF(x, markerRect.top()), QPointF(x, markerRect.bottom()));
+        painter->setPen(QColor(static_cast<QRgb>(hitPoint.color)));
+        painter->drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextDontClip, text);
+    }
+
+    painter->restore();
+}
+
+muse::RectF AbstractNotationPaintView::videoHitPointRectByTick(muse::midi::tick_t _tick) const
+{
+    if (!m_notation) {
+        return RectF();
+    }
+
+    const engraving::Score* score = m_notation->elements()->msScore();
+    if (!score) {
+        return RectF();
+    }
+
+    const Fraction tick = Fraction::fromTicks(_tick);
+    const Measure* measure = score->tick2measureMM(tick);
+    if (!measure) {
+        return RectF();
+    }
+
+    const engraving::System* system = measure->system();
+    if (!system || !system->page() || system->staves().empty()) {
+        return RectF();
+    }
+
+    qreal x = 0.0;
+    engraving::Segment* segment = measure->first(engraving::SegmentType::ChordRest);
+    while (segment && !segment->visible()) {
+        segment = segment->next(engraving::SegmentType::ChordRest);
+    }
+
+    for (; segment;) {
+        const Fraction t1 = segment->tick();
+        const qreal x1 = segment->canvasPos().x();
+        qreal x2 = 0.0;
+        Fraction t2;
+
+        engraving::Segment* nextSegment = segment->next(engraving::SegmentType::ChordRest);
+        while (nextSegment && !nextSegment->visible()) {
+            nextSegment = nextSegment->next(engraving::SegmentType::ChordRest);
+        }
+
+        if (nextSegment) {
+            t2 = nextSegment->tick();
+            x2 = nextSegment->canvasPos().x();
+        } else {
+            t2 = measure->endTick();
+            const engraving::Segment* endBarLine = measure->findSegment(engraving::SegmentType::EndBarLine, measure->endTick());
+            x2 = endBarLine ? endBarLine->canvasPos().x() : measure->canvasPos().x() + measure->width();
+        }
+
+        if (tick >= t1 && tick < t2) {
+            const Fraction dt = t2 - t1;
+            const qreal dx = x2 - x1;
+            x = dt.ticks() != 0 ? x1 + dx * (tick - t1).ticks() / dt.ticks() : x1;
+            break;
+        }
+
+        segment = nextSegment;
+    }
+
+    if (!segment) {
+        return RectF();
+    }
+
+    const double spatium = score->style().spatium();
+    RectF systemRect = system->canvasBoundingRect();
+    if (systemRect.isNull()) {
+        return RectF();
+    }
+
+    systemRect.adjust(0.0, -0.35 * spatium, 0.0, 0.35 * spatium);
+    return RectF { x, systemRect.top(), 0.0, systemRect.height() };
 }
 
 void AbstractNotationPaintView::updateShadowNoteVisibility()
@@ -825,6 +1030,7 @@ void AbstractNotationPaintView::paint(QPainter* qp)
 
     m_loopInMarker->paint(painter);
     m_loopOutMarker->paint(painter);
+    paintVideoHitPoints(qp);
 
     if (notation()->viewMode() == engraving::LayoutMode::LINE) {
         ContinuousPanel::NotationViewContext nvCtx;

@@ -32,6 +32,7 @@
 #include "context/iglobalcontext.h"
 #include "extensions/iextensionsregister.h"
 #include "global/iglobalconfiguration.h"
+#include "project/iprojectvideosettings.h"
 #ifdef MUSE_MODULE_MUSESAMPLER
 #include "musesampler/imusesamplerinfo.h"
 #endif
@@ -86,6 +87,8 @@ public:
 private:
     void setupConnections();
 
+    void updateTimecodeItems();
+
     bool isMuseSamplerModuleAdded() const;
 
     using muse::uicomponents::AbstractMenuModel::makeMenuItem;
@@ -112,6 +115,7 @@ private:
     muse::uicomponents::MenuItemList makeTextItems();
     muse::uicomponents::MenuItemList makeLinesItems();
     muse::uicomponents::MenuItemList makeChordAndFretboardDiagramsItems();
+    muse::uicomponents::MenuItemList makeTimecodeItems();
     muse::uicomponents::MenuItemList makeExtensionsItems();
 
     mu::notation::INotationUndoStackPtr undoStack() const;

@@ -33,6 +33,7 @@
 #include "context/iglobalcontext.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
+#include "project/iprojectvideosettings.h"
 #include "ui/qml/Muse/Ui/navigationsection.h"
 
 #include "iplaybackcontroller.h"
@@ -102,11 +103,14 @@ private:
 
     void subscribeOnAutomationChanges();
 
+    void onVideoAttachmentChanged();
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
+    int resolveVideoInsertIndex() const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
                                                  bool isPrimary = true);
+    MixerChannelItem* buildVideoChannelItem();
     MixerChannelItem* buildAuxChannelItem(muse::audio::aux_channel_idx_t index, const muse::audio::TrackId trackId);
     MixerChannelItem* buildMasterChannelItem();
 
@@ -117,8 +121,11 @@ private:
     void loadOutputParams(MixerChannelItem* item, const project::AudioOutputParams& params);
     void updateOutputResourceItemCount();
 
+    project::AudioOutputParams effectiveMasterOutputParams() const;
+
     project::INotationProjectPtr currentProject() const;
     project::IProjectAudioSettingsPtr audioSettings() const;
+    project::IProjectVideoSettingsPtr videoSettings() const;
     notation::INotationPlaybackPtr notationPlayback() const;
     notation::INotationPartsPtr masterNotationParts() const;
 

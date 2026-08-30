@@ -40,8 +40,14 @@
 
 using namespace mu::appshell;
 using namespace mu::notation;
+using namespace mu::project;
 using namespace mu::engraving;
 using namespace muse::actions;
+
+static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_OFF_CODE("video-timecode-off");
+static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_ABOVE_CODE("video-timecode-above-bars");
+static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_BELOW_CODE("video-timecode-below-bars");
+static const ActionCode NOTATION_PAGE_SHOW_VIDEO_HITPOINTS_CODE("show-video-hitpoints");
 
 NotationPageModel::NotationPageModel(QObject* parent)
     : QObject(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
@@ -68,6 +74,19 @@ void NotationPageModel::init()
 
     commandsController()->dockToggleRequested().onReceive(this, [this](const DockName& dockName) {
         toggleDock(dockName);
+    });
+
+    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_OFF_CODE, [this]() {
+        setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::Off);
+    });
+    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_ABOVE_CODE, [this]() {
+        setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::AboveBars);
+    });
+    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_BELOW_CODE, [this]() {
+        setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::BelowBars);
+    });
+    dispatcher()->reg(this, NOTATION_PAGE_SHOW_VIDEO_HITPOINTS_CODE, [this]() {
+        toggleShowVideoHitPoints();
     });
 
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
@@ -169,6 +188,11 @@ QString NotationPageModel::percussionPanelName() const
     return PERCUSSION_PANEL_NAME;
 }
 
+QString NotationPageModel::videoPanelName() const
+{
+    return VIDEO_PANEL_NAME;
+}
+
 QString NotationPageModel::statusBarName() const
 {
     return NOTATION_STATUSBAR_NAME;
@@ -207,6 +231,22 @@ void NotationPageModel::toggleDock(const QString& name)
     }
 
     dispatcher()->dispatch("dock-toggle", ActionData::make_arg1<QString>(name));
+}
+
+void NotationPageModel::setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode mode)
+{
+    INotationProjectPtr project = globalContext()->currentProject();
+    updateVideoAttachment(project ? project->videoSettings() : nullptr, [mode](VideoAttachmentSettings& updated) {
+        updated.timecodeDisplayMode = mode;
+    });
+}
+
+void NotationPageModel::toggleShowVideoHitPoints()
+{
+    INotationProjectPtr project = globalContext()->currentProject();
+    updateVideoAttachment(project ? project->videoSettings() : nullptr, [](VideoAttachmentSettings& updated) {
+        updated.showHitPoints = !updated.showHitPoints;
+    });
 }
 
 void NotationPageModel::scheduleUpdatePercussionPanelVisibility()

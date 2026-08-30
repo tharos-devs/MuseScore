@@ -20,6 +20,13 @@
 
 muse_create_qml_module(playback_qml FOR playback)
 
+set(PLAYBACK_QML_IMPORTS
+    TARGET muse_ui_qml
+    TARGET muse_uicomponents_qml
+    TARGET notationscene_qml
+    QtMultimedia
+)
+
 qt_add_qml_module(playback_qml
     URI MuseScore.Playback
     VERSION 1.0
@@ -51,6 +58,10 @@ qt_add_qml_module(playback_qml
         soundflagsettingsmodel.h
         soundprofilesmodel.cpp
         soundprofilesmodel.h
+        videopanelcontextmenumodel.cpp
+        videopanelcontextmenumodel.h
+        videopanelmodel.cpp
+        videopanelmodel.h
     QML_FILES
         internal/AudioProcessingProgressBar.qml
         internal/AudioResourceControl.qml
@@ -72,6 +83,8 @@ qt_add_qml_module(playback_qml
         internal/PlaybackToolBarActions.qml
         internal/SoundFlag/MuseSoundsParams.qml
         internal/SoundFlag/ParamsGridView.qml
+        internal/VideoHitPointRow.qml
+        internal/VideoHitPointsPanel.qml
         internal/VolumePressureMeter.qml
         internal/VolumeSlider.qml
         MixerPanel.qml
@@ -81,10 +94,14 @@ qt_add_qml_module(playback_qml
         PlaybackToolBar.qml
         SoundFlagPopup.qml
         SoundProfilesDialog.qml
+        VideoPanelLoader.qml
+        VideoPanel.qml
     IMPORTS
-        TARGET muse_ui_qml
-        TARGET muse_uicomponents_qml
-        TARGET notationscene_qml
+        ${PLAYBACK_QML_IMPORTS}
 )
+
+if (TARGET Qt6::Multimedia)
+    target_link_libraries(playback_qml PRIVATE Qt6::Multimedia)
+endif()
 
 fixup_qml_module_dependencies(playback_qml)

@@ -62,6 +62,7 @@ static const std::map<rcommand::Command, DockName> s_dockToggleCommands = {
     { DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND, PIANO_KEYBOARD_PANEL_NAME },
     { DOCK_TOGGLE_PERCUSSION_COMMAND, PERCUSSION_PANEL_NAME },
     { DOCK_TOGGLE_STATUSBAR_COMMAND, NOTATION_STATUSBAR_NAME },
+    { DOCK_TOGGLE_VIDEO_PANEL_COMMAND, VIDEO_PANEL_NAME },
 };
 
 void AppshellCommandsController::preInit()
@@ -72,7 +73,7 @@ void AppshellCommandsController::preInit()
 void AppshellCommandsController::init()
 {
     auto cd = commandDispatcher();
-    cd->onRequest(this, APP_QUIT_COMMAND, [this](const rcommand::CommandQuery& query) { return quit(query); });
+    cd->onRequest(this, APP_QUIT_COMMAND, [this](const rcommand::Params& params) { return quit(params); });
     cd->onRequest(this, APP_RESTART_COMMAND, [this]() { restart(); return muse::make_ok(); });
     cd->onRequest(this, APP_FULLSCREEN_COMMAND, [this]() { toggleFullScreen(); return muse::make_ok(); });
 
@@ -124,6 +125,7 @@ void AppshellCommandsController::init()
             { "toggle-piano-keyboard", DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND, {} },
             { "toggle-percussion-panel", DOCK_TOGGLE_PERCUSSION_COMMAND, {} },
             { "toggle-statusbar", DOCK_TOGGLE_STATUSBAR_COMMAND, {} },
+            { "toggle-video-panel", DOCK_TOGGLE_VIDEO_PANEL_COMMAND, {} },
         };
 
         rcommand::registerActionToCommand(this, actionToCommands, commandDispatcher(), dispatcher());
@@ -280,10 +282,10 @@ bool AppshellCommandsController::onDropEvent(QDropEvent* event)
     return false;
 }
 
-muse::Ret AppshellCommandsController::quit(const muse::rcommand::CommandQuery& query)
+muse::Ret AppshellCommandsController::quit(const muse::rcommand::Params& params)
 {
-    bool isAllInstances = query.param("all_instances", Val(true)).toBool();
-    muse::io::path_t installatorPath = query.param("installer_path", Val("")).toString();
+    bool isAllInstances = params.at("all_instances").toBool();
+    muse::io::path_t installatorPath = params.at("installer_path").toString();
     return quit(isAllInstances, installatorPath);
 }
 

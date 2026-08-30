@@ -88,6 +88,37 @@ PlaybackCursorType PlaybackConfigurationStub::cursorType() const
     return PlaybackCursorType::SMOOTH;
 }
 
+int PlaybackConfigurationStub::videoHitPointsPanelWidth() const
+{
+    return 320;
+}
+
+void PlaybackConfigurationStub::setVideoHitPointsPanelWidth(int)
+{
+}
+
+bool PlaybackConfigurationStub::videoHitPointsPanelVisible() const
+{
+    return true;
+}
+
+void PlaybackConfigurationStub::setVideoHitPointsPanelVisible(bool)
+{
+}
+
+QStringList PlaybackConfigurationStub::recentVideoFiles() const
+{
+    return {};
+}
+
+void PlaybackConfigurationStub::addRecentVideoFile(const QString&)
+{
+}
+
+void PlaybackConfigurationStub::clearRecentVideoFiles()
+{
+}
+
 bool PlaybackConfigurationStub::isMixerSectionVisible(MixerSectionType) const
 {
     return false;

@@ -44,6 +44,7 @@
 #include "../iplaybackcontroller.h"
 #include "../iplaybackconfiguration.h"
 #include "../isoundprofilesrepository.h"
+#include "project/iprojectvideosettings.h"
 
 namespace mu::playback {
 class OnlineSoundsController;
@@ -110,6 +111,9 @@ public:
 
     const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
+
+    bool isMasterOutputForceMuted() const override;
+    muse::async::Notification masterOutputForceMuteChanged() const override;
 
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;
@@ -202,6 +206,8 @@ private:
     void disableLoop();
 
     project::IProjectAudioSettingsPtr audioSettings() const;
+    project::IProjectVideoSettingsPtr videoSettings() const;
+    void updateMasterControlParams();
 
     void resetPlayback();
     void setupPlayback();
@@ -245,6 +251,8 @@ private:
     muse::async::Channel<bool> m_loopEnabledChanged;
     muse::async::Notification m_totalPlayTimeChanged;
     muse::async::Notification m_currentTempoChanged;
+    muse::async::Notification m_masterOutputForceMuteChanged;
+    bool m_isMasterOutputForceMuted = false;
 
     muse::midi::tick_t m_currentTick = 0;
     notation::Tempo m_currentTempo;

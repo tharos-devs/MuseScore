@@ -565,6 +565,68 @@ DockPage {
                     }
                 }
             }
+        },
+
+        DockPanel {
+            id: videoPanel
+
+            objectName: root.pageModel.videoPanelName()
+            title: qsTrc("appshell", "Video")
+
+            height: 360
+            minimumHeight: root.horizontalPanelMinHeight
+            //! NOTE: unlike other horizontal panels (Timeline, Selection Filter), the
+            //! Video panel benefits from being resized/maximized much larger when
+            //! floated -- so it gets its own ceiling instead of the shared 520px one.
+            maximumHeight: root.panelMaxDimension
+
+            //! NOTE: unlike other horizontal panels, Video has an internal SplitView
+            //! (preview+transport | hit-points panel) whose two sides have their own
+            //! minimums (320 + 240 = 560px); too narrow a window/floating panel makes
+            //! that split collapse/overlap, so it needs a real floor instead of
+            //! panelMinDimension. The extra margin above 560 covers panel chrome
+            //! (title bar, borders) that isn't part of the SplitView's own content area.
+            minimumWidth: 640
+            maximumWidth: root.panelMaxDimension
+
+            groupName: root.horizontalPanelsGroup
+
+            //! NOTE: hidden by default
+            visible: false
+
+            location: Location.Bottom
+
+            dropDestinations: root.horizontalPanelDropDestinations
+
+            navigationSection: root.navigationPanelSec(videoPanel.location)
+
+            VideoPanelLoader {
+                id: videoPanelLoaderInstance
+
+                anchors.fill: parent
+                navigationSection: videoPanel.navigationSection
+                contentNavigationPanelOrderStart: videoPanel.contentNavigationPanelOrderStart
+                floating: videoPanel.floating
+
+                // NOTE: this panel's content (including this Loader) is the
+                // DockPanel's default-property content, which the framework
+                // wraps into a Component and only instantiates once the panel
+                // is actually shown (DockPanel.qml: `Loader { active: root.visible
+                // && root.inited }`) -- so a plain declarative binding at the
+                // DockPanel level (`videoPanel.contextMenuModel: videoPanelLoaderInstance.
+                // contextMenuModel`) referenced an id that didn't exist yet and
+                // silently never fired. Pushing it up imperatively here, once
+                // this content itself finishes loading, is what Mixer/Piano
+                // keyboard already do for exactly this reason (see their own
+                // Component.onCompleted below in this same file).
+                Component.onCompleted: {
+                    videoPanel.contextMenuModel = contextMenuModel
+                }
+
+                Component.onDestruction: {
+                    videoPanel.contextMenuModel = null
+                }
+            }
         }
     ]
 

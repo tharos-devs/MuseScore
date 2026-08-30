@@ -21,6 +21,8 @@
  */
 #include "playbackconfiguration.h"
 
+#include <algorithm>
+
 #include "settings.h"
 #include "types/string.h"
 
@@ -42,6 +44,20 @@ static const Settings::Key PLAY_CHORD_WHEN_EDITING(moduleName, "score/chord/play
 static const Settings::Key PLAY_HARMONY_WHEN_EDITING(moduleName, "score/harmony/play/onedit");
 
 static const Settings::Key SOUND_PRESETS_MULTI_SELECTION_KEY(moduleName, "application/playback/soundPresetsMultiSelectionEnabled");
+
+static const Settings::Key VIDEO_HIT_POINTS_PANEL_WIDTH_KEY(moduleName, "playback/video/hitPointsPanelWidth");
+static constexpr int VIDEO_HIT_POINTS_PANEL_DEFAULT_WIDTH = 320;
+//! NOTE: must fit the hit-point table's own minimum row content (timecode +
+//! measure + a usable name column + the delete button) without clipping it --
+//! see the matching QML-side note next to VideoPanel.qml's hitPointsPanelMinWidth.
+static constexpr int VIDEO_HIT_POINTS_PANEL_MIN_WIDTH = 320;
+static constexpr int VIDEO_HIT_POINTS_PANEL_MAX_WIDTH = 420;
+
+static const Settings::Key VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY(moduleName, "playback/video/hitPointsPanelVisible");
+
+static const Settings::Key RECENT_VIDEO_FILES_KEY(moduleName, "playback/video/recentFiles");
+static constexpr int RECENT_VIDEO_FILES_MAX = 5;
+static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
 
 static const Settings::Key MIXER_LABELS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/labelsSectionVisible");
 static const Settings::Key MIXER_SOUND_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/soundSectionVisible");
@@ -113,6 +129,9 @@ void PlaybackConfiguration::init()
         m_playNotesOnMidiInputChanged.send(val.toBool());
     });
     settings()->setDefaultValue(PLAYBACK_CURSOR_TYPE_KEY, Val(PlaybackCursorType::STEPPED));
+    settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_WIDTH_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_WIDTH));
+    settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(true));
+    settings()->setDefaultValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
     settings()->setDefaultValue(SOUND_PRESETS_MULTI_SELECTION_KEY, Val(false));
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_SOUND_WARNING, Val(true));
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_PLAYBACK_PROFILE_WARNING, Val(true));
@@ -222,6 +241,59 @@ muse::async::Channel<bool> PlaybackConfiguration::playNotesOnMidiInputChanged() 
 PlaybackCursorType PlaybackConfiguration::cursorType() const
 {
     return settings()->value(PLAYBACK_CURSOR_TYPE_KEY).toEnum<PlaybackCursorType>();
+}
+
+int PlaybackConfiguration::videoHitPointsPanelWidth() const
+{
+    return std::clamp(settings()->value(VIDEO_HIT_POINTS_PANEL_WIDTH_KEY).toInt(),
+                      VIDEO_HIT_POINTS_PANEL_MIN_WIDTH, VIDEO_HIT_POINTS_PANEL_MAX_WIDTH);
+}
+
+void PlaybackConfiguration::setVideoHitPointsPanelWidth(int width)
+{
+    width = std::clamp(width, VIDEO_HIT_POINTS_PANEL_MIN_WIDTH, VIDEO_HIT_POINTS_PANEL_MAX_WIDTH);
+    settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_WIDTH_KEY, Val(width));
+}
+
+bool PlaybackConfiguration::videoHitPointsPanelVisible() const
+{
+    return settings()->value(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY).toBool();
+}
+
+void PlaybackConfiguration::setVideoHitPointsPanelVisible(bool visible)
+{
+    settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(visible));
+}
+
+QStringList PlaybackConfiguration::recentVideoFiles() const
+{
+    QString joined = QString::fromStdString(settings()->value(RECENT_VIDEO_FILES_KEY).toString());
+    if (joined.isEmpty()) {
+        return {};
+    }
+
+    return joined.split(RECENT_VIDEO_FILES_SEPARATOR, Qt::SkipEmptyParts);
+}
+
+void PlaybackConfiguration::addRecentVideoFile(const QString& path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QStringList files = recentVideoFiles();
+    files.removeAll(path);
+    files.prepend(path);
+    while (files.size() > RECENT_VIDEO_FILES_MAX) {
+        files.removeLast();
+    }
+
+    settings()->setSharedValue(RECENT_VIDEO_FILES_KEY, Val(files.join(RECENT_VIDEO_FILES_SEPARATOR).toStdString()));
+}
+
+void PlaybackConfiguration::clearRecentVideoFiles()
+{
+    settings()->setSharedValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
 }
 
 bool PlaybackConfiguration::isMixerSectionVisible(MixerSectionType sectionType) const

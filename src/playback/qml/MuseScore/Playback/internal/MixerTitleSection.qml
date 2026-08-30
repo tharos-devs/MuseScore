@@ -52,6 +52,7 @@ MixerPanelSection {
             switch(channelItem.type) {
             case MixerChannelItem.PrimaryInstrument:
             case MixerChannelItem.SecondaryInstrument:
+            case MixerChannelItem.Video:
                 return ui.theme.accentColor
             case MixerChannelItem.Aux:
                 return "#63D47B"
