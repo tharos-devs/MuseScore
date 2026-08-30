@@ -173,6 +173,21 @@ bool MixerChannelItem::forceMute() const
     return m_outParams.forceMute;
 }
 
+QColor MixerChannelItem::color() const
+{
+    return m_outParams.color;
+}
+
+bool MixerChannelItem::hasCustomColor() const
+{
+    return m_outParams.color.isValid();
+}
+
+bool MixerChannelItem::selected() const
+{
+    return m_selected;
+}
+
 muse::ui::NavigationPanel* MixerChannelItem::panel() const
 {
     return m_panel;
@@ -289,6 +304,11 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
         if (!m_hasBalanceAutomation) {
             setDisplayedBalance(m_outParams.balance.raw() * BALANCE_SCALING_FACTOR);
         }
+    }
+
+    if (m_outParams.color != newParams.color) {
+        m_outParams.color = newParams.color;
+        emit colorChanged();
     }
 
     loadOutputResourceItems(newParams.fxChain);
@@ -529,6 +549,26 @@ void MixerChannelItem::setMuted(bool mute)
     if (mute && m_outParams.solo) {
         setSolo(false);
     }
+}
+
+void MixerChannelItem::setColor(QColor color)
+{
+    if (m_outParams.color == color) {
+        return;
+    }
+
+    m_outParams.color = color;
+    emit colorChanged();
+}
+
+void MixerChannelItem::setSelected(bool selected)
+{
+    if (m_selected == selected) {
+        return;
+    }
+
+    m_selected = selected;
+    emit selectedChanged();
 }
 
 mu::notation::INotationPlaybackPtr MixerChannelItem::notationPlayback() const
