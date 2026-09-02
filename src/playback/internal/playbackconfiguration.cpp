@@ -55,6 +55,17 @@ static constexpr int VIDEO_HIT_POINTS_PANEL_MAX_WIDTH = 420;
 
 static const Settings::Key VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY(moduleName, "playback/video/hitPointsPanelVisible");
 
+static const Settings::Key VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY(moduleName, "playback/video/hitPointsPanelBelowTimeline");
+
+static const Settings::Key VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY(moduleName, "playback/video/hitPointsPanelHeight");
+static constexpr int VIDEO_HIT_POINTS_PANEL_DEFAULT_HEIGHT = 220;
+//! NOTE: floor/ceiling for the sidebar's own axis once it's moved below the
+//! timeline (see VIDEO_HIT_POINTS_PANEL_MIN_WIDTH/MAX_WIDTH above for the
+//! equivalent when it's docked to the side) -- matches VideoPanel.qml's
+//! hitPointsPanelMinHeight/MaxHeight.
+static constexpr int VIDEO_HIT_POINTS_PANEL_MIN_HEIGHT = 160;
+static constexpr int VIDEO_HIT_POINTS_PANEL_MAX_HEIGHT = 400;
+
 static const Settings::Key RECENT_VIDEO_FILES_KEY(moduleName, "playback/video/recentFiles");
 static constexpr int RECENT_VIDEO_FILES_MAX = 5;
 static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
@@ -131,6 +142,8 @@ void PlaybackConfiguration::init()
     settings()->setDefaultValue(PLAYBACK_CURSOR_TYPE_KEY, Val(PlaybackCursorType::STEPPED));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_WIDTH_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_WIDTH));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(true));
+    settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY, Val(false));
+    settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_HEIGHT));
     settings()->setDefaultValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
     settings()->setDefaultValue(SOUND_PRESETS_MULTI_SELECTION_KEY, Val(false));
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_SOUND_WARNING, Val(true));
@@ -263,6 +276,28 @@ bool PlaybackConfiguration::videoHitPointsPanelVisible() const
 void PlaybackConfiguration::setVideoHitPointsPanelVisible(bool visible)
 {
     settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(visible));
+}
+
+bool PlaybackConfiguration::videoHitPointsPanelBelowTimeline() const
+{
+    return settings()->value(VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY).toBool();
+}
+
+void PlaybackConfiguration::setVideoHitPointsPanelBelowTimeline(bool belowTimeline)
+{
+    settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY, Val(belowTimeline));
+}
+
+int PlaybackConfiguration::videoHitPointsPanelHeight() const
+{
+    return std::clamp(settings()->value(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY).toInt(),
+                      VIDEO_HIT_POINTS_PANEL_MIN_HEIGHT, VIDEO_HIT_POINTS_PANEL_MAX_HEIGHT);
+}
+
+void PlaybackConfiguration::setVideoHitPointsPanelHeight(int height)
+{
+    height = std::clamp(height, VIDEO_HIT_POINTS_PANEL_MIN_HEIGHT, VIDEO_HIT_POINTS_PANEL_MAX_HEIGHT);
+    settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY, Val(height));
 }
 
 QStringList PlaybackConfiguration::recentVideoFiles() const

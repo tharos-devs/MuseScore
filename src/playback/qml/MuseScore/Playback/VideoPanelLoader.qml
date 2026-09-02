@@ -70,6 +70,15 @@ Item {
     // content, only instantiated once the panel is actually shown).
     property alias contextMenuModel: contextMenuModel
 
+    // NOTE: exposed so NotationPage.qml's DockPanel can relax its own
+    // minimumWidth when docked -- with the sidebar below the timeline instead
+    // of beside it, the panel's real content floor is much narrower (roughly
+    // previewPaneMinWidth alone), which is what actually makes docking this
+    // panel to a narrow left/right column practical. Read from
+    // videoPanelLoader.item directly (rather than only via the contextMenuModel
+    // copy above) since this needs to be usable even before that model exists.
+    readonly property bool hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
+
     readonly property bool shouldLoadPanel: width > 0 && height > 0
 
     // NOTE: this does NOT use QWindow.showFullScreen()/showNormal() at all --
@@ -93,8 +102,27 @@ Item {
 
         floating: root.floating
         isFullScreen: root.isFullScreen
+        // NOTE: forwarded from the lazily-loaded VideoPanel.qml (the actual
+        // owner of the sidebar's layout, via videoPanelLoader.item below) --
+        // this model has no layout of its own, same reasoning as
+        // screenAvailableGeometry() needing this file to reach into the real
+        // window rather than owning that logic itself.
+        hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
+        hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
 
         Component.onCompleted: contextMenuModel.load()
+
+        onSetHitPointsPanelBelowTimelineRequested: function(belowTimeline) {
+            if (videoPanelLoader.item) {
+                videoPanelLoader.item.setHitPointsPanelBelowTimeline(belowTimeline)
+            }
+        }
+
+        onToggleHitPointsPanelVisibleRequested: {
+            if (videoPanelLoader.item) {
+                videoPanelLoader.item.toggleHitPointsPanelVisible()
+            }
+        }
 
         onToggleFullScreenRequested: {
             var win = root.Window.window

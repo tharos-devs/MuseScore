@@ -47,6 +47,21 @@ class VideoPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
     //! static toggle name.
     Q_PROPERTY(bool isFullScreen READ isFullScreen WRITE setIsFullScreen NOTIFY isFullScreenChanged)
 
+    //! NOTE Whether the hit-points sidebar currently sits below the timeline
+    //! rather than beside it -- fed in from VideoPanel.qml (this model doesn't
+    //! own the panel's layout). Unlike Full screen, this item is available in
+    //! both the docked and floating states: it's precisely the docked-narrow
+    //! case (e.g. this panel docked to the left/right of the notation view)
+    //! that most needs the sidebar out of the way of the horizontal space.
+    Q_PROPERTY(
+        bool hitPointsPanelBelowTimeline READ hitPointsPanelBelowTimeline WRITE setHitPointsPanelBelowTimeline NOTIFY hitPointsPanelBelowTimelineChanged)
+
+    //! NOTE Whether the hit-points sidebar is currently shown at all -- fed in
+    //! from VideoPanel.qml, same reasoning as hitPointsPanelBelowTimeline
+    //! above. Flips the "Sidebar > Show/Hide" item's label, same pattern as
+    //! Full screen's own label flip.
+    Q_PROPERTY(bool hitPointsPanelVisible READ hitPointsPanelVisible WRITE setHitPointsPanelVisible NOTIFY hitPointsPanelVisibleChanged)
+
     QML_ELEMENT
 
 public:
@@ -72,6 +87,12 @@ public:
     bool isFullScreen() const;
     void setIsFullScreen(bool isFullScreen);
 
+    bool hitPointsPanelBelowTimeline() const;
+    void setHitPointsPanelBelowTimeline(bool belowTimeline);
+
+    bool hitPointsPanelVisible() const;
+    void setHitPointsPanelVisible(bool visible);
+
 signals:
     //! NOTE Actually toggling full screen needs a QQuickWindow (via the
     //! Window attached property), which this menu-item-list model has no
@@ -80,10 +101,23 @@ signals:
     void floatingChanged();
     void isFullScreenChanged();
 
+    //! NOTE Actually moving/showing the sidebar needs the panel's own
+    //! SplitView, which this menu-item-list model has no business reaching
+    //! into -- QML handles it on receiving these, same as
+    //! toggleFullScreenRequested above. setHitPointsPanelBelowTimelineRequested
+    //! sets the position directly (Right/Down are independent picks, not a
+    //! toggle -- clicking the option that's already active is a no-op).
+    void setHitPointsPanelBelowTimelineRequested(bool belowTimeline);
+    void hitPointsPanelBelowTimelineChanged();
+    void toggleHitPointsPanelVisibleRequested();
+    void hitPointsPanelVisibleChanged();
+
 private:
     void updateItems();
 
     bool m_floating = false;
     bool m_isFullScreen = false;
+    bool m_hitPointsPanelBelowTimeline = false;
+    bool m_hitPointsPanelVisible = true;
 };
 }

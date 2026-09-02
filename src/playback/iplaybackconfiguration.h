@@ -61,6 +61,12 @@ public:
     virtual bool videoHitPointsPanelVisible() const = 0;
     virtual void setVideoHitPointsPanelVisible(bool visible) = 0;
 
+    virtual bool videoHitPointsPanelBelowTimeline() const = 0;
+    virtual void setVideoHitPointsPanelBelowTimeline(bool belowTimeline) = 0;
+
+    virtual int videoHitPointsPanelHeight() const = 0;
+    virtual void setVideoHitPointsPanelHeight(int height) = 0;
+
     //! NOTE Most-recently-used first, capped at a small fixed size.
     virtual QStringList recentVideoFiles() const = 0;
     virtual void addRecentVideoFile(const QString& path) = 0;

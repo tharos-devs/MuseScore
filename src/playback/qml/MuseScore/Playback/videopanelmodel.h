@@ -140,6 +140,13 @@ public:
     Q_INVOKABLE bool hitPointsPanelVisible() const;
     Q_INVOKABLE void setHitPointsPanelVisible(bool visible);
 
+    //! NOTE Same persisted-on-load/write-back-on-drag pattern as the width/visible
+    //! pair above, for the sidebar's alternate "below the timeline" layout.
+    Q_INVOKABLE bool hitPointsPanelBelowTimeline() const;
+    Q_INVOKABLE void setHitPointsPanelBelowTimeline(bool belowTimeline);
+    Q_INVOKABLE int hitPointsPanelHeight() const;
+    Q_INVOKABLE void setHitPointsPanelHeight(int height);
+
     Q_INVOKABLE QStringList recentVideoFiles() const;
     Q_INVOKABLE void clearRecentVideoFiles();
 
