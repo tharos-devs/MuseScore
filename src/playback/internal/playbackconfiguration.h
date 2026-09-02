@@ -64,6 +64,12 @@ public:
     bool videoHitPointsPanelVisible() const override;
     void setVideoHitPointsPanelVisible(bool visible) override;
 
+    bool videoHitPointsPanelBelowTimeline() const override;
+    void setVideoHitPointsPanelBelowTimeline(bool belowTimeline) override;
+
+    int videoHitPointsPanelHeight() const override;
+    void setVideoHitPointsPanelHeight(int height) override;
+
     QStringList recentVideoFiles() const override;
     void addRecentVideoFile(const QString& path) override;
     void clearRecentVideoFiles() override;

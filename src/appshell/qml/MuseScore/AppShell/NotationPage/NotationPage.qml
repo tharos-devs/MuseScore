@@ -111,6 +111,18 @@ DockPage {
         root.panelBottomDropDestination
     ]
 
+    //! NOTE: unlike the other horizontal panels (Mixer, Timeline, Piano keyboard,
+    //! Percussion, Selection Filter), Video also makes sense as a narrow side
+    //! panel (its own internal sidebar can be moved below the timeline via its
+    //! context menu to fit that width) -- so it gets top/bottom PLUS left/right,
+    //! instead of reusing horizontalPanelDropDestinations verbatim.
+    readonly property var videoPanelDropDestinations: [
+        root.panelTopDropDestination,
+        root.panelBottomDropDestination,
+        { "dock": root.centralDock, "dropLocation": Location.Left, "dropDistance": root.verticalPanelDefaultWidth },
+        { "dock": root.centralDock, "dropLocation": Location.Right, "dropDistance": root.verticalPanelDefaultWidth }
+    ]
+
     property var notationView: null
 
     mainToolBars: [
@@ -586,7 +598,22 @@ DockPage {
             //! that split collapse/overlap, so it needs a real floor instead of
             //! panelMinDimension. The extra margin above 560 covers panel chrome
             //! (title bar, borders) that isn't part of the SplitView's own content area.
-            minimumWidth: 640
+            //! With the sidebar moved below the timeline instead (chosen via the
+            //! panel's own "..." menu), that internal split becomes vertical and no
+            //! longer eats into the width budget -- the floor drops to roughly the
+            //! preview+transport column's own minimum (VideoPanel.qml's
+            //! previewPaneMinWidth) plus the same chrome margin.
+            //! NOTE: this is intent-documenting more than strictly enforced --
+            //! DockBase::resize()'s own axis routing reads location(), which
+            //! isn't updated by drag-and-drop redocking (dropcontroller.cpp never
+            //! calls setLocation()), so a docked panel's minimumWidth isn't
+            //! reliably re-applied by the framework once it changes after the
+            //! panel is already docked to the side. VideoPanel.qml's own
+            //! button-row content degrades gracefully well past this width
+            //! regardless (progressively hiding the zoom cluster, then
+            //! Load/Recent, rather than overlapping), so this floor not being a
+            //! hard wall doesn't cause visible breakage.
+            minimumWidth: videoPanelLoaderInstance.hitPointsPanelBelowTimeline ? 340 : 640
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
@@ -596,7 +623,7 @@ DockPage {
 
             location: Location.Bottom
 
-            dropDestinations: root.horizontalPanelDropDestinations
+            dropDestinations: root.videoPanelDropDestinations
 
             navigationSection: root.navigationPanelSec(videoPanel.location)
 

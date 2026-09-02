@@ -236,6 +236,26 @@ void VideoPanelModel::setHitPointsPanelVisible(bool visible)
     configuration()->setVideoHitPointsPanelVisible(visible);
 }
 
+bool VideoPanelModel::hitPointsPanelBelowTimeline() const
+{
+    return configuration()->videoHitPointsPanelBelowTimeline();
+}
+
+void VideoPanelModel::setHitPointsPanelBelowTimeline(bool belowTimeline)
+{
+    configuration()->setVideoHitPointsPanelBelowTimeline(belowTimeline);
+}
+
+int VideoPanelModel::hitPointsPanelHeight() const
+{
+    return configuration()->videoHitPointsPanelHeight();
+}
+
+void VideoPanelModel::setHitPointsPanelHeight(int height)
+{
+    configuration()->setVideoHitPointsPanelHeight(height);
+}
+
 QStringList VideoPanelModel::recentVideoFiles() const
 {
     return configuration()->recentVideoFiles();

@@ -43,13 +43,33 @@ Item {
     // centered on the video regardless of how wide the outer groups are --
     // but that means, unlike a plain RowLayout, nothing here prevents the
     // groups from painting on top of each other if the row gets narrower than
-    // all three combined need. This floor is sized for that: left cluster
-    // (Load+Recent, ~60) + centered cluster (#, M, Rewind, Play, Stop, Loop,
-    // ~220) + right cluster (zoom out/value/presets-dropdown/zoom in/sidebar
-    // toggle, ~136), plus content margins and slack for font-metrics rounding.
+    // all three combined need (a real risk once this panel is docked to a
+    // narrow left/right column). Handled in two stages instead of a single
+    // floor: below previewPaneFullControlsWidth the right (zoom) cluster
+    // hides itself entirely (buttonRow's own visibility binding) rather than
+    // overlapping the transport controls; below previewPaneMinWidth -- left
+    // + center clusters only, once zoom is already hidden -- even that isn't
+    // safe, so this is enforced as a hard floor instead (leftPane's own
+    // SplitView.minimumWidth below), since there's nothing left to hide past
+    // that point and the transport icons would start painting over Load.
     // NOTE: whenever a button is added to/removed from any of the three
-    // clusters, this needs revisiting too -- it does NOT update itself.
-    readonly property int previewPaneMinWidth: 510
+    // clusters, both thresholds below need revisiting -- neither updates
+    // itself.
+    readonly property int previewPaneMinWidth: 320
+    // NOTE: sized for left cluster (Load+Recent, ~60) + centered cluster (#,
+    // M, Rewind, Play, Stop, Loop, ~220) + right cluster (zoom out/value/
+    // presets-dropdown/zoom in, ~108) + content margins and slack for
+    // font-metrics rounding -- i.e. previewPaneMinWidth above PLUS the right
+    // cluster's own footprint.
+    readonly property int previewPaneFullControlsWidth: 480
+    // NOTE: floor for the preview+controls+timeline column's OWN axis once the
+    // sidebar moves below it (hitPointsPanelBelowTimeline) and stacking makes
+    // that column's height the constrained dimension instead of its width --
+    // sized for previewSlot's own 96px floor + the button row (~30) + the
+    // zoom/timeline row (~24 + 88) + spacing/margins between them. Unused
+    // while the sidebar is beside the video (previewPaneMinWidth is the floor
+    // then instead).
+    readonly property int previewPaneMinHeight: 280
     // NOTE: must fit the hit-point table's own minimum row content (timecode 88
     // + measure 64 + name's own 80 floor + delete button 28, plus spacing and
     // panel margins) without clipping the delete button -- narrower than this
@@ -59,6 +79,21 @@ Item {
     readonly property int hitPointsPanelMaxWidth: 420
     property int hitPointsPanelWidth: 320
     property bool hitPointsPanelVisible: true
+
+    //! NOTE: floor/ceiling for the sidebar's own axis once it's moved below the
+    //! timeline via the context menu (see hitPointsPanelMinWidth/MaxWidth above
+    //! for the equivalent when it's beside the video) -- matches
+    //! PlaybackConfiguration's VIDEO_HIT_POINTS_PANEL_MIN_HEIGHT/MAX_HEIGHT.
+    readonly property int hitPointsPanelMinHeight: 160
+    readonly property int hitPointsPanelMaxHeight: 400
+    property int hitPointsPanelHeight: 220
+
+    //! NOTE: chosen via the panel's own "..." context menu (Move sidebar below
+    //! timeline / Move sidebar to the side) rather than automatically -- lets
+    //! the user pick whichever suits how they've docked/floated this panel
+    //! (a narrow left/right dock especially benefits from the sidebar below,
+    //! since there's no room for it beside the video at that width).
+    property bool hitPointsPanelBelowTimeline: false
     readonly property int timelineZoomMax: 10
     property real timelineZoom: 1
     readonly property int timelineFrameRate: Math.max(1, Math.round(videoModel.frameRate))
@@ -82,9 +117,21 @@ Item {
     // cover the video. Half the current sidebar width on top of the two panes'
     // combined minimum leaves enough slack that this shouldn't get hit in
     // normal use, per the user's own sizing rule of thumb. When the sidebar is
-    // hidden there's no sidebar minimum to reserve space for.
+    // hidden there's no sidebar minimum to reserve space for. With the sidebar
+    // moved below the timeline instead, it no longer adds to the WIDTH floor
+    // at all -- previewPaneMinWidth alone is enough, same as when it's hidden.
     implicitWidth: root.previewPaneMinWidth
-                   + (root.hitPointsPanelVisible ? root.hitPointsPanelMinWidth + Math.round(root.hitPointsPanelWidth / 2) : 0)
+                   + (!root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                      ? root.hitPointsPanelMinWidth + Math.round(root.hitPointsPanelWidth / 2) : 0)
+
+    // NOTE: mirrors implicitWidth above, but for the HEIGHT floor -- only
+    // relevant once the sidebar is stacked below the timeline (contentSplitView
+    // becomes vertically oriented then), since in the side-by-side layout the
+    // two panes share the same height and width is the only axis that needs a
+    // reserved floor.
+    implicitHeight: root.previewPaneMinHeight
+                    + (root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                       ? root.hitPointsPanelMinHeight + Math.round(root.hitPointsPanelHeight / 2) : 0)
 
     // NOTE: the generic "monospace" family alias doesn't reliably resolve to an
     // actual fixed-pitch font on every platform -- when it doesn't, digits with
@@ -151,11 +198,22 @@ Item {
         videoModel.load()
         root.hitPointsPanelWidth = Math.max(root.hitPointsPanelMinWidth, Math.min(root.hitPointsPanelMaxWidth, videoModel.hitPointsPanelWidth()))
         root.hitPointsPanelVisible = videoModel.hitPointsPanelVisible()
+        root.hitPointsPanelHeight = Math.max(root.hitPointsPanelMinHeight, Math.min(root.hitPointsPanelMaxHeight, videoModel.hitPointsPanelHeight()))
+        root.hitPointsPanelBelowTimeline = videoModel.hitPointsPanelBelowTimeline()
     }
 
     function toggleHitPointsPanelVisible() {
         root.hitPointsPanelVisible = !root.hitPointsPanelVisible
         videoModel.setHitPointsPanelVisible(root.hitPointsPanelVisible)
+    }
+
+    //! NOTE: sets the position directly rather than toggling -- the "Sidebar"
+    //! context menu offers Right/Down as two independent picks (like a radio
+    //! group), not a single toggle, so clicking the option that's already
+    //! active should simply do nothing.
+    function setHitPointsPanelBelowTimeline(belowTimeline) {
+        root.hitPointsPanelBelowTimeline = belowTimeline
+        videoModel.setHitPointsPanelBelowTimeline(belowTimeline)
     }
 
     function targetVideoPositionMs() {
@@ -539,7 +597,7 @@ Item {
         id: contentSplitView
 
         anchors.fill: parent
-        orientation: Qt.Horizontal
+        orientation: root.hitPointsPanelBelowTimeline ? Qt.Vertical : Qt.Horizontal
 
         handle: Rectangle {
             id: resizingHandle
@@ -549,16 +607,27 @@ Item {
 
             color: ui.theme.strokeColor
 
-            // NOTE: only capture/persist the sidebar width once the user finishes
-            // dragging (not on every intermediate width change) -- so a transient
-            // shrink caused by too little available space -- see hitPointsPanel's
-            // SplitView.preferredWidth -- never overwrites the user's real
-            // preference with a space-constrained value.
+            // NOTE: only capture/persist the sidebar's size once the user finishes
+            // dragging (not on every intermediate change) -- so a transient shrink
+            // caused by too little available space -- see hitPointsPanel's
+            // SplitView.preferredWidth/preferredHeight -- never overwrites the
+            // user's real preference with a space-constrained value. Which axis
+            // gets persisted follows hitPointsPanelBelowTimeline, since that's
+            // also what the SplitView's own orientation follows above.
             Connections {
                 target: resizingHandle.SplitHandle
 
                 function onPressedChanged() {
-                    if (!resizingHandle.SplitHandle.pressed && hitPointsPanel.width > 0) {
+                    if (resizingHandle.SplitHandle.pressed) {
+                        return
+                    }
+
+                    if (root.hitPointsPanelBelowTimeline) {
+                        if (hitPointsPanel.height > 0) {
+                            root.hitPointsPanelHeight = hitPointsPanel.height
+                            videoModel.setHitPointsPanelHeight(hitPointsPanel.height)
+                        }
+                    } else if (hitPointsPanel.width > 0) {
                         root.hitPointsPanelWidth = hitPointsPanel.width
                         videoModel.setHitPointsPanelWidth(hitPointsPanel.width)
                     }
@@ -598,6 +667,7 @@ Item {
             SplitView.fillWidth: true
             SplitView.fillHeight: true
             SplitView.minimumWidth: root.previewPaneMinWidth
+            SplitView.minimumHeight: root.previewPaneMinHeight
 
             ColumnLayout {
                 anchors.fill: parent
@@ -818,6 +888,8 @@ Item {
             }
 
             Item {
+                id: buttonRow
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: 30
 
@@ -825,6 +897,17 @@ Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
+
+                    // NOTE: hides this whole cluster once the row is too narrow
+                    // even for just the left+center clusters (the zoom cluster
+                    // already hid itself first, at the wider
+                    // previewPaneFullControlsWidth threshold) -- there's nothing
+                    // left to trim after this, so this is the last line of
+                    // defense against the transport cluster overlapping Load.
+                    // The transport cluster stays centered on buttonRow's full
+                    // width regardless (see its own NOTE), so hiding this
+                    // doesn't shift it.
+                    visible: buttonRow.width >= root.previewPaneMinWidth
 
                     FilePicker {
                         id: filePicker
@@ -992,6 +1075,14 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
 
+                    // NOTE: hides this whole cluster once the row is too narrow
+                    // for all three clusters to fit without overlapping the
+                    // transport controls -- see previewPaneFullControlsWidth's
+                    // own NOTE above. The transport cluster stays centered on
+                    // buttonRow's full width regardless (see its own NOTE), so
+                    // hiding this doesn't shift it.
+                    visible: buttonRow.width >= root.previewPaneFullControlsWidth
+
                     FlatButton {
                         Layout.preferredWidth: 24
                         Layout.preferredHeight: 24
@@ -1106,22 +1197,6 @@ Item {
 
                         onClicked: {
                             root.timelineZoom = Math.min(root.timelineZoomMax, root.timelineZoom + 0.25)
-                        }
-                    }
-
-                    FlatButton {
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        Layout.leftMargin: 4
-                        icon: root.hitPointsPanelVisible ? IconCode.CHEVRON_RIGHT : IconCode.CHEVRON_LEFT
-                        buttonType: FlatButton.IconOnly
-                        transparent: true
-                        toolTipTitle: root.hitPointsPanelVisible ? qsTrc("playback", "Hide sidebar") : qsTrc("playback", "Show sidebar")
-                        navigation.panel: navigationPanel
-                        navigation.order: root.contentNavigationPanelOrderStart + 16
-
-                        onClicked: {
-                            root.toggleHitPointsPanelVisible()
                         }
                     }
                 }
@@ -1643,14 +1718,26 @@ Item {
             visible: root.hitPointsPanelVisible
 
             // NOTE: never request more than (total - leftPane's own minimum) --
-            // otherwise a stale/persisted width can force the SplitView to shrink
-            // leftPane below what it needs, which reads as the sidebar "covering"
-            // the video.
+            // otherwise a stale/persisted width/height can force the SplitView to
+            // shrink leftPane below what it needs, which reads as the sidebar
+            // "covering" the video. Only one axis' constraints are actually
+            // honored by the SplitView at a time, matching whichever orientation
+            // is currently active (see contentSplitView.orientation above) -- the
+            // other axis' properties below are simply inert until the mode flips.
             SplitView.preferredWidth: Math.min(root.hitPointsPanelWidth,
                                                 Math.max(root.hitPointsPanelMinWidth, contentSplitView.width - leftPane.SplitView.minimumWidth))
             SplitView.minimumWidth: root.hitPointsPanelMinWidth
             SplitView.maximumWidth: root.hitPointsPanelMaxWidth
-            SplitView.fillHeight: true
+            // NOTE: only fills the cross-axis in horizontal (beside-the-video)
+            // mode -- in vertical (below-the-timeline) mode leftPane is the one
+            // that should get the leftover space instead, so this must be false
+            // there or the two panes would both claim the fill role.
+            SplitView.fillHeight: !root.hitPointsPanelBelowTimeline
+
+            SplitView.preferredHeight: Math.min(root.hitPointsPanelHeight,
+                                                 Math.max(root.hitPointsPanelMinHeight, contentSplitView.height - leftPane.SplitView.minimumHeight))
+            SplitView.minimumHeight: root.hitPointsPanelMinHeight
+            SplitView.maximumHeight: root.hitPointsPanelMaxHeight
 
             videoModel: videoModel
             seekToVideoPositionMs: root.seekToVideoPositionMs
