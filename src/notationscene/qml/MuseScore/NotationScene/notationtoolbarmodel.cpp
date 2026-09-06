@@ -22,6 +22,8 @@
 
 #include "notationtoolbarmodel.h"
 
+#include "global/containers.h"
+
 #include "uicomponents/qml/Muse/UiComponents/toolbaritem.h"
 
 using namespace mu::notation;
@@ -78,4 +80,15 @@ void NotationToolBarModel::load()
 muse::uicomponents::ToolBarItem* NotationToolBarModel::automationItem() const
 {
     return m_automationItem;
+}
+
+void NotationToolBarModel::onActionsStateChanges(const ActionCodeList& codes)
+{
+    AbstractToolBarModel::onActionsStateChanges(codes);
+
+    if (!m_automationItem || !muse::contains(codes, ActionCode("toggle-automation"))) {
+        return;
+    }
+
+    m_automationItem->setState(uiActionsRegister()->actionState("toggle-automation"));
 }

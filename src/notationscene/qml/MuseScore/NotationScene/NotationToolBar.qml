@@ -20,13 +20,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import QtQuick
-import QtQuick.Layouts
 
 import Muse.UiComponents
 
 import MuseScore.NotationScene
 
-RowLayout {
+// A plain Row, not RowLayout: StyledToolBarView already manages its own width/height
+// internally, which conflicts with RowLayout's layout-managed sizing (that fight is what made
+// the automation button render out of place) - Row just positions children using their own
+// existing size, without renegotiating it.
+Row {
     id: root
 
     property alias isCompactMode: toolBarModel.isCompactMode
@@ -47,6 +50,8 @@ RowLayout {
     StyledToolBarView {
         id: styledToolBarView
 
+        anchors.verticalCenter: parent.verticalCenter
+
         navigationPanel.name: "NotationToolBar"
         navigationPanel.accessible.name: qsTrc("notation", "Notation toolbar")
 
@@ -58,9 +63,9 @@ RowLayout {
     SplitButton {
         id: automationButton
 
-        readonly property var itemData: toolBarModel.automationItem
+        anchors.verticalCenter: parent.verticalCenter
 
-        Layout.preferredHeight: 32
+        readonly property var itemData: toolBarModel.automationItem
 
         icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
         text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
@@ -81,6 +86,13 @@ RowLayout {
 
         onHandleMenuItem: function(itemId) {
             automationTypeMenuModel.handleMenuItem(itemId)
+        }
+
+        onAboutToOpenMenu: {
+            // Refresh right before showing, rather than relying solely on the model's own
+            // reactive updates - matches how the right-click "Automation type" submenu is always
+            // rebuilt fresh on open, so it can't show a stale/no checkmark either.
+            automationTypeMenuModel.init()
         }
     }
 }

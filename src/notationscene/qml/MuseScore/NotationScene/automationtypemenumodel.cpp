@@ -34,6 +34,11 @@ void AutomationTypeMenuModel::init()
 {
     updateItems();
 
+    // Without this, items keep whatever enabled/checked state the command had at construction
+    // time (this model is built once, at NotationToolBar.qml startup) and never refresh - unlike
+    // NotationContextMenuModel's items, which are rebuilt fresh on every right-click.
+    subscribeOnChanges();
+
     notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
         updateItems();
     });

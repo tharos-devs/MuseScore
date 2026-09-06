@@ -50,6 +50,12 @@ public:
 signals:
     void automationItemChanged();
 
+protected:
+    // m_automationItem isn't in the base's own tracked items list (it's excluded from setItems()
+    // - see load()), so it would otherwise never receive enabled/checked updates when the action's
+    // state changes (e.g. when a score opens/closes) and would stay stuck at its initial state.
+    void onActionsStateChanges(const muse::actions::ActionCodeList& codes) override;
+
 private:
     bool m_loaded = false;
     muse::uicomponents::ToolBarItem* m_automationItem = nullptr;
