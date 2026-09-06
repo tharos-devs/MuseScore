@@ -32,6 +32,18 @@ using namespace muse::actions;
 
 void NotationToolBarModel::load()
 {
+    // Checked (and retried if still null) on every call, even after m_loaded below is set - if
+    // "toggle-automation" isn't registered yet the first time this runs, this is the only chance
+    // to pick it up on a later call (e.g. via currentMasterNotationChanged, below).
+    if (!m_automationItem) {
+        m_automationItem = makeItem("toggle-automation");
+        if (m_automationItem) {
+            m_automationItem->setShowTitle(!isCompactMode());
+            m_automationItem->setIsTitleBold(true);
+            emit automationItemChanged();
+        }
+    }
+
     if (m_loaded) {
         return;
     }
@@ -59,14 +71,14 @@ void NotationToolBarModel::load()
 
     setItems(items);
 
-    if (!m_automationItem) {
-        m_automationItem = makeItem("toggle-automation");
+    // m_automationItem is excluded from the base's own tracked items (above), so it also misses
+    // the setShowTitle() update AbstractToolBarModel::setIsCompactMode() applies to every other
+    // item when the toolbar switches compact mode - do it here too.
+    connect(this, &NotationToolBarModel::isCompactModeChanged, this, [this]() {
         if (m_automationItem) {
             m_automationItem->setShowTitle(!isCompactMode());
-            m_automationItem->setIsTitleBold(true);
-            emit automationItemChanged();
         }
-    }
+    });
 
     context()->currentMasterNotationChanged().onNotify(this, [this]() {
         load();

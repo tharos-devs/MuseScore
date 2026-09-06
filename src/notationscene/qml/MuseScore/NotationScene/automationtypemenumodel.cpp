@@ -39,13 +39,21 @@ void AutomationTypeMenuModel::init()
     // NotationContextMenuModel's items, which are rebuilt fresh on every right-click.
     subscribeOnChanges();
 
+    // SetReplace: init() is called again every time the dropdown is about to open (see
+    // NotationToolBar.qml's aboutToOpenMenu handler), so this must tolerate being re-registered
+    // rather than asserting like the default SetOnce mode does.
     notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
         updateItems();
-    });
+    }, muse::async::Asyncable::Mode::SetReplace);
 }
 
 void AutomationTypeMenuModel::updateItems()
 {
+    // AbstractMenuModel::setItems() doesn't delete the items it's replacing (unlike
+    // AbstractToolBarModel's own setItems), and this runs on every dropdown open - without this,
+    // each open leaks the previous batch.
+    qDeleteAll(items());
+
     setItems({
         makeAutomationTypeItem(AutomationType::Dynamics, "dynamics", TranslatableString::untranslatable("Dynamics")),
         makeAutomationTypeItem(AutomationType::Tempo, "tempo", TranslatableString::untranslatable("Tempo")),
@@ -55,7 +63,7 @@ void AutomationTypeMenuModel::updateItems()
 }
 
 MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,
-                                                          const TranslatableString& title)
+                                                           const TranslatableString& title)
 {
     MenuItem* item = makeMenuItem(SELECT_AUTOMATION_TYPE_COMMAND, title);
     if (!item) {

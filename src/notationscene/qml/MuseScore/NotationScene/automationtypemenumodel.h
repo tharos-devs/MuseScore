@@ -33,8 +33,11 @@ namespace mu::notation {
 // Backs the toolbar "Automation" split-button's dropdown - lets the user pick which curve to view
 // directly, without needing the right-click "Automation type" submenu (see
 // NotationContextMenuModel::makeAutomationTypeItems(), which builds an equivalent set of items for
-// that submenu - kept as a separate small copy here rather than shared, since makeMenuItem() is a
-// protected AbstractMenuModel member and the two models don't otherwise share a common owner).
+// that submenu). Kept as a separate small copy here rather than shared: sharing would mean either
+// exposing makeMenuItem() (protected on the shared AbstractMenuModel base, for good reason) or
+// constructing a NotationContextMenuModel by hand as a helper, which risks not getting its
+// Contextable/IOC context set up the way QML-instantiated objects normally get it for free - not
+// worth risking for 4 nearly-identical menu items.
 class AutomationTypeMenuModel : public muse::uicomponents::AbstractMenuModel
 {
     Q_OBJECT
@@ -48,6 +51,6 @@ public:
 private:
     void updateItems();
     muse::uicomponents::MenuItem* makeAutomationTypeItem(mu::engraving::AutomationType type, const std::string& queryTypeParam,
-                                                         const muse::TranslatableString& title);
+                                                          const muse::TranslatableString& title);
 };
 }

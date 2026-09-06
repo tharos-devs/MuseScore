@@ -67,6 +67,14 @@ Row {
 
         readonly property var itemData: toolBarModel.automationItem
 
+        // Not part of styledToolBarView's own Repeater (see notationtoolbarmodel.cpp), so it
+        // never gets this wiring "for free" the way StyledToolBarView.qml's onLoaded does for
+        // its own items - without it, this button is unreachable via keyboard/screen-reader
+        // toolbar navigation.
+        navigation.panel: styledToolBarView.navigationPanel
+        navigation.row: -1
+        navigation.column: 200
+
         icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
         text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
         checked: Boolean(itemData) && itemData.checked
