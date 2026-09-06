@@ -63,7 +63,7 @@ void AutomationTypeMenuModel::updateItems()
 }
 
 MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,
-                                                           const TranslatableString& title)
+                                                          const TranslatableString& title)
 {
     MenuItem* item = makeMenuItem(SELECT_AUTOMATION_TYPE_COMMAND, title);
     if (!item) {

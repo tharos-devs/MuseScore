@@ -51,6 +51,6 @@ public:
 private:
     void updateItems();
     muse::uicomponents::MenuItem* makeAutomationTypeItem(mu::engraving::AutomationType type, const std::string& queryTypeParam,
-                                                          const muse::TranslatableString& title);
+                                                         const muse::TranslatableString& title);
 };
 }
