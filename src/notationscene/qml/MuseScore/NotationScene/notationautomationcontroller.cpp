@@ -686,6 +686,17 @@ void NotationAutomationController::applyPolylineColors(PolylinePlot* polyline, c
     selected->setMiddleRingColorHovered(foregroundColor);
     selected->setOutlineColorHovered(lineColor);
 
+    // The drag tooltip's chip needs to stay legible against whatever the score's own background
+    // currently is (light/dark/high-contrast paper, or a user-customized color) - matches the
+    // note-velocity drag tooltip's identical luminance-based approach for visual consistency.
+    const QColor background = notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white);
+    const double luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue();
+    if (luminance > 128.0) {
+        polyline->setValueLabelColors(QColor(40, 40, 40, 235), QColor(255, 255, 255));
+    } else {
+        polyline->setValueLabelColors(QColor(235, 235, 235, 235), QColor(20, 20, 20));
+    }
+
     applyPolylineColorsUnderLine(polyline, key);
 }
 
