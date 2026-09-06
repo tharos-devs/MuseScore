@@ -35,12 +35,23 @@ class NotationToolBarModel : public muse::uicomponents::AbstractToolBarModel
     Q_OBJECT
     QML_ELEMENT;
 
+    // Kept out of the model's own displayed items (see load()) - it's rendered as a SplitButton
+    // by NotationToolBar.qml instead of a plain generic toolbar item, so this exposes the same
+    // reactive ToolBarItem (checked/enabled/icon/title, and activate() to trigger it) for that.
+    Q_PROPERTY(muse::uicomponents::ToolBarItem * automationItem READ automationItem NOTIFY automationItemChanged)
+
     muse::ContextInject<context::IGlobalContext> context = { this };
 
 public:
     Q_INVOKABLE void load() override;
 
+    muse::uicomponents::ToolBarItem* automationItem() const;
+
+signals:
+    void automationItemChanged();
+
 private:
     bool m_loaded = false;
+    muse::uicomponents::ToolBarItem* m_automationItem = nullptr;
 };
 }

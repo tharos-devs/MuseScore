@@ -20,22 +20,67 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import QtQuick
+import QtQuick.Layouts
 
 import Muse.UiComponents
 
 import MuseScore.NotationScene
 
-StyledToolBarView {
+RowLayout {
+    id: root
+
     property alias isCompactMode: toolBarModel.isCompactMode
+    property alias navigationPanel: styledToolBarView.navigationPanel
 
-    navigationPanel.name: "NotationToolBar"
-    navigationPanel.accessible.name: qsTrc("notation", "Notation toolbar")
-
-    spacing: 2
+    spacing: 4
 
     NotationToolBarModel {
         id: toolBarModel
     }
 
-    model: toolBarModel
+    AutomationTypeMenuModel {
+        id: automationTypeMenuModel
+
+        Component.onCompleted: automationTypeMenuModel.init()
+    }
+
+    StyledToolBarView {
+        id: styledToolBarView
+
+        navigationPanel.name: "NotationToolBar"
+        navigationPanel.accessible.name: qsTrc("notation", "Notation toolbar")
+
+        spacing: 2
+
+        model: toolBarModel
+    }
+
+    SplitButton {
+        id: automationButton
+
+        readonly property var itemData: toolBarModel.automationItem
+
+        Layout.preferredHeight: 32
+
+        icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
+        text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
+        checked: Boolean(itemData) && itemData.checked
+        enabled: Boolean(itemData) && itemData.enabled
+        visible: Boolean(itemData)
+
+        toolTipTitle: Boolean(itemData) ? itemData.title : ""
+        toolTipDescription: Boolean(itemData) ? itemData.description : ""
+
+        menuItems: automationTypeMenuModel.items
+
+        onClicked: {
+            if (Boolean(itemData)) {
+                itemData.activate()
+            }
+        }
+
+        onHandleMenuItem: function(itemId) {
+            automationTypeMenuModel.handleMenuItem(itemId)
+        }
+    }
 }

@@ -34,10 +34,12 @@ void NotationToolBarModel::load()
         return;
     }
 
+    // "toggle-automation" is deliberately NOT in this list: it's rendered as a SplitButton
+    // (see NotationToolBar.qml) instead of a plain generic ToolBarItem, so it can offer a
+    // dropdown to pick the automation type directly, alongside its usual toggle behavior.
     muse::actions::ActionCodeList itemsCodes = {
         "parts",
-        "toggle-mixer",
-        "toggle-automation"
+        "toggle-mixer"
     };
 
     ToolBarItemList items;
@@ -55,6 +57,15 @@ void NotationToolBarModel::load()
 
     setItems(items);
 
+    if (!m_automationItem) {
+        m_automationItem = makeItem("toggle-automation");
+        if (m_automationItem) {
+            m_automationItem->setShowTitle(!isCompactMode());
+            m_automationItem->setIsTitleBold(true);
+            emit automationItemChanged();
+        }
+    }
+
     context()->currentMasterNotationChanged().onNotify(this, [this]() {
         load();
     });
@@ -62,4 +73,9 @@ void NotationToolBarModel::load()
     AbstractToolBarModel::load();
 
     m_loaded = true;
+}
+
+muse::uicomponents::ToolBarItem* NotationToolBarModel::automationItem() const
+{
+    return m_automationItem;
 }
