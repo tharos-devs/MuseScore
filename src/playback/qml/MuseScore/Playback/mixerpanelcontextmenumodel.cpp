@@ -22,6 +22,9 @@
 
 #include "mixerpanelcontextmenumodel.h"
 
+#include <QGuiApplication>
+#include <QScreen>
+
 #include "types/translatablestring.h"
 
 #include "playback/playbackcommands.h"
@@ -35,6 +38,7 @@ using namespace muse::actions;
 using namespace muse::audio;
 
 static const QString VIEW_MENU_ID("view-menu");
+static const ActionCode TOGGLE_FULL_SCREEN_ACTION("mixer-panel-toggle-fullscreen");
 
 static TranslatableString mixerSectionTitle(MixerSectionType type)
 {
@@ -109,9 +113,67 @@ bool MixerPanelContextMenuModel::titleSectionVisible() const
     return isSectionVisible(MixerSectionType::Title);
 }
 
+bool MixerPanelContextMenuModel::floating() const
+{
+    return m_floating;
+}
+
+void MixerPanelContextMenuModel::setFloating(bool floating)
+{
+    if (m_floating == floating) {
+        return;
+    }
+
+    m_floating = floating;
+    emit floatingChanged();
+
+    updateItems();
+}
+
+bool MixerPanelContextMenuModel::isFullScreen() const
+{
+    return m_isFullScreen;
+}
+
+void MixerPanelContextMenuModel::setIsFullScreen(bool isFullScreen)
+{
+    if (m_isFullScreen == isFullScreen) {
+        return;
+    }
+
+    m_isFullScreen = isFullScreen;
+    emit isFullScreenChanged();
+
+    updateItems();
+}
+
+QVariantMap MixerPanelContextMenuModel::screenAvailableGeometry(int windowX, int windowY) const
+{
+    QScreen* screen = QGuiApplication::screenAt(QPoint(windowX, windowY));
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+
+    QVariantMap result;
+    if (!screen) {
+        return result;
+    }
+
+    const QRect geometry = screen->availableGeometry();
+    result["x"] = geometry.x();
+    result["y"] = geometry.y();
+    result["width"] = geometry.width();
+    result["height"] = geometry.height();
+    return result;
+}
+
 void MixerPanelContextMenuModel::load()
 {
     AbstractMenuModel::load();
+
+    dispatcher()->reg(this, TOGGLE_FULL_SCREEN_ACTION, [this]() {
+        emit toggleFullScreenRequested();
+    });
 
     configuration()->isAuxSendVisibleChanged().onReceive(this, [this](aux_channel_idx_t auxSendIndex, bool newVisibilityValue) {
         auto query = rcommand::make_query(TOGGLE_AUX_SEND_COMMAND, { { "auxsend-index", Val(auxSendIndex) } });
@@ -132,32 +194,7 @@ void MixerPanelContextMenuModel::load()
         emitMixerSectionVisibilityChanged(sectionType);
     });
 
-    MenuItemList viewMenuItems {
-        buildSectionVisibleItem(MixerSectionType::Labels),
-        buildSectionVisibleItem(MixerSectionType::Sound),
-        buildSectionVisibleItem(MixerSectionType::AudioFX),
-    };
-
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        viewMenuItems.push_back(buildAuxSendVisibleItem(idx));
-    }
-
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        viewMenuItems.push_back(buildAuxChannelVisibleItem(idx));
-    }
-
-    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Balance));
-    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Volume));
-    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Fader));
-    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::MuteAndSolo));
-    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Title));
-
-    MenuItemList items {
-        makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
-        makeMenu(TranslatableString("playback", "View"), viewMenuItems, VIEW_MENU_ID)
-    };
-
-    setItems(items);
+    updateItems();
 }
 
 bool MixerPanelContextMenuModel::isSectionVisible(MixerSectionType sectionType) const
@@ -237,4 +274,47 @@ void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionT
     case MixerSectionType::Unknown:
         break;
     }
+}
+
+void MixerPanelContextMenuModel::updateItems()
+{
+    MenuItemList viewMenuItems {
+        buildSectionVisibleItem(MixerSectionType::Labels),
+        buildSectionVisibleItem(MixerSectionType::Sound),
+        buildSectionVisibleItem(MixerSectionType::AudioFX),
+    };
+
+    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
+        viewMenuItems.push_back(buildAuxSendVisibleItem(idx));
+    }
+
+    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
+        viewMenuItems.push_back(buildAuxChannelVisibleItem(idx));
+    }
+
+    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Balance));
+    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Volume));
+    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Fader));
+    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::MuteAndSolo));
+    viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Title));
+
+    MenuItemList items;
+
+    if (m_floating) {
+        UiAction fullScreenAction;
+        fullScreenAction.title = m_isFullScreen ? TranslatableString("playback", "Exit full screen") : TranslatableString(
+            "playback", "Full screen");
+        fullScreenAction.code = TOGGLE_FULL_SCREEN_ACTION;
+
+        MenuItem* fullScreenItem = new MenuItem(fullScreenAction, this);
+        fullScreenItem->setId("mixer-panel-fullscreen");
+        fullScreenItem->setState(UiActionState::make_enabled());
+
+        items << fullScreenItem;
+    }
+
+    items << makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND);
+    items << makeMenu(TranslatableString("playback", "View"), viewMenuItems, VIEW_MENU_ID);
+
+    setItems(items);
 }

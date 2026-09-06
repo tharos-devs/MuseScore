@@ -25,6 +25,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 
 import Muse.Ui
 import Muse.UiComponents
@@ -43,6 +44,41 @@ ColumnLayout {
         navigation.section: root.navigationSection
         navigation.order: root.contentNavigationPanelOrderStart
     }
+
+    // NOTE: whether the enclosing DockPanel is currently floating (undocked)
+    // -- fed in from NotationPage.qml (`floating: mixerPanel.floating` on
+    // this component's own instantiation). Full screen only makes sense once
+    // this panel is its own floating window -- when docked, there's no
+    // separate window to fullscreen, so "Full screen" would end up
+    // fullscreening the whole MuseScore window instead, which isn't what a
+    // user asking to fullscreen just the mixer expects (e.g. floating this
+    // panel onto a second monitor and fullscreening it there).
+    property bool floating: false
+
+    // NOTE: docking while "full screen" (simulated, see below) leaves no
+    // sensible state to return to on a later undock -- start fresh instead of
+    // carrying a stale saved geometry/flag across a dock/undock cycle.
+    onFloatingChanged: {
+        if (!floating) {
+            isFullScreen = false
+            savedGeometry = null
+        }
+    }
+
+    // NOTE: tracked ourselves rather than reading Window.window.visibility ===
+    // Window.FullScreen -- see the NOTE on savedGeometry below for why native
+    // showFullScreen()/showNormal() aren't used here at all.
+    property bool isFullScreen: false
+
+    // NOTE: this does NOT use QWindow.showFullScreen()/showNormal() at all --
+    // this window type (Qt::Tool, frameless -- see KDDockWidgets' FloatingWindow
+    // setup) doesn't reliably restore geometry on showNormal() (confirmed for
+    // the Video panel's floating window, same window type). Doing this as a
+    // plain geometry resize instead -- filling the window's current screen,
+    // no native full-screen transition involved at all -- sidesteps that
+    // stuck state entirely, at the cost of not hiding the OS menu bar/dock on
+    // the screen it's on the way real OS full screen would.
+    property var savedGeometry: null
 
     signal resizeRequested(var newWidth, var newHeight)
 
@@ -120,8 +156,50 @@ ColumnLayout {
     MixerPanelContextMenuModel {
         id: contextMenuModel
 
+        floating: root.floating
+        isFullScreen: root.isFullScreen
+
         Component.onCompleted: {
             contextMenuModel.load()
+        }
+
+        onToggleFullScreenRequested: {
+            var win = root.Window.window
+            if (!win) {
+                return
+            }
+
+            if (root.isFullScreen) {
+                if (root.savedGeometry) {
+                    win.x = root.savedGeometry.x
+                    win.y = root.savedGeometry.y
+                    win.width = root.savedGeometry.width
+                    win.height = root.savedGeometry.height
+                    root.savedGeometry = null
+                }
+                root.isFullScreen = false
+            } else {
+                root.savedGeometry = { x: win.x, y: win.y, width: win.width, height: win.height }
+
+                // NOTE: fills the AVAILABLE area of whichever screen the
+                // window is currently on (QScreen::availableGeometry(), via
+                // contextMenuModel.screenAvailableGeometry() -- win itself is
+                // a KDDockWidgets::QuickView wrapper around the real
+                // QQuickWindow and doesn't forward a usable `.screen`, so C++
+                // resolves the right QScreen from the window's own position
+                // instead), not the screen's raw full geometry -- the
+                // available area is exactly what's left over once the OS
+                // reserves its own space (the menu bar on macOS, the taskbar
+                // on Windows, panels on Linux), so this fills the screen
+                // without ever landing underneath any of that, on any
+                // platform.
+                var availableGeometry = contextMenuModel.screenAvailableGeometry(win.x, win.y)
+                win.x = availableGeometry.x
+                win.y = availableGeometry.y
+                win.width = availableGeometry.width
+                win.height = availableGeometry.height
+                root.isFullScreen = true
+            }
         }
     }
 
