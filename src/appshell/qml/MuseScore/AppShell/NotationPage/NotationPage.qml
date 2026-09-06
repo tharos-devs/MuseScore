@@ -419,8 +419,14 @@ DockPage {
 
             height: 368
             minimumHeight: root.horizontalPanelMinHeight
-            //! NOTE: taller than the other horizontal panels' shared cap, to fit up to 5 FX slots without a scrollbar
-            maximumHeight: root.horizontalPanelMaxHeight + 80
+            //! NOTE: unlike the other horizontal panels, Mixer can be floated and
+            //! then full-screened (see MixerPanel.qml/mixerpanelcontextmenumodel) --
+            //! the shared 520px cap would otherwise clamp the floating window well
+            //! below screen height, leaving it unable to actually fill the screen
+            //! and forcing a scrollbar on its channel strips instead. This also
+            //! covers docked use: taller than the shared cap alone, to fit up to
+            //! 5 FX slots without a scrollbar.
+            maximumHeight: root.panelMaxDimension
 
             minimumWidth: root.panelMinDimension
             maximumWidth: root.panelMaxDimension
@@ -441,6 +447,7 @@ DockPage {
 
                 navigationSection: mixerPanel.navigationSection
                 contentNavigationPanelOrderStart: mixerPanel.contentNavigationPanelOrderStart
+                floating: mixerPanel.floating
 
                 Component.onCompleted: {
                     mixerPanel.contextMenuModel = contextMenuModel
