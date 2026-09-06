@@ -206,6 +206,42 @@ static muse::real_t automationValueFromDisplay(AutomationType type, double displ
     return muse::real_t(displayValue);
 }
 
+// Formats a point's "display"-space value (as tracked live by PolylinePlot during a drag, i.e. the
+// same value passed as pointMoved's y argument) into the drag tooltip's label text, in each
+// automation type's own natural unit - reuses the fader-curve helpers above rather than duplicating them
+static QString formattedActivePointValue(AutomationType type, double pointDomainY)
+{
+    // Point Y is stored inverted relative to the display range - "higher value == lower Y" (see the
+    // "1.0 - automationValueToDisplay(...)" convention used when building/editing points above) - so
+    // flip back to the real display value before formatting.
+    const double displayValue = std::clamp(1.0 - pointDomainY, 0.0, 1.0);
+
+    if (type == AutomationType::Dynamics) {
+        return QString("%1%").arg(qRound(displayValue * 100.0));
+    }
+
+    if (type == AutomationType::Volume) {
+        const double localDb = VOLUME_RANGE_MIN_DB + displayValue * (VOLUME_RANGE_MAX_DB - VOLUME_RANGE_MIN_DB);
+        const double logicalDb = volumeLocalDbToLogicalDb(localDb);
+        return QString("%1 dB").arg(qRound(logicalDb));
+    }
+
+    if (type == AutomationType::Tempo) {
+        const double localBpm = displayValue * TEMPO_RANGE_MAX_BPM;
+        // Clamp to the same [MIN_TEMPO, MAX_TEMPO] floor/ceiling automationValueFromDisplay() enforces
+        // when the drag is committed, so the live tooltip never shows a value the point can't actually land on
+        const double logicalBpm = std::clamp(tempoLocalBpmToLogicalBpm(localBpm),
+                                             mu::engraving::Constants::MIN_TEMPO.toBPM().val,
+                                             mu::engraving::Constants::MAX_TEMPO.toBPM().val);
+        return QString("%1 BPM").arg(qRound(logicalBpm));
+    }
+
+    // Pan: matches the Mixer's own balance display (mixerchannelitem.cpp's BALANCE_SCALING_FACTOR),
+    // not MIDI CC10 - the engine's balance_t is -1.0..+1.0, shown there as a signed -100..+100 percentage
+    const int panValue = qRound((displayValue - 0.5) * 2.0 * 100.0);
+    return panValue > 0 ? QString("+%1").arg(panValue) : QString::number(panValue);
+}
+
 static const Segment* lastSegmentOfSystem(const System* system)
 {
     const mu::engraving::SegmentType type = mu::engraving::SegmentType::Duration;
@@ -449,6 +485,16 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         setPreviewPoint({ clampedX, y });
     });
 
+    // Shown only while the mouse is pressed (see PolylinePlot::paint()'s m_pressed gate) - fires as
+    // soon as a point is pressed, even before any drag movement, so a plain click (to check a point's
+    // value without necessarily moving it) shows the tooltip too, not just an active drag. Deliberately
+    // NOT shown on hover alone - with closely-spaced points that would be too noisy/intrusive.
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::activePointChanged, [this, polyline]() {
+        polyline->setActivePointLabel(polyline->hasActivePoint()
+                                      ? formattedActivePointValue(currentAutomationType(), polyline->activePointValue())
+                                      : QString());
+    });
+
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::pointAdded,
                      [this, key, polyline, system, staffCanvasRect](qreal x, qreal y, bool completed) {
         if (completed) {
@@ -613,6 +659,17 @@ void NotationAutomationController::applyPolylineColors(PolylinePlot* polyline, c
     selected->setCenterColorHovered(selectionColor);
     selected->setMiddleRingColorHovered(foregroundColor);
     selected->setOutlineColorHovered(lineColor);
+
+    // The drag tooltip's chip needs to stay legible against whatever the score's own background
+    // currently is (light/dark/high-contrast paper, or a user-customized color) - matches the
+    // note-velocity drag tooltip's identical luminance-based approach for visual consistency.
+    const QColor background = notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white);
+    const double luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue();
+    if (luminance > 128.0) {
+        polyline->setValueLabelColors(QColor(40, 40, 40, 235), QColor(255, 255, 255));
+    } else {
+        polyline->setValueLabelColors(QColor(235, 235, 235, 235), QColor(20, 20, 20));
+    }
 
     applyPolylineColorsUnderLine(polyline, key);
 }
