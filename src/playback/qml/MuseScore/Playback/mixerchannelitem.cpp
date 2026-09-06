@@ -42,7 +42,7 @@ static constexpr volume_dbfs_t MIN_DISPLAYED_DBFS = volume_dbfs_t::make(-60.f); 
 
 static constexpr float BALANCE_SCALING_FACTOR = 100.f;
 
-static constexpr int OUTPUT_RESOURCE_COUNT_LIMIT = 4;
+static constexpr int OUTPUT_RESOURCE_COUNT_LIMIT = 5;
 
 static const std::string VSTFX_EDITOR_ACTION("action://vst/fx_editor");
 static const std::string VSTI_EDITOR_ACTION("action://vst/instrument_editor");

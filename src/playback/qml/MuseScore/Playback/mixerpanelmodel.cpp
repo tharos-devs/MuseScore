@@ -522,6 +522,7 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
     });
 
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+        updateOutputResourceItemCount();
         playback()->setFxChainParams(trackId, params.fxChain);
     });
 
@@ -579,6 +580,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         playback()->setControlParams(trackId, params.control());
     });
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+        updateOutputResourceItemCount();
         playback()->setFxChainParams(trackId, params.fxChain);
     });
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {

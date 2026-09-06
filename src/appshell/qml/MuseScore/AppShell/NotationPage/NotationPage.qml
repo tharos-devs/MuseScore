@@ -407,7 +407,8 @@ DockPage {
 
             height: 368
             minimumHeight: root.horizontalPanelMinHeight
-            maximumHeight: root.horizontalPanelMaxHeight
+            //! NOTE: taller than the other horizontal panels' shared cap, to fit up to 5 FX slots without a scrollbar
+            maximumHeight: root.horizontalPanelMaxHeight + 80
 
             minimumWidth: root.panelMinDimension
             maximumWidth: root.panelMaxDimension
