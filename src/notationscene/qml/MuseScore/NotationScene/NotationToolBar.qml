@@ -25,17 +25,13 @@ import Muse.UiComponents
 
 import MuseScore.NotationScene
 
-// A plain Row, not RowLayout: StyledToolBarView already manages its own width/height
-// internally, which conflicts with RowLayout's layout-managed sizing (that fight is what made
-// the automation button render out of place) - Row just positions children using their own
-// existing size, without renegotiating it.
-Row {
-    id: root
-
+StyledToolBarView {
     property alias isCompactMode: toolBarModel.isCompactMode
-    property alias navigationPanel: styledToolBarView.navigationPanel
 
-    spacing: 4
+    navigationPanel.name: "NotationToolBar"
+    navigationPanel.accessible.name: qsTrc("notation", "Notation toolbar")
+
+    spacing: 2
 
     NotationToolBarModel {
         id: toolBarModel
@@ -47,60 +43,52 @@ Row {
         Component.onCompleted: automationTypeMenuModel.init()
     }
 
-    StyledToolBarView {
-        id: styledToolBarView
+    model: toolBarModel
 
-        anchors.verticalCenter: parent.verticalCenter
-
-        navigationPanel.name: "NotationToolBar"
-        navigationPanel.accessible.name: qsTrc("notation", "Notation toolbar")
-
-        spacing: 2
-
-        model: toolBarModel
+    // "toggle-automation" is marked ToolBarItemType.USER_TYPE (see notationtoolbarmodel.cpp) so it
+    // stays a normal item in the model's own order (keeping it correctly positioned between
+    // "toggle-mixer" and "toggle-note-offset-editor" - the two were fighting for that spot when
+    // automation was instead rendered as a separate sibling appended after this whole view), while
+    // still getting its own delegate: a SplitButton whose dropdown arrow picks the automation type
+    // directly, instead of a plain toggle-only button.
+    sourceComponentCallback: function(type) {
+        return type === ToolBarItemType.USER_TYPE ? automationButtonComponent : null
     }
 
-    SplitButton {
-        id: automationButton
+    Component {
+        id: automationButtonComponent
 
-        anchors.verticalCenter: parent.verticalCenter
+        SplitButton {
+            id: control
 
-        readonly property var itemData: toolBarModel.automationItem
+            property var itemData
 
-        // Not part of styledToolBarView's own Repeater (see notationtoolbarmodel.cpp), so it
-        // never gets this wiring "for free" the way StyledToolBarView.qml's onLoaded does for
-        // its own items - without it, this button is unreachable via keyboard/screen-reader
-        // toolbar navigation.
-        navigation.panel: styledToolBarView.navigationPanel
-        navigation.row: -1
-        navigation.column: 200
+            icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
+            text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
+            checked: Boolean(itemData) && itemData.checked
+            enabled: Boolean(itemData) ? itemData.enabled : false
 
-        icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
-        text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
-        checked: Boolean(itemData) && itemData.checked
-        enabled: Boolean(itemData) && itemData.enabled
-        visible: Boolean(itemData)
+            toolTipTitle: Boolean(itemData) ? itemData.title : ""
+            toolTipDescription: Boolean(itemData) ? itemData.description : ""
 
-        toolTipTitle: Boolean(itemData) ? itemData.title : ""
-        toolTipDescription: Boolean(itemData) ? itemData.description : ""
+            menuItems: automationTypeMenuModel.items
 
-        menuItems: automationTypeMenuModel.items
-
-        onClicked: {
-            if (Boolean(itemData)) {
-                itemData.activate()
+            onClicked: {
+                if (Boolean(itemData)) {
+                    itemData.activate()
+                }
             }
-        }
 
-        onHandleMenuItem: function(itemId) {
-            automationTypeMenuModel.handleMenuItem(itemId)
-        }
+            onHandleMenuItem: function(itemId) {
+                automationTypeMenuModel.handleMenuItem(itemId)
+            }
 
-        onAboutToOpenMenu: {
-            // Refresh right before showing, rather than relying solely on the model's own
-            // reactive updates - matches how the right-click "Automation type" submenu is always
-            // rebuilt fresh on open, so it can't show a stale/no checkmark either.
-            automationTypeMenuModel.init()
+            onAboutToOpenMenu: {
+                // Refresh right before showing, rather than relying solely on the model's own
+                // reactive updates - matches how the right-click "Automation type" submenu is
+                // always rebuilt fresh on open, so it can't show a stale/no checkmark either.
+                automationTypeMenuModel.init()
+            }
         }
     }
 }
