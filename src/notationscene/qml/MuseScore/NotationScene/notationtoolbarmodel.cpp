@@ -22,6 +22,8 @@
 
 #include "notationtoolbarmodel.h"
 
+#include "global/containers.h"
+
 #include "uicomponents/qml/Muse/UiComponents/toolbaritem.h"
 
 using namespace mu::notation;
@@ -30,14 +32,28 @@ using namespace muse::actions;
 
 void NotationToolBarModel::load()
 {
+    // Checked (and retried if still null) on every call, even after m_loaded below is set - if
+    // "toggle-automation" isn't registered yet the first time this runs, this is the only chance
+    // to pick it up on a later call (e.g. via currentMasterNotationChanged, below).
+    if (!m_automationItem) {
+        m_automationItem = makeItem("toggle-automation");
+        if (m_automationItem) {
+            m_automationItem->setShowTitle(!isCompactMode());
+            m_automationItem->setIsTitleBold(true);
+            emit automationItemChanged();
+        }
+    }
+
     if (m_loaded) {
         return;
     }
 
+    // "toggle-automation" is deliberately NOT in this list: it's rendered as a SplitButton
+    // (see NotationToolBar.qml) instead of a plain generic ToolBarItem, so it can offer a
+    // dropdown to pick the automation type directly, alongside its usual toggle behavior.
     muse::actions::ActionCodeList itemsCodes = {
         "parts",
         "toggle-mixer",
-        "toggle-automation",
         "toggle-note-offset-editor",
         "toggle-note-velocity-editor"
     };
@@ -57,6 +73,15 @@ void NotationToolBarModel::load()
 
     setItems(items);
 
+    // m_automationItem is excluded from the base's own tracked items (above), so it also misses
+    // the setShowTitle() update AbstractToolBarModel::setIsCompactMode() applies to every other
+    // item when the toolbar switches compact mode - do it here too.
+    connect(this, &NotationToolBarModel::isCompactModeChanged, this, [this]() {
+        if (m_automationItem) {
+            m_automationItem->setShowTitle(!isCompactMode());
+        }
+    });
+
     context()->currentMasterNotationChanged().onNotify(this, [this]() {
         load();
     });
@@ -64,4 +89,20 @@ void NotationToolBarModel::load()
     AbstractToolBarModel::load();
 
     m_loaded = true;
+}
+
+muse::uicomponents::ToolBarItem* NotationToolBarModel::automationItem() const
+{
+    return m_automationItem;
+}
+
+void NotationToolBarModel::onActionsStateChanges(const ActionCodeList& codes)
+{
+    AbstractToolBarModel::onActionsStateChanges(codes);
+
+    if (!m_automationItem || !muse::contains(codes, ActionCode("toggle-automation"))) {
+        return;
+    }
+
+    m_automationItem->setState(uiActionsRegister()->actionState("toggle-automation"));
 }

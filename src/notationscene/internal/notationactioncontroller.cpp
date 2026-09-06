@@ -3384,6 +3384,14 @@ muse::Ret NotationActionController::selectAutomationType(const muse::rcommand::P
 
     configuration()->setCurrentAutomationType(automationType);
 
+    // Picking a type is a clear enough intent to see its curve - auto-enable automation mode if it
+    // was off, rather than requiring a separate toggle first. Harmless no-op for the existing
+    // right-click "Automation type" submenu, which is only reachable when the mode is already on.
+    IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (masterNotation && !masterNotation->automation()->isAutomationModeEnabled()) {
+        masterNotation->automation()->setAutomationModeEnabled(true);
+    }
+
     return muse::make_ok();
 }
 
