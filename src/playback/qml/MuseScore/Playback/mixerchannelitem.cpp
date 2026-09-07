@@ -235,6 +235,73 @@ void MixerChannelItem::setOutputResourceItemCount(size_t count)
     }
 }
 
+void MixerChannelItem::moveOutputResourceItem(int fromIndex, int toIndex)
+{
+    TRACEFUNC;
+
+    if (m_fxChainUpdatePending) {
+        // NOTE: a previous reorder's fxChainParamsChanged is still awaiting
+        // its engine round-trip (cleared in loadOutputResourceItems below).
+        // Applying another reorder now, before that round-trip lands, risks
+        // the round-trip's own (by-then-stale) echo overwriting this newer
+        // one once it does arrive. Requires starting and finishing an entire
+        // second drag gesture faster than that round-trip, so this is a rare
+        // defensive guard rather than something expected to trigger in
+        // practice. Re-emitting outputResourceItemListChanged() rolls the QML
+        // side back to the actual (unchanged) order, in case it already
+        // showed an optimistic shift for this now-rejected drag.
+        emit outputResourceItemListChanged();
+        return;
+    }
+
+    QList<OutputResourceItem*> items = m_outputResourceItems.values();
+
+    IF_ASSERT_FAILED(fromIndex >= 0 && fromIndex < items.size() && toIndex >= 0 && toIndex < items.size()) {
+        return;
+    }
+
+    if (fromIndex == toIndex) {
+        return;
+    }
+
+    items.move(fromIndex, toIndex);
+
+    m_outputResourceItemsLoading = true;
+    m_outputResourceItems.clear();
+
+    for (int i = 0; i < items.size(); ++i) {
+        AudioFxParams params = items[i]->params();
+        params.chainOrder = static_cast<AudioFxChainOrder>(i);
+
+        // NOTE: blocked because two items can transiently share the same
+        // chainOrder/id() mid-loop (e.g. moving index 2 to 0 briefly gives
+        // both the just-moved item and the not-yet-processed original
+        // occupant of slot 0 the same chainOrder) -- fxParamsChanged() is
+        // NOTIFY for OutputResourceItem::id(), so letting it fire here would
+        // let a QML binding on it (id is used as this delegate's navigation
+        // name) observe that duplicate. outputResourceItemListChanged() at
+        // the end of this function -- which rebuilds every delegate against
+        // the now-fully-consistent state -- covers the necessary UI update.
+        items[i]->blockSignals(true);
+        items[i]->setParams(params);
+        items[i]->blockSignals(false);
+
+        m_outputResourceItems.insert(params.chainOrder, items[i]);
+    }
+
+    m_outputResourceItemsLoading = false;
+
+    m_outParams.fxChain.clear();
+    for (const OutputResourceItem* item : std::as_const(m_outputResourceItems)) {
+        m_outParams.fxChain.insert({ item->params().chainOrder, item->params() });
+    }
+
+    m_fxChainUpdatePending = true;
+
+    emit fxChainParamsChanged(m_outParams);
+    emit outputResourceItemListChanged();
+}
+
 void MixerChannelItem::addBlankSlots(size_t count)
 {
     TRACEFUNC;
@@ -334,6 +401,13 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
 
 void MixerChannelItem::loadOutputResourceItems(const AudioFxChain& fxChain)
 {
+    // NOTE: any incoming fx chain update -- including the engine round-trip
+    // echoing back a reorder this object itself just sent -- means the
+    // engine has processed at least one round-trip since the last one we
+    // sent, so it's safe to allow moveOutputResourceItem() again. See its
+    // own comment on m_fxChainUpdatePending.
+    m_fxChainUpdatePending = false;
+
     m_outParams.fxChain = fxChain;
 
     m_outputResourceItemsLoading = true;

@@ -142,6 +142,17 @@ public:
 
     void setOutputResourceItemCount(size_t count);
 
+    //! NOTE Reorders the channel's own FX slots by moving the slot currently
+    //! at fromIndex to toIndex, shifting the slots in between -- e.g. moving
+    //! index 2 to index 0 in [A,B,C,D] yields [C,A,B,D], not a two-item swap.
+    //! Indices are positions in outputResourceItemList()'s current order (== the
+    //! items' current chainOrder, since that's always contiguous 0..count-1 --
+    //! see addBlankSlots()/resolveNewBlankOutputResourceItemOrder()). Reassigns
+    //! each affected item's chainOrder to its new position via setParams(), so
+    //! it flows through the same fxChainParamsChanged persistence/engine path
+    //! as any other FX chain edit (add/remove/replace).
+    Q_INVOKABLE void moveOutputResourceItem(int fromIndex, int toIndex);
+
     void loadInputParams(const project::AudioInputParams& newParams);
     void loadOutputParams(const project::AudioOutputParams& newParams);
     void loadSoloMuteState(const notation::INotationSoloMuteState::SoloMuteState& newState);
@@ -269,5 +280,13 @@ protected:
     bool m_outputResourceItemsLoading = false;
 
     bool m_selected = false;
+
+    //! NOTE Set by moveOutputResourceItem() while its fxChainParamsChanged is
+    //! still awaiting its engine round-trip, cleared once any fx chain update
+    //! (including that round-trip's own echo) arrives via
+    //! loadOutputResourceItems() -- guards against a second reorder's result
+    //! later being clobbered by the first (now-stale) round-trip's echo. See
+    //! moveOutputResourceItem()'s own comment.
+    bool m_fxChainUpdatePending = false;
 };
 }
