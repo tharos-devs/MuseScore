@@ -44,8 +44,11 @@ MixerPanelSection {
         readonly property bool isInstrument: channelItem.type === MixerChannelItem.PrimaryInstrument
                                               || channelItem.type === MixerChannelItem.SecondaryInstrument
 
+        //! NOTE: channels whose title color/selection can be customized
+        readonly property bool isColorable: content.isInstrument || channelItem.type === MixerChannelItem.Aux
+
         function resolveLabelColor() {
-            if (content.isInstrument && channelItem.hasCustomColor) {
+            if (content.isColorable && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 
@@ -105,7 +108,7 @@ MixerPanelSection {
             }
 
             onClicked: function(mouse) {
-                if (!content.isInstrument) {
+                if (!content.isColorable) {
                     return
                 }
 
