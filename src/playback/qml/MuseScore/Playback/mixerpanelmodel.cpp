@@ -228,6 +228,7 @@ void MixerPanelModel::addItem(MixerChannelItem* item, int index)
     //! count as every other channel (instrument items already get this via their own,
     //! separately-resolved loadOutputParams() call, so this is a no-op for them)
     updateOutputResourceItemCount();
+    updateAuxSendItemCount();
 
     emit rowCountChanged();
 }
@@ -534,6 +535,7 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
 
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
         playback()->setAuxSendsParams(trackId, params.auxSends);
+        updateAuxSendItemCount();
     });
 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this,
@@ -583,6 +585,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
     });
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
         playback()->setAuxSendsParams(trackId, params.auxSends);
+        updateAuxSendItemCount();
     });
 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this,
@@ -623,6 +626,7 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
 
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this](const AudioOutputParams& params) {
         playback()->setMasterAuxSendsParams(params.auxSends);
+        updateAuxSendItemCount();
     });
 
     return item;
@@ -675,6 +679,26 @@ void MixerPanelModel::updateOutputResourceItemCount()
 
     for (MixerChannelItem* item : m_mixerChannelList) {
         item->setOutputResourceItemCount(maxFxCount + 1 /* + 1 blank slot */);
+    }
+}
+
+void MixerPanelModel::updateAuxSendItemCount()
+{
+    size_t maxRealSendCount = 0;
+
+    for (const MixerChannelItem* item : m_mixerChannelList) {
+        size_t realCount = 0;
+        for (const AuxSendItem* auxSendItem : item->auxSendItems()) {
+            if (auxSendItem->auxIndex() != AuxSendItem::NO_BUS) {
+                ++realCount;
+            }
+        }
+
+        maxRealSendCount = std::max(maxRealSendCount, realCount);
+    }
+
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        item->setAuxSendItemCount(maxRealSendCount + 1 /* + 1 blank slot */);
     }
 }
 

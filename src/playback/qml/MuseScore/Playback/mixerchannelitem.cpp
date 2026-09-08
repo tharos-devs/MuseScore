@@ -1001,6 +1001,72 @@ void MixerChannelItem::addAuxSendBlankSlot()
     emit auxSendItemListChanged();
 }
 
+void MixerChannelItem::addAuxSendBlankSlots(size_t count)
+{
+    TRACEFUNC;
+
+    if (count == 0) {
+        return;
+    }
+
+    //! NOTE: unlike addAuxSendBlankSlot() (used by the "Add Aux send" menu action, which
+    //! only ever wants a single trailing blank), this deliberately allows multiple blank
+    //! slots at once - used to pad a channel up to match a wider sibling channel's slot
+    //! count (mirroring addBlankSlots() for FX slots)
+    for (size_t i = 0; i < count && static_cast<int>(m_auxSendItems.size()) < AUX_SEND_SLOT_LIMIT; ++i) {
+        int slotOrder = resolveNewBlankAuxSendItemOrder(m_auxSendItems);
+        m_auxSendItems.insert(slotOrder, buildAuxSendItem(AuxSendItem::NO_BUS, blankAuxSendParams()));
+    }
+
+    emit auxSendItemListChanged();
+}
+
+void MixerChannelItem::removeAuxSendBlankSlotsFromEnd(size_t count)
+{
+    TRACEFUNC;
+
+    bool itemsRemoved = false;
+    DEFER {
+        if (itemsRemoved) {
+            emit auxSendItemListChanged();
+        }
+    };
+
+    for (size_t i = 0; i < count; ++i) {
+        if (m_auxSendItems.empty()) {
+            return;
+        }
+
+        auto lastItemIt = std::prev(m_auxSendItems.end());
+        AuxSendItem* item = lastItemIt.value();
+
+        if (item->auxIndex() != AuxSendItem::NO_BUS) {
+            return;
+        }
+
+        m_auxSendItems.erase(lastItemIt);
+        item->disconnect();
+        item->deleteLater();
+        itemsRemoved = true;
+    }
+}
+
+void MixerChannelItem::setAuxSendItemCount(size_t count)
+{
+    count = std::min(count, static_cast<size_t>(AUX_SEND_SLOT_LIMIT));
+    size_t itemsSize = static_cast<size_t>(m_auxSendItems.size());
+
+    if (itemsSize == count) {
+        return;
+    }
+
+    if (itemsSize < count) {
+        addAuxSendBlankSlots(count - itemsSize);
+    } else {
+        removeAuxSendBlankSlotsFromEnd(itemsSize - count);
+    }
+}
+
 void MixerChannelItem::ensureTrailingBlankAuxSlot()
 {
     if (!hasBlankAuxSendSlot()) {

@@ -131,6 +131,7 @@ public:
     void updateHasAutomationFlags();
 
     void setOutputResourceItemCount(size_t count);
+    void setAuxSendItemCount(size_t count);
 
     void loadInputParams(const project::AudioInputParams& newParams);
     void loadOutputParams(const project::AudioOutputParams& newParams);
@@ -210,6 +211,8 @@ protected:
 
     bool hasBlankAuxSendSlot() const;
     void addAuxSendBlankSlot();
+    void addAuxSendBlankSlots(size_t count);
+    void removeAuxSendBlankSlotsFromEnd(size_t count);
     void ensureTrailingBlankAuxSlot();
     void reassignAuxSend(AuxSendItem* item, muse::audio::aux_channel_idx_t newBusIndex);
     void blankAuxSend(AuxSendItem* item);
