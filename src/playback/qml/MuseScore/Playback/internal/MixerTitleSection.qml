@@ -38,6 +38,11 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
+        //! NOTE: only Aux channels are renamable for now
+        readonly property bool isAux: channelItem.type === MixerChannelItem.Aux
+
+        property bool editingName: false
+
         width: root.channelItemWidth
         height: 22
 
@@ -71,34 +76,116 @@ MixerPanelSection {
             return 0.5
         }
 
+        //! NOTE: per-channel-type context menu items
+        function buildContextMenuItems() {
+            if (content.isInstrument) {
+                return [
+                    { id: "editColor", title: qsTrc("playback", "Edit color…") },
+                    //! NOTE Not scoped to content.channelItem.hasCustomColor: this may apply to a whole
+                    //! multi-selection where other selected channels have a custom color even if the
+                    //! right-clicked one doesn't (right-clicking an already-selected channel keeps the
+                    //! multi-selection, see onClicked above).
+                    { id: "resetColor", title: qsTrc("playback", "Reset color") }
+                ]
+            }
+
+            if (content.isAux) {
+                return [
+                    { id: "renameAux", title: qsTrc("playback", "Rename channel") }
+                ]
+            }
+
+            return []
+        }
+
+        function startEditingName() {
+            if (!content.isAux || content.editingName) {
+                return
+            }
+
+            ui.tooltip.hide(mouseArea)
+            content.editingName = true
+        }
+
+        //! NOTE: newName undefined means the edit was cancelled (Escape) - end editing
+        //! without renaming
+        function commitEditingName(newName) {
+            if (!content.editingName) {
+                return
+            }
+
+            content.editingName = false
+
+            if (newName !== undefined) {
+                root.model.renameAuxChannel(content.channelItem, newName)
+            }
+        }
+
         readonly property color labelColor: resolveLabelColor()
 
         color: Utils.colorWithAlpha(labelColor, resolveLabelColorOpacity())
         border.color: channelItem.selected ? ui.theme.fontPrimaryColor : labelColor
         border.width: channelItem.selected ? 2 : 1
 
-        StyledTextLabel {
-            id: textLabel
-            anchors.centerIn: parent
+        Loader {
+            id: nameLoader
+            anchors.fill: parent
 
-            font: ui.theme.bodyBoldFont
+            sourceComponent: content.editingName ? editNameField : nameLabel
 
-            readonly property int margin: -8
-            width: margin + parent.width + margin
+            Component {
+                id: nameLabel
 
-            text: content.channelItem.title
+                StyledTextLabel {
+                    id: textLabel
+                    anchors.centerIn: parent
+
+                    font: ui.theme.bodyBoldFont
+
+                    readonly property int margin: -8
+                    width: margin + content.width + margin
+
+                    text: content.channelItem.title
+                }
+            }
+
+            Component {
+                id: editNameField
+
+                TextInputField {
+                    anchors.fill: parent
+                    anchors.margins: 2
+
+                    currentText: content.channelItem.title
+
+                    property bool cancelled: false
+
+                    Component.onCompleted: {
+                        forceActiveFocus()
+                        selectAll()
+                    }
+
+                    onEscaped: {
+                        cancelled = true
+                    }
+
+                    onTextEditingFinished: function(newTextValue) {
+                        Qt.callLater(content.commitEditingName, cancelled ? undefined : newTextValue)
+                    }
+                }
+            }
         }
 
         MouseArea {
             id: mouseArea
             anchors.fill: parent
 
-            enabled: parent.enabled
+            enabled: parent.enabled && !content.editingName
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.RightButton
 
             onContainsMouseChanged: {
-                if (mouseArea.containsMouse && textLabel.truncated) {
+                if (mouseArea.containsMouse && nameLoader.item && nameLoader.item.truncated) {
                     ui.tooltip.show(mouseArea, content.channelItem.title)
                 } else {
                     ui.tooltip.hide(mouseArea)
@@ -106,21 +193,30 @@ MixerPanelSection {
             }
 
             onClicked: function(mouse) {
-                if (!content.isInstrument) {
+                if (content.isInstrument) {
+                    // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux.
+                    const extendSelection = (mouse.modifiers & Qt.ControlModifier) !== 0
+                    const rangeSelection = (mouse.modifiers & Qt.ShiftModifier) !== 0
+
+                    if (mouse.button === Qt.RightButton) {
+                        if (!content.channelItem.selected) {
+                            root.model.selectChannel(content.channelItem, false, false)
+                        }
+                        contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
+                    } else if (mouse.button === Qt.LeftButton) {
+                        root.model.selectChannel(content.channelItem, extendSelection, rangeSelection)
+                    }
                     return
                 }
 
-                // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux.
-                const extendSelection = (mouse.modifiers & Qt.ControlModifier) !== 0
-                const rangeSelection = (mouse.modifiers & Qt.ShiftModifier) !== 0
-
-                if (mouse.button === Qt.RightButton) {
-                    if (!content.channelItem.selected) {
-                        root.model.selectChannel(content.channelItem, false, false)
-                    }
+                if (mouse.button === Qt.RightButton && content.isAux) {
                     contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
-                } else if (mouse.button === Qt.LeftButton) {
-                    root.model.selectChannel(content.channelItem, extendSelection, rangeSelection)
+                }
+            }
+
+            onDoubleClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                    content.startEditingName()
                 }
             }
         }
@@ -137,14 +233,7 @@ MixerPanelSection {
         ContextMenuLoader {
             id: contextMenuLoader
 
-            items: [
-                { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                //! NOTE Not scoped to content.channelItem.hasCustomColor: this may apply to a whole
-                //! multi-selection where other selected channels have a custom color even if the
-                //! right-clicked one doesn't (right-clicking an already-selected channel keeps the
-                //! multi-selection, see onClicked above).
-                { id: "resetColor", title: qsTrc("playback", "Reset color") }
-            ]
+            items: content.buildContextMenuItems()
 
             onHandleMenuItem: function(itemId) {
                 if (itemId === "editColor") {
@@ -152,6 +241,8 @@ MixerPanelSection {
                 } else if (itemId === "resetColor") {
                     root.model.resetColorForSelectedChannels()
                     root.model.clearSelection()
+                } else if (itemId === "renameAux") {
+                    content.startEditingName()
                 }
             }
         }

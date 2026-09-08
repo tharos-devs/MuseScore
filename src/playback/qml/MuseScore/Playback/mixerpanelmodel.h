@@ -68,6 +68,8 @@ public:
     Q_INVOKABLE void resetColorForSelectedChannels();
     Q_INVOKABLE void clearSelection();
 
+    Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
+
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
