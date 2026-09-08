@@ -407,7 +407,9 @@ DockPage {
 
             height: 368
             minimumHeight: root.horizontalPanelMinHeight
-            maximumHeight: root.horizontalPanelMaxHeight
+            //! NOTE: taller than the other horizontal panels' shared cap, to fit up to
+            //! 5 aux-send slots per channel without a scrollbar
+            maximumHeight: root.horizontalPanelMaxHeight + 90
 
             minimumWidth: root.panelMinDimension
             maximumWidth: root.panelMaxDimension

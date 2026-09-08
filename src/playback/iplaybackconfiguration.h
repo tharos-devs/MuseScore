@@ -57,13 +57,9 @@ public:
     virtual void setMixerSectionVisible(MixerSectionType sectionType, bool visible) = 0;
     virtual muse::async::Channel<MixerSectionType, bool> isMixerSectionVisibleChanged() const = 0;
 
-    virtual bool isAuxSendVisible(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setAuxSendVisible(muse::audio::aux_channel_idx_t index, bool visible) = 0;
-    virtual muse::async::Channel<muse::audio::aux_channel_idx_t, bool> isAuxSendVisibleChanged() const = 0;
-
-    virtual bool isAuxChannelVisible(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setAuxChannelVisible(muse::audio::aux_channel_idx_t index, bool visible) const = 0;
-    virtual muse::async::Channel<muse::audio::aux_channel_idx_t, bool> isAuxChannelVisibleChanged() const = 0;
+    virtual bool areAuxChannelsVisible() const = 0;
+    virtual void setAuxChannelsVisible(bool visible) = 0;
+    virtual muse::async::Channel<bool> areAuxChannelsVisibleChanged() const = 0;
 
     virtual muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                                     const muse::String& instrumentSoundId) const = 0;

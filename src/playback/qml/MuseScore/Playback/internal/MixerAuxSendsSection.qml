@@ -64,8 +64,8 @@ MixerPanelSection {
                 auxSendItemModel: modelData
 
                 navigationPanel: content.channelItem.panel
-                navigationRowStart: root.navigationRowStart + index * 2 // NOTE: 2 - because AuxSendControl has 2 controls
-                navigationName: content.accessibleName
+                navigationRowStart: root.navigationRowStart + index * 5 // NOTE: 5 - AuxSendControl spans rows +0..+4
+                navigationName: modelData.id
                 accessibleName: content.accessibleName
 
                 onNavigateControlIndexChanged: function(index) {

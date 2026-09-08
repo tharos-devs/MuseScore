@@ -31,6 +31,8 @@
 #include "audio/common/audioutils.h"
 #include "vst/vstpluginattrs.h"
 
+#include "log.h"
+
 using namespace mu::project;
 using namespace muse;
 using namespace muse::audio;
@@ -82,8 +84,9 @@ bool ProjectAudioSettings::containsAuxOutputParams(aux_channel_idx_t index) cons
 
 const AudioOutputParams& ProjectAudioSettings::auxOutputParams(aux_channel_idx_t index) const
 {
-    if (index < m_auxOutputParams.size()) {
-        return m_auxOutputParams.at(index);
+    auto it = m_auxOutputParams.find(index);
+    if (it != m_auxOutputParams.end()) {
+        return it->second;
     }
 
     static const AudioOutputParams _dummy;
@@ -99,6 +102,18 @@ void ProjectAudioSettings::setAuxOutputParams(aux_channel_idx_t index, const Aud
 
     m_auxOutputParams.insert_or_assign(index, params);
     m_settingsChanged.notify();
+}
+
+std::vector<aux_channel_idx_t> ProjectAudioSettings::auxOutputParamsIndices() const
+{
+    std::vector<aux_channel_idx_t> indices;
+    indices.reserve(m_auxOutputParams.size());
+
+    for (const auto& pair : m_auxOutputParams) {
+        indices.push_back(pair.first);
+    }
+
+    return indices;
 }
 
 const TrackInputParamsMap& ProjectAudioSettings::allTrackInputParams() const
@@ -266,11 +281,18 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
     for (aux_channel_idx_t i = 0; i < static_cast<aux_channel_idx_t>(auxArray.size()); ++i) {
         QJsonObject auxObject = auxArray[i].toObject();
 
+        //! NOTE: fall back to array position for files saved before "index" was written
+        //! (that was always safe in practice since indices stayed contiguous 0..N-1, but
+        //! relying on it silently breaks the moment aux buses can become sparse)
+        aux_channel_idx_t index = auxObject.contains("index")
+                                   ? static_cast<aux_channel_idx_t>(auxObject.value("index").toInt())
+                                   : i;
+
         AudioOutputParams outParams = outputParamsFromJson(auxObject.value("out").toObject());
         SoloMuteState soloMuteState = soloMuteStateFromJson(auxObject.value("soloMuteState").toObject());
 
-        m_auxOutputParams.emplace(i, std::move(outParams));
-        m_auxSoloMuteStatesMap.emplace(i, std::move(soloMuteState));
+        m_auxOutputParams.emplace(index, std::move(outParams));
+        m_auxSoloMuteStatesMap.emplace(index, std::move(soloMuteState));
     }
 
     QJsonArray tracksArray = rootObj.value("tracks").toArray();
@@ -593,6 +615,7 @@ QJsonObject ProjectAudioSettings::buildAuxObject(aux_channel_idx_t index, const 
 {
     QJsonObject result;
 
+    result.insert("index", static_cast<int>(index));
     result.insert("out", outputParamsToJson(params));
 
     auto soloMuteSearch = m_auxSoloMuteStatesMap.find(index);

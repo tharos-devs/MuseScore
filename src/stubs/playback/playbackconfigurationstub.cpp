@@ -102,30 +102,16 @@ muse::async::Channel<MixerSectionType, bool> PlaybackConfigurationStub::isMixerS
     return {};
 }
 
-bool PlaybackConfigurationStub::isAuxSendVisible(aux_channel_idx_t) const
+bool PlaybackConfigurationStub::areAuxChannelsVisible() const
 {
     return false;
 }
 
-void PlaybackConfigurationStub::setAuxSendVisible(aux_channel_idx_t, bool)
+void PlaybackConfigurationStub::setAuxChannelsVisible(bool)
 {
 }
 
-muse::async::Channel<aux_channel_idx_t, bool> PlaybackConfigurationStub::isAuxSendVisibleChanged() const
-{
-    return {};
-}
-
-bool PlaybackConfigurationStub::isAuxChannelVisible(aux_channel_idx_t) const
-{
-    return false;
-}
-
-void PlaybackConfigurationStub::setAuxChannelVisible(aux_channel_idx_t, bool) const
-{
-}
-
-muse::async::Channel<aux_channel_idx_t, bool> PlaybackConfigurationStub::isAuxChannelVisibleChanged() const
+muse::async::Channel<bool> PlaybackConfigurationStub::areAuxChannelsVisibleChanged() const
 {
     return {};
 }

@@ -89,6 +89,7 @@ public:
 
     using AuxTrackIdMap = std::map<muse::audio::aux_channel_idx_t, muse::audio::TrackId>;
     virtual const AuxTrackIdMap& auxTrackIdMap() const = 0;
+    virtual void addNewAuxBus() = 0;
 
     virtual muse::async::Channel<muse::audio::TrackId> trackAdded() const = 0;
     virtual muse::async::Channel<muse::audio::TrackId> trackRemoved() const = 0;

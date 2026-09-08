@@ -30,7 +30,10 @@
 #include "engraving/types/types.h"
 
 namespace mu::playback {
-static constexpr muse::audio::aux_channel_idx_t AUX_CHANNEL_NUM = 2;
+//! NOTE: number of aux buses bootstrapped for a brand-new project
+static constexpr muse::audio::aux_channel_idx_t DEFAULT_AUX_CHANNEL_NUM = 2;
+//! NOTE: hard cap on the number of aux buses a project can have
+static constexpr muse::audio::aux_channel_idx_t MAX_AUX_CHANNEL_NUM = 10;
 static constexpr muse::audio::aux_channel_idx_t REVERB_CHANNEL_IDX = 0;
 
 enum class PlaybackCursorType {
@@ -43,6 +46,7 @@ enum class MixerSectionType {
     Labels,
     Sound,
     AudioFX,
+    AuxSends,
     Balance,
     Volume,
     Fader,
@@ -55,6 +59,7 @@ static const std::map<MixerSectionType, std::string> MIXER_SECTION_TYPE_STR = {
     { MixerSectionType::Labels, "labels" },
     { MixerSectionType::Sound, "sound" },
     { MixerSectionType::AudioFX, "audio-fx" },
+    { MixerSectionType::AuxSends, "aux-sends" },
     { MixerSectionType::Balance, "balance" },
     { MixerSectionType::Volume, "volume" },
     { MixerSectionType::Fader, "fader" },
@@ -78,6 +83,7 @@ inline QList<MixerSectionType> allMixerSectionTypes()
         MixerSectionType::Labels,
         MixerSectionType::Sound,
         MixerSectionType::AudioFX,
+        MixerSectionType::AuxSends,
         MixerSectionType::Balance,
         MixerSectionType::Volume,
         MixerSectionType::Fader,
