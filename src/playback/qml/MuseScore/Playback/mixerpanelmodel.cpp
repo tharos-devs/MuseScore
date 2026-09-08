@@ -935,12 +935,17 @@ void MixerPanelModel::updateOutputResourceItemCount()
 
     for (const MixerChannelItem* item : m_mixerChannelList) {
         const AudioFxChain& chain = item->outputParams().fxChain;
-        if (chain.empty()) {
-            continue;
-        }
 
-        AudioFxChainOrder order = std::prev(chain.end())->first;
-        maxFxCount = std::max(maxFxCount, static_cast<size_t>(order) + 1);
+        //! NOTE: find the highest chainOrder among REAL (non-blank) entries - the chain's
+        //! own highest key can itself be a blank/padding slot (e.g. its own trailing blank),
+        //! which must not count towards how many real slots are needed before the shared
+        //! trailing blank below is added, or an extra blank slot creeps in on every recount
+        for (auto it = chain.crbegin(); it != chain.crend(); ++it) {
+            if (it->second.isValid()) {
+                maxFxCount = std::max(maxFxCount, static_cast<size_t>(it->first) + 1);
+                break;
+            }
+        }
     }
 
     for (MixerChannelItem* item : m_mixerChannelList) {
