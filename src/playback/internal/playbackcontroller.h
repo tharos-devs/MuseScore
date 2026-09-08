@@ -109,6 +109,7 @@ public:
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
     bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
 
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
         const engraving::InstrumentTrackId& instrumentTrackId) const override;
@@ -264,6 +265,11 @@ private:
 
     InstrumentTrackIdMap m_instrumentTrackIdMap;
     AuxTrackIdMap m_auxTrackIdMap;
+
+    //! NOTE: index -> isGroupBus, for a bus whose addAuxTrack() engine round-trip hasn't
+    //! resolved yet (see resolveAuxBusDisplayNumber()'s doc comment) - entries are removed
+    //! once the corresponding m_auxTrackIdMap entry is inserted (or the add fails)
+    std::map<muse::audio::aux_channel_idx_t, bool> m_pendingAuxBusGroupFlags;
 
     //! NOTE: in-memory only, deliberately never persisted to audioSettings() - mute/solo
     //! is transient playback state, and "muted" isn't even serialized to the project file,

@@ -57,9 +57,9 @@ static const std::string CHAIN_ORDER_KEY("chainOrder");
 //! resolveAuxTrackTitle, considerFx=false) - aux-send slots must show that same name for
 //! consistency, so this deliberately does not use IPlaybackController::auxChannelName(),
 //! which is fx-aware
-static QString auxBusPositionalName(aux_channel_idx_t index, bool isGroupBus)
+static QString auxBusPositionalName(aux_channel_idx_t displayNumber, bool isGroupBus)
 {
-    return muse::qtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(index + 1);
+    return muse::qtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(displayNumber);
 }
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
@@ -353,6 +353,8 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
 
     loadOutputResourceItems(newParams.fxChain);
     loadAuxSendItems(newParams.auxSends);
+
+    m_outputParamsLoaded = true;
 }
 
 void MixerChannelItem::loadOutputResourceItems(const AudioFxChain& fxChain)
@@ -810,7 +812,9 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
     newItem->setAuxIndex(isBlankSlot ? AuxSendItem::NO_BUS : index);
     newItem->setIsActive(params.active);
     newItem->setAudioSignalPercentage(static_cast<int>(params.signalAmount * 100.f));
-    newItem->setTitle(isBlankSlot ? QString() : auxBusPositionalName(index, controller()->isAuxBusGroup(index)));
+    newItem->setTitle(isBlankSlot
+                      ? QString()
+                      : auxBusPositionalName(controller()->resolveAuxBusDisplayNumber(index), controller()->isAuxBusGroup(index)));
     newItem->blockSignals(false);
 
     connect(newItem, &AuxSendItem::isActiveChanged, this, [this, newItem]() {
@@ -877,7 +881,8 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
             continue; // already targeted by another slot on this track
         }
 
-        data.availableBuses.push_back({ busIndex, auxBusPositionalName(busIndex, controller()->isAuxBusGroup(busIndex)) });
+        QString busName = auxBusPositionalName(controller()->resolveAuxBusDisplayNumber(busIndex), controller()->isAuxBusGroup(busIndex));
+        data.availableBuses.push_back({ busIndex, busName });
     }
 
     //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already
@@ -961,7 +966,7 @@ void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newB
     //! blocked here (unlike in buildAuxSendItem's initial construction) - this item is
     //! already live/bound in QML, and blocking would silently freeze its displayed title
     item->setAuxIndex(newBusIndex);
-    item->setTitle(auxBusPositionalName(newBusIndex, controller()->isAuxBusGroup(newBusIndex)));
+    item->setTitle(auxBusPositionalName(controller()->resolveAuxBusDisplayNumber(newBusIndex), controller()->isAuxBusGroup(newBusIndex)));
     item->setIsActive(true);
     item->setAudioSignalPercentage(static_cast<int>(signalAmount * 100.f));
 
@@ -1190,6 +1195,11 @@ AudioFxChainOrder MixerChannelItem::resolveNewBlankOutputResourceItemOrder() con
 bool MixerChannelItem::outputOnly() const
 {
     return m_outputOnly;
+}
+
+bool MixerChannelItem::outputParamsLoaded() const
+{
+    return m_outputParamsLoaded;
 }
 
 const AudioInputParams& MixerChannelItem::inputParams() const

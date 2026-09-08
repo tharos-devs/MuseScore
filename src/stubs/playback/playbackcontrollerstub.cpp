@@ -193,6 +193,11 @@ bool PlaybackControllerStub::isAuxBusGroup(muse::audio::aux_channel_idx_t) const
     return false;
 }
 
+muse::audio::aux_channel_idx_t PlaybackControllerStub::resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const
+{
+    return index + 1;
+}
+
 muse::async::Promise<muse::audio::SoundPresetList> PlaybackControllerStub::availableSoundPresets(const engraving::InstrumentTrackId&) const
 {
     return muse::async::Promise<muse::audio::SoundPresetList>([](auto /*resolve*/, auto reject) {

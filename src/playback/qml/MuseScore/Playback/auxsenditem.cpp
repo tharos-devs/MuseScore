@@ -141,11 +141,11 @@ void AuxSendItem::requestAvailableResources()
         }
 
         if (data.canAddBus) {
-            result << buildMenuItem(ADD_AUX_BUS_ID, muse::qtrc("playback", "Add Aux bus"), false);
+            result << buildMenuItem(ADD_AUX_BUS_ID, muse::qtrc("playback", "Add Aux channel"), false);
         }
 
         if (data.canAddGroupBus) {
-            result << buildMenuItem(ADD_GROUP_BUS_ID, muse::qtrc("playback", "Add Bus"), false);
+            result << buildMenuItem(ADD_GROUP_BUS_ID, muse::qtrc("playback", "Add Bus channel"), false);
         }
     }
 

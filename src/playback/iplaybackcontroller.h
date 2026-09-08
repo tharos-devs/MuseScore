@@ -99,6 +99,7 @@ public:
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const = 0;
 
     virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const = 0;
 
     virtual muse::async::Promise<muse::audio::SoundPresetList>
     availableSoundPresets(const engraving::InstrumentTrackId& instrumentTrackId) const = 0;

@@ -72,7 +72,12 @@ static AudioOutputParams makeReverbOutputParams()
     return result;
 }
 
-static std::string resolveAuxTrackTitle(aux_channel_idx_t index, const AudioOutputParams& params, bool isGroupBus, bool considerFx = true)
+//! NOTE: displayNumber is already 1-based and already resolved per-type (see
+//! PlaybackController::resolveAuxBusDisplayNumber()) - the first-ever Bus channel must
+//! read "Bus 1" even if 2 Aux channels already exist at lower indices, since Aux and Bus
+//! channels are numbered as two independent sequences, not a single shared one
+static std::string resolveAuxTrackTitle(aux_channel_idx_t displayNumber, const AudioOutputParams& params, bool isGroupBus,
+                                        bool considerFx = true)
 {
     //! NOTE: the "borrow the loaded fx's name" convenience (e.g. "Reverb" instead of
     //! "Aux 1") is specific to the send/return use case - a group bus's identity is about
@@ -86,7 +91,7 @@ static std::string resolveAuxTrackTitle(aux_channel_idx_t index, const AudioOutp
         return meta.id;
     }
 
-    return muse::mtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(index + 1).toStdString();
+    return muse::mtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(displayNumber).toStdString();
 }
 
 PlaybackController::PlaybackController(const muse::modularity::ContextPtr& iocCtx)
@@ -286,7 +291,8 @@ Channel<TrackId> PlaybackController::trackRemoved() const
 
 std::string PlaybackController::auxChannelName(aux_channel_idx_t index) const
 {
-    return resolveAuxTrackTitle(index, audioSettings()->auxOutputParams(index), audioSettings()->isAuxBusGroup(index));
+    return resolveAuxTrackTitle(resolveAuxBusDisplayNumber(index), audioSettings()->auxOutputParams(index),
+                                audioSettings()->isAuxBusGroup(index));
 }
 
 bool PlaybackController::isAuxBusGroup(aux_channel_idx_t index) const
@@ -1265,11 +1271,22 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
     trackParams.control = originParams.control();
     trackParams.isGroupBus = isGroupBus;
 
-    std::string title = resolveAuxTrackTitle(index, originParams, isGroupBus, false);
+    std::string title = resolveAuxTrackTitle(resolveAuxBusDisplayNumber(index), originParams, isGroupBus, false);
+
+    //! NOTE: mark this index as "about to exist" synchronously, right now - m_auxTrackIdMap
+    //! only gets this entry once the engine round-trip resolves below, which is too late
+    //! for a SIBLING addAuxTrack() call in the same tight loop (setupTracks() bootstraps
+    //! several buses at once on a brand-new project) to see when computing ITS OWN display
+    //! number - without this, every bus created in the same batch computes the same "1st
+    //! of its type" ordinal, e.g. two default Aux buses both showing "Aux 1"
+    m_pendingAuxBusGroupFlags[index] = isGroupBus;
+
     uint64_t playbackKey = notationPlaybackKey();
 
     playback()->addAuxTrack(title, trackParams)
     .onResolve(this, [this, playbackKey, index, onFinished, originParams](const TrackId trackId, const TrackParams& appliedParams) {
+        m_pendingAuxBusGroupFlags.erase(index);
+
         //! NOTE It may be that while we were adding a track, the notation was already closed (or opened another)
         //! This situation can be if the notation was opened and immediately closed.
         if (notationPlaybackKey() != playbackKey) {
@@ -1288,7 +1305,9 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
 
         m_trackAdded.send(trackId);
     })
-    .onReject(this, [onFinished](int code, const std::string& msg) {
+    .onReject(this, [this, index, onFinished](int code, const std::string& msg) {
+        m_pendingAuxBusGroupFlags.erase(index);
+
         LOGE() << "can't add a new aux track, code: [" << code << "] " << msg;
 
         onFinished();
@@ -1307,6 +1326,39 @@ aux_channel_idx_t PlaybackController::resolveFreeAuxBusIndex() const
     }
 
     return freeIndex;
+}
+
+aux_channel_idx_t PlaybackController::resolveAuxBusDisplayNumber(aux_channel_idx_t index) const
+{
+    //! NOTE: Aux and Bus channels are numbered as two independent 1-based sequences (each
+    //! starts at 1), not a single sequence sharing the underlying index pool - e.g. the
+    //! first-ever Bus channel must read "Bus 1" even if 2 Aux channels already exist at
+    //! lower indices. Works uniformly for both an existing bus (already in
+    //! m_auxTrackIdMap - counts itself via the < comparison against later same-type
+    //! entries) and a brand new one about to be created (not yet in the map, so every
+    //! existing same-type entry is naturally "< index" - resolveFreeAuxBusIndex() only
+    //! ever returns the lowest unused index)
+    bool isGroupBus = audioSettings()->isAuxBusGroup(index);
+
+    aux_channel_idx_t displayNumber = 1;
+    for (const auto& pair : m_auxTrackIdMap) {
+        if (pair.first < index && audioSettings()->isAuxBusGroup(pair.first) == isGroupBus) {
+            ++displayNumber;
+        }
+    }
+
+    //! NOTE: also count buses that are being created RIGHT NOW but haven't round-tripped
+    //! through the engine yet (see addAuxTrack()'s m_pendingAuxBusGroupFlags) - without
+    //! this, several buses created in the same batch (e.g. setupTracks() bootstrapping a
+    //! brand-new project's default aux buses) would all compute the same ordinal, since
+    //! none of them are in m_auxTrackIdMap yet when the others compute their own number
+    for (const auto& pair : m_pendingAuxBusGroupFlags) {
+        if (pair.first < index && pair.second == isGroupBus && !muse::contains(m_auxTrackIdMap, pair.first)) {
+            ++displayNumber;
+        }
+    }
+
+    return displayNumber;
 }
 
 void PlaybackController::addNewAuxBus()
@@ -1590,10 +1642,11 @@ void PlaybackController::subscribeOnAudioParamsChanges()
         if (auxIt != m_auxTrackIdMap.end()) {
             aux_channel_idx_t auxIdx = auxIt->first;
             bool isGroupBus = audioSettings()->isAuxBusGroup(auxIdx);
-            std::string oldName = resolveAuxTrackTitle(auxIdx, audioSettings()->auxOutputParams(auxIdx), isGroupBus);
+            aux_channel_idx_t displayNumber = resolveAuxBusDisplayNumber(auxIdx);
+            std::string oldName = resolveAuxTrackTitle(displayNumber, audioSettings()->auxOutputParams(auxIdx), isGroupBus);
             AudioOutputParams outParams = audioSettings()->auxOutputParams(auxIdx);
             outParams.fxChain = params;
-            std::string newName = resolveAuxTrackTitle(auxIdx, outParams, isGroupBus);
+            std::string newName = resolveAuxTrackTitle(displayNumber, outParams, isGroupBus);
 
             audioSettings()->setAuxOutputParams(auxIdx, outParams);
 

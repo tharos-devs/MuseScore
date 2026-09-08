@@ -148,6 +148,16 @@ public:
 
     bool outputOnly() const;
 
+    //! NOTE: true once loadOutputParams() has actually applied real data to this item at
+    //! least once. An instrument channel item's real data (incl. fx chain and aux sends)
+    //! only arrives asynchronously (see MixerPanelModel::buildInstrumentChannelItem()'s
+    //! playback()->params(trackId) promise) - before that, its fx/aux-send slot lists are
+    //! genuinely empty, not "correctly synced to zero slots". Cross-channel slot-count
+    //! syncing (MixerPanelModel::updateOutputResourceItemCount()/updateAuxSendItemCount())
+    //! must skip padding a not-yet-loaded item, or the padding permanently corrupts
+    //! aux-send slot order once the real data does arrive (see git history for details)
+    bool outputParamsLoaded() const;
+
     const project::AudioInputParams& inputParams() const;
     const project::AudioOutputParams& outputParams() const;
 
@@ -263,6 +273,7 @@ protected:
 
     QString m_title;
     bool m_outputOnly = false;
+    bool m_outputParamsLoaded = false;
 
     float m_leftChannelPressure = 0.0;
     float m_rightChannelPressure = 0.0;

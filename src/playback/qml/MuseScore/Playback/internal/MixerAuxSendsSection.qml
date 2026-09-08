@@ -59,7 +59,13 @@ MixerPanelSection {
                 required property AuxSendItem modelData
                 required property int index
 
-                anchors.horizontalCenter: parent.horizontalCenter
+                //! NOTE: reference the Column by its stable id, not `parent` - unlike the
+                //! FX section's delegate (which already does this), this one used
+                //! `parent.horizontalCenter`, which can transiently be null while the
+                //! Repeater destroys/recreates delegates (e.g. auxSendItemListChanged
+                //! firing for other channels while a new bus channel is being added),
+                //! causing "Cannot read property 'horizontalCenter' of null"
+                anchors.horizontalCenter: content.horizontalCenter
 
                 auxSendItemModel: modelData
 

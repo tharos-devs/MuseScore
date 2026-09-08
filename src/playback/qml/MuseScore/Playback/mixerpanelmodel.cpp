@@ -223,12 +223,22 @@ void MixerPanelModel::addItem(MixerChannelItem* item, int index)
     updateItemsPanelsOrder();
     endInsertRows();
 
-    //! NOTE: aux channel items load their initial output params (incl. fx chain) synchronously,
-    //! before they are inserted here - re-sync now so the new item gets the same fx slot
-    //! count as every other channel (instrument items already get this via their own,
-    //! separately-resolved loadOutputParams() call, so this is a no-op for them)
-    updateOutputResourceItemCount();
-    updateAuxSendItemCount();
+    //! NOTE: aux/master channel items load their initial output params (incl. fx chain and
+    //! aux sends) synchronously, before they are inserted here - re-sync now so the new
+    //! item gets the same slot counts as every other channel. Instrument channel items
+    //! load asynchronously, via their own, separately-resolved loadOutputParams() call
+    //! (buildInstrumentChannelItem()'s playback()->params(trackId) promise) - which
+    //! performs this exact same sync itself once real data actually arrives, so calling
+    //! it here too, before that data exists, is not just redundant but actively harmful
+    //! for aux sends specifically: unlike fx slots (positioned by each fx's own fixed
+    //! chainOrder key), aux-send slot order is assigned by a "next free slot" allocator,
+    //! so padding an empty item with blanks now would let those blanks permanently claim
+    //! the front slots ahead of the real entries that only get placed once the async
+    //! resolve actually runs
+    if (item->type() == MixerChannelItem::Type::Aux || item->type() == MixerChannelItem::Type::Master) {
+        updateOutputResourceItemCount();
+        updateAuxSendItemCount();
+    }
 
     emit rowCountChanged();
 }
@@ -657,6 +667,7 @@ void MixerPanelModel::loadOutputParams(MixerChannelItem* item, const AudioOutput
 
     item->loadOutputParams(params);
     updateOutputResourceItemCount();
+    updateAuxSendItemCount();
 }
 
 void MixerPanelModel::updateOutputResourceItemCount()
@@ -679,6 +690,14 @@ void MixerPanelModel::updateOutputResourceItemCount()
     }
 
     for (MixerChannelItem* item : m_mixerChannelList) {
+        //! NOTE: skip a channel that hasn't loaded its own real data yet (e.g. an
+        //! instrument track whose playback()->params() promise hasn't resolved) - padding
+        //! it now, before it has anything of its own, is not just premature but actively
+        //! wrong once its real data does arrive (see outputParamsLoaded()'s doc comment)
+        if (!item->outputParamsLoaded()) {
+            continue;
+        }
+
         item->setOutputResourceItemCount(maxFxCount + 1 /* + 1 blank slot */);
     }
 }
@@ -699,6 +718,16 @@ void MixerPanelModel::updateAuxSendItemCount()
     }
 
     for (MixerChannelItem* item : m_mixerChannelList) {
+        //! NOTE: skip a channel that hasn't loaded its own real data yet - see the
+        //! matching note in updateOutputResourceItemCount(). Unlike fx slots (positioned
+        //! by each fx's own fixed chainOrder key), aux-send slots are positioned by a
+        //! "next free slot" allocator, so padding an unloaded channel here would let
+        //! those blanks permanently claim the front slots ahead of the real entries that
+        //! only get placed once this channel's own async load actually completes
+        if (!item->outputParamsLoaded()) {
+            continue;
+        }
+
         item->setAuxSendItemCount(maxRealSendCount + 1 /* + 1 blank slot */);
     }
 }
