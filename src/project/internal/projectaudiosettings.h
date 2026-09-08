@@ -64,6 +64,9 @@ public:
     bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
     void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) override;
 
+    muse::String auxName(muse::audio::aux_channel_idx_t index) const override;
+    void setAuxName(muse::audio::aux_channel_idx_t index, const muse::String& name) override;
+
     void removeTrackParams(const engraving::InstrumentTrackId& partId) override;
 
     const playback::SoundProfileName& activeSoundProfile() const override;
@@ -118,6 +121,8 @@ private:
     std::unordered_map<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStatesMap;
     muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStateChanged;
     std::unordered_map<muse::audio::aux_channel_idx_t, bool> m_auxIsGroupBusMap;
+
+    std::unordered_map<muse::audio::aux_channel_idx_t, muse::String> m_auxNamesMap;
 
     std::unordered_map<engraving::InstrumentTrackId, AudioInputParams> m_trackInputParamsMap;
     std::unordered_map<engraving::InstrumentTrackId, AudioOutputParams> m_trackOutputParamsMap;
