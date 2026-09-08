@@ -403,8 +403,8 @@ void MixerChannelItem::loadAuxSendItems(const AuxSendsParams& auxSends)
         aux_channel_idx_t busIndex = item->auxIndex();
 
         bool stillAssigned = busIndex != AuxSendItem::NO_BUS
-                              && busIndex < auxSends.size()
-                              && !isBlankAuxSend(auxSends[busIndex]);
+                             && busIndex < auxSends.size()
+                             && !isBlankAuxSend(auxSends[busIndex]);
 
         if (stillAssigned) {
             item->blockSignals(true);

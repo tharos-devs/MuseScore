@@ -285,8 +285,8 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         //! (that was always safe in practice since indices stayed contiguous 0..N-1, but
         //! relying on it silently breaks the moment aux buses can become sparse)
         aux_channel_idx_t index = auxObject.contains("index")
-                                   ? static_cast<aux_channel_idx_t>(auxObject.value("index").toInt())
-                                   : i;
+                                  ? static_cast<aux_channel_idx_t>(auxObject.value("index").toInt())
+                                  : i;
 
         AudioOutputParams outParams = outputParamsFromJson(auxObject.value("out").toObject());
         SoloMuteState soloMuteState = soloMuteStateFromJson(auxObject.value("soloMuteState").toObject());

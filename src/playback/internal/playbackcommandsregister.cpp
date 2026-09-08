@@ -199,7 +199,8 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString("playback", "Toggle mixer section"),
         InputSchema({
             { "section",
-              Arg(DataType::String, u"Mixer section (labels, sound, audio-fx, aux-sends, balance, volume, fader, mute-and-solo, title)") } }),
+              Arg(DataType::String,
+                  u"Mixer section (labels, sound, audio-fx, aux-sends, balance, volume, fader, mute-and-solo, title)") } }),
         Decoration()
     },
     CommandInfo{

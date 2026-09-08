@@ -215,7 +215,7 @@ protected:
     void blankAuxSend(AuxSendItem* item);
     void handleAuxSendMenuItem(AuxSendItem* item, const QString& menuItemId);
     AuxSendItem::MenuData buildAuxSendMenuData(const AuxSendItem* item) const;
-    void updateAuxSendField(const AuxSendItem* item, const std::function<void (muse::audio::AuxSendParams&)>& setter);
+    void updateAuxSendField(const AuxSendItem* item, const std::function<void(muse::audio::AuxSendParams&)>& setter);
 
     //! NOTE: key is a stable slot order (like AudioFxChainOrder for fx slots), NOT the
     //! target bus index - this keeps a slot's on-screen position fixed when its target
