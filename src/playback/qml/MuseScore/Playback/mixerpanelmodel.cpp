@@ -122,7 +122,8 @@ void MixerPanelModel::selectChannel(MixerChannelItem* item, bool extendSelection
 
     auto isSelectable = [](const MixerChannelItem* channel) {
         return channel->type() == MixerChannelItem::Type::PrimaryInstrument
-               || channel->type() == MixerChannelItem::Type::SecondaryInstrument;
+               || channel->type() == MixerChannelItem::Type::SecondaryInstrument
+               || channel->type() == MixerChannelItem::Type::Aux;
     };
 
     if (rangeSelection && m_selectionAnchorIndex >= 0 && itemIndex >= 0) {
@@ -828,6 +829,12 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this,
             [this, index](const notation::INotationSoloMuteState::SoloMuteState& state) {
         audioSettings()->setAuxSoloMuteState(index, state);
+    });
+
+    connect(item, &MixerChannelItem::colorChanged, this, [this, item, index]() {
+        AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
+        outParams.color = item->color();
+        audioSettings()->setAuxOutputParams(index, outParams);
     });
 
     return item;

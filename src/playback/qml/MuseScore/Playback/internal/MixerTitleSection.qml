@@ -49,8 +49,11 @@ MixerPanelSection {
         readonly property bool isInstrument: channelItem.type === MixerChannelItem.PrimaryInstrument
                                               || channelItem.type === MixerChannelItem.SecondaryInstrument
 
+        //! NOTE: channels whose title color/selection can be customized
+        readonly property bool isColorable: content.isInstrument || channelItem.type === MixerChannelItem.Aux
+
         function resolveLabelColor() {
-            if (content.isInstrument && channelItem.hasCustomColor) {
+            if (content.isColorable && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 
@@ -78,24 +81,22 @@ MixerPanelSection {
 
         //! NOTE: per-channel-type context menu items
         function buildContextMenuItems() {
-            if (content.isInstrument) {
-                return [
-                    { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                    //! NOTE Not scoped to content.channelItem.hasCustomColor: this may apply to a whole
-                    //! multi-selection where other selected channels have a custom color even if the
-                    //! right-clicked one doesn't (right-clicking an already-selected channel keeps the
-                    //! multi-selection, see onClicked above).
-                    { id: "resetColor", title: qsTrc("playback", "Reset color") }
-                ]
+            let items = []
+
+            if (content.isColorable) {
+                items.push({ id: "editColor", title: qsTrc("playback", "Edit color…") })
+                //! NOTE Not scoped to content.channelItem.hasCustomColor: this may apply to a whole
+                //! multi-selection where other selected channels have a custom color even if the
+                //! right-clicked one doesn't (right-clicking an already-selected channel keeps the
+                //! multi-selection, see onClicked above).
+                items.push({ id: "resetColor", title: qsTrc("playback", "Reset color") })
             }
 
             if (content.isAux) {
-                return [
-                    { id: "renameAux", title: qsTrc("playback", "Rename channel") }
-                ]
+                items.push({ id: "renameAux", title: qsTrc("playback", "Rename channel") })
             }
 
-            return []
+            return items
         }
 
         function startEditingName() {
@@ -193,24 +194,21 @@ MixerPanelSection {
             }
 
             onClicked: function(mouse) {
-                if (content.isInstrument) {
-                    // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux.
-                    const extendSelection = (mouse.modifiers & Qt.ControlModifier) !== 0
-                    const rangeSelection = (mouse.modifiers & Qt.ShiftModifier) !== 0
-
-                    if (mouse.button === Qt.RightButton) {
-                        if (!content.channelItem.selected) {
-                            root.model.selectChannel(content.channelItem, false, false)
-                        }
-                        contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
-                    } else if (mouse.button === Qt.LeftButton) {
-                        root.model.selectChannel(content.channelItem, extendSelection, rangeSelection)
-                    }
+                if (!content.isColorable) {
                     return
                 }
 
-                if (mouse.button === Qt.RightButton && content.isAux) {
+                // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux.
+                const extendSelection = (mouse.modifiers & Qt.ControlModifier) !== 0
+                const rangeSelection = (mouse.modifiers & Qt.ShiftModifier) !== 0
+
+                if (mouse.button === Qt.RightButton) {
+                    if (!content.channelItem.selected) {
+                        root.model.selectChannel(content.channelItem, false, false)
+                    }
                     contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
+                } else if (mouse.button === Qt.LeftButton) {
+                    root.model.selectChannel(content.channelItem, extendSelection, rangeSelection)
                 }
             }
 
