@@ -111,6 +111,10 @@ public:
     virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) = 0;
 
+    //! NOTE: empty means no custom name was set - callers should fall back to a positional default
+    virtual muse::String auxName(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual void setAuxName(muse::audio::aux_channel_idx_t index, const muse::String& name) = 0;
+
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
 
     virtual const playback::SoundProfileName& activeSoundProfile() const = 0;
