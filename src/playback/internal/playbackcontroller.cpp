@@ -1301,7 +1301,13 @@ void PlaybackController::addNewAuxBus()
 
     configuration()->setAuxChannelsVisible(true);
 
-    addAuxTrack(freeIndex, []() {});
+    //! NOTE: addAuxTrack() unconditionally increments m_loadingTrackCount and relies on its
+    //! onFinished callback to bring it back down (see setupTracks()'s onAddFinished); without
+    //! this, isLoaded()/isPlayAllowed() would stay stuck false after adding a bus at runtime
+    addAuxTrack(freeIndex, [this]() {
+        m_loadingTrackCount--;
+        m_isPlayAllowedChanged.send(isPlayAllowed());
+    });
 }
 
 void PlaybackController::setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive)

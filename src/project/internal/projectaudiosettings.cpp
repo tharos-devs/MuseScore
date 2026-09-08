@@ -284,14 +284,26 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         //! NOTE: fall back to array position for files saved before "index" was written
         //! (that was always safe in practice since indices stayed contiguous 0..N-1, but
         //! relying on it silently breaks the moment aux buses can become sparse)
-        aux_channel_idx_t index = auxObject.contains("index")
-                                  ? static_cast<aux_channel_idx_t>(auxObject.value("index").toInt())
-                                  : i;
+        aux_channel_idx_t index = i;
+
+        if (auxObject.contains("index")) {
+            int rawIndex = auxObject.value("index").toInt(-1);
+            if (rawIndex < 0 || rawIndex >= static_cast<int>(MAX_AUX_CHANNEL_NUM)) {
+                LOGW() << "invalid aux channel index " << rawIndex << " in project file, skipping";
+                continue;
+            }
+
+            index = static_cast<aux_channel_idx_t>(rawIndex);
+        }
 
         AudioOutputParams outParams = outputParamsFromJson(auxObject.value("out").toObject());
         SoloMuteState soloMuteState = soloMuteStateFromJson(auxObject.value("soloMuteState").toObject());
 
-        m_auxOutputParams.emplace(index, std::move(outParams));
+        if (!m_auxOutputParams.emplace(index, std::move(outParams)).second) {
+            LOGW() << "duplicate aux channel index " << index << " in project file, ignoring";
+            continue;
+        }
+
         m_auxSoloMuteStatesMap.emplace(index, std::move(soloMuteState));
     }
 

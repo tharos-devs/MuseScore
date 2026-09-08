@@ -828,6 +828,10 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
 void MixerChannelItem::updateAuxSendField(const AuxSendItem* item, const std::function<void(AuxSendParams&)>& setter)
 {
     aux_channel_idx_t idx = item->auxIndex();
+    if (idx == AuxSendItem::NO_BUS) {
+        return;
+    }
+
     if (idx >= m_outParams.auxSends.size()) {
         resizeAuxSendsWithBlankPadding(m_outParams.auxSends, idx + 1);
     }
