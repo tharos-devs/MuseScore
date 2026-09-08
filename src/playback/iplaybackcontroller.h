@@ -90,12 +90,15 @@ public:
     using AuxTrackIdMap = std::map<muse::audio::aux_channel_idx_t, muse::audio::TrackId>;
     virtual const AuxTrackIdMap& auxTrackIdMap() const = 0;
     virtual void addNewAuxBus() = 0;
+    virtual void addNewGroupBus() = 0;
 
     virtual muse::async::Channel<muse::audio::TrackId> trackAdded() const = 0;
     virtual muse::async::Channel<muse::audio::TrackId> trackRemoved() const = 0;
 
     virtual std::string auxChannelName(muse::audio::aux_channel_idx_t index) const = 0;
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const = 0;
+
+    virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
 
     virtual muse::async::Promise<muse::audio::SoundPresetList>
     availableSoundPresets(const engraving::InstrumentTrackId& instrumentTrackId) const = 0;

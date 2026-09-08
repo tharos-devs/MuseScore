@@ -49,6 +49,7 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
 
     Q_PROPERTY(Type type READ type CONSTANT)
     Q_PROPERTY(bool outputOnly READ outputOnly CONSTANT)
+    Q_PROPERTY(bool isGroupBus READ isGroupBus CONSTANT)
 
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
 
@@ -101,8 +102,13 @@ public:
     ~MixerChannelItem() override;
 
     Type type() const;
+    bool isGroupBus() const;
 
     muse::audio::TrackId trackId() const;
+
+    //! NOTE: only meaningful for Type::Aux channels - the bus index this channel
+    //! represents, needed to query IPlaybackController::isAuxBusGroup()
+    void setAuxIndex(muse::audio::aux_channel_idx_t index);
 
     const engraving::InstrumentTrackId& instrumentTrackId() const;
     void setInstrumentTrackId(const engraving::InstrumentTrackId& instrumentTrackId);
@@ -236,6 +242,7 @@ protected:
     Type m_type = Type::Unknown;
 
     muse::audio::TrackId m_trackId = -1;
+    muse::audio::aux_channel_idx_t m_auxIndex = 0;
     engraving::InstrumentTrackId m_instrumentTrackId;
 
     project::AudioInputParams m_inputParams;

@@ -65,12 +65,15 @@ public:
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
     void addNewAuxBus() override;
+    void addNewGroupBus() override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
 
     std::string auxChannelName(muse::audio::aux_channel_idx_t index) const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
+
+    bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
 
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
         const engraving::InstrumentTrackId& instrumentTrackId) const override;

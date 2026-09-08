@@ -550,6 +550,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
 {
     MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Aux, true /*outputOnly*/, trackId);
     item->setPanelSection(m_navigationSection);
+    item->setAuxIndex(index);
     item->loadSoloMuteState(audioSettings()->auxSoloMuteState(index));
 
     playback()->trackName(trackId)

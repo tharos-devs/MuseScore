@@ -55,6 +55,7 @@ public:
         std::vector<BusOption> availableBuses;
         bool canAddSend = false;
         bool canAddBus = false;
+        bool canAddGroupBus = false;
     };
 
     using MenuDataProvider = std::function<MenuData ()>;

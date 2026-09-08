@@ -229,6 +229,23 @@ muse::async::Channel<aux_channel_idx_t, IProjectAudioSettings::SoloMuteState> Pr
     return m_auxSoloMuteStateChanged;
 }
 
+bool ProjectAudioSettings::isAuxBusGroup(aux_channel_idx_t index) const
+{
+    auto it = m_auxIsGroupBusMap.find(index);
+    return it != m_auxIsGroupBusMap.end() ? it->second : false;
+}
+
+void ProjectAudioSettings::setIsAuxBusGroup(aux_channel_idx_t index, bool isGroup)
+{
+    auto it = m_auxIsGroupBusMap.find(index);
+    if (it != m_auxIsGroupBusMap.end() && it->second == isGroup) {
+        return;
+    }
+
+    m_auxIsGroupBusMap.insert_or_assign(index, isGroup);
+    m_settingsChanged.notify();
+}
+
 void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
 {
     auto inSearch = m_trackInputParamsMap.find(partId);
@@ -305,6 +322,7 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         }
 
         m_auxSoloMuteStatesMap.emplace(index, std::move(soloMuteState));
+        m_auxIsGroupBusMap.emplace(index, auxObject.value("isGroupBus").toBool(false));
     }
 
     QJsonArray tracksArray = rootObj.value("tracks").toArray();
@@ -633,6 +651,11 @@ QJsonObject ProjectAudioSettings::buildAuxObject(aux_channel_idx_t index, const 
     auto soloMuteSearch = m_auxSoloMuteStatesMap.find(index);
     if (soloMuteSearch != m_auxSoloMuteStatesMap.end()) {
         result.insert("soloMuteState", soloMuteStateToJson(soloMuteSearch->second));
+    }
+
+    auto isGroupSearch = m_auxIsGroupBusMap.find(index);
+    if (isGroupSearch != m_auxIsGroupBusMap.end() && isGroupSearch->second) {
+        result.insert("isGroupBus", true);
     }
 
     return result;

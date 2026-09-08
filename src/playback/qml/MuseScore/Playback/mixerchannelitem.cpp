@@ -52,13 +52,14 @@ static const std::string TRACK_ID_KEY("trackId");
 static const std::string RESOURCE_ID_KEY("resourceId");
 static const std::string CHAIN_ORDER_KEY("chainOrder");
 
-//! NOTE: the aux bus's own channel strip is always titled positionally ("Aux N"), regardless
-//! of any fx loaded on that bus (see PlaybackController::addAuxTrack/resolveAuxTrackTitle,
-//! considerFx=false) - aux-send slots must show that same name for consistency, so this
-//! deliberately does not use IPlaybackController::auxChannelName(), which is fx-aware
-static QString auxBusPositionalName(aux_channel_idx_t index)
+//! NOTE: the aux bus's own channel strip is always titled positionally ("Aux N"/"Bus N"),
+//! regardless of any fx loaded on that bus (see PlaybackController::addAuxTrack/
+//! resolveAuxTrackTitle, considerFx=false) - aux-send slots must show that same name for
+//! consistency, so this deliberately does not use IPlaybackController::auxChannelName(),
+//! which is fx-aware
+static QString auxBusPositionalName(aux_channel_idx_t index, bool isGroupBus)
 {
-    return muse::qtrc("playback", "Aux %1").arg(index + 1);
+    return muse::qtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(index + 1);
 }
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
@@ -123,6 +124,16 @@ MixerChannelItem::~MixerChannelItem()
 MixerChannelItem::Type MixerChannelItem::type() const
 {
     return m_type;
+}
+
+bool MixerChannelItem::isGroupBus() const
+{
+    return m_type == Type::Aux && controller()->isAuxBusGroup(m_auxIndex);
+}
+
+void MixerChannelItem::setAuxIndex(aux_channel_idx_t index)
+{
+    m_auxIndex = index;
 }
 
 TrackId MixerChannelItem::trackId() const
@@ -799,7 +810,7 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
     newItem->setAuxIndex(isBlankSlot ? AuxSendItem::NO_BUS : index);
     newItem->setIsActive(params.active);
     newItem->setAudioSignalPercentage(static_cast<int>(params.signalAmount * 100.f));
-    newItem->setTitle(isBlankSlot ? QString() : auxBusPositionalName(index));
+    newItem->setTitle(isBlankSlot ? QString() : auxBusPositionalName(index, controller()->isAuxBusGroup(index)));
     newItem->blockSignals(false);
 
     connect(newItem, &AuxSendItem::isActiveChanged, this, [this, newItem]() {
@@ -866,7 +877,7 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
             continue; // already targeted by another slot on this track
         }
 
-        data.availableBuses.push_back({ busIndex, auxBusPositionalName(busIndex) });
+        data.availableBuses.push_back({ busIndex, auxBusPositionalName(busIndex, controller()->isAuxBusGroup(busIndex)) });
     }
 
     //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already
@@ -881,7 +892,12 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
     }
 
     data.canAddSend = m_auxSendItems.size() < AUX_SEND_SLOT_LIMIT && !anotherBlankExists;
-    data.canAddBus = controller()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+
+    //! NOTE: "Add Aux bus"/"Add Bus" share the same underlying MAX_AUX_CHANNEL_NUM pool -
+    //! both bus kinds are tracked in the same auxTrackIdMap()
+    bool canAddAnotherBus = controller()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+    data.canAddBus = canAddAnotherBus;
+    data.canAddGroupBus = canAddAnotherBus;
 
     return data;
 }
@@ -900,6 +916,11 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
 
     if (menuItemId == "addAuxBus") {
         controller()->addNewAuxBus();
+        return;
+    }
+
+    if (menuItemId == "addGroupBus") {
+        controller()->addNewGroupBus();
         return;
     }
 
@@ -940,7 +961,7 @@ void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newB
     //! blocked here (unlike in buildAuxSendItem's initial construction) - this item is
     //! already live/bound in QML, and blocking would silently freeze its displayed title
     item->setAuxIndex(newBusIndex);
-    item->setTitle(auxBusPositionalName(newBusIndex));
+    item->setTitle(auxBusPositionalName(newBusIndex, controller()->isAuxBusGroup(newBusIndex)));
     item->setIsActive(true);
     item->setAudioSignalPercentage(static_cast<int>(signalAmount * 100.f));
 

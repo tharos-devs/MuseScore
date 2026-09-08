@@ -164,6 +164,10 @@ void PlaybackControllerStub::addNewAuxBus()
 {
 }
 
+void PlaybackControllerStub::addNewGroupBus()
+{
+}
+
 muse::async::Channel<muse::audio::TrackId> PlaybackControllerStub::trackAdded() const
 {
     return {};
@@ -182,6 +186,11 @@ std::string PlaybackControllerStub::auxChannelName(muse::audio::aux_channel_idx_
 muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> PlaybackControllerStub::auxChannelNameChanged() const
 {
     return {};
+}
+
+bool PlaybackControllerStub::isAuxBusGroup(muse::audio::aux_channel_idx_t) const
+{
+    return false;
 }
 
 muse::async::Promise<muse::audio::SoundPresetList> PlaybackControllerStub::availableSoundPresets(const engraving::InstrumentTrackId&) const

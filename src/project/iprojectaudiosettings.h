@@ -105,6 +105,12 @@ public:
     virtual void setAuxSoloMuteState(muse::audio::aux_channel_idx_t index, const SoloMuteState& state) = 0;
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> auxSoloMuteStateChanged() const = 0;
 
+    //! NOTE: a "group" bus is a track's only path to the master output (as opposed to a
+    //! regular send/return bus, where a track's direct-to-master signal is untouched) -
+    //! see TrackParams::isGroupBus. Defaults to false (regular send/return) when never set.
+    virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) = 0;
+
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
 
     virtual const playback::SoundProfileName& activeSoundProfile() const = 0;

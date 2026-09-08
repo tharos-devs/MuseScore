@@ -100,12 +100,15 @@ public:
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
     void addNewAuxBus() override;
+    void addNewGroupBus() override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
 
     std::string auxChannelName(muse::audio::aux_channel_idx_t index) const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
+
+    bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
 
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
         const engraving::InstrumentTrackId& instrumentTrackId) const override;
@@ -212,13 +215,14 @@ private:
     void setupPlayer();
 
     void updateSoloMuteStates();
-    void updateAuxMuteStates();
+    void updateAuxMuteStates(bool hasSolo, const std::vector<muse::audio::aux_channel_idx_t>& audibleGroupBuses);
 
     using TrackAddFinished = std::function<void ()>;
 
     void addTrack(const engraving::InstrumentTrackId& instrumentTrackId, const TrackAddFinished& onFinished);
     void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, const TrackAddFinished& onFinished);
     void addAuxTrack(muse::audio::aux_channel_idx_t index, const TrackAddFinished& onFinished);
+    muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
 
     void setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive);
     project::AudioOutputParams trackOutputParams(const engraving::InstrumentTrackId& instrumentTrackId) const;

@@ -82,7 +82,13 @@ MixerPanelSection {
                 icon: IconCode.SOLO
                 checked: content.channelItem.solo
 
-                enabled: content.channelItem.type !== MixerChannelItem.Aux && (!content.channelItem.muted || content.channelItem.forceMute)
+                //! NOTE: solo is only meaningful for a "group" bus (soloing it, or a track
+                //! that feeds it, correctly isolates them together - see
+                //! PlaybackController::updateSoloMuteStates()) - a regular send/return aux
+                //! bus is left disabled here, same as before, since there's no well-defined
+                //! standard behavior for "solo through a send" (see AuxSendItem/DAW research)
+                enabled: (content.channelItem.type !== MixerChannelItem.Aux || content.channelItem.isGroupBus)
+                         && (!content.channelItem.muted || content.channelItem.forceMute)
                 visible: content.channelItem.type !== MixerChannelItem.Master && content.channelItem.type !== MixerChannelItem.Metronome
 
                 navigation.name: "SoloButton"
