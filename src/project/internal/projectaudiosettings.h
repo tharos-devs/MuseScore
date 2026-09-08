@@ -45,6 +45,7 @@ public:
     bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) override;
+    std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const override;
 
     const TrackInputParamsMap& allTrackInputParams() const override;
     const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& partId) const override;

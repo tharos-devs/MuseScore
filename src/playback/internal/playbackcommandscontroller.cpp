@@ -73,8 +73,7 @@ void PlaybackCommandsController::init()
     registerCommand(RELOAD_PLAYBACK_CACHE_COMMAND, &IPlaybackController::reloadPlaybackCache);
 
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
-    registerCommand(TOGGLE_AUX_SEND_COMMAND, [this](const rcommand::Params& params) { return toggleAuxSend(params); });
-    registerCommand(TOGGLE_AUX_CHANNEL_COMMAND, [this](const rcommand::Params& params) { return toggleAuxChannel(params); });
+    registerCommand(TOGGLE_AUX_CHANNELS_COMMAND, [this]() { return toggleAuxChannels(); });
 
     // compat
     {
@@ -101,8 +100,7 @@ void PlaybackCommandsController::init()
             { "reload-playback-cache", RELOAD_PLAYBACK_CACHE_COMMAND, {} },
             { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },
             { "toggle-mixer-section", TOGGLE_MIXER_SECTION_COMMAND, mixerSectionToggle },
-            { "toggle-aux-send", TOGGLE_AUX_SEND_COMMAND, make_conv({ { "auxsend-index", param<int> } }) },
-            { "toggle-aux-channel", TOGGLE_AUX_CHANNEL_COMMAND, make_conv({ { "auxchannel-index", param<int> } }) },
+            { "toggle-aux-channels", TOGGLE_AUX_CHANNELS_COMMAND, {} },
         };
 
         registerActionToCommand(this, actionToCommand, dispatcher(), actionsDispatcher());
@@ -133,27 +131,10 @@ muse::Ret PlaybackCommandsController::toggleMixerSection(const muse::rcommand::P
     return make_ok();
 }
 
-muse::Ret PlaybackCommandsController::toggleAuxSend(const muse::rcommand::Params& params)
+muse::Ret PlaybackCommandsController::toggleAuxChannels()
 {
-    if (!params.contains("auxsend-index")) {
-        return make_ret(Ret::Code::BadArgs);
-    }
-
-    aux_channel_idx_t auxSendIndex = static_cast<aux_channel_idx_t>(params.at("auxsend-index").toInt());
-    bool visible = configuration()->isAuxSendVisible(auxSendIndex);
-    configuration()->setAuxSendVisible(auxSendIndex, !visible);
-    return make_ok();
-}
-
-muse::Ret PlaybackCommandsController::toggleAuxChannel(const muse::rcommand::Params& params)
-{
-    if (!params.contains("auxchannel-index")) {
-        return make_ret(Ret::Code::BadArgs);
-    }
-
-    aux_channel_idx_t auxChannelIndex = static_cast<aux_channel_idx_t>(params.at("auxchannel-index").toInt());
-    bool visible = configuration()->isAuxChannelVisible(auxChannelIndex);
-    configuration()->setAuxChannelVisible(auxChannelIndex, !visible);
+    bool visible = configuration()->areAuxChannelsVisible();
+    configuration()->setAuxChannelsVisible(!visible);
     return make_ok();
 }
 

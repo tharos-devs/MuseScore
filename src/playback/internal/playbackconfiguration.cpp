@@ -73,6 +73,7 @@ static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
 static const Settings::Key MIXER_LABELS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/labelsSectionVisible");
 static const Settings::Key MIXER_SOUND_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/soundSectionVisible");
 static const Settings::Key MIXER_AUDIO_FX_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/audioFxSectionVisible");
+static const Settings::Key MIXER_AUX_SENDS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/auxSendsSectionVisible");
 static const Settings::Key MIXER_BALANCE_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/balanceSectionVisible");
 static const Settings::Key MIXER_VOLUME_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/volumeSectionVisible");
 static const Settings::Key MIXER_FADER_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/faderSectionVisible");
@@ -88,6 +89,16 @@ static const Settings::Key ONLINE_SOUNDS_SHOW_ERROR(moduleName, "playback/online
 static const Settings::Key ONLINE_SOUNDS_SHOW_PROGRESS_BAR_MODE(moduleName, "playback/onlineSounds/showProgressBarMode");
 
 static const Settings::Key MUTE_HIDDEN_INSTRUMENTS(moduleName, "playback/mixer/muteHiddenInstruments");
+static const Settings::Key AUX_CHANNELS_VISIBLE(moduleName, "playback/mixer/auxChannelsVisible");
+static const Settings::Key AUX_CHANNELS_VISIBLE_MIGRATED(moduleName, "playback/mixer/auxChannelsVisibleMigratedFromPerIndex");
+
+//! NOTE: the per-index "auxChannel<N>Visible" keys these replace (used up until this
+//! feature); kept only so migrateAuxChannelsVisibleSetting() can read a user's old
+//! preference once - never registered with setDefaultValue, so they are never re-created
+static Settings::Key legacyAuxChannelVisibleKey(muse::audio::aux_channel_idx_t index)
+{
+    return Settings::Key(moduleName, "playback/mixer/auxChannel" + std::to_string(index) + "Visible");
+}
 
 static const Settings::Key DEFAULT_SOUND_PROFILE_FOR_NEW_PROJECTS(moduleName, "playback/profiles/defaultProfileName");
 static const SoundProfileName BASIC_PROFILE_NAME(u"MuseScore Basic");
@@ -100,6 +111,7 @@ static Settings::Key mixerSectionVisibleKey(MixerSectionType sectionType)
     case MixerSectionType::Labels: return MIXER_LABELS_SECTION_VISIBLE_KEY;
     case MixerSectionType::Sound: return MIXER_SOUND_SECTION_VISIBLE_KEY;
     case MixerSectionType::AudioFX: return MIXER_AUDIO_FX_SECTION_VISIBLE_KEY;
+    case MixerSectionType::AuxSends: return MIXER_AUX_SENDS_SECTION_VISIBLE_KEY;
     case MixerSectionType::Balance: return MIXER_BALANCE_SECTION_VISIBLE_KEY;
     case MixerSectionType::Volume: return MIXER_VOLUME_SECTION_VISIBLE_KEY;
     case MixerSectionType::Fader: return MIXER_FADER_SECTION_VISIBLE_KEY;
@@ -109,16 +121,6 @@ static Settings::Key mixerSectionVisibleKey(MixerSectionType sectionType)
     }
 
     return Settings::Key();
-}
-
-static Settings::Key auxSendVisibleKey(aux_channel_idx_t index)
-{
-    return Settings::Key(moduleName, "playback/mixer/auxSend" + std::to_string(index) + "Visible");
-}
-
-static Settings::Key auxChannelVisibleKey(aux_channel_idx_t index)
-{
-    return Settings::Key(moduleName, "playback/mixer/auxChannel" + std::to_string(index) + "Visible");
 }
 
 void PlaybackConfiguration::init()
@@ -164,21 +166,33 @@ void PlaybackConfiguration::init()
 
     settings()->setDefaultValue(DEFAULT_SOUND_PROFILE_FOR_NEW_PROJECTS, Val(fallbackSoundProfileStr().toStdString()));
 
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        Settings::Key auxSendKey = auxSendVisibleKey(idx);
-        Settings::Key auxChannelKey = auxChannelVisibleKey(idx);
+    settings()->setDefaultValue(AUX_CHANNELS_VISIBLE, Val(false));
+    settings()->setDefaultValue(AUX_CHANNELS_VISIBLE_MIGRATED, Val(false));
 
-        settings()->setDefaultValue(auxSendKey, Val(idx == REVERB_CHANNEL_IDX));
-        settings()->setDefaultValue(auxChannelKey, Val(false));
+    //! NOTE: one-time migration from the old per-index "auxChannel<N>Visible" settings
+    //! (replaced by this single toggle) - without it, a user who had previously made an
+    //! aux channel strip visible would silently lose that preference on upgrade. Guarded
+    //! by AUX_CHANNELS_VISIBLE_MIGRATED so it only ever runs once, and never overrides a
+    //! choice the user makes afterward via the new single toggle.
+    if (!settings()->value(AUX_CHANNELS_VISIBLE_MIGRATED).toBool()) {
+        bool anyLegacyVisible = false;
+        for (aux_channel_idx_t idx = 0; idx < MAX_AUX_CHANNEL_NUM; ++idx) {
+            if (settings()->value(legacyAuxChannelVisibleKey(idx)).toBool()) {
+                anyLegacyVisible = true;
+                break;
+            }
+        }
 
-        settings()->valueChanged(auxSendKey).onReceive(this, [this, idx](const Val& val) {
-            m_isAuxSendVisibleChanged.send(idx, val.toBool());
-        });
+        if (anyLegacyVisible) {
+            settings()->setSharedValue(AUX_CHANNELS_VISIBLE, Val(true));
+        }
 
-        settings()->valueChanged(auxChannelKey).onReceive(this, [this, idx](const Val& val) {
-            m_isAuxChannelVisibleChanged.send(idx, val.toBool());
-        });
+        settings()->setSharedValue(AUX_CHANNELS_VISIBLE_MIGRATED, Val(true));
     }
+
+    settings()->valueChanged(AUX_CHANNELS_VISIBLE).onReceive(this, [this](const Val& val) {
+        m_areAuxChannelsVisibleChanged.send(val.toBool());
+    });
 
     settings()->setDefaultValue(ONLINE_SOUNDS_SHOW_ERROR, Val(true));
     settings()->valueChanged(ONLINE_SOUNDS_SHOW_ERROR).onReceive(nullptr, [this](const Val&) {
@@ -346,34 +360,19 @@ muse::async::Channel<MixerSectionType, bool> PlaybackConfiguration::isMixerSecti
     return m_isMixerSectionVisibleChanged;
 }
 
-bool PlaybackConfiguration::isAuxSendVisible(aux_channel_idx_t index) const
+bool PlaybackConfiguration::areAuxChannelsVisible() const
 {
-    return settings()->value(auxSendVisibleKey(index)).toBool();
+    return settings()->value(AUX_CHANNELS_VISIBLE).toBool();
 }
 
-void PlaybackConfiguration::setAuxSendVisible(aux_channel_idx_t index, bool visible)
+void PlaybackConfiguration::setAuxChannelsVisible(bool visible)
 {
-    settings()->setSharedValue(auxSendVisibleKey(index), Val(visible));
+    settings()->setSharedValue(AUX_CHANNELS_VISIBLE, Val(visible));
 }
 
-muse::async::Channel<aux_channel_idx_t, bool> PlaybackConfiguration::isAuxSendVisibleChanged() const
+muse::async::Channel<bool> PlaybackConfiguration::areAuxChannelsVisibleChanged() const
 {
-    return m_isAuxSendVisibleChanged;
-}
-
-bool PlaybackConfiguration::isAuxChannelVisible(aux_channel_idx_t index) const
-{
-    return settings()->value(auxChannelVisibleKey(index)).toBool();
-}
-
-void PlaybackConfiguration::setAuxChannelVisible(aux_channel_idx_t index, bool visible) const
-{
-    settings()->setSharedValue(auxChannelVisibleKey(index), Val(visible));
-}
-
-muse::async::Channel<aux_channel_idx_t, bool> PlaybackConfiguration::isAuxChannelVisibleChanged() const
-{
-    return m_isAuxChannelVisibleChanged;
+    return m_areAuxChannelsVisibleChanged;
 }
 
 gain_t PlaybackConfiguration::defaultAuxSendValue(aux_channel_idx_t index, AudioSourceType sourceType,

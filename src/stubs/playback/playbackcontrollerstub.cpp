@@ -160,6 +160,10 @@ const IPlaybackController::AuxTrackIdMap& PlaybackControllerStub::auxTrackIdMap(
     return m;
 }
 
+void PlaybackControllerStub::addNewAuxBus()
+{
+}
+
 muse::async::Channel<muse::audio::TrackId> PlaybackControllerStub::trackAdded() const
 {
     return {};

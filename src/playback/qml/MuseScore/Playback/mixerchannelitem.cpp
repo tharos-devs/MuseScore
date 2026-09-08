@@ -48,6 +48,7 @@ static constexpr volume_dbfs_t MIN_DISPLAYED_DBFS = volume_dbfs_t::make(-60.f); 
 static constexpr float BALANCE_SCALING_FACTOR = 100.f;
 
 static constexpr int OUTPUT_RESOURCE_COUNT_LIMIT = 5;
+static constexpr int AUX_SEND_SLOT_LIMIT = 5;
 
 static const std::string VSTFX_EDITOR_ACTION("action://vst/fx_editor");
 static const std::string VSTI_EDITOR_ACTION("action://vst/instrument_editor");
@@ -55,6 +56,44 @@ static const std::string VSTI_EDITOR_ACTION("action://vst/instrument_editor");
 static const std::string TRACK_ID_KEY("trackId");
 static const std::string RESOURCE_ID_KEY("resourceId");
 static const std::string CHAIN_ORDER_KEY("chainOrder");
+
+//! NOTE: the aux bus's own channel strip is always titled positionally ("Aux N"), regardless
+//! of any fx loaded on that bus (see PlaybackController::addAuxTrack/resolveAuxTrackTitle,
+//! considerFx=false) - aux-send slots must show that same name for consistency, so this
+//! deliberately does not use IPlaybackController::auxChannelName(), which is fx-aware
+static QString auxBusPositionalName(aux_channel_idx_t index)
+{
+    return muse::qtrc("playback", "Aux %1").arg(index + 1);
+}
+
+//! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
+//! {signalAmount: 0.f, active: false} - the SAME value a default-constructed AuxSendParams
+//! has. Using -1.f (outside the valid [0;1] gain range) as the "never assigned" sentinel
+//! instead lets a reload correctly tell the two apart; the engine never acts on this value
+//! for a blank entry since it's always paired with active=false (see writeTrackToAuxBuffers,
+//! which skips non-active sends before ever reading signalAmount)
+static AuxSendParams blankAuxSendParams()
+{
+    return AuxSendParams { -1.f, false };
+}
+
+static bool isBlankAuxSend(const AuxSendParams& params)
+{
+    return params == blankAuxSendParams();
+}
+
+//! NOTE: growing this vector must pad new positions with the blank sentinel, not the
+//! natural zero-initialized default - otherwise a gap introduced by resizing to reach a
+//! higher bus index would be indistinguishable from a real, silent-but-assigned send
+static void resizeAuxSendsWithBlankPadding(AuxSendsParams& auxSends, size_t newSize)
+{
+    size_t oldSize = auxSends.size();
+    auxSends.resize(newSize);
+
+    for (size_t i = oldSize; i < newSize; ++i) {
+        auxSends[i] = blankAuxSendParams();
+    }
+}
 
 MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, audio::TrackId trackId)
     : QObject(parent), muse::Contextable(muse::iocCtxForQmlObject(this)),
@@ -455,42 +494,61 @@ void MixerChannelItem::loadAuxSendItems(const AuxSendsParams& auxSends)
 
     m_outParams.auxSends = auxSends;
 
-    configuration()->isAuxSendVisibleChanged().onReceive(this, [this](aux_channel_idx_t index, bool visible) {
-        if (visible) {
-            IF_ASSERT_FAILED(index < m_outParams.auxSends.size()) {
-                return;
-            };
+    //! NOTE: keep existing slots whose target bus is still assigned - this preserves their
+    //! on-screen (slot-order) position; anything else is rebuilt from scratch below
+    QMap<int, AuxSendItem*> newItems;
+    std::vector<aux_channel_idx_t> handledBuses;
 
-            m_auxSendItems.insert(index, buildAuxSendItem(index, m_outParams.auxSends[index]));
+    for (auto it = m_auxSendItems.begin(); it != m_auxSendItems.end(); ++it) {
+        AuxSendItem* item = it.value();
+        aux_channel_idx_t busIndex = item->auxIndex();
+
+        bool stillAssigned = busIndex != AuxSendItem::NO_BUS
+                             && busIndex < auxSends.size()
+                             && !isBlankAuxSend(auxSends[busIndex]);
+
+        if (stillAssigned) {
+            item->blockSignals(true);
+            item->setIsActive(auxSends[busIndex].active);
+            item->setAudioSignalPercentage(static_cast<int>(auxSends[busIndex].signalAmount * 100.f));
+            item->blockSignals(false);
+            newItems.insert(it.key(), item);
+            handledBuses.push_back(busIndex);
+        } else if (item->isBlank()) {
+            newItems.insert(it.key(), item);
         } else {
-            m_auxSendItems.remove(index);
+            item->disconnect();
+            item->deleteLater();
         }
-
-        emit auxSendItemListChanged();
-    }, async::Asyncable::Mode::SetReplace);
-
-    if (m_auxSendItems.size() == static_cast<int>(auxSends.size())) {
-        return;
     }
 
-    QMap<aux_channel_idx_t, AuxSendItem*> newItems;
-
     for (aux_channel_idx_t i = 0; i < auxSends.size(); ++i) {
-        if (!configuration()->isAuxSendVisible(i)) {
+        if (isBlankAuxSend(auxSends[i]) || muse::contains(handledBuses, i)) {
             continue;
         }
 
-        auto it = m_auxSendItems.find(i);
-
-        if (it != m_auxSendItems.end()) {
-            newItems.insert(it.key(), it.value());
-        } else {
-            newItems.insert(i, buildAuxSendItem(i, auxSends[i]));
+        //! NOTE: guard against ever exceeding the per-track slot cap here too (mirroring
+        //! addAuxSendBlankSlot()'s guard) - without it, more than AUX_SEND_SLOT_LIMIT
+        //! non-blank entries (which should never happen, but could from a desync) would
+        //! make resolveNewBlankAuxSendItemOrder() return an already-used key, silently
+        //! overwriting (and leaking) whatever item currently holds that slot
+        if (newItems.size() >= AUX_SEND_SLOT_LIMIT) {
+            break;
         }
+
+        int slotOrder = resolveNewBlankAuxSendItemOrder(newItems);
+        newItems.insert(slotOrder, buildAuxSendItem(i, auxSends[i]));
     }
 
-    if (m_auxSendItems != newItems) {
+    bool changed = m_auxSendItems != newItems;
+
+    if (changed) {
         m_auxSendItems = std::move(newItems);
+    }
+
+    ensureTrailingBlankAuxSlot(); // may itself emit auxSendItemListChanged if it adds a slot
+
+    if (changed) {
         emit auxSendItemListChanged();
     }
 }
@@ -794,17 +852,33 @@ InputResourceItem* MixerChannelItem::buildInputResourceItem()
 
         bool auxParamsChanged = false;
         for (aux_channel_idx_t idx = 0; idx < static_cast<size_t>(m_outParams.auxSends.size()); ++idx) {
+            //! NOTE: skip unassigned/blank positions - they have nothing displayed, and
+            //! writing a fresh default signalAmount into one would move it away from the
+            //! blank sentinel, wrongly turning it into an assigned send
+            if (isBlankAuxSend(m_outParams.auxSends.at(idx))) {
+                continue;
+            }
+
             const muse::String& soundId = m_inputParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
             gain_t newAudioSignalAmount = configuration()->defaultAuxSendValue(idx, m_inputParams.type(), soundId);
 
-            auto it = m_auxSendItems.find(idx);
-            if (it == m_auxSendItems.end()) {
+            //! NOTE: m_auxSendItems is keyed by stable slot order, not bus index - the
+            //! item targeting this bus (if any is currently live) must be found by value
+            AuxSendItem* item = nullptr;
+            for (AuxSendItem* candidate : std::as_const(m_auxSendItems)) {
+                if (candidate->auxIndex() == idx) {
+                    item = candidate;
+                    break;
+                }
+            }
+
+            if (!item) {
                 if (!muse::RealIsEqual(m_outParams.auxSends.at(idx).signalAmount, newAudioSignalAmount)) {
                     m_outParams.auxSends.at(idx).signalAmount = newAudioSignalAmount;
                     auxParamsChanged = true;
                 }
             } else {
-                it.value()->setAudioSignalPercentage(newAudioSignalAmount * 100.f);
+                item->setAudioSignalPercentage(newAudioSignalAmount * 100.f);
             }
         }
 
@@ -875,32 +949,231 @@ OutputResourceItem* MixerChannelItem::buildOutputResourceItem(const audio::Audio
 
 AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const AuxSendParams& params)
 {
+    bool isBlankSlot = isBlankAuxSend(params);
+
     AuxSendItem* newItem = new AuxSendItem(this);
     newItem->blockSignals(true);
+    newItem->setAuxIndex(isBlankSlot ? AuxSendItem::NO_BUS : index);
     newItem->setIsActive(params.active);
-    newItem->setAudioSignalPercentage(params.signalAmount * 100.f);
-    newItem->setTitle(muse::qtrc("playback", "Aux %1").arg(index + 1));
+    newItem->setAudioSignalPercentage(static_cast<int>(params.signalAmount * 100.f));
+    newItem->setTitle(isBlankSlot ? QString() : auxBusPositionalName(index));
     newItem->blockSignals(false);
 
-    connect(newItem, &AuxSendItem::isActiveChanged, this, [this, index](bool active) {
-        IF_ASSERT_FAILED(index < m_outParams.auxSends.size()) {
-            return;
-        }
-
-        m_outParams.auxSends[index].active = active;
-        emit auxSendsParamsChanged(m_outParams);
+    connect(newItem, &AuxSendItem::isActiveChanged, this, [this, newItem]() {
+        updateAuxSendField(newItem, [newItem](AuxSendParams& params) {
+            params.active = newItem->isActive();
+        });
     });
 
-    connect(newItem, &AuxSendItem::audioSignalPercentageChanged, this, [this, index](int percentage) {
-        IF_ASSERT_FAILED(index < m_outParams.auxSends.size()) {
-            return;
-        }
+    connect(newItem, &AuxSendItem::audioSignalPercentageChanged, this, [this, newItem](int percentage) {
+        updateAuxSendField(newItem, [percentage](AuxSendParams& params) {
+            params.signalAmount = static_cast<float>(percentage) / 100.f;
+        });
+    });
 
-        m_outParams.auxSends[index].signalAmount = static_cast<float>(percentage) / 100.f;
-        emit auxSendsParamsChanged(m_outParams);
+    newItem->setMenuDataProvider([this, newItem]() {
+        return buildAuxSendMenuData(newItem);
+    });
+
+    newItem->setMenuItemHandler([this, newItem](const QString& menuItemId) {
+        handleAuxSendMenuItem(newItem, menuItemId);
     });
 
     return newItem;
+}
+
+void MixerChannelItem::updateAuxSendField(const AuxSendItem* item, const std::function<void(AuxSendParams&)>& setter)
+{
+    aux_channel_idx_t idx = item->auxIndex();
+    if (idx == AuxSendItem::NO_BUS) {
+        return;
+    }
+
+    if (idx >= m_outParams.auxSends.size()) {
+        resizeAuxSendsWithBlankPadding(m_outParams.auxSends, idx + 1);
+    }
+
+    setter(m_outParams.auxSends[idx]);
+    emit auxSendsParamsChanged(m_outParams);
+}
+
+AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* item) const
+{
+    AuxSendItem::MenuData data;
+
+    for (const auto& pair : controller()->auxTrackIdMap()) {
+        aux_channel_idx_t busIndex = pair.first;
+
+        //! NOTE: whether another slot is really using a bus must be based on its auxIndex(),
+        //! not isBlank() - a slot bypassed with its knob at 0% is isBlank() but still holds
+        //! a real target bus, and would otherwise let this bus be offered to two slots at once
+        bool usedByAnotherSlot = false;
+        for (const AuxSendItem* other : std::as_const(m_auxSendItems)) {
+            if (other == item || other->auxIndex() == AuxSendItem::NO_BUS) {
+                continue;
+            }
+
+            if (other->auxIndex() == busIndex) {
+                usedByAnotherSlot = true;
+                break;
+            }
+        }
+
+        if (usedByAnotherSlot) {
+            continue; // already targeted by another slot on this track
+        }
+
+        data.availableBuses.push_back({ busIndex, auxBusPositionalName(busIndex) });
+    }
+
+    //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already
+    //! exists - it would be a no-op (addAuxSendBlankSlot() itself refuses to create a
+    //! second blank), and the user should just use that existing blank slot instead
+    bool anotherBlankExists = false;
+    for (const AuxSendItem* other : std::as_const(m_auxSendItems)) {
+        if (other != item && other->auxIndex() == AuxSendItem::NO_BUS) {
+            anotherBlankExists = true;
+            break;
+        }
+    }
+
+    data.canAddSend = m_auxSendItems.size() < AUX_SEND_SLOT_LIMIT && !anotherBlankExists;
+    data.canAddBus = controller()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+
+    return data;
+}
+
+void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& menuItemId)
+{
+    if (menuItemId == "noAuxSend") {
+        blankAuxSend(item);
+        return;
+    }
+
+    if (menuItemId == "addAuxSend") {
+        addAuxSendBlankSlot();
+        return;
+    }
+
+    if (menuItemId == "addAuxBus") {
+        controller()->addNewAuxBus();
+        return;
+    }
+
+    bool ok = false;
+    aux_channel_idx_t newBusIndex = static_cast<aux_channel_idx_t>(menuItemId.toUInt(&ok));
+    if (ok) {
+        reassignAuxSend(item, newBusIndex);
+    }
+}
+
+void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newBusIndex)
+{
+    IF_ASSERT_FAILED(item) {
+        return;
+    }
+
+    aux_channel_idx_t oldIndex = item->auxIndex();
+    if (oldIndex == newBusIndex && !item->isBlank()) {
+        return;
+    }
+
+    if (newBusIndex >= m_outParams.auxSends.size()) {
+        resizeAuxSendsWithBlankPadding(m_outParams.auxSends, newBusIndex + 1);
+    }
+
+    AudioSourceType sourceType = m_inputParams.isValid() ? m_inputParams.type() : AudioSourceType::Fluid;
+    const muse::String& instrumentSoundId = m_inputParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
+    gain_t signalAmount = configuration()->defaultAuxSendValue(newBusIndex, sourceType, instrumentSoundId);
+
+    if (oldIndex != AuxSendItem::NO_BUS && oldIndex < m_outParams.auxSends.size() && oldIndex != newBusIndex) {
+        m_outParams.auxSends[oldIndex] = blankAuxSendParams();
+    }
+
+    m_outParams.auxSends[newBusIndex] = AuxSendParams { signalAmount, true };
+
+    //! NOTE: the item's slot order (its key in m_auxSendItems) does not change here -
+    //! only which bus it targets, so it stays visually in place. Signals must NOT be
+    //! blocked here (unlike in buildAuxSendItem's initial construction) - this item is
+    //! already live/bound in QML, and blocking would silently freeze its displayed title
+    item->setAuxIndex(newBusIndex);
+    item->setTitle(auxBusPositionalName(newBusIndex));
+    item->setIsActive(true);
+    item->setAudioSignalPercentage(static_cast<int>(signalAmount * 100.f));
+
+    ensureTrailingBlankAuxSlot();
+
+    emit auxSendsParamsChanged(m_outParams);
+    emit auxSendItemListChanged();
+}
+
+void MixerChannelItem::blankAuxSend(AuxSendItem* item)
+{
+    IF_ASSERT_FAILED(item) {
+        return;
+    }
+
+    aux_channel_idx_t index = item->auxIndex();
+    if (index != AuxSendItem::NO_BUS && index < m_outParams.auxSends.size()) {
+        m_outParams.auxSends[index] = blankAuxSendParams();
+    }
+
+    int slotOrder = m_auxSendItems.key(item, -1);
+    if (slotOrder >= 0) {
+        m_auxSendItems.remove(slotOrder);
+    }
+
+    item->disconnect();
+    item->deleteLater();
+
+    ensureTrailingBlankAuxSlot();
+
+    emit auxSendsParamsChanged(m_outParams);
+    emit auxSendItemListChanged();
+}
+
+bool MixerChannelItem::hasBlankAuxSendSlot() const
+{
+    //! NOTE: based on auxIndex(), not isBlank() - see buildAuxSendMenuData for why
+    for (const AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == AuxSendItem::NO_BUS) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void MixerChannelItem::addAuxSendBlankSlot()
+{
+    //! NOTE: guard against creating a second blank slot - e.g. "Add Aux send" clicked
+    //! from a slot's dropdown while a trailing blank slot is already present
+    if (m_auxSendItems.size() >= AUX_SEND_SLOT_LIMIT || hasBlankAuxSendSlot()) {
+        return;
+    }
+
+    int slotOrder = resolveNewBlankAuxSendItemOrder(m_auxSendItems);
+    m_auxSendItems.insert(slotOrder, buildAuxSendItem(AuxSendItem::NO_BUS, blankAuxSendParams()));
+
+    emit auxSendItemListChanged();
+}
+
+void MixerChannelItem::ensureTrailingBlankAuxSlot()
+{
+    if (!hasBlankAuxSendSlot()) {
+        addAuxSendBlankSlot();
+    }
+}
+
+int MixerChannelItem::resolveNewBlankAuxSendItemOrder(const QMap<int, AuxSendItem*>& items) const
+{
+    for (int order = 0; order < AUX_SEND_SLOT_LIMIT; ++order) {
+        if (!items.contains(order)) {
+            return order;
+        }
+    }
+
+    return AUX_SEND_SLOT_LIMIT - 1;
 }
 
 void MixerChannelItem::openEditor(AbstractAudioResourceItem* item, const actions::ActionQuery& action)
@@ -1014,7 +1287,7 @@ QList<AuxSendItem*> MixerChannelItem::auxSendItemList() const
     return m_auxSendItems.values();
 }
 
-const QMap<aux_channel_idx_t, AuxSendItem*>& MixerChannelItem::auxSendItems() const
+const QMap<int, AuxSendItem*>& MixerChannelItem::auxSendItems() const
 {
     return m_auxSendItems;
 }

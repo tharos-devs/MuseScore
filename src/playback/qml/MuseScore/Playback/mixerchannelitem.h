@@ -169,7 +169,9 @@ public:
     QList<OutputResourceItem*> outputResourceItemList() const;
     QList<AuxSendItem*> auxSendItemList() const;
 
-    const QMap<muse::audio::aux_channel_idx_t, AuxSendItem*>& auxSendItems() const;
+    const QMap<int, AuxSendItem*>& auxSendItems() const;
+
+    void resetAudioChannelsVolumePressure();
 
 public slots:
     void setTitle(QString title);
@@ -216,7 +218,6 @@ protected:
     notation::INotationPlaybackPtr notationPlayback() const;
 
     void setAudioChannelVolumePressure(const muse::audio::audioch_t chNum, const float newValue);
-    void resetAudioChannelsVolumePressure();
 
     void applyMuteToOutputParams(const bool isMuted);
 
@@ -231,6 +232,20 @@ protected:
     void removeBlankSlotsFromEnd(size_t count);
 
     muse::audio::AudioFxChainOrder resolveNewBlankOutputResourceItemOrder() const;
+
+    bool hasBlankAuxSendSlot() const;
+    void addAuxSendBlankSlot();
+    void ensureTrailingBlankAuxSlot();
+    void reassignAuxSend(AuxSendItem* item, muse::audio::aux_channel_idx_t newBusIndex);
+    void blankAuxSend(AuxSendItem* item);
+    void handleAuxSendMenuItem(AuxSendItem* item, const QString& menuItemId);
+    AuxSendItem::MenuData buildAuxSendMenuData(const AuxSendItem* item) const;
+    void updateAuxSendField(const AuxSendItem* item, const std::function<void(muse::audio::AuxSendParams&)>& setter);
+
+    //! NOTE: key is a stable slot order (like AudioFxChainOrder for fx slots), NOT the
+    //! target bus index - this keeps a slot's on-screen position fixed when its target
+    //! bus is reassigned via the dropdown
+    int resolveNewBlankAuxSendItemOrder(const QMap<int, AuxSendItem*>& items) const;
 
     void openEditor(AbstractAudioResourceItem* item, const muse::actions::ActionQuery& action);
     void closeEditor(AbstractAudioResourceItem* item);
@@ -262,7 +277,7 @@ protected:
 
     InputResourceItem* m_inputResourceItem = nullptr;
     QMap<muse::audio::AudioFxChainOrder, OutputResourceItem*> m_outputResourceItems;
-    QMap<muse::audio::aux_channel_idx_t, AuxSendItem*> m_auxSendItems;
+    QMap<int, AuxSendItem*> m_auxSendItems; // NOTE: keyed by stable slot order, not bus index
 
     muse::audio::AudioSignalChanges m_audioSignalChanges;
     muse::audio::AutomatedControlParamsChanges m_automatedControlParamsChanges;

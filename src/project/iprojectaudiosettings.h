@@ -95,6 +95,7 @@ public:
     virtual bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) = 0;
+    virtual std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const = 0;
 
     virtual const TrackInputParamsMap& allTrackInputParams() const = 0;
     virtual const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& trackId) const = 0;

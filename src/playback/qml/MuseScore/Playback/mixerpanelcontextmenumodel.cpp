@@ -46,6 +46,7 @@ static TranslatableString mixerSectionTitle(MixerSectionType type)
     case MixerSectionType::Labels: return TranslatableString("playback", "Labels");
     case MixerSectionType::Sound: return TranslatableString("playback", "Sound");
     case MixerSectionType::AudioFX: return TranslatableString("playback", "Audio FX");
+    case MixerSectionType::AuxSends: return TranslatableString("playback", "Aux sends");
     case MixerSectionType::Balance: return TranslatableString("playback", "Pan");
     case MixerSectionType::Volume: return TranslatableString("playback", "Volume");
     case MixerSectionType::Fader: return TranslatableString("playback", "Fader");
@@ -79,13 +80,7 @@ bool MixerPanelContextMenuModel::audioFxSectionVisible() const
 
 bool MixerPanelContextMenuModel::auxSendsSectionVisible() const
 {
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        if (configuration()->isAuxSendVisible(idx)) {
-            return true;
-        }
-    }
-
-    return false;
+    return isSectionVisible(MixerSectionType::AuxSends);
 }
 
 bool MixerPanelContextMenuModel::balanceSectionVisible() const
@@ -175,15 +170,8 @@ void MixerPanelContextMenuModel::load()
         emit toggleFullScreenRequested();
     });
 
-    configuration()->isAuxSendVisibleChanged().onReceive(this, [this](aux_channel_idx_t auxSendIndex, bool newVisibilityValue) {
-        auto query = rcommand::make_query(TOGGLE_AUX_SEND_COMMAND, { { "auxsend-index", Val(auxSendIndex) } });
-        setViewMenuItemChecked(query, newVisibilityValue);
-
-        emit auxSendsSectionVisibleChanged();
-    });
-
-    configuration()->isAuxChannelVisibleChanged().onReceive(this, [this](aux_channel_idx_t auxChannelIndex, bool newVisibilityValue) {
-        auto query = rcommand::make_query(TOGGLE_AUX_CHANNEL_COMMAND, { { "auxchannel-index", Val(auxChannelIndex) } });
+    configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool newVisibilityValue) {
+        auto query = rcommand::make_query(TOGGLE_AUX_CHANNELS_COMMAND, rcommand::Params());
         setViewMenuItemChecked(query, newVisibilityValue);
     });
 
@@ -212,23 +200,13 @@ MenuItem* MixerPanelContextMenuModel::buildSectionVisibleItem(MixerSectionType s
     return item;
 }
 
-MenuItem* MixerPanelContextMenuModel::buildAuxSendVisibleItem(aux_channel_idx_t index)
+MenuItem* MixerPanelContextMenuModel::buildAuxChannelsVisibleItem()
 {
     MenuItem* item = new MenuItem(this);
-    item->setTitle(TranslatableString("playback", String("Aux send %1").arg(index + 1)));
+    item->setTitle(TranslatableString("playback", "Aux channels"));
     item->setCheckable(true);
-    item->setChecked(configuration()->isAuxSendVisible(index));
-    item->setCommandQuery(rcommand::make_query(TOGGLE_AUX_SEND_COMMAND, { { "auxsend-index", Val(index) } }));
-    return item;
-}
-
-MenuItem* MixerPanelContextMenuModel::buildAuxChannelVisibleItem(aux_channel_idx_t index)
-{
-    MenuItem* item = new MenuItem(this);
-    item->setTitle(TranslatableString("playback", String("Aux channel %1").arg(index + 1)));
-    item->setCheckable(true);
-    item->setChecked(configuration()->isAuxChannelVisible(index));
-    item->setCommandQuery(rcommand::make_query(TOGGLE_AUX_CHANNEL_COMMAND, { { "auxchannel-index", Val(index) } }));
+    item->setChecked(configuration()->areAuxChannelsVisible());
+    item->setCommandQuery(rcommand::make_query(TOGGLE_AUX_CHANNELS_COMMAND, rcommand::Params()));
     return item;
 }
 
@@ -256,6 +234,9 @@ void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionT
     case MixerSectionType::AudioFX:
         emit audioFxSectionVisibleChanged();
         break;
+    case MixerSectionType::AuxSends:
+        emit auxSendsSectionVisibleChanged();
+        break;
     case MixerSectionType::Balance:
         emit balanceSectionVisibleChanged();
         break;
@@ -282,15 +263,9 @@ void MixerPanelContextMenuModel::updateItems()
         buildSectionVisibleItem(MixerSectionType::Labels),
         buildSectionVisibleItem(MixerSectionType::Sound),
         buildSectionVisibleItem(MixerSectionType::AudioFX),
+        buildSectionVisibleItem(MixerSectionType::AuxSends),
+        buildAuxChannelsVisibleItem(),
     };
-
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        viewMenuItems.push_back(buildAuxSendVisibleItem(idx));
-    }
-
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-        viewMenuItems.push_back(buildAuxChannelVisibleItem(idx));
-    }
 
     viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Balance));
     viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Volume));

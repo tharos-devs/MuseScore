@@ -23,6 +23,7 @@
 #pragma once
 
 #include <optional>
+#include <tuple>
 #include <unordered_map>
 
 #include "modularity/ioc.h"
@@ -99,6 +100,7 @@ public:
 
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
+    void addNewAuxBus() override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
@@ -273,6 +275,14 @@ private:
 
     InstrumentTrackIdMap m_instrumentTrackIdMap;
     AuxTrackIdMap m_auxTrackIdMap;
+
+    //! NOTE: in-memory only, deliberately never persisted to audioSettings() - mute/solo
+    //! is transient playback state, and "muted" isn't even serialized to the project file,
+    //! so writing it there would only mark the project as having unsaved changes for no
+    //! reason. This exists purely so updateAuxMuteStates() can tell whether it already
+    //! applied a given mute state to the engine, without re-reading a stale value back.
+    std::map<muse::audio::aux_channel_idx_t, bool> m_lastAppliedAuxMuteState;
+    std::map<muse::audio::TrackId, std::tuple<bool, bool, bool> > m_lastAppliedInstrumentMuteSoloState;
 
     std::unordered_map<engraving::InstrumentTrackId, muse::audio::ControlParams> m_automatedControlParamsCache;
 

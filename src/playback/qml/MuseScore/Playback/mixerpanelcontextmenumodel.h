@@ -121,8 +121,7 @@ private:
     bool isSectionVisible(MixerSectionType sectionType) const;
 
     muse::uicomponents::MenuItem* buildSectionVisibleItem(MixerSectionType sectionType);
-    muse::uicomponents::MenuItem* buildAuxSendVisibleItem(muse::audio::aux_channel_idx_t index);
-    muse::uicomponents::MenuItem* buildAuxChannelVisibleItem(muse::audio::aux_channel_idx_t index);
+    muse::uicomponents::MenuItem* buildAuxChannelsVisibleItem();
 
     void emitMixerSectionVisibilityChanged(MixerSectionType sectionType);
 

@@ -60,13 +60,9 @@ public:
     void setMixerSectionVisible(MixerSectionType sectionType, bool visible) override;
     muse::async::Channel<MixerSectionType, bool> isMixerSectionVisibleChanged() const override;
 
-    bool isAuxSendVisible(muse::audio::aux_channel_idx_t index) const override;
-    void setAuxSendVisible(muse::audio::aux_channel_idx_t index, bool visible) override;
-    muse::async::Channel<muse::audio::aux_channel_idx_t, bool> isAuxSendVisibleChanged() const override;
-
-    bool isAuxChannelVisible(muse::audio::aux_channel_idx_t index) const override;
-    void setAuxChannelVisible(muse::audio::aux_channel_idx_t index, bool visible) const override;
-    muse::async::Channel<muse::audio::aux_channel_idx_t, bool> isAuxChannelVisibleChanged() const override;
+    bool areAuxChannelsVisible() const override;
+    void setAuxChannelsVisible(bool visible) override;
+    muse::async::Channel<bool> areAuxChannelsVisibleChanged() const override;
 
     muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                             const muse::String& instrumentSoundId) const override;

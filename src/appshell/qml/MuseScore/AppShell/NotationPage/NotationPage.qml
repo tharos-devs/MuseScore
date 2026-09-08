@@ -425,7 +425,7 @@ DockPage {
             //! below screen height, leaving it unable to actually fill the screen
             //! and forcing a scrollbar on its channel strips instead. This also
             //! covers docked use: taller than the shared cap alone, to fit up to
-            //! 5 FX slots without a scrollbar.
+            //! 5 FX slots and up to 5 aux-send slots per channel without a scrollbar.
             maximumHeight: root.panelMaxDimension
 
             minimumWidth: root.panelMinDimension

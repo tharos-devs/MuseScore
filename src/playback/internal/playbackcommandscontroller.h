@@ -61,8 +61,7 @@ private:
     muse::Ret showPlaybackSetup();
 
     muse::Ret toggleMixerSection(const muse::rcommand::Params& params);
-    muse::Ret toggleAuxSend(const muse::rcommand::Params& params);
-    muse::Ret toggleAuxChannel(const muse::rcommand::Params& params);
+    muse::Ret toggleAuxChannels();
 
     void registerCommand(const muse::rcommand::Command&, const std::function<muse::Ret()>&);
     void registerCommand(const muse::rcommand::Command&, const std::function<muse::Ret(const muse::rcommand::Params&)>&);

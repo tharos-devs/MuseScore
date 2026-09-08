@@ -68,6 +68,7 @@ public:
     MOCK_METHOD(const InstrumentTrackIdMap&, instrumentTrackIdMap, (), (const, override));
 
     MOCK_METHOD(const AuxTrackIdMap&, auxTrackIdMap, (), (const, override));
+    MOCK_METHOD(void, addNewAuxBus, (), (override));
 
     MOCK_METHOD(muse::async::Channel<muse::audio::TrackId>, trackAdded, (), (const, override));
     MOCK_METHOD(muse::async::Channel<muse::audio::TrackId>, trackRemoved, (), (const, override));

@@ -37,7 +37,9 @@ Item {
 
     property NavigationPanel navigationPanel: null
     property int navigationRowStart: 0
-    readonly property int navigationRowEnd: navigationRowStart + 2
+    //! NOTE: knob is at +0; AudioResourceControl starts at +1 and its own activity/title/
+    //! selector controls sit at a further +1/+2/+3 relative to THAT, i.e. +2/+3/+4 here
+    readonly property int navigationRowEnd: navigationRowStart + 4
     property string navigationName: ""
     property string accessibleName: ""
 
@@ -58,12 +60,14 @@ Item {
 
             radius: root.height / 2 + 1.5
 
+            enabled: root.auxSendItemModel ? !root.auxSendItemModel.isBlank : false
+
             from: 0
             to: 100
             stepSize: 1
-            value: root.auxSendItemModel.audioSignalPercentage
+            value: root.auxSendItemModel ? root.auxSendItemModel.audioSignalPercentage : 0
 
-            accentControl: root.auxSendItemModel.isActive
+            accentControl: root.auxSendItemModel ? root.auxSendItemModel.isActive : false
             accentColor: root.accentColor
 
             navigation.panel: root.navigationPanel
@@ -78,41 +82,46 @@ Item {
             onNewValueRequested: function(newValue) {
                 root.auxSendItemModel.audioSignalPercentage = newValue
             }
+
+            //! NOTE: while dragging, the slot button next to the knob (resourceControl,
+            //! below) shows the live percentage in place of the target bus name - restores
+            //! this control's pre-redesign behavior, driven from the model's own title()
+            //! (see AuxSendItem::isDragging) rather than a separate floating readout
+            Connections {
+                target: audioSignalAmountKnob.mouseArea
+                function onPressedChanged() {
+                    if (root.auxSendItemModel) {
+                        root.auxSendItemModel.isDragging = audioSignalAmountKnob.mouseArea.pressed
+                    }
+                }
+            }
         }
 
-        FlatButton {
-            id: bypassBtn
-
-            readonly property bool isHovering: bypassBtn.mouseArea.containsMouse
+        AudioResourceControl {
+            id: resourceControl
 
             Layout.fillWidth: true
-            Layout.preferredHeight: audioSignalAmountKnob.backgroundHeight
-            Layout.alignment: Qt.AlignTop
+            Layout.fillHeight: true
 
-            navigation.panel: root.navigationPanel
-            navigation.row: root.navigationRowStart + 1
-            navigation.accessible.name: bypassBtn.isHovering ? root.accessibleName + " " + root.title + " " + qsTrc("playback", "Bypass") : root.title
-            navigation.onActiveChanged: {
-                if (navigation.active) {
-                    root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                }
+            resourceItemModel: root.auxSendItemModel
+
+            navigationPanel: root.navigationPanel
+            navigationRowStart: root.navigationRowStart + 1 // NOTE: 3 controls (activity/title/selector)
+            navigationName: root.navigationName
+            accessibleName: root.accessibleName
+
+            onTurnedOn: {
+                root.auxSendItemModel.isActive = true
             }
 
-            text: {
-                if (audioSignalAmountKnob.mouseArea.pressed) {
-                    return audioSignalAmountKnob.value + "%"
-                }
-
-                return bypassBtn.isHovering ? "" : root.title
+            onTurnedOff: {
+                root.auxSendItemModel.isActive = false
             }
 
-            icon: bypassBtn.isHovering ? IconCode.BYPASS : IconCode.NONE
-
-            accentButton: root.auxSendItemModel.isActive
             accentColor: root.accentColor
 
-            onClicked: {
-                root.auxSendItemModel.isActive = !root.auxSendItemModel.isActive
+            onNavigateControlIndexChanged: function(index) {
+                root.navigateControlIndexChanged(index)
             }
         }
     }

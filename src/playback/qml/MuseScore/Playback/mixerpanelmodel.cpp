@@ -256,9 +256,9 @@ void MixerPanelModel::reloadItems()
 
     addInstrumentTrack(notationPlayback()->metronomeTrackId());
 
-    const auto& auxTrackIdMap = controller()->auxTrackIdMap();
-    for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
-        if (configuration()->isAuxChannelVisible(it->first)) {
+    if (configuration()->areAuxChannelsVisible()) {
+        const auto& auxTrackIdMap = controller()->auxTrackIdMap();
+        for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
             m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
         }
     }
@@ -296,7 +296,7 @@ void MixerPanelModel::onTrackAdded(const TrackId& trackId)
     });
 
     if (auxIt != auxTracks.end()) {
-        if (configuration()->isAuxChannelVisible(auxIt->first)) {
+        if (configuration()->areAuxChannelsVisible()) {
             addItem(buildAuxChannelItem(auxIt->first, trackId), m_mixerChannelList.size() - 1);
         }
     }
@@ -319,6 +319,12 @@ void MixerPanelModel::addItem(MixerChannelItem* item, int index)
     if (index <= m_selectionAnchorIndex) {
         ++m_selectionAnchorIndex;
     }
+
+    //! NOTE: aux channel items load their initial output params (incl. fx chain) synchronously,
+    //! before they are inserted here - re-sync now so the new item gets the same fx slot
+    //! count as every other channel (instrument items already get this via their own,
+    //! separately-resolved loadOutputParams() call, so this is a no-op for them)
+    updateOutputResourceItemCount();
 
     emit rowCountChanged();
 }
@@ -382,6 +388,19 @@ void MixerPanelModel::clear()
 
 void MixerPanelModel::setupConnections()
 {
+    controller()->isPlayingChanged().onReceive(this, [this](bool playing) {
+        if (playing) {
+            return;
+        }
+
+        //! NOTE: some channels (notably aux buses) don't reliably receive a final
+        //! silence value from the engine once playback stops, leaving their meters
+        //! stuck at their last non-zero reading - force them all back to silence here
+        for (MixerChannelItem* item : m_mixerChannelList) {
+            item->resetAudioChannelsVolumePressure();
+        }
+    });
+
     audioSettings()->auxSoloMuteStateChanged().onReceive(
         this, [this](const aux_channel_idx_t index,
                      notation::INotationSoloMuteState::SoloMuteState newSoloMuteState) {
@@ -440,20 +459,19 @@ void MixerPanelModel::setupConnections()
         loadOutputParams(m_masterChannelItem, effectiveMasterOutputParams());
     });
 
-    configuration()->isAuxChannelVisibleChanged().onReceive(this, [this](aux_channel_idx_t index, bool visible) {
+    configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool visible) {
         const auto& auxMap = controller()->auxTrackIdMap();
-        TrackId trackId = muse::value(auxMap, index);
-        if (visible) {
-            int visibleAuxesOnRight = 0;
 
-            for (const auto& aux : auxMap) {
-                if (configuration()->isAuxChannelVisible(aux.first) && (aux.first > index)) {
-                    visibleAuxesOnRight++;
+        if (visible) {
+            for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
+                if (!findChannelItem(it->second)) {
+                    addItem(buildAuxChannelItem(it->first, it->second), masterChannelIndex());
                 }
             }
-            addItem(buildAuxChannelItem(index, trackId), masterChannelIndex() - visibleAuxesOnRight);
         } else {
-            removeItem(trackId);
+            for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
+                removeItem(it->second);
+            }
         }
     });
 
@@ -710,13 +728,6 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
 
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
         playback()->setAuxSendsParams(trackId, params.auxSends);
-    });
-
-    connect(item, &MixerChannelItem::auxSendItemListChanged, this, [this, item]() {
-        const QMap<aux_channel_idx_t, AuxSendItem*>& auxSendItems = item->auxSendItems();
-        for (auto it = auxSendItems.begin(); it != auxSendItems.end(); ++it) {
-            it.value()->setTitle(QString::fromStdString(controller()->auxChannelName(it.key())));
-        }
     });
 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this,

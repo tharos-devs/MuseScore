@@ -1235,13 +1235,14 @@ void PlaybackController::doAddTrack(const InstrumentTrackId& instrumentTrackId, 
     }
 
     if (!isMetronome && originParams.auxSends.empty()) {
+        //! NOTE: only the Reverb bus gets a meaningful default send; every other bus starts
+        //! unassigned (blank) and is only added to the track's aux-send slots when the user picks it
         const muse::String& instrumentSoundId = inParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
         AudioSourceType sourceType = inParams.isValid() ? inParams.type() : AudioSourceType::Fluid;
 
-        for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
-            gain_t signalAmount = configuration()->defaultAuxSendValue(idx, sourceType, instrumentSoundId);
-            originParams.auxSends.emplace_back(AuxSendParams { signalAmount, true });
-        }
+        gain_t reverbSignalAmount = configuration()->defaultAuxSendValue(REVERB_CHANNEL_IDX, sourceType, instrumentSoundId);
+        originParams.auxSends.resize(REVERB_CHANNEL_IDX + 1);
+        originParams.auxSends[REVERB_CHANNEL_IDX] = AuxSendParams { reverbSignalAmount, true };
     }
 
     uint64_t playbackKey = notationPlaybackKey();
@@ -1352,6 +1353,30 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
     });
 
     m_loadingTrackCount++;
+}
+
+void PlaybackController::addNewAuxBus()
+{
+    aux_channel_idx_t freeIndex = 0;
+    for (; freeIndex < MAX_AUX_CHANNEL_NUM; ++freeIndex) {
+        if (m_auxTrackIdMap.find(freeIndex) == m_auxTrackIdMap.end()) {
+            break;
+        }
+    }
+
+    if (freeIndex >= MAX_AUX_CHANNEL_NUM) {
+        return;
+    }
+
+    configuration()->setAuxChannelsVisible(true);
+
+    //! NOTE: addAuxTrack() unconditionally increments m_loadingTrackCount and relies on its
+    //! onFinished callback to bring it back down (see setupTracks()'s onAddFinished); without
+    //! this, isLoaded()/isPlayAllowed() would stay stuck false after adding a bus at runtime
+    addAuxTrack(freeIndex, [this]() {
+        m_loadingTrackCount--;
+        m_isPlayAllowedChanged.send(isPlayAllowed());
+    });
 }
 
 void PlaybackController::setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive)
@@ -1618,6 +1643,32 @@ void PlaybackController::subscribeOnAudioParamsChanges()
             }
         }
     });
+
+    //! NOTE: without this, aux-send routing changes are only ever pushed to the live
+    //! engine and never persisted, so they don't mark the project as needing a save
+    playback()->auxSendsParamsChanged().onReceive(this, [this](const TrackId trackId, const AuxSendsParams& params) {
+        auto instrumentIt = std::find_if(m_instrumentTrackIdMap.begin(), m_instrumentTrackIdMap.end(), [trackId](const auto& pair) {
+            return pair.second == trackId;
+        });
+
+        if (instrumentIt != m_instrumentTrackIdMap.end()) {
+            AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentIt->first);
+            outParams.auxSends = params;
+            audioSettings()->setTrackOutputParams(instrumentIt->first, outParams);
+            return;
+        }
+
+        auto auxIt = std::find_if(m_auxTrackIdMap.begin(), m_auxTrackIdMap.end(), [trackId](const auto& pair) {
+            return pair.second == trackId;
+        });
+
+        if (auxIt != m_auxTrackIdMap.end()) {
+            aux_channel_idx_t auxIdx = auxIt->first;
+            AudioOutputParams outParams = audioSettings()->auxOutputParams(auxIdx);
+            outParams.auxSends = params;
+            audioSettings()->setAuxOutputParams(auxIdx, outParams);
+        }
+    });
 }
 
 void PlaybackController::setupTracks()
@@ -1631,7 +1682,16 @@ void PlaybackController::setupTracks()
     m_loadingTrackCount = 0;
 
     InstrumentTrackIdSet trackIdSet = notationPlayback()->existingTrackIdSet();
-    size_t trackCount = trackIdSet.size() + AUX_CHANNEL_NUM;
+
+    std::vector<aux_channel_idx_t> auxIndices = audioSettings()->auxOutputParamsIndices();
+    if (auxIndices.empty()) {
+        //! NOTE: brand-new project, bootstrap the default aux buses
+        for (aux_channel_idx_t idx = 0; idx < DEFAULT_AUX_CHANNEL_NUM; ++idx) {
+            auxIndices.push_back(idx);
+        }
+    }
+
+    size_t trackCount = trackIdSet.size() + auxIndices.size();
     std::string title = muse::trc("playback", "Loading audio samples");
 
     auto onAddFinished = [this, trackCount, title]() {
@@ -1650,7 +1710,7 @@ void PlaybackController::setupTracks()
         addTrack(trackId, onAddFinished);
     }
 
-    for (aux_channel_idx_t idx = 0; idx < AUX_CHANNEL_NUM; ++idx) {
+    for (aux_channel_idx_t idx : auxIndices) {
         addAuxTrack(idx, onAddFinished);
     }
 
@@ -1774,7 +1834,19 @@ void PlaybackController::updateSoloMuteStates()
         params.forceMute = shouldForceMute;
 
         audio::TrackId trackId = m_instrumentTrackIdMap.at(instrumentTrackId);
+
+        //! NOTE: compare the full (muted, solo, forceMute) tuple against our own in-memory
+        //! record, not audioSettings() - same reasoning as updateAuxMuteStates(). Comparing
+        //! all three (not just muted) matters: e.g. muted can stay the same while solo
+        //! changes, and skipping the send in that case would leave the engine out of sync.
+        auto lastState = std::make_tuple(params.muted, params.solo, params.forceMute);
+        auto it = m_lastAppliedInstrumentMuteSoloState.find(trackId);
+        if (it != m_lastAppliedInstrumentMuteSoloState.end() && it->second == lastState) {
+            continue;
+        }
+
         playback()->setControlParams(trackId, trackControlParams(instrumentTrackId, params, /*rebuildVolume*/ false, /*rebuildPan*/ false));
+        m_lastAppliedInstrumentMuteSoloState[trackId] = lastState;
     }
 
     updateAuxMuteStates();
@@ -1783,15 +1855,23 @@ void PlaybackController::updateSoloMuteStates()
 void PlaybackController::updateAuxMuteStates()
 {
     for (const auto& pair : m_auxTrackIdMap) {
-        auto soloMuteState = audioSettings()->auxSoloMuteState(pair.first);
+        bool mute = audioSettings()->auxSoloMuteState(pair.first).mute;
 
-        AudioOutputParams params = audioSettings()->auxOutputParams(pair.first);
-        if (params.muted == soloMuteState.mute) {
+        //! NOTE: compare against our own in-memory record of what was last sent to the
+        //! engine, not audioSettings() - "muted" isn't even persisted to the project file,
+        //! so writing it there (as a previous version of this function did, to work around
+        //! a stale-comparison bug) only made every mute/unmute wrongly mark the project as
+        //! having unsaved changes
+        auto it = m_lastAppliedAuxMuteState.find(pair.first);
+        if (it != m_lastAppliedAuxMuteState.end() && it->second == mute) {
             continue;
         }
 
-        params.muted = soloMuteState.mute;
+        AudioOutputParams params = audioSettings()->auxOutputParams(pair.first);
+        params.muted = mute;
         playback()->setControlParams(pair.second, params.control());
+
+        m_lastAppliedAuxMuteState[pair.first] = mute;
     }
 }
 
