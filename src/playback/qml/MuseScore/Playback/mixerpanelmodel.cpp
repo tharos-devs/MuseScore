@@ -436,11 +436,12 @@ void MixerPanelModel::setupConnections()
 
     controller()->auxChannelNameChanged().onReceive(this, [this](aux_channel_idx_t index, const std::string& name) {
         for (MixerChannelItem* item : m_mixerChannelList) {
-            const QMap<aux_channel_idx_t, AuxSendItem*>& items = item->auxSendItems();
-            auto it = items.find(index);
-
-            if (it != items.end()) {
-                it.value()->setTitle(QString::fromStdString(name));
+            //! NOTE: auxSendItems() is keyed by stable slot order, not bus index - find the
+            //! slot(s) actually targeting this bus by value instead of by key
+            for (AuxSendItem* auxSendItem : item->auxSendItems()) {
+                if (auxSendItem->auxIndex() == index) {
+                    auxSendItem->setTitle(QString::fromStdString(name));
+                }
             }
         }
     });

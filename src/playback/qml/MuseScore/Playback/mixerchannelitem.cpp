@@ -1001,7 +1001,7 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 {
     AuxSendItem::MenuData data;
 
-    for (const auto& pair : controller()->auxTrackIdMap()) {
+    for (const auto& pair : playbackController()->auxTrackIdMap()) {
         aux_channel_idx_t busIndex = pair.first;
 
         //! NOTE: whether another slot is really using a bus must be based on its auxIndex(),
@@ -1038,7 +1038,7 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
     }
 
     data.canAddSend = m_auxSendItems.size() < AUX_SEND_SLOT_LIMIT && !anotherBlankExists;
-    data.canAddBus = controller()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+    data.canAddBus = playbackController()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
 
     return data;
 }
@@ -1056,7 +1056,7 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
     }
 
     if (menuItemId == "addAuxBus") {
-        controller()->addNewAuxBus();
+        playbackController()->addNewAuxBus();
         return;
     }
 
