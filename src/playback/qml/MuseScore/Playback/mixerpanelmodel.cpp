@@ -105,6 +105,29 @@ QVariant MixerPanelModel::data(const QModelIndex& index, int role) const
     return QVariant::fromValue(m_mixerChannelList.at(index.row()));
 }
 
+void MixerPanelModel::renameAuxChannel(MixerChannelItem* channelItem, const QString& name)
+{
+    IF_ASSERT_FAILED(channelItem && channelItem->type() == MixerChannelItem::Type::Aux) {
+        return;
+    }
+
+    QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty() || trimmedName == channelItem->title()) {
+        return;
+    }
+
+    aux_channel_idx_t index = channelItem->auxBusIndex();
+
+    audioSettings()->setAuxName(index, muse::String::fromQString(trimmedName));
+    channelItem->setTitle(trimmedName);
+
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        if (item != channelItem) {
+            item->renameAuxSendsTargeting(index, trimmedName);
+        }
+    }
+}
+
 int MixerPanelModel::rowCount(const QModelIndex&) const
 {
     return m_mixerChannelList.count();
@@ -548,13 +571,23 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
 {
     MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Aux, true /*outputOnly*/, trackId);
     item->setPanelSection(m_navigationSection);
+    item->setAuxBusIndex(index);
     item->loadSoloMuteState(audioSettings()->auxSoloMuteState(index));
 
+    //! NOTE: set synchronously up front to avoid a flash of the positional/engine name
+    //! before playback()->trackName() below resolves
+    QString customName = audioSettings()->auxName(index).toQString();
+    if (!customName.isEmpty()) {
+        item->setTitle(customName);
+    }
+
     playback()->trackName(trackId)
-    .onResolve(this, [this, trackId](const RetVal<TrackName>& trackName) {
+    .onResolve(this, [this, trackId, index](const RetVal<TrackName>& trackName) {
         if (trackName.ret) {
             if (MixerChannelItem* item = findChannelItem(trackId)) {
-                item->setTitle(QString::fromStdString(trackName.val));
+                //! NOTE: a persisted custom name always wins over the engine's track name
+                QString customName = audioSettings()->auxName(index).toQString();
+                item->setTitle(!customName.isEmpty() ? customName : QString::fromStdString(trackName.val));
             }
         } else {
             LOGE() << "unable to get track name, error: " << trackName.ret.toString();

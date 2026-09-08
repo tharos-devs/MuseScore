@@ -104,6 +104,11 @@ public:
 
     muse::audio::TrackId trackId() const;
 
+    //! NOTE: only meaningful for Type::Aux - the bus index this channel strip itself represents
+    //! (distinct from AuxSendItem::auxIndex(), which is the target bus of one per-track send slot)
+    muse::audio::aux_channel_idx_t auxBusIndex() const;
+    void setAuxBusIndex(muse::audio::aux_channel_idx_t index);
+
     const engraving::InstrumentTrackId& instrumentTrackId() const;
     void setInstrumentTrackId(const engraving::InstrumentTrackId& instrumentTrackId);
 
@@ -151,6 +156,10 @@ public:
     const QMap<int, AuxSendItem*>& auxSendItems() const;
 
     void resetAudioChannelsVolumePressure();
+
+    //! NOTE: updates the title of any of this track's aux-send slots that target busIndex -
+    //! called on every other channel item when an aux bus is renamed
+    void renameAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex, const QString& newName);
 
 public slots:
     void setTitle(QString title);
@@ -217,6 +226,10 @@ protected:
     AuxSendItem::MenuData buildAuxSendMenuData(const AuxSendItem* item) const;
     void updateAuxSendField(const AuxSendItem* item, const std::function<void(muse::audio::AuxSendParams&)>& setter);
 
+    //! NOTE: the display name for an aux bus - a persisted custom name if the user renamed it
+    //! (see IProjectAudioSettings::auxName), falling back to the positional "Aux N" default
+    QString auxBusDisplayName(muse::audio::aux_channel_idx_t index) const;
+
     //! NOTE: key is a stable slot order (like AudioFxChainOrder for fx slots), NOT the
     //! target bus index - this keeps a slot's on-screen position fixed when its target
     //! bus is reassigned via the dropdown
@@ -234,6 +247,7 @@ protected:
 
     muse::audio::TrackId m_trackId = -1;
     engraving::InstrumentTrackId m_instrumentTrackId;
+    muse::audio::aux_channel_idx_t m_auxBusIndex = 0;
 
     project::AudioInputParams m_inputParams;
     project::AudioOutputParams m_outParams;

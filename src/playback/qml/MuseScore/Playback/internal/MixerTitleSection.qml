@@ -38,6 +38,12 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
+        //! NOTE: only Aux channels are renamable for now - see buildContextMenuItems() for
+        //! where a future per-type item list (e.g. instrument "Edit color…"/"Reset color") belongs
+        readonly property bool isAux: channelItem.type === MixerChannelItem.Aux
+
+        property bool editingName: false
+
         width: root.channelItemWidth
         height: 22
 
@@ -63,36 +69,133 @@ MixerPanelSection {
             return 0.5
         }
 
+        //! NOTE: per-channel-type context menu items - currently only Aux has any (rename);
+        //! this is the natural place to add instrument "Edit color…"/"Reset color" later
+        function buildContextMenuItems() {
+            if (content.isAux) {
+                return [
+                    { id: "renameAux", title: qsTrc("playback", "Rename channel") }
+                ]
+            }
+
+            return []
+        }
+
+        function startEditingName() {
+            if (!content.isAux || content.editingName) {
+                return
+            }
+
+            ui.tooltip.hide(mouseArea)
+            content.editingName = true
+        }
+
+        //! NOTE: newName undefined means the edit was cancelled (Escape) - end editing
+        //! without renaming
+        function commitEditingName(newName) {
+            if (!content.editingName) {
+                return
+            }
+
+            content.editingName = false
+
+            if (newName !== undefined) {
+                root.model.renameAuxChannel(content.channelItem, newName)
+            }
+        }
+
         readonly property color labelColor: resolveLabelColor()
 
         color: Utils.colorWithAlpha(labelColor, resolveLabelColorOpacity())
         border.color: labelColor
         border.width: 1
 
-        StyledTextLabel {
-            id: textLabel
-            anchors.centerIn: parent
+        Loader {
+            id: nameLoader
+            anchors.fill: parent
 
-            font: ui.theme.bodyBoldFont
+            sourceComponent: content.editingName ? editNameField : nameLabel
 
-            readonly property int margin: -8
-            width: margin + parent.width + margin
+            Component {
+                id: nameLabel
 
-            text: content.channelItem.title
+                StyledTextLabel {
+                    id: textLabel
+                    anchors.centerIn: parent
+
+                    font: ui.theme.bodyBoldFont
+
+                    readonly property int margin: -8
+                    width: margin + content.width + margin
+
+                    text: content.channelItem.title
+                }
+            }
+
+            Component {
+                id: editNameField
+
+                TextInputField {
+                    anchors.fill: parent
+                    anchors.margins: 2
+
+                    currentText: content.channelItem.title
+
+                    property bool cancelled: false
+
+                    Component.onCompleted: {
+                        forceActiveFocus()
+                        selectAll()
+                    }
+
+                    onEscaped: {
+                        cancelled = true
+                    }
+
+                    onTextEditingFinished: function(newTextValue) {
+                        Qt.callLater(content.commitEditingName, cancelled ? undefined : newTextValue)
+                    }
+                }
+            }
         }
 
         MouseArea {
             id: mouseArea
             anchors.fill: parent
 
-            enabled: parent.enabled
+            enabled: parent.enabled && !content.editingName
             hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
 
             onContainsMouseChanged: {
-                if (mouseArea.containsMouse && textLabel.truncated) {
+                if (mouseArea.containsMouse && nameLoader.item && nameLoader.item.truncated) {
                     ui.tooltip.show(mouseArea, content.channelItem.title)
                 } else {
                     ui.tooltip.hide(mouseArea)
+                }
+            }
+
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton && content.isAux) {
+                    contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
+                }
+            }
+
+            onDoubleClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                    content.startEditingName()
+                }
+            }
+        }
+
+        ContextMenuLoader {
+            id: contextMenuLoader
+
+            items: content.buildContextMenuItems()
+
+            onHandleMenuItem: function(itemId) {
+                if (itemId === "renameAux") {
+                    content.startEditingName()
                 }
             }
         }

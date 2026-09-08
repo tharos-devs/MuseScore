@@ -130,6 +130,16 @@ TrackId MixerChannelItem::trackId() const
     return m_trackId;
 }
 
+aux_channel_idx_t MixerChannelItem::auxBusIndex() const
+{
+    return m_auxBusIndex;
+}
+
+void MixerChannelItem::setAuxBusIndex(aux_channel_idx_t index)
+{
+    m_auxBusIndex = index;
+}
+
 const mu::engraving::InstrumentTrackId& MixerChannelItem::instrumentTrackId() const
 {
     return m_instrumentTrackId;
@@ -799,7 +809,7 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
     newItem->setAuxIndex(isBlankSlot ? AuxSendItem::NO_BUS : index);
     newItem->setIsActive(params.active);
     newItem->setAudioSignalPercentage(static_cast<int>(params.signalAmount * 100.f));
-    newItem->setTitle(isBlankSlot ? QString() : auxBusPositionalName(index));
+    newItem->setTitle(isBlankSlot ? QString() : auxBusDisplayName(index));
     newItem->blockSignals(false);
 
     connect(newItem, &AuxSendItem::isActiveChanged, this, [this, newItem]() {
@@ -866,7 +876,7 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
             continue; // already targeted by another slot on this track
         }
 
-        data.availableBuses.push_back({ busIndex, auxBusPositionalName(busIndex) });
+        data.availableBuses.push_back({ busIndex, auxBusDisplayName(busIndex) });
     }
 
     //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already
@@ -940,7 +950,7 @@ void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newB
     //! blocked here (unlike in buildAuxSendItem's initial construction) - this item is
     //! already live/bound in QML, and blocking would silently freeze its displayed title
     item->setAuxIndex(newBusIndex);
-    item->setTitle(auxBusPositionalName(newBusIndex));
+    item->setTitle(auxBusDisplayName(newBusIndex));
     item->setIsActive(true);
     item->setAudioSignalPercentage(static_cast<int>(signalAmount * 100.f));
 
@@ -1133,4 +1143,26 @@ QList<AuxSendItem*> MixerChannelItem::auxSendItemList() const
 const QMap<int, AuxSendItem*>& MixerChannelItem::auxSendItems() const
 {
     return m_auxSendItems;
+}
+
+QString MixerChannelItem::auxBusDisplayName(aux_channel_idx_t index) const
+{
+    project::INotationProjectPtr project = context()->currentProject();
+    if (project) {
+        muse::String customName = project->audioSettings()->auxName(index);
+        if (!customName.empty()) {
+            return customName.toQString();
+        }
+    }
+
+    return auxBusPositionalName(index);
+}
+
+void MixerChannelItem::renameAuxSendsTargeting(aux_channel_idx_t busIndex, const QString& newName)
+{
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == busIndex) {
+            item->setTitle(newName);
+        }
+    }
 }
