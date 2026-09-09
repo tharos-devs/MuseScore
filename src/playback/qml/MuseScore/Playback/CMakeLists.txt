@@ -35,6 +35,8 @@ qt_add_qml_module(playback_qml
         abstractaudioresourceitem.h
         auxsenditem.cpp
         auxsenditem.h
+        auxsenditemlistmodel.cpp
+        auxsenditemlistmodel.h
         inputresourceitem.cpp
         inputresourceitem.h
         mixerchannelitem.cpp

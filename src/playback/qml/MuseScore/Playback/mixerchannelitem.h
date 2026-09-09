@@ -43,6 +43,7 @@ class QTimer;
 #include "inputresourceitem.h"
 #include "outputresourceitem.h"
 #include "auxsenditem.h"
+#include "auxsenditemlistmodel.h"
 
 namespace mu::playback {
 class MixerChannelItem : public QObject, public muse::async::Asyncable, public muse::Contextable
@@ -51,13 +52,17 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
 
     Q_PROPERTY(Type type READ type CONSTANT)
     Q_PROPERTY(bool outputOnly READ outputOnly CONSTANT)
+    Q_PROPERTY(bool isGroupBus READ isGroupBus CONSTANT)
+    Q_PROPERTY(bool isReverbBus READ isReverbBus CONSTANT)
 
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
 
     Q_PROPERTY(mu::playback::InputResourceItem * inputResourceItem READ inputResourceItem NOTIFY inputResourceItemChanged)
     Q_PROPERTY(
         QList<mu::playback::OutputResourceItem*> outputResourceItemList READ outputResourceItemList NOTIFY outputResourceItemListChanged)
-    Q_PROPERTY(QList<mu::playback::AuxSendItem*> auxSendItemList READ auxSendItemList NOTIFY auxSendItemListChanged)
+    //! NOTE: a real incremental list model, not a plain list property - see
+    //! AuxSendItemListModel's doc comment for why
+    Q_PROPERTY(QObject * auxSendItemModel READ auxSendItemModel CONSTANT)
 
     Q_PROPERTY(float leftChannelPressure READ leftChannelPressure NOTIFY leftChannelPressureChanged)
     Q_PROPERTY(float rightChannelPressure READ rightChannelPressure NOTIFY rightChannelPressureChanged)
@@ -108,11 +113,16 @@ public:
     ~MixerChannelItem() override;
 
     Type type() const;
+    bool isGroupBus() const;
+    //! NOTE: only meaningful for Type::Aux channels - the Reverb bus is a built-in default
+    //! that can be renamed but not deleted (see IPlaybackController::removeAuxBus)
+    bool isReverbBus() const;
 
     muse::audio::TrackId trackId() const;
 
-    //! NOTE: only meaningful for Type::Aux - the bus index this channel strip itself represents
-    //! (distinct from AuxSendItem::auxIndex(), which is the target bus of one per-track send slot)
+    //! NOTE: only meaningful for Type::Aux channels - the bus index this channel strip
+    //! itself represents (distinct from AuxSendItem::auxIndex(), which is the target bus
+    //! of one per-track send slot), needed to query IPlaybackController::isAuxBusGroup()
     muse::audio::aux_channel_idx_t auxBusIndex() const;
     void setAuxBusIndex(muse::audio::aux_channel_idx_t index);
 
@@ -146,6 +156,7 @@ public:
     void updateHasAutomationFlags();
 
     void setOutputResourceItemCount(size_t count);
+    void setAuxSendItemCount(size_t count);
 
     //! NOTE Reorders the channel's own FX slots by moving the slot currently
     //! at fromIndex to toIndex, shifting the slots in between -- e.g. moving
@@ -162,17 +173,33 @@ public:
     void loadOutputParams(const project::AudioOutputParams& newParams);
     void loadSoloMuteState(const notation::INotationSoloMuteState::SoloMuteState& newState);
 
+    //! NOTE: refreshes the LIVE effective muted/forceMute state (as opposed to
+    //! loadSoloMuteState(), which loads the persisted solo/mute the user actually set) -
+    //! called when THIS channel becomes (or stops being) force-muted as a side effect of some
+    //! OTHER track/bus's solo changing (see IPlaybackController::trackMuteStateChanged())
+    void loadMuteForceMuteState(bool muted, bool forceMute);
+
     void subscribeOnAudioSignalChanges(muse::audio::AudioSignalChanges& audioSignalChanges);
     void subscribeOnAutomatedControlParamsChanges(muse::audio::AutomatedControlParamsChanges& changes);
 
     bool outputOnly() const;
+
+    //! NOTE: true once loadOutputParams() has actually applied real data to this item at
+    //! least once. An instrument channel item's real data (incl. fx chain and aux sends)
+    //! only arrives asynchronously (see MixerPanelModel::buildInstrumentChannelItem()'s
+    //! playback()->params(trackId) promise) - before that, its fx/aux-send slot lists are
+    //! genuinely empty, not "correctly synced to zero slots". Cross-channel slot-count
+    //! syncing (MixerPanelModel::updateOutputResourceItemCount()/updateAuxSendItemCount())
+    //! must skip padding a not-yet-loaded item, or the padding permanently corrupts
+    //! aux-send slot order once the real data does arrive (see git history for details)
+    bool outputParamsLoaded() const;
 
     const project::AudioInputParams& inputParams() const;
     const project::AudioOutputParams& outputParams() const;
 
     InputResourceItem* inputResourceItem() const;
     QList<OutputResourceItem*> outputResourceItemList() const;
-    QList<AuxSendItem*> auxSendItemList() const;
+    QObject* auxSendItemModel() const;
 
     const QMap<int, AuxSendItem*>& auxSendItems() const;
 
@@ -181,6 +208,11 @@ public:
     //! NOTE: updates the title of any of this track's aux-send slots that target busIndex -
     //! called on every other channel item when an aux bus is renamed
     void renameAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex, const QString& newName);
+
+    //! NOTE: resets to "No aux send" any of this track's aux-send slots that target busIndex -
+    //! called on every other channel item when an aux/group bus is deleted, so no slot is
+    //! left pointing at a bus index that no longer exists
+    void clearAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex);
 
 public slots:
     void setTitle(QString title);
@@ -221,7 +253,6 @@ signals:
 
     void inputResourceItemChanged();
     void outputResourceItemListChanged();
-    void auxSendItemListChanged();
 
 protected:
     notation::INotationPlaybackPtr notationPlayback() const;
@@ -244,9 +275,15 @@ protected:
 
     bool hasBlankAuxSendSlot() const;
     void addAuxSendBlankSlot();
+    void addAuxSendBlankSlots(size_t count);
+    void removeAuxSendBlankSlotsFromEnd(size_t count);
     void ensureTrailingBlankAuxSlot();
     void reassignAuxSend(AuxSendItem* item, muse::audio::aux_channel_idx_t newBusIndex);
     void blankAuxSend(AuxSendItem* item);
+    //! NOTE: renumbers m_auxSendItems' keys to a contiguous 0..N-1 range (preserving order) -
+    //! closes any gap left by removing a middle slot, so the next trailing-blank refill can't
+    //! land back in that gap instead of at the true end (see blankAuxSend())
+    void compactAuxSendItemKeys();
     void handleAuxSendMenuItem(AuxSendItem* item, const QString& menuItemId);
     AuxSendItem::MenuData buildAuxSendMenuData(const AuxSendItem* item) const;
     void updateAuxSendField(const AuxSendItem* item, const std::function<void(muse::audio::AuxSendParams&)>& setter);
@@ -292,12 +329,14 @@ protected:
     InputResourceItem* m_inputResourceItem = nullptr;
     QMap<muse::audio::AudioFxChainOrder, OutputResourceItem*> m_outputResourceItems;
     QMap<int, AuxSendItem*> m_auxSendItems; // NOTE: keyed by stable slot order, not bus index
+    AuxSendItemListModel* m_auxSendItemListModel = nullptr;
 
     muse::audio::AudioSignalChanges m_audioSignalChanges;
     muse::audio::AutomatedControlParamsChanges m_automatedControlParamsChanges;
 
     QString m_title;
     bool m_outputOnly = false;
+    bool m_outputParamsLoaded = false;
 
     float m_leftChannelPressure = 0.0;
     float m_rightChannelPressure = 0.0;

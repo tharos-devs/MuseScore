@@ -38,7 +38,8 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
-        //! NOTE: only Aux channels are renamable for now
+        //! NOTE: only Aux channels are renamable/add-FX-or-Group/deletable for now - see
+        //! buildContextMenuItems() below for where these per-type item lists live
         readonly property bool isAux: channelItem.type === MixerChannelItem.Aux
 
         property bool editingName: false
@@ -93,7 +94,15 @@ MixerPanelSection {
             }
 
             if (content.isAux) {
+                if (items.length > 0) {
+                    items.push({})
+                }
                 items.push({ id: "renameAux", title: qsTrc("playback", "Rename channel") })
+                items.push({})
+                items.push({ id: "addFxChannel", title: qsTrc("playback", "Add FX channel"), enabled: root.model.canAddAuxBus() })
+                items.push({ id: "addGroupChannel", title: qsTrc("playback", "Add Group channel"), enabled: root.model.canAddAuxBus() })
+                items.push({})
+                items.push({ id: "deleteChannel", title: qsTrc("playback", "Delete channel"), enabled: !content.channelItem.isReverbBus })
             }
 
             return items
@@ -194,6 +203,9 @@ MixerPanelSection {
             }
 
             onClicked: function(mouse) {
+                //! NOTE: isColorable already covers Aux channels (see its definition above),
+                //! so this single guard also gates the FX/Group/rename/delete context menu -
+                //! no separate isAux-only branch is needed here
                 if (!content.isColorable) {
                     return
                 }
@@ -241,6 +253,12 @@ MixerPanelSection {
                     root.model.clearSelection()
                 } else if (itemId === "renameAux") {
                     content.startEditingName()
+                } else if (itemId === "addFxChannel") {
+                    root.model.addFxChannel()
+                } else if (itemId === "addGroupChannel") {
+                    root.model.addGroupChannel()
+                } else if (itemId === "deleteChannel") {
+                    root.model.deleteAuxChannel(content.channelItem)
                 }
             }
         }

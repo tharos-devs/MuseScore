@@ -57,13 +57,22 @@ static const std::string TRACK_ID_KEY("trackId");
 static const std::string RESOURCE_ID_KEY("resourceId");
 static const std::string CHAIN_ORDER_KEY("chainOrder");
 
-//! NOTE: the aux bus's own channel strip is always titled positionally ("Aux N"), regardless
-//! of any fx loaded on that bus (see PlaybackController::addAuxTrack/resolveAuxTrackTitle,
-//! considerFx=false) - aux-send slots must show that same name for consistency, so this
-//! deliberately does not use IPlaybackController::auxChannelName(), which is fx-aware
-static QString auxBusPositionalName(aux_channel_idx_t index)
+//! NOTE: the aux bus's own channel strip is always titled positionally ("FX N"/"Group N"),
+//! regardless of any fx loaded on that bus (see PlaybackController::addAuxTrack/
+//! resolveAuxTrackTitle, considerFx=false) - aux-send slots must show that same name for
+//! consistency, so this deliberately does not use IPlaybackController::auxChannelName(),
+//! which is fx-aware
+static QString auxBusPositionalName(aux_channel_idx_t displayNumber, bool isGroupBus)
 {
-    return muse::qtrc("playback", "Aux %1").arg(index + 1);
+    //! NOTE: each literal is passed directly to qtrc() (not via a ternary as the argument) -
+    //! translation-extraction tooling scans for string-literal arguments to qtrc()/mtrc()/
+    //! trc() calls, and a computed/ternary argument can make it fail to pick up one or both
+    //! strings as translatable
+    if (isGroupBus) {
+        return muse::qtrc("playback", "Group %1").arg(displayNumber);
+    }
+
+    return muse::qtrc("playback", "FX %1").arg(displayNumber);
 }
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
@@ -107,6 +116,8 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
         m_inputResourceItem = buildInputResourceItem();
     }
 
+    m_auxSendItemListModel = new AuxSendItemListModel(this);
+
     m_panel = new ui::NavigationPanel(this);
     m_panel->setDirection(ui::NavigationPanel::Vertical);
     m_panel->setName("MixerChannelPanel " + QString::number(m_trackId));
@@ -137,9 +148,14 @@ MixerChannelItem::Type MixerChannelItem::type() const
     return m_type;
 }
 
-TrackId MixerChannelItem::trackId() const
+bool MixerChannelItem::isGroupBus() const
 {
-    return m_trackId;
+    return m_type == Type::Aux && playbackController()->isAuxBusGroup(m_auxBusIndex);
+}
+
+bool MixerChannelItem::isReverbBus() const
+{
+    return m_type == Type::Aux && m_auxBusIndex == REVERB_CHANNEL_IDX;
 }
 
 aux_channel_idx_t MixerChannelItem::auxBusIndex() const
@@ -150,6 +166,11 @@ aux_channel_idx_t MixerChannelItem::auxBusIndex() const
 void MixerChannelItem::setAuxBusIndex(aux_channel_idx_t index)
 {
     m_auxBusIndex = index;
+}
+
+TrackId MixerChannelItem::trackId() const
+{
+    return m_trackId;
 }
 
 const mu::engraving::InstrumentTrackId& MixerChannelItem::instrumentTrackId() const
@@ -446,6 +467,8 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
 
     loadOutputResourceItems(newParams.fxChain);
     loadAuxSendItems(newParams.auxSends);
+
+    m_outputParamsLoaded = true;
 }
 
 void MixerChannelItem::loadOutputResourceItems(const AudioFxChain& fxChain)
@@ -556,10 +579,10 @@ void MixerChannelItem::loadAuxSendItems(const AuxSendsParams& auxSends)
         m_auxSendItems = std::move(newItems);
     }
 
-    ensureTrailingBlankAuxSlot(); // may itself emit auxSendItemListChanged if it adds a slot
+    ensureTrailingBlankAuxSlot(); // may itself sync the model if it adds a slot
 
     if (changed) {
-        emit auxSendItemListChanged();
+        m_auxSendItemListModel->sync(m_auxSendItems.values());
     }
 }
 
@@ -573,6 +596,19 @@ void MixerChannelItem::loadSoloMuteState(const notation::INotationSoloMuteState:
     if (m_outParams.solo != newState.solo) {
         m_outParams.solo = newState.solo;
         emit soloChanged();
+    }
+}
+
+void MixerChannelItem::loadMuteForceMuteState(bool muted, bool forceMute)
+{
+    if (m_outParams.muted != muted) {
+        m_outParams.muted = muted;
+        emit mutedChanged();
+    }
+
+    if (m_outParams.forceMute != forceMute) {
+        m_outParams.forceMute = forceMute;
+        emit forceMuteChanged();
     }
 }
 
@@ -1033,7 +1069,9 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
             continue; // already targeted by another slot on this track
         }
 
-        data.availableBuses.push_back({ busIndex, auxBusDisplayName(busIndex) });
+        bool isGroupBus = playbackController()->isAuxBusGroup(busIndex);
+        QString busName = auxBusDisplayName(busIndex);
+        data.availableBuses.push_back({ busIndex, busName, isGroupBus });
     }
 
     //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already
@@ -1048,7 +1086,11 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
     }
 
     data.canAddSend = m_auxSendItems.size() < AUX_SEND_SLOT_LIMIT && !anotherBlankExists;
-    data.canAddBus = playbackController()->auxTrackIdMap().size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+    //! NOTE: "Add Aux bus"/"Add Bus" share the same underlying MAX_AUX_CHANNEL_NUM pool -
+    //! both bus kinds are tracked in the same auxTrackIdMap()
+    bool canAddAnotherBus = playbackController()->canAddAuxBus();
+    data.canAddBus = canAddAnotherBus;
+    data.canAddGroupBus = canAddAnotherBus;
 
     return data;
 }
@@ -1067,6 +1109,11 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
 
     if (menuItemId == "addAuxBus") {
         playbackController()->addNewAuxBus();
+        return;
+    }
+
+    if (menuItemId == "addGroupBus") {
+        playbackController()->addNewGroupBus();
         return;
     }
 
@@ -1114,7 +1161,7 @@ void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newB
     ensureTrailingBlankAuxSlot();
 
     emit auxSendsParamsChanged(m_outParams);
-    emit auxSendItemListChanged();
+    m_auxSendItemListModel->sync(m_auxSendItems.values());
 }
 
 void MixerChannelItem::blankAuxSend(AuxSendItem* item)
@@ -1131,6 +1178,13 @@ void MixerChannelItem::blankAuxSend(AuxSendItem* item)
     int slotOrder = m_auxSendItems.key(item, -1);
     if (slotOrder >= 0) {
         m_auxSendItems.remove(slotOrder);
+        //! NOTE: removing a MIDDLE slot (e.g. this item's bus was deleted elsewhere - see
+        //! clearAuxSendsTargeting()) leaves a gap in the key sequence. Without closing it,
+        //! ensureTrailingBlankAuxSlot()/resolveNewBlankAuxSendItemOrder() below would refill
+        //! that same gap (it always picks the LOWEST free key) instead of appending a truly
+        //! trailing blank - leaving a blank slot sandwiched before other real, higher-keyed
+        //! slots, which violates the "at most one blank, always trailing" invariant
+        compactAuxSendItemKeys();
     }
 
     item->disconnect();
@@ -1139,7 +1193,21 @@ void MixerChannelItem::blankAuxSend(AuxSendItem* item)
     ensureTrailingBlankAuxSlot();
 
     emit auxSendsParamsChanged(m_outParams);
-    emit auxSendItemListChanged();
+    m_auxSendItemListModel->sync(m_auxSendItems.values());
+}
+
+void MixerChannelItem::compactAuxSendItemKeys()
+{
+    //! NOTE: slot-order keys have no meaning outside this map (unlike a bus INDEX, no
+    //! persisted data or external code references a specific key value) - only their
+    //! relative (ascending) order matters, so renumbering them to a contiguous 0..N-1
+    //! range is always safe and preserves the existing visual order
+    QMap<int, AuxSendItem*> compacted;
+    int nextKey = 0;
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        compacted.insert(nextKey++, item);
+    }
+    m_auxSendItems = std::move(compacted);
 }
 
 bool MixerChannelItem::hasBlankAuxSendSlot() const
@@ -1165,7 +1233,73 @@ void MixerChannelItem::addAuxSendBlankSlot()
     int slotOrder = resolveNewBlankAuxSendItemOrder(m_auxSendItems);
     m_auxSendItems.insert(slotOrder, buildAuxSendItem(AuxSendItem::NO_BUS, blankAuxSendParams()));
 
-    emit auxSendItemListChanged();
+    m_auxSendItemListModel->sync(m_auxSendItems.values());
+}
+
+void MixerChannelItem::addAuxSendBlankSlots(size_t count)
+{
+    TRACEFUNC;
+
+    if (count == 0) {
+        return;
+    }
+
+    //! NOTE: unlike addAuxSendBlankSlot() (used by the "Add Aux send" menu action, which
+    //! only ever wants a single trailing blank), this deliberately allows multiple blank
+    //! slots at once - used to pad a channel up to match a wider sibling channel's slot
+    //! count (mirroring addBlankSlots() for FX slots)
+    for (size_t i = 0; i < count && static_cast<int>(m_auxSendItems.size()) < AUX_SEND_SLOT_LIMIT; ++i) {
+        int slotOrder = resolveNewBlankAuxSendItemOrder(m_auxSendItems);
+        m_auxSendItems.insert(slotOrder, buildAuxSendItem(AuxSendItem::NO_BUS, blankAuxSendParams()));
+    }
+
+    m_auxSendItemListModel->sync(m_auxSendItems.values());
+}
+
+void MixerChannelItem::removeAuxSendBlankSlotsFromEnd(size_t count)
+{
+    TRACEFUNC;
+
+    bool itemsRemoved = false;
+    DEFER {
+        if (itemsRemoved) {
+            m_auxSendItemListModel->sync(m_auxSendItems.values());
+        }
+    };
+
+    for (size_t i = 0; i < count; ++i) {
+        if (m_auxSendItems.empty()) {
+            return;
+        }
+
+        auto lastItemIt = std::prev(m_auxSendItems.end());
+        AuxSendItem* item = lastItemIt.value();
+
+        if (item->auxIndex() != AuxSendItem::NO_BUS) {
+            return;
+        }
+
+        m_auxSendItems.erase(lastItemIt);
+        item->disconnect();
+        item->deleteLater();
+        itemsRemoved = true;
+    }
+}
+
+void MixerChannelItem::setAuxSendItemCount(size_t count)
+{
+    count = std::min(count, static_cast<size_t>(AUX_SEND_SLOT_LIMIT));
+    size_t itemsSize = static_cast<size_t>(m_auxSendItems.size());
+
+    if (itemsSize == count) {
+        return;
+    }
+
+    if (itemsSize < count) {
+        addAuxSendBlankSlots(count - itemsSize);
+    } else {
+        removeAuxSendBlankSlotsFromEnd(itemsSize - count);
+    }
 }
 
 void MixerChannelItem::ensureTrailingBlankAuxSlot()
@@ -1272,6 +1406,11 @@ bool MixerChannelItem::outputOnly() const
     return m_outputOnly;
 }
 
+bool MixerChannelItem::outputParamsLoaded() const
+{
+    return m_outputParamsLoaded;
+}
+
 const AudioInputParams& MixerChannelItem::inputParams() const
 {
     return m_inputParams;
@@ -1292,9 +1431,9 @@ QList<OutputResourceItem*> MixerChannelItem::outputResourceItemList() const
     return m_outputResourceItems.values();
 }
 
-QList<AuxSendItem*> MixerChannelItem::auxSendItemList() const
+QObject* MixerChannelItem::auxSendItemModel() const
 {
-    return m_auxSendItems.values();
+    return m_auxSendItemListModel;
 }
 
 const QMap<int, AuxSendItem*>& MixerChannelItem::auxSendItems() const
@@ -1312,7 +1451,7 @@ QString MixerChannelItem::auxBusDisplayName(aux_channel_idx_t index) const
         }
     }
 
-    return auxBusPositionalName(index);
+    return auxBusPositionalName(playbackController()->resolveAuxBusDisplayNumber(index), playbackController()->isAuxBusGroup(index));
 }
 
 void MixerChannelItem::renameAuxSendsTargeting(aux_channel_idx_t busIndex, const QString& newName)
@@ -1321,5 +1460,21 @@ void MixerChannelItem::renameAuxSendsTargeting(aux_channel_idx_t busIndex, const
         if (item->auxIndex() == busIndex) {
             item->setTitle(newName);
         }
+    }
+}
+
+void MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
+{
+    //! NOTE: blankAuxSend() removes the item from m_auxSendItems, so the matching items
+    //! must be collected up front rather than acted on while iterating that same map
+    QList<AuxSendItem*> targetingItems;
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == busIndex) {
+            targetingItems.push_back(item);
+        }
+    }
+
+    for (AuxSendItem* item : targetingItems) {
+        blankAuxSend(item);
     }
 }

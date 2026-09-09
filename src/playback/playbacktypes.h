@@ -30,10 +30,11 @@
 #include "engraving/types/types.h"
 
 namespace mu::playback {
-//! NOTE: number of aux buses bootstrapped for a brand-new project
+//! NOTE: total number of aux/group buses bootstrapped for a brand-new project (index 0 is
+//! always the Reverb/Aux bus, the rest default to Group buses - see PlaybackController::setupTracks())
 static constexpr muse::audio::aux_channel_idx_t DEFAULT_AUX_CHANNEL_NUM = 2;
 //! NOTE: hard cap on the number of aux buses a project can have
-static constexpr muse::audio::aux_channel_idx_t MAX_AUX_CHANNEL_NUM = 10;
+static constexpr muse::audio::aux_channel_idx_t MAX_AUX_CHANNEL_NUM = 20;
 static constexpr muse::audio::aux_channel_idx_t REVERB_CHANNEL_IDX = 0;
 
 enum class PlaybackCursorType {

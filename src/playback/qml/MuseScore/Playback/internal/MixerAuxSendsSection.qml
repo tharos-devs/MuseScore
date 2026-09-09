@@ -51,7 +51,12 @@ MixerPanelSection {
             id: repeater
             anchors.horizontalCenter: parent.horizontalCenter
 
-            model: content.channelItem.auxSendItemList
+            //! NOTE: an Aux/Group bus channel's own outgoing aux-send slots are configurable
+            //! in the UI but never actually routed by the engine (Mixer::process() only
+            //! consults aux sends for regular instrument tracks) - hide them here instead of
+            //! showing a control that silently does nothing. The column stays present (with
+            //! no items) so this channel's strip keeps the same width as every other section.
+            model: content.channelItem.type === MixerChannelItem.Aux ? [] : content.channelItem.auxSendItemModel
 
             delegate: Item {
                 width: root.channelItemWidth

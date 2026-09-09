@@ -96,6 +96,9 @@ public:
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) = 0;
     virtual std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const = 0;
+    //! NOTE: erases every persisted setting for this aux index (output params, solo/mute
+    //! state, group-bus flag, custom name) - the counterpart to bootstrapping a new bus
+    virtual void removeAuxOutputParams(muse::audio::aux_channel_idx_t index) = 0;
 
     virtual const TrackInputParamsMap& allTrackInputParams() const = 0;
     virtual const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& trackId) const = 0;
@@ -111,9 +114,27 @@ public:
     virtual void setAuxSoloMuteState(muse::audio::aux_channel_idx_t index, const SoloMuteState& state) = 0;
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> auxSoloMuteStateChanged() const = 0;
 
+    //! NOTE: a "group" bus is a track's only path to the master output (as opposed to a
+    //! regular send/return bus, where a track's direct-to-master signal is untouched) -
+    //! see TrackParams::isGroupBus. Defaults to false (regular send/return) when never set.
+    virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) = 0;
+
     //! NOTE: empty means no custom name was set - callers should fall back to a positional default
     virtual muse::String auxName(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxName(muse::audio::aux_channel_idx_t index, const muse::String& name) = 0;
+
+    //! NOTE: a bus's positional display number ("FX N"/"Group N") is assigned ONCE, the
+    //! first time this bus is resolved (see PlaybackController::resolveAuxBusDisplayNumber/
+    //! ensureAuxDisplayNumberAssigned), and never changes again for the life of this bus -
+    //! unlike a number derived live from the CURRENT sibling set, this can't drift out from
+    //! under an existing send slot's displayed target just because a sibling bus elsewhere
+    //! was added or removed. 0 means not yet assigned. takeNextAuxDisplayNumber() hands out
+    //! the next number for a type (FX vs Group) from a monotonic counter that is never
+    //! decremented, so a number is never reused even after the bus that had it is deleted.
+    virtual muse::audio::aux_channel_idx_t auxDisplayNumber(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) = 0;
+    virtual muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) = 0;
 
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
 

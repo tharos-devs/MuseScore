@@ -68,13 +68,23 @@ public:
     MOCK_METHOD(const InstrumentTrackIdMap&, instrumentTrackIdMap, (), (const, override));
 
     MOCK_METHOD(const AuxTrackIdMap&, auxTrackIdMap, (), (const, override));
+    MOCK_METHOD(bool, canAddAuxBus, (), (const, override));
     MOCK_METHOD(void, addNewAuxBus, (), (override));
+    MOCK_METHOD(void, addNewGroupBus, (), (override));
+    MOCK_METHOD(void, removeAuxBus, (muse::audio::aux_channel_idx_t), (override));
+    MOCK_METHOD(bool, isTrackForceMuted, (const engraving::InstrumentTrackId&), (const, override));
+    MOCK_METHOD(bool, isAuxForceMuted, (muse::audio::aux_channel_idx_t), (const, override));
+    MOCK_METHOD((muse::async::Channel<engraving::InstrumentTrackId, bool, bool>), trackMuteStateChanged, (), (const, override));
+    MOCK_METHOD((muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool>), auxMuteStateChanged, (), (const, override));
 
     MOCK_METHOD(muse::async::Channel<muse::audio::TrackId>, trackAdded, (), (const, override));
     MOCK_METHOD(muse::async::Channel<muse::audio::TrackId>, trackRemoved, (), (const, override));
 
     MOCK_METHOD(std::string, auxChannelName, (muse::audio::aux_channel_idx_t), (const, override));
     MOCK_METHOD((muse::async::Channel<muse::audio::aux_channel_idx_t, std::string>), auxChannelNameChanged, (), (const, override));
+
+    MOCK_METHOD(bool, isAuxBusGroup, (muse::audio::aux_channel_idx_t), (const, override));
+    MOCK_METHOD(muse::audio::aux_channel_idx_t, resolveAuxBusDisplayNumber, (muse::audio::aux_channel_idx_t), (const, override));
 
     MOCK_METHOD(muse::async::Promise<muse::audio::SoundPresetList>, availableSoundPresets, (const engraving::InstrumentTrackId&), (const,
                                                                                                                                    override));

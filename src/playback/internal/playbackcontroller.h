@@ -24,6 +24,7 @@
 
 #include <optional>
 #include <tuple>
+#include <set>
 #include <unordered_map>
 
 #include "modularity/ioc.h"
@@ -100,7 +101,10 @@ public:
 
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
+    bool canAddAuxBus() const override;
     void addNewAuxBus() override;
+    void addNewGroupBus() override;
+    void removeAuxBus(muse::audio::aux_channel_idx_t index) override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
@@ -108,11 +112,19 @@ public:
     std::string auxChannelName(muse::audio::aux_channel_idx_t index) const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
+    bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
+
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
         const engraving::InstrumentTrackId& instrumentTrackId) const override;
 
     const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
+    bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
+    bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
+
+    muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
+    muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
 
     bool isMasterOutputForceMuted() const override;
     muse::async::Notification masterOutputForceMuteChanged() const override;
@@ -222,13 +234,17 @@ private:
     void setupPlayer();
 
     void updateSoloMuteStates();
-    void updateAuxMuteStates();
+    void updateAuxMuteStates(bool hasSolo, const std::vector<muse::audio::aux_channel_idx_t>& audibleGroupBuses);
 
     using TrackAddFinished = std::function<void ()>;
 
     void addTrack(const engraving::InstrumentTrackId& instrumentTrackId, const TrackAddFinished& onFinished);
     void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, const TrackAddFinished& onFinished);
     void addAuxTrack(muse::audio::aux_channel_idx_t index, const TrackAddFinished& onFinished);
+    muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
+    //! NOTE: permanently pins this bus's display number on first call (a no-op if already
+    //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
+    void ensureAuxDisplayNumberAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus);
 
     void setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive);
     project::AudioOutputParams trackOutputParams(const engraving::InstrumentTrackId& instrumentTrackId) const;
@@ -276,13 +292,24 @@ private:
     InstrumentTrackIdMap m_instrumentTrackIdMap;
     AuxTrackIdMap m_auxTrackIdMap;
 
+    //! NOTE: indices reserved by an addAuxTrack() call whose engine round-trip hasn't
+    //! resolved (or rejected) yet - see resolveFreeAuxBusIndex()/addAuxTrack()'s doc comment
+    std::set<muse::audio::aux_channel_idx_t> m_pendingAuxIndices;
+
     //! NOTE: in-memory only, deliberately never persisted to audioSettings() - mute/solo
     //! is transient playback state, and "muted" isn't even serialized to the project file,
     //! so writing it there would only mark the project as having unsaved changes for no
     //! reason. This exists purely so updateAuxMuteStates() can tell whether it already
     //! applied a given mute state to the engine, without re-reading a stale value back.
     std::map<muse::audio::aux_channel_idx_t, bool> m_lastAppliedAuxMuteState;
+    //! NOTE: mirrors m_lastAppliedAuxMuteState but tracks forceMute specifically, so a newly
+    //! (re)built Mixer channel item for this bus can seed its initial forceMute the same way
+    //! isTrackForceMuted() does for instrument tracks (see buildAuxChannelItem())
+    std::map<muse::audio::aux_channel_idx_t, bool> m_lastAppliedAuxForceMute;
     std::map<muse::audio::TrackId, std::tuple<bool, bool, bool> > m_lastAppliedInstrumentMuteSoloState;
+
+    muse::async::Channel<engraving::InstrumentTrackId, bool, bool> m_trackMuteStateChanged;
+    muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> m_auxMuteStateChanged;
 
     std::unordered_map<engraving::InstrumentTrackId, muse::audio::ControlParams> m_automatedControlParamsCache;
 

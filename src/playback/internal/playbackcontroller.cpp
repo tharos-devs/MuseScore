@@ -72,9 +72,17 @@ static AudioOutputParams makeReverbOutputParams()
     return result;
 }
 
-static std::string resolveAuxTrackTitle(aux_channel_idx_t index, const AudioOutputParams& params, bool considerFx = true)
+//! NOTE: displayNumber is already 1-based and already resolved per-type (see
+//! PlaybackController::resolveAuxBusDisplayNumber()) - the first-ever Bus channel must
+//! read "Bus 1" even if 2 Aux channels already exist at lower indices, since Aux and Bus
+//! channels are numbered as two independent sequences, not a single shared one
+static std::string resolveAuxTrackTitle(aux_channel_idx_t displayNumber, const AudioOutputParams& params, bool isGroupBus,
+                                        bool considerFx = true)
 {
-    if (considerFx && params.fxChain.size() == 1) {
+    //! NOTE: the "borrow the loaded fx's name" convenience (e.g. "Reverb" instead of
+    //! "Aux 1") is specific to the send/return use case - a group bus's identity is about
+    //! which tracks it groups, not incidentally whatever fx happens to be loaded on it
+    if (!isGroupBus && considerFx && params.fxChain.size() == 1) {
         const AudioResourceMeta& meta = params.fxChain.cbegin()->second.resourceMeta;
         if (meta.id == MUSE_REVERB_ID) {
             return muse::trc("playback", "Reverb");
@@ -83,7 +91,15 @@ static std::string resolveAuxTrackTitle(aux_channel_idx_t index, const AudioOutp
         return meta.id;
     }
 
-    return muse::mtrc("playback", "Aux %1").arg(index + 1).toStdString();
+    //! NOTE: each literal is passed directly to mtrc() (not via a ternary as the argument) -
+    //! translation-extraction tooling scans for string-literal arguments to mtrc()/qsTrc()/
+    //! trc() calls, and a computed/ternary argument can make it fail to pick up one or both
+    //! strings as translatable
+    if (isGroupBus) {
+        return muse::mtrc("playback", "Group %1").arg(displayNumber).toStdString();
+    }
+
+    return muse::mtrc("playback", "FX %1").arg(displayNumber).toStdString();
 }
 
 PlaybackController::PlaybackController(const muse::modularity::ContextPtr& iocCtx)
@@ -271,6 +287,11 @@ const IPlaybackController::AuxTrackIdMap& PlaybackController::auxTrackIdMap() co
     return m_auxTrackIdMap;
 }
 
+bool PlaybackController::canAddAuxBus() const
+{
+    return m_auxTrackIdMap.size() < static_cast<size_t>(MAX_AUX_CHANNEL_NUM);
+}
+
 Channel<TrackId> PlaybackController::trackAdded() const
 {
     return m_trackAdded;
@@ -283,7 +304,13 @@ Channel<TrackId> PlaybackController::trackRemoved() const
 
 std::string PlaybackController::auxChannelName(aux_channel_idx_t index) const
 {
-    return resolveAuxTrackTitle(index, audioSettings()->auxOutputParams(index));
+    return resolveAuxTrackTitle(resolveAuxBusDisplayNumber(index), audioSettings()->auxOutputParams(index),
+                                audioSettings()->isAuxBusGroup(index));
+}
+
+bool PlaybackController::isAuxBusGroup(aux_channel_idx_t index) const
+{
+    return audioSettings()->isAuxBusGroup(index);
 }
 
 Channel<aux_channel_idx_t, std::string> PlaybackController::auxChannelNameChanged() const
@@ -321,6 +348,37 @@ void PlaybackController::setTrackSoloMuteState(const InstrumentTrackId& trackId,
     }
 
     m_notation->soloMuteState()->setTrackSoloMuteState(trackId, state);
+}
+
+bool PlaybackController::isTrackForceMuted(const InstrumentTrackId& instrumentTrackId) const
+{
+    auto trackIt = m_instrumentTrackIdMap.find(instrumentTrackId);
+    if (trackIt == m_instrumentTrackIdMap.end()) {
+        return false;
+    }
+
+    auto stateIt = m_lastAppliedInstrumentMuteSoloState.find(trackIt->second);
+    if (stateIt == m_lastAppliedInstrumentMuteSoloState.end()) {
+        return false;
+    }
+
+    return std::get<2>(stateIt->second);
+}
+
+bool PlaybackController::isAuxForceMuted(aux_channel_idx_t index) const
+{
+    auto it = m_lastAppliedAuxForceMute.find(index);
+    return it != m_lastAppliedAuxForceMute.end() ? it->second : false;
+}
+
+muse::async::Channel<InstrumentTrackId, bool, bool> PlaybackController::trackMuteStateChanged() const
+{
+    return m_trackMuteStateChanged;
+}
+
+muse::async::Channel<aux_channel_idx_t, bool, bool> PlaybackController::auxMuteStateChanged() const
+{
+    return m_auxMuteStateChanged;
 }
 
 void PlaybackController::playElements(const std::vector<const notation::EngravingItem*>& elements, const PlayParams& params, bool isMidi)
@@ -1309,6 +1367,14 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
         return;
     }
 
+    //! NOTE: distinguishes a genuinely brand-new bus (added just now via
+    //! addNewAuxBus()/addNewGroupBus(), no prior persisted data) from one being reloaded
+    //! from an already-saved project - only for the former is it safe to roll back the
+    //! group-bus flag/display number on failure below, since the latter's metadata was
+    //! legitimately persisted by an earlier, successful session and must survive a one-off
+    //! engine hiccup on this reload attempt
+    bool isBrandNewBus = !audioSettings()->containsAuxOutputParams(index);
+
     AudioOutputParams originParams;
 
     if (audioSettings()->containsAuxOutputParams(index)) {
@@ -1317,17 +1383,37 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
         originParams = makeReverbOutputParams();
     }
 
+    bool isGroupBus = audioSettings()->isAuxBusGroup(index);
+
+    //! NOTE: permanently pins this bus's display number the first time it's ever resolved
+    //! (right now, synchronously) - see IProjectAudioSettings::auxDisplayNumber()'s doc
+    //! comment for why this must never be recomputed later from the current sibling set
+    ensureAuxDisplayNumberAssigned(index, isGroupBus);
+
+    //! NOTE: reserves this index synchronously, right now - m_auxTrackIdMap only gains this
+    //! entry once the engine round-trip below actually resolves, which is too late to stop
+    //! an overlapping addNewAuxBus()/addNewGroupBus() call (e.g. two clicks in quick
+    //! succession, before either resolves) from independently picking the SAME "free" index
+    //! via resolveFreeAuxBusIndex() and creating two engine tracks for it - the second one's
+    //! m_auxTrackIdMap.insert() below would then silently no-op, leaking an orphaned,
+    //! uncontrollable engine track that never gets its own Mixer channel item
+    m_pendingAuxIndices.insert(index);
+
     TrackParams trackParams;
     trackParams.source = {};
     trackParams.fxChain = originParams.fxChain;
     trackParams.auxSends = originParams.auxSends;
     trackParams.control = originParams.control();
+    trackParams.isGroupBus = isGroupBus;
 
-    std::string title = resolveAuxTrackTitle(index, originParams, false);
+    std::string title = resolveAuxTrackTitle(resolveAuxBusDisplayNumber(index), originParams, isGroupBus, false);
+
     uint64_t playbackKey = notationPlaybackKey();
 
     playback()->addAuxTrack(title, trackParams)
     .onResolve(this, [this, playbackKey, index, onFinished, originParams](const TrackId trackId, const TrackParams& appliedParams) {
+        m_pendingAuxIndices.erase(index);
+
         //! NOTE It may be that while we were adding a track, the notation was already closed (or opened another)
         //! This situation can be if the notation was opened and immediately closed.
         if (notationPlaybackKey() != playbackKey) {
@@ -1342,11 +1428,24 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
         audioSettings()->setAuxOutputParams(index, appliedOutParams);
 
         updateSoloMuteStates();
+
         onFinished();
 
         m_trackAdded.send(trackId);
     })
-    .onReject(this, [onFinished](int code, const std::string& msg) {
+    .onReject(this, [this, index, isBrandNewBus, onFinished](int code, const std::string& msg) {
+        m_pendingAuxIndices.erase(index);
+
+        //! NOTE: the index goes back into resolveFreeAuxBusIndex()'s free pool - for a
+        //! brand-new bus (see isBrandNewBus above), the group-bus flag/display number
+        //! pinned earlier in this same call must be rolled back too, or a LATER bus later
+        //! created at this recycled index would silently inherit this failed attempt's
+        //! leftover metadata
+        if (isBrandNewBus) {
+            audioSettings()->setIsAuxBusGroup(index, false);
+            audioSettings()->setAuxDisplayNumber(index, 0);
+        }
+
         LOGE() << "can't add a new aux track, code: [" << code << "] " << msg;
 
         onFinished();
@@ -1355,15 +1454,45 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
     m_loadingTrackCount++;
 }
 
-void PlaybackController::addNewAuxBus()
+aux_channel_idx_t PlaybackController::resolveFreeAuxBusIndex() const
 {
     aux_channel_idx_t freeIndex = 0;
     for (; freeIndex < MAX_AUX_CHANNEL_NUM; ++freeIndex) {
-        if (m_auxTrackIdMap.find(freeIndex) == m_auxTrackIdMap.end()) {
+        //! NOTE: also skip an index reserved by an addAuxTrack() call still awaiting its
+        //! engine round-trip (see m_pendingAuxIndices) - without this, two overlapping
+        //! addNewAuxBus()/addNewGroupBus() calls could both pick the same "free" index
+        if (m_auxTrackIdMap.find(freeIndex) == m_auxTrackIdMap.end() && !muse::contains(m_pendingAuxIndices, freeIndex)) {
             break;
         }
     }
 
+    return freeIndex;
+}
+
+aux_channel_idx_t PlaybackController::resolveAuxBusDisplayNumber(aux_channel_idx_t index) const
+{
+    //! NOTE: Aux and Bus channels are numbered as two independent 1-based sequences (each
+    //! starts at 1), not a single sequence sharing the underlying index pool - e.g. the
+    //! first-ever Bus channel must read "Bus 1" even if 2 Aux channels already exist at
+    //! lower indices. This is a pure lookup of the number permanently pinned for this bus
+    //! by ensureAuxDisplayNumberAssigned() when it was first created - see
+    //! IProjectAudioSettings::auxDisplayNumber()'s doc comment for why it's never
+    //! recomputed from the current sibling set.
+    return audioSettings()->auxDisplayNumber(index);
+}
+
+void PlaybackController::ensureAuxDisplayNumberAssigned(aux_channel_idx_t index, bool isGroupBus)
+{
+    if (audioSettings()->auxDisplayNumber(index) > 0) {
+        return;
+    }
+
+    audioSettings()->setAuxDisplayNumber(index, audioSettings()->takeNextAuxDisplayNumber(isGroupBus));
+}
+
+void PlaybackController::addNewAuxBus()
+{
+    aux_channel_idx_t freeIndex = resolveFreeAuxBusIndex();
     if (freeIndex >= MAX_AUX_CHANNEL_NUM) {
         return;
     }
@@ -1377,6 +1506,69 @@ void PlaybackController::addNewAuxBus()
         m_loadingTrackCount--;
         m_isPlayAllowedChanged.send(isPlayAllowed());
     });
+}
+
+void PlaybackController::addNewGroupBus()
+{
+    aux_channel_idx_t freeIndex = resolveFreeAuxBusIndex();
+    if (freeIndex >= MAX_AUX_CHANNEL_NUM) {
+        return;
+    }
+
+    //! NOTE: must be persisted before addAuxTrack() below, which reads it back via
+    //! audioSettings()->isAuxBusGroup(index) to build both the engine-side TrackParams
+    //! and the bus's own default title ("Bus %1" instead of "Aux %1")
+    audioSettings()->setIsAuxBusGroup(freeIndex, true);
+
+    configuration()->setAuxChannelsVisible(true);
+
+    addAuxTrack(freeIndex, [this]() {
+        m_loadingTrackCount--;
+        m_isPlayAllowedChanged.send(isPlayAllowed());
+    });
+}
+
+void PlaybackController::removeAuxBus(aux_channel_idx_t index)
+{
+    IF_ASSERT_FAILED(notationPlayback() && playback()) {
+        return;
+    }
+
+    //! NOTE: the Reverb bus is special-cased throughout (addAuxTrack/resolveAuxTrackTitle)
+    //! and always occupies index 0 - it isn't removable
+    if (index == REVERB_CHANNEL_IDX) {
+        return;
+    }
+
+    auto search = m_auxTrackIdMap.find(index);
+    if (search == m_auxTrackIdMap.end()) {
+        return;
+    }
+
+    TrackId trackId = search->second;
+
+    //! NOTE: removeTrack() alone does not tear down this track's loaded Audio FX plugin
+    //! instances (built-in or VST3) - it only drops the engine's own references to the
+    //! track chain. Clearing the fx chain first runs it through the normal fx-chain-diff
+    //! path (AudioContext::onFxChainParamsChanged -> AudioFactory::resolveFxList), which is
+    //! what actually unregisters/destroys each plugin instance; both calls go through the
+    //! same ordered RPC channel, so this is guaranteed to complete before removeTrack() runs
+    playback()->setFxChainParams(trackId, AudioFxChain());
+    playback()->removeTrack(trackId);
+    audioSettings()->removeAuxOutputParams(index);
+
+    m_auxTrackIdMap.erase(search);
+
+    //! NOTE: aux indices are recycled by resolveFreeAuxBusIndex() - without this, a stale
+    //! cached mute value from this now-removed bus could coincidentally match the first
+    //! computed value for a NEW bus later created at the same index, making
+    //! updateAuxMuteStates() wrongly skip sending that new bus's initial control params
+    m_lastAppliedAuxMuteState.erase(index);
+    m_lastAppliedAuxForceMute.erase(index);
+
+    updateSoloMuteStates();
+
+    m_trackRemoved.send(trackId);
 }
 
 void PlaybackController::setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive)
@@ -1547,6 +1739,13 @@ void PlaybackController::removeTrack(const InstrumentTrackId& instrumentTrackId)
     m_onlineSoundsController->removeOnlineTrack(search->second);
 
     m_trackRemoved.send(search->second);
+
+    //! NOTE: TrackIds are never recycled (see AudioContext::newTrackId()), so unlike the
+    //! analogous aux-index cleanup in removeAuxBus(), a stale entry here can't misclassify a
+    //! future track - but leaving it here would still leak one entry per removed instrument
+    //! track for the rest of the session (repeated add/delete, undo/redo)
+    m_lastAppliedInstrumentMuteSoloState.erase(search->second);
+
     m_instrumentTrackIdMap.erase(instrumentTrackId);
     m_automatedControlParamsCache.erase(instrumentTrackId);
 }
@@ -1631,10 +1830,12 @@ void PlaybackController::subscribeOnAudioParamsChanges()
 
         if (auxIt != m_auxTrackIdMap.end()) {
             aux_channel_idx_t auxIdx = auxIt->first;
-            std::string oldName = resolveAuxTrackTitle(auxIdx, audioSettings()->auxOutputParams(auxIdx));
+            bool isGroupBus = audioSettings()->isAuxBusGroup(auxIdx);
+            aux_channel_idx_t displayNumber = resolveAuxBusDisplayNumber(auxIdx);
+            std::string oldName = resolveAuxTrackTitle(displayNumber, audioSettings()->auxOutputParams(auxIdx), isGroupBus);
             AudioOutputParams outParams = audioSettings()->auxOutputParams(auxIdx);
             outParams.fxChain = params;
-            std::string newName = resolveAuxTrackTitle(auxIdx, outParams);
+            std::string newName = resolveAuxTrackTitle(displayNumber, outParams, isGroupBus);
 
             audioSettings()->setAuxOutputParams(auxIdx, outParams);
 
@@ -1685,9 +1886,14 @@ void PlaybackController::setupTracks()
 
     std::vector<aux_channel_idx_t> auxIndices = audioSettings()->auxOutputParamsIndices();
     if (auxIndices.empty()) {
-        //! NOTE: brand-new project, bootstrap the default aux buses
+        //! NOTE: brand-new project, bootstrap the default aux buses: index 0 is always the
+        //! Reverb send (an Aux/FX-type bus), the remaining default buses are Group buses,
+        //! so a fresh project ships with one FX send and one Group bus rather than 2 FX sends
         for (aux_channel_idx_t idx = 0; idx < DEFAULT_AUX_CHANNEL_NUM; ++idx) {
             auxIndices.push_back(idx);
+            if (idx != REVERB_CHANNEL_IDX) {
+                audioSettings()->setIsAuxBusGroup(idx, true);
+            }
         }
     }
 
@@ -1802,6 +2008,56 @@ void PlaybackController::updateSoloMuteStates()
         }
     }
 
+    if (!hasSolo) {
+        for (const auto& pair : m_auxTrackIdMap) {
+            if (audioSettings()->isAuxBusGroup(pair.first) && audioSettings()->auxSoloMuteState(pair.first).solo) {
+                hasSolo = true;
+                break;
+            }
+        }
+    }
+
+    //! NOTE: a group bus is a soloed track's ONLY path to master (see Mixer::process()'s
+    //! skip-direct-mix logic) - if solo force-muted it like any other non-soloed channel,
+    //! soloing a track that only reaches master through a group bus would produce silence
+    //! instead of isolating it. A group bus stays "audible" here (exempt from force-mute)
+    //! either because it's soloed itself, or because a track that's soloed sends to it.
+    //!
+    //! These two reasons are NOT equivalent for an individual INSTRUMENT track's own
+    //! force-mute below: soloing the bus itself means "let everything through this bus
+    //! play", so every track feeding it is exempt - but a bus made audible only because
+    //! ONE of its sibling tracks is soloed must NOT exempt every OTHER track sharing that
+    //! same bus, or soloing track 4 (routed to Group bus X together with un-soloed track 3)
+    //! would also let track 3 bleed through. directlySoloedGroupBuses (bus-solo only) is
+    //! what per-track exemption below must use; audibleGroupBuses (both reasons merged) is
+    //! only for the group bus channel's OWN force-mute decision in updateAuxMuteStates().
+    std::vector<aux_channel_idx_t> audibleGroupBuses;
+    std::vector<aux_channel_idx_t> directlySoloedGroupBuses;
+    if (hasSolo) {
+        for (const auto& pair : m_auxTrackIdMap) {
+            if (audioSettings()->isAuxBusGroup(pair.first) && audioSettings()->auxSoloMuteState(pair.first).solo) {
+                audibleGroupBuses.push_back(pair.first);
+            }
+        }
+
+        directlySoloedGroupBuses = audibleGroupBuses;
+
+        for (const InstrumentTrackId& instrumentTrackId : existingTrackIdSet) {
+            if (!m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId).solo) {
+                continue;
+            }
+
+            const AuxSendsParams& auxSends = trackOutputParams(instrumentTrackId).auxSends;
+            for (size_t i = 0; i < auxSends.size(); ++i) {
+                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
+                if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount)
+                    && audioSettings()->isAuxBusGroup(auxIdx) && !muse::contains(audibleGroupBuses, auxIdx)) {
+                    audibleGroupBuses.push_back(auxIdx);
+                }
+            }
+        }
+    }
+
     InstrumentTrackIdSet allowedInstrumentTrackIdSet = instrumentTrackIdSetForRangePlayback();
     bool isRangePlaybackMode = !m_isExportingAudio && selection()->isRange() && !allowedInstrumentTrackIdSet.empty();
 
@@ -1817,8 +2073,24 @@ void PlaybackController::updateSoloMuteStates()
         // 1. Recall the solo-mute state for this notation
         const auto& soloMuteState = m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId);
 
+        // 3. Update params for playback / mixer
+        AudioOutputParams params = trackOutputParams(instrumentTrackId);
+
         // 2. Evaluate "force mute" (disabling the mute button)
-        bool shouldForceMute = hasSolo && !soloMuteState.solo;
+        //! NOTE: must check directlySoloedGroupBuses (bus itself soloed), NOT the merged
+        //! audibleGroupBuses - otherwise an un-soloed track sharing a group bus with a
+        //! soloed SIBLING track would wrongly be exempted from force-mute too (see the note
+        //! above where these two vectors are built)
+        bool feedsDirectlySoloedGroupBus = false;
+        if (!directlySoloedGroupBuses.empty()) {
+            for (size_t i = 0; i < params.auxSends.size() && !feedsDirectlySoloedGroupBus; ++i) {
+                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
+                feedsDirectlySoloedGroupBus = params.auxSends[i].active && !muse::is_zero(params.auxSends[i].signalAmount)
+                                              && muse::contains(directlySoloedGroupBuses, auxIdx);
+            }
+        }
+
+        bool shouldForceMute = hasSolo && !soloMuteState.solo && !feedsDirectlySoloedGroupBus;
         if (notationPlayback()->isChordSymbolsTrack(instrumentTrackId) && !shouldForceMute) {
             shouldForceMute = !notationConfiguration()->isPlayChordSymbolsEnabled();
         }
@@ -1827,8 +2099,6 @@ void PlaybackController::updateSoloMuteStates()
             shouldForceMute = !muse::contains(allowedInstrumentTrackIdSet, instrumentTrackId);
         }
 
-        // 3. Update params for playback / mixer
-        AudioOutputParams params = trackOutputParams(instrumentTrackId);
         params.solo = soloMuteState.solo;
         params.muted = soloMuteState.mute || shouldForceMute;
         params.forceMute = shouldForceMute;
@@ -1847,15 +2117,31 @@ void PlaybackController::updateSoloMuteStates()
 
         playback()->setControlParams(trackId, trackControlParams(instrumentTrackId, params, /*rebuildVolume*/ false, /*rebuildPan*/ false));
         m_lastAppliedInstrumentMuteSoloState[trackId] = lastState;
+
+        //! NOTE: notifies the Mixer UI for THIS track even when it isn't the one whose own
+        //! button was toggled - e.g. every sibling that just became (or stopped being)
+        //! force-muted as a side effect of some OTHER track's solo changing (see
+        //! trackMuteStateChanged()'s doc comment)
+        m_trackMuteStateChanged.send(instrumentTrackId, params.muted, params.forceMute);
     }
 
-    updateAuxMuteStates();
+    updateAuxMuteStates(hasSolo, audibleGroupBuses);
 }
 
-void PlaybackController::updateAuxMuteStates()
+void PlaybackController::updateAuxMuteStates(bool hasSolo, const std::vector<aux_channel_idx_t>& audibleGroupBuses)
 {
     for (const auto& pair : m_auxTrackIdMap) {
-        bool mute = audioSettings()->auxSoloMuteState(pair.first).mute;
+        const SoloMuteState& soloMuteState = audioSettings()->auxSoloMuteState(pair.first);
+
+        //! NOTE: solo only ever force-mutes GROUP buses (see updateSoloMuteStates()) - a
+        //! regular send/return aux bus is deliberately left alone by solo entirely, since
+        //! (unlike a group bus) it isn't any track's only path to master, and there's no
+        //! well-defined standard behavior for "solo through a send" (see the Aux-bus-routing
+        //! research this decision came from - every DAW checked handles it inconsistently)
+        bool isGroupBus = audioSettings()->isAuxBusGroup(pair.first);
+        bool shouldForceMute = isGroupBus && hasSolo && !muse::contains(audibleGroupBuses, pair.first);
+
+        bool mute = soloMuteState.mute || shouldForceMute;
 
         //! NOTE: compare against our own in-memory record of what was last sent to the
         //! engine, not audioSettings() - "muted" isn't even persisted to the project file,
@@ -1872,6 +2158,11 @@ void PlaybackController::updateAuxMuteStates()
         playback()->setControlParams(pair.second, params.control());
 
         m_lastAppliedAuxMuteState[pair.first] = mute;
+        m_lastAppliedAuxForceMute[pair.first] = shouldForceMute;
+
+        //! NOTE: see trackMuteStateChanged()'s doc comment - same reasoning, for Aux/Group
+        //! bus channels
+        m_auxMuteStateChanged.send(pair.first, mute, shouldForceMute);
     }
 }
 

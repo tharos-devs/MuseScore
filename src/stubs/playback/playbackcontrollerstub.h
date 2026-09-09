@@ -64,7 +64,10 @@ public:
 
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
+    bool canAddAuxBus() const override;
     void addNewAuxBus() override;
+    void addNewGroupBus() override;
+    void removeAuxBus(muse::audio::aux_channel_idx_t index) override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
@@ -72,11 +75,19 @@ public:
     std::string auxChannelName(muse::audio::aux_channel_idx_t index) const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
+    bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
+
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
         const engraving::InstrumentTrackId& instrumentTrackId) const override;
 
     const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
+    bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
+    bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
+
+    muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
+    muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
 
     bool isMasterOutputForceMuted() const override;
     muse::async::Notification masterOutputForceMuteChanged() const override;

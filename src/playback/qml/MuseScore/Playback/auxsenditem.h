@@ -49,12 +49,14 @@ public:
     struct BusOption {
         muse::audio::aux_channel_idx_t index = 0;
         QString title;
+        bool isGroupBus = false;
     };
 
     struct MenuData {
         std::vector<BusOption> availableBuses;
         bool canAddSend = false;
         bool canAddBus = false;
+        bool canAddGroupBus = false;
     };
 
     using MenuDataProvider = std::function<MenuData ()>;

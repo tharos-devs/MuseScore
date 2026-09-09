@@ -46,6 +46,7 @@ public:
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) override;
     std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const override;
+    void removeAuxOutputParams(muse::audio::aux_channel_idx_t index) override;
 
     const TrackInputParamsMap& allTrackInputParams() const override;
     const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& partId) const override;
@@ -61,8 +62,15 @@ public:
     void setAuxSoloMuteState(muse::audio::aux_channel_idx_t index, const SoloMuteState& state) override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> auxSoloMuteStateChanged() const override;
 
+    bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) override;
+
     muse::String auxName(muse::audio::aux_channel_idx_t index) const override;
     void setAuxName(muse::audio::aux_channel_idx_t index, const muse::String& name) override;
+
+    muse::audio::aux_channel_idx_t auxDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
+    void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) override;
+    muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) override;
 
     void removeTrackParams(const engraving::InstrumentTrackId& partId) override;
 
@@ -117,8 +125,13 @@ private:
     std::map<muse::audio::aux_channel_idx_t, AudioOutputParams> m_auxOutputParams;
     std::unordered_map<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStatesMap;
     muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStateChanged;
+    std::unordered_map<muse::audio::aux_channel_idx_t, bool> m_auxIsGroupBusMap;
 
     std::unordered_map<muse::audio::aux_channel_idx_t, muse::String> m_auxNamesMap;
+
+    std::unordered_map<muse::audio::aux_channel_idx_t, muse::audio::aux_channel_idx_t> m_auxDisplayNumberMap;
+    muse::audio::aux_channel_idx_t m_nextFxDisplayNumber = 1;
+    muse::audio::aux_channel_idx_t m_nextGroupDisplayNumber = 1;
 
     std::unordered_map<engraving::InstrumentTrackId, AudioInputParams> m_trackInputParamsMap;
     std::unordered_map<engraving::InstrumentTrackId, AudioOutputParams> m_trackOutputParamsMap;

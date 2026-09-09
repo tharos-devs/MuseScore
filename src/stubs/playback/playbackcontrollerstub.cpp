@@ -160,7 +160,20 @@ const IPlaybackController::AuxTrackIdMap& PlaybackControllerStub::auxTrackIdMap(
     return m;
 }
 
+bool PlaybackControllerStub::canAddAuxBus() const
+{
+    return false;
+}
+
 void PlaybackControllerStub::addNewAuxBus()
+{
+}
+
+void PlaybackControllerStub::addNewGroupBus()
+{
+}
+
+void PlaybackControllerStub::removeAuxBus(muse::audio::aux_channel_idx_t)
 {
 }
 
@@ -182,6 +195,16 @@ std::string PlaybackControllerStub::auxChannelName(muse::audio::aux_channel_idx_
 muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> PlaybackControllerStub::auxChannelNameChanged() const
 {
     return {};
+}
+
+bool PlaybackControllerStub::isAuxBusGroup(muse::audio::aux_channel_idx_t) const
+{
+    return false;
+}
+
+muse::audio::aux_channel_idx_t PlaybackControllerStub::resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const
+{
+    return index + 1;
 }
 
 muse::async::Promise<muse::audio::SoundPresetList> PlaybackControllerStub::availableSoundPresets(const engraving::InstrumentTrackId&) const
@@ -225,6 +248,26 @@ muse::async::Notification PlaybackControllerStub::isVideoPlayingChanged() const
 {
     static muse::async::Notification notification;
     return notification;
+}
+
+bool PlaybackControllerStub::isTrackForceMuted(const engraving::InstrumentTrackId&) const
+{
+    return false;
+}
+
+bool PlaybackControllerStub::isAuxForceMuted(muse::audio::aux_channel_idx_t) const
+{
+    return false;
+}
+
+muse::async::Channel<engraving::InstrumentTrackId, bool, bool> PlaybackControllerStub::trackMuteStateChanged() const
+{
+    return {};
+}
+
+muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> PlaybackControllerStub::auxMuteStateChanged() const
+{
+    return {};
 }
 
 void PlaybackControllerStub::playElements(const std::vector<const engraving::EngravingItem*>&, const PlayParams&, bool)

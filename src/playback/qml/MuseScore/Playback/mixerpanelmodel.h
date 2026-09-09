@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <QAbstractListModel>
 #include <QQmlParserStatus>
 #include <QList>
@@ -69,6 +71,11 @@ public:
     Q_INVOKABLE void clearSelection();
 
     Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
+    Q_INVOKABLE void deleteAuxChannel(mu::playback::MixerChannelItem* channelItem);
+
+    Q_INVOKABLE bool canAddAuxBus() const;
+    Q_INVOKABLE void addFxChannel();
+    Q_INVOKABLE void addGroupChannel();
 
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -108,6 +115,8 @@ private:
     void onVideoAttachmentChanged();
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
     int resolveVideoInsertIndex() const;
+    std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
+    int resolveAuxInsertIndex(muse::audio::aux_channel_idx_t index, bool isGroupBus) const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
@@ -122,6 +131,7 @@ private:
 
     void loadOutputParams(MixerChannelItem* item, const project::AudioOutputParams& params);
     void updateOutputResourceItemCount();
+    void updateAuxSendItemCount();
 
     project::AudioOutputParams effectiveMasterOutputParams() const;
 
