@@ -165,9 +165,18 @@ void MixerPanelModel::reloadItems()
     addInstrumentTrack(notationPlayback()->metronomeTrackId());
 
     if (configuration()->areAuxChannelsVisible()) {
+        //! NOTE: FX-type buses are grouped together, followed by all Group-type buses,
+        //! rather than interleaved in raw index/creation order - see resolveAuxInsertIndex()
         const auto& auxTrackIdMap = controller()->auxTrackIdMap();
         for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
-            m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
+            if (!controller()->isAuxBusGroup(it->first)) {
+                m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
+            }
+        }
+        for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
+            if (controller()->isAuxBusGroup(it->first)) {
+                m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
+            }
         }
     }
 
@@ -205,7 +214,8 @@ void MixerPanelModel::onTrackAdded(const TrackId& trackId)
 
     if (auxIt != auxTracks.end()) {
         if (configuration()->areAuxChannelsVisible()) {
-            addItem(buildAuxChannelItem(auxIt->first, trackId), m_mixerChannelList.size() - 1);
+            bool isGroupBus = controller()->isAuxBusGroup(auxIt->first);
+            addItem(buildAuxChannelItem(auxIt->first, trackId), resolveAuxInsertIndex(isGroupBus));
         }
     }
 }
@@ -334,8 +344,14 @@ void MixerPanelModel::setupConnections()
         const auto& auxMap = controller()->auxTrackIdMap();
 
         if (visible) {
+            //! NOTE: same FX-then-Group ordering as reloadItems() - see resolveAuxInsertIndex()
             for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
-                if (!findChannelItem(it->second)) {
+                if (!controller()->isAuxBusGroup(it->first) && !findChannelItem(it->second)) {
+                    addItem(buildAuxChannelItem(it->first, it->second), masterChannelIndex());
+                }
+            }
+            for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
+                if (controller()->isAuxBusGroup(it->first) && !findChannelItem(it->second)) {
                     addItem(buildAuxChannelItem(it->first, it->second), masterChannelIndex());
                 }
             }
@@ -451,6 +467,28 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
     }
 
     return INVALID_INDEX;
+}
+
+int MixerPanelModel::resolveAuxInsertIndex(bool isGroupBus) const
+{
+    //! NOTE: FX-type aux buses are grouped together, followed by all Group-type buses,
+    //! then the master channel - a new Group bus always goes right before master, a new
+    //! FX bus goes right before the first existing Group bus (or before master if there
+    //! isn't one yet). Mirrors the two-pass ordering used in reloadItems() and the
+    //! areAuxChannelsVisibleChanged handler in setupConnections().
+    if (isGroupBus) {
+        return masterChannelIndex();
+    }
+
+    for (int i = 0; i < m_mixerChannelList.size(); ++i) {
+        const MixerChannelItem* item = m_mixerChannelList[i];
+        if (item->type() == MixerChannelItem::Type::Master
+            || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
+            return i;
+        }
+    }
+
+    return masterChannelIndex();
 }
 
 int MixerPanelModel::indexOf(const TrackId trackId) const

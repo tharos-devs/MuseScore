@@ -52,14 +52,14 @@ static const std::string TRACK_ID_KEY("trackId");
 static const std::string RESOURCE_ID_KEY("resourceId");
 static const std::string CHAIN_ORDER_KEY("chainOrder");
 
-//! NOTE: the aux bus's own channel strip is always titled positionally ("Aux N"/"Bus N"),
+//! NOTE: the aux bus's own channel strip is always titled positionally ("FX N"/"Group N"),
 //! regardless of any fx loaded on that bus (see PlaybackController::addAuxTrack/
 //! resolveAuxTrackTitle, considerFx=false) - aux-send slots must show that same name for
 //! consistency, so this deliberately does not use IPlaybackController::auxChannelName(),
 //! which is fx-aware
 static QString auxBusPositionalName(aux_channel_idx_t displayNumber, bool isGroupBus)
 {
-    return muse::qtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(displayNumber);
+    return muse::qtrc("playback", isGroupBus ? "Group %1" : "FX %1").arg(displayNumber);
 }
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
@@ -881,8 +881,9 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
             continue; // already targeted by another slot on this track
         }
 
-        QString busName = auxBusPositionalName(controller()->resolveAuxBusDisplayNumber(busIndex), controller()->isAuxBusGroup(busIndex));
-        data.availableBuses.push_back({ busIndex, busName });
+        bool isGroupBus = controller()->isAuxBusGroup(busIndex);
+        QString busName = auxBusPositionalName(controller()->resolveAuxBusDisplayNumber(busIndex), isGroupBus);
+        data.availableBuses.push_back({ busIndex, busName, isGroupBus });
     }
 
     //! NOTE: don't offer "Add Aux send" when a blank slot other than this one already

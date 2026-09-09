@@ -91,7 +91,7 @@ static std::string resolveAuxTrackTitle(aux_channel_idx_t displayNumber, const A
         return meta.id;
     }
 
-    return muse::mtrc("playback", isGroupBus ? "Bus %1" : "Aux %1").arg(displayNumber).toStdString();
+    return muse::mtrc("playback", isGroupBus ? "Group %1" : "FX %1").arg(displayNumber).toStdString();
 }
 
 PlaybackController::PlaybackController(const muse::modularity::ContextPtr& iocCtx)
@@ -1697,9 +1697,14 @@ void PlaybackController::setupTracks()
 
     std::vector<aux_channel_idx_t> auxIndices = audioSettings()->auxOutputParamsIndices();
     if (auxIndices.empty()) {
-        //! NOTE: brand-new project, bootstrap the default aux buses
+        //! NOTE: brand-new project, bootstrap the default aux buses: index 0 is always the
+        //! Reverb send (an Aux/FX-type bus), the remaining default buses are Group buses,
+        //! so a fresh project ships with one FX send and one Group bus rather than 2 FX sends
         for (aux_channel_idx_t idx = 0; idx < DEFAULT_AUX_CHANNEL_NUM; ++idx) {
             auxIndices.push_back(idx);
+            if (idx != REVERB_CHANNEL_IDX) {
+                audioSettings()->setIsAuxBusGroup(idx, true);
+            }
         }
     }
 

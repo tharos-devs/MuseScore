@@ -49,6 +49,7 @@ public:
     struct BusOption {
         muse::audio::aux_channel_idx_t index = 0;
         QString title;
+        bool isGroupBus = false;
     };
 
     struct MenuData {

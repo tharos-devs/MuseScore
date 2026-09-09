@@ -41,7 +41,30 @@ MixerPanelSection {
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
 
+        //! NOTE: distinguishes the two Aux-bus flavors at a glance - "FX" for a regular
+        //! send/return bus, "GRP" for a group/subgroup bus (see MixerChannelItem::isGroupBus).
+        //! Anchored off muteSoloRow (not part of it) so it never shifts the mute/solo
+        //! buttons' centered position for non-Aux channels.
+        StyledTextLabel {
+            id: auxTypeLabel
+
+            visible: content.channelItem.type === MixerChannelItem.Aux
+
+            anchors.right: muteSoloRow.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: muteSoloRow.verticalCenter
+
+            text: content.channelItem.isGroupBus ? qsTrc("playback", "GRP") : qsTrc("playback", "FX")
+
+            font.pixelSize: 10
+            font.capitalization: Font.AllUppercase
+            color: ui.theme.fontSecondaryColor
+            opacity: 0.5
+        }
+
         Row {
+            id: muteSoloRow
+
             anchors.horizontalCenter: parent.horizontalCenter
 
             spacing: 6

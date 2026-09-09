@@ -98,6 +98,7 @@ private:
     void subscribeOnAutomationChanges();
 
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
+    int resolveAuxInsertIndex(bool isGroupBus) const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
