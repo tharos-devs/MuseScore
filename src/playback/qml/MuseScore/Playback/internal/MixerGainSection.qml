@@ -45,6 +45,12 @@ MixerPanelSection {
         Row {
             id: contentRow
 
+            //! NOTE: the Video channel isn't a real audio-engine track (see VIDEO_TRACK_ID
+            //! in MixerPanelModel) - its controlParamsChanged handler only forwards
+            //! volume/balance/muted to VideoAttachmentSettings, so a Gain knob here would
+            //! be a dead control, silently discarding whatever the user sets
+            visible: content.channelItem.type !== MixerChannelItem.Video
+
             anchors.horizontalCenter: parent.horizontalCenter
 
             spacing: 8
