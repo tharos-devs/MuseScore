@@ -245,6 +245,21 @@ int MixerChannelItem::balanceMax() const
     return audio::BALANCE_MAX.raw() * BALANCE_SCALING_FACTOR;
 }
 
+int MixerChannelItem::gain() const
+{
+    return m_gain;
+}
+
+int MixerChannelItem::gainMin() const
+{
+    return audio::GAIN_DB_MIN.raw();
+}
+
+int MixerChannelItem::gainMax() const
+{
+    return audio::GAIN_DB_MAX.raw();
+}
+
 bool MixerChannelItem::hasVolumeAutomation() const
 {
     return m_hasVolumeAutomation;
@@ -468,6 +483,11 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
         if (!m_hasBalanceAutomation) {
             setDisplayedBalance(m_outParams.balance.raw() * BALANCE_SCALING_FACTOR);
         }
+    }
+
+    if (!muse::RealIsEqual(m_outParams.gain, newParams.gain)) {
+        m_outParams.gain = newParams.gain;
+        setDisplayedGain(m_outParams.gain.raw());
     }
 
     if (m_outParams.color != newParams.color) {
@@ -721,6 +741,17 @@ void MixerChannelItem::setBalance(int balance)
     emit controlParamsChanged(m_outParams);
 }
 
+void MixerChannelItem::setGain(int gain)
+{
+    if (m_outParams.gain.raw() == gain) {
+        return;
+    }
+
+    m_outParams.gain = static_cast<float>(gain);
+    setDisplayedGain(gain);
+    emit controlParamsChanged(m_outParams);
+}
+
 void MixerChannelItem::setSolo(bool solo)
 {
     if (m_outParams.solo == solo) {
@@ -838,6 +869,16 @@ void MixerChannelItem::setDisplayedBalance(int balance)
 
     m_balance = balance;
     emit balanceChanged(m_balance);
+}
+
+void MixerChannelItem::setDisplayedGain(int gain)
+{
+    if (m_gain == gain) {
+        return;
+    }
+
+    m_gain = gain;
+    emit gainChanged(m_gain);
 }
 
 void MixerChannelItem::setAudioChannelVolumePressure(const audio::audioch_t chNum, const float newValue)

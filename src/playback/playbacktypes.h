@@ -46,6 +46,7 @@ enum class MixerSectionType {
     Unknown,
     Labels,
     Sound,
+    Gain,
     AudioFX,
     AuxSends,
     Balance,
@@ -59,6 +60,7 @@ static const std::map<MixerSectionType, std::string> MIXER_SECTION_TYPE_STR = {
     { MixerSectionType::Unknown, "unknown" },
     { MixerSectionType::Labels, "labels" },
     { MixerSectionType::Sound, "sound" },
+    { MixerSectionType::Gain, "gain" },
     { MixerSectionType::AudioFX, "audio-fx" },
     { MixerSectionType::AuxSends, "aux-sends" },
     { MixerSectionType::Balance, "balance" },
@@ -83,6 +85,7 @@ inline QList<MixerSectionType> allMixerSectionTypes()
     static const QList<MixerSectionType> sections {
         MixerSectionType::Labels,
         MixerSectionType::Sound,
+        MixerSectionType::Gain,
         MixerSectionType::AudioFX,
         MixerSectionType::AuxSends,
         MixerSectionType::Balance,

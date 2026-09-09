@@ -73,6 +73,9 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(int balance READ balance WRITE setBalance NOTIFY balanceChanged)
     Q_PROPERTY(int balanceMin READ balanceMin CONSTANT)
     Q_PROPERTY(int balanceMax READ balanceMax CONSTANT)
+    Q_PROPERTY(int gain READ gain WRITE setGain NOTIFY gainChanged)
+    Q_PROPERTY(int gainMin READ gainMin CONSTANT)
+    Q_PROPERTY(int gainMax READ gainMax CONSTANT)
     Q_PROPERTY(bool hasVolumeAutomation READ hasVolumeAutomation NOTIFY hasVolumeAutomationChanged)
     Q_PROPERTY(bool hasBalanceAutomation READ hasBalanceAutomation NOTIFY hasBalanceAutomationChanged)
     Q_PROPERTY(bool solo READ solo WRITE setSolo NOTIFY soloChanged)
@@ -140,6 +143,9 @@ public:
     int balance() const;
     int balanceMin() const;
     int balanceMax() const;
+    int gain() const;
+    int gainMin() const;
+    int gainMax() const;
     bool hasVolumeAutomation() const;
     bool hasBalanceAutomation() const;
     bool solo() const;
@@ -222,6 +228,7 @@ public slots:
 
     void setVolumeLevel(float volumeLevel);
     void setBalance(int balance);
+    void setGain(int gain);
     void setSolo(bool solo);
     void setMuted(bool mute);
     void setColor(QColor color);
@@ -235,6 +242,7 @@ signals:
 
     void volumeLevelChanged(float volumeLevel);
     void balanceChanged(int balance);
+    void gainChanged(int gain);
     void hasVolumeAutomationChanged();
     void hasBalanceAutomationChanged();
     void soloChanged();
@@ -310,6 +318,7 @@ protected:
 
     void setDisplayedVolumeLevel(float volumeLevel);
     void setDisplayedBalance(int balance);
+    void setDisplayedGain(int gain);
 
     Type m_type = Type::Unknown;
 
@@ -322,6 +331,7 @@ protected:
 
     float m_volumeLevel = 0.f;
     int m_balance = 0;
+    int m_gain = 0;
 
     bool m_hasVolumeAutomation = false;
     bool m_hasBalanceAutomation = false;
