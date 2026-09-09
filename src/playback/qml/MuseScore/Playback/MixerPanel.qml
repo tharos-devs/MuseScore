@@ -299,6 +299,24 @@ ColumnLayout {
                     }
                 }
 
+                MixerGainSection {
+                    id: gainSection
+
+                    visible: contextMenuModel.gainSectionVisible
+                    headerVisible: contextMenuModel.labelsSectionVisible
+                    headerWidth: prv.headerWidth
+                    channelItemWidth: prv.channelItemWidth
+
+                    model: mixerPanelModel
+
+                    navigationRowStart: 50
+                    needReadChannelName: prv.isPanelActivated
+
+                    onNavigateControlIndexChanged: function(index) {
+                        prv.setNavigateControlIndex(index)
+                    }
+                }
+
                 MixerFxSection {
                     id: fxSection
 

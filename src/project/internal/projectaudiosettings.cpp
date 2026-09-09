@@ -205,6 +205,7 @@ void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId,
     if (!paramsChanged) {
         paramsChanged |= !muse::RealIsEqual(it->second.volume, params.volume);
         paramsChanged |= !muse::RealIsEqual(it->second.balance, params.balance);
+        paramsChanged |= !muse::RealIsEqual(it->second.gain, params.gain);
         paramsChanged |= (it->second.fxChain != params.fxChain);
         paramsChanged |= (it->second.auxSends != params.auxSends);
     }
@@ -483,6 +484,7 @@ AudioOutputParams ProjectAudioSettings::outputParamsFromJson(const QJsonObject& 
     result.fxChain = fxChainFromJson(object.value("fxChain").toObject());
     result.balance = object.value("balance").toVariant().toFloat();
     result.volume = object.value("volumeDb").toVariant().toFloat();
+    result.gain = object.value("gainDb").toVariant().toFloat();
     result.auxSends = auxSendsFromJson(object.value("auxSends").toArray());
 
     const QString colorName = object.value("color").toString();
@@ -603,6 +605,7 @@ QJsonObject ProjectAudioSettings::outputParamsToJson(const AudioOutputParams& pa
     result.insert("fxChain", fxChainToJson(params.fxChain));
     result.insert("balance", params.balance.raw());
     result.insert("volumeDb", params.volume.raw());
+    result.insert("gainDb", params.gain.raw());
 
     if (!params.auxSends.empty()) {
         result.insert("auxSends", auxSendsToJson(params.auxSends));

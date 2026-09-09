@@ -41,6 +41,7 @@ struct AudioOutputParams {
     muse::audio::AudioFxChain fxChain;
     muse::audio::volume_db_t volume = 0.f;
     muse::audio::balance_t balance = 0.f;
+    muse::audio::volume_db_t gain = 0.f;
     muse::audio::AuxSendsParams auxSends;
     bool solo = false;
     bool muted = false;
@@ -54,6 +55,7 @@ struct AudioOutputParams {
         return fxChain == other.fxChain
                && muse::is_equal(volume, other.volume)
                && muse::is_equal(balance, other.balance)
+               && muse::is_equal(gain, other.gain)
                && auxSends == other.auxSends
                && solo == other.solo
                && muted == other.muted
@@ -67,6 +69,7 @@ struct AudioOutputParams {
         control.volume = volume;
         control.balance = balance;
         control.muted = muted;
+        control.gain = gain;
         return control;
     }
 
@@ -79,6 +82,7 @@ struct AudioOutputParams {
             balance = std::get<muse::audio::balance_t>(control.balance.value());
         }
         muted = control.muted;
+        gain = control.gain;
     }
 };
 

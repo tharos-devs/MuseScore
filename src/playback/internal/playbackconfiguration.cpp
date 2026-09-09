@@ -72,6 +72,7 @@ static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
 
 static const Settings::Key MIXER_LABELS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/labelsSectionVisible");
 static const Settings::Key MIXER_SOUND_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/soundSectionVisible");
+static const Settings::Key MIXER_GAIN_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/gainSectionVisible");
 static const Settings::Key MIXER_AUDIO_FX_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/audioFxSectionVisible");
 static const Settings::Key MIXER_AUX_SENDS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/auxSendsSectionVisible");
 static const Settings::Key MIXER_BALANCE_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/balanceSectionVisible");
@@ -110,6 +111,7 @@ static Settings::Key mixerSectionVisibleKey(MixerSectionType sectionType)
     switch (sectionType) {
     case MixerSectionType::Labels: return MIXER_LABELS_SECTION_VISIBLE_KEY;
     case MixerSectionType::Sound: return MIXER_SOUND_SECTION_VISIBLE_KEY;
+    case MixerSectionType::Gain: return MIXER_GAIN_SECTION_VISIBLE_KEY;
     case MixerSectionType::AudioFX: return MIXER_AUDIO_FX_SECTION_VISIBLE_KEY;
     case MixerSectionType::AuxSends: return MIXER_AUX_SENDS_SECTION_VISIBLE_KEY;
     case MixerSectionType::Balance: return MIXER_BALANCE_SECTION_VISIBLE_KEY;

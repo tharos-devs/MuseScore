@@ -904,11 +904,12 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
     connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId, instrumentTrackId](const AudioOutputParams& params) {
         playback()->setControlParams(trackId, params.control());
 
-        //! NOTE Only persist volume/balance here; solo/mute/forceMute are owned by
+        //! NOTE Only persist volume/balance/gain here; solo/mute/forceMute are owned by
         //! INotationSoloMuteState and must not be echoed back into the saved output params.
         AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentTrackId);
         outParams.volume = params.volume;
         outParams.balance = params.balance;
+        outParams.gain = params.gain;
         audioSettings()->setTrackOutputParams(instrumentTrackId, outParams);
     });
 
@@ -998,6 +999,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
         outParams.volume = params.volume;
         outParams.balance = params.balance;
+        outParams.gain = params.gain;
         audioSettings()->setAuxOutputParams(index, outParams);
     });
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
@@ -1108,6 +1110,7 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
         AudioOutputParams outParams = audioSettings()->masterAudioOutputParams();
         outParams.volume = params.volume;
         outParams.balance = params.balance;
+        outParams.gain = params.gain;
         audioSettings()->setMasterAudioOutputParams(outParams);
     });
 
