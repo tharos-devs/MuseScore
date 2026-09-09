@@ -104,6 +104,21 @@ static void resizeAuxSendsWithBlankPadding(AuxSendsParams& auxSends, size_t newS
     }
 }
 
+//! NOTE: fxChain can (and, once any slot's params round-trip through the engine, normally
+//! does) contain blank/padding entries alongside real ones - the chain's own highest key can
+//! itself be a blank slot. Callers that need "how many slots are actually required by real
+//! content" must look at the highest VALID entry, not fxChain.size() or its highest key.
+static size_t requiredOutputResourceItemCount(const audio::AudioFxChain& fxChain)
+{
+    for (auto it = fxChain.crbegin(); it != fxChain.crend(); ++it) {
+        if (it->second.isValid()) {
+            return static_cast<size_t>(it->first) + 1;
+        }
+    }
+
+    return 0;
+}
+
 MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, audio::TrackId trackId)
     : QObject(parent), muse::Contextable(muse::iocCtxForQmlObject(this)),
     m_type(type),
@@ -287,7 +302,7 @@ void MixerChannelItem::setPanelSection(muse::ui::INavigationSection* section)
 
 void MixerChannelItem::setOutputResourceItemCount(size_t count)
 {
-    IF_ASSERT_FAILED(count >= m_outParams.fxChain.size()) {
+    IF_ASSERT_FAILED(count >= requiredOutputResourceItemCount(m_outParams.fxChain)) {
         return;
     }
 
