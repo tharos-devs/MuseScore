@@ -125,6 +125,14 @@ protected:
     //! see the .cpp for why the base class implementation must not be allowed to touch them
     void onCommandStateChanged(const muse::rcommand::Command& command, const muse::rcommand::CommandState& state) override;
 
+#ifdef MUSE_MODULE_ACTIONS_SUPPORT
+    //! NOTE: a second, independent generic reactive path (legacy UiAction-based, parallel to
+    //! onCommandStateChanged() above) that MenuItem::actionCode() also exposes these items to
+    //! (it just returns the item's raw command intent string) - must be filtered the same way,
+    //! for the same reason. See the .cpp for the full explanation.
+    void onActionsStateChanges(const muse::actions::ActionCodeList& codes) override;
+#endif
+
 private:
     bool isSectionVisible(MixerSectionType sectionType) const;
 

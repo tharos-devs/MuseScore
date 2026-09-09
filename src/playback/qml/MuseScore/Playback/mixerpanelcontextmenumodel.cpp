@@ -248,6 +248,37 @@ void MixerPanelContextMenuModel::onCommandStateChanged(const muse::rcommand::Com
     AbstractMenuModel::onCommandStateChanged(command, state);
 }
 
+#ifdef MUSE_MODULE_ACTIONS_SUPPORT
+void MixerPanelContextMenuModel::onActionsStateChanges(const muse::actions::ActionCodeList& codes)
+{
+    //! NOTE: a second, independent generic reactive path, parallel to onCommandStateChanged()
+    //! above and just as capable of stomping these items' checked state - MenuItem::actionCode()
+    //! (used by AbstractMenuModel::updateState()'s ActionCodeList overload to match items) just
+    //! returns the item's raw command-query intent string verbatim (see MenuItem::setActionCode()/
+    //! actionCode()), so it's exposed under this mechanism too even though these items were built
+    //! as commands, never as actual UiActions. Confirmed via LOGD tracing: MenuItem::setState()
+    //! (the setter this path calls) was flipping the "Aux channels" item's checked to false with
+    //! neither onCommandStateChanged() nor a real user toggle involved.
+    ActionCodeList filtered;
+    filtered.reserve(codes.size());
+
+    const std::string mixerSectionPrefix = TOGGLE_MIXER_SECTION_COMMAND.toString();
+    const std::string auxChannelsCode = TOGGLE_AUX_CHANNELS_COMMAND.toString();
+
+    for (const ActionCode& code : codes) {
+        if (code == auxChannelsCode || code.rfind(mixerSectionPrefix, 0) == 0) {
+            continue;
+        }
+        filtered.push_back(code);
+    }
+
+    if (!filtered.empty()) {
+        AbstractMenuModel::onActionsStateChanges(filtered);
+    }
+}
+
+#endif
+
 void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionType sectionType)
 {
     switch (sectionType) {
