@@ -51,7 +51,12 @@ MixerPanelSection {
             id: repeater
             anchors.horizontalCenter: parent.horizontalCenter
 
-            model: content.channelItem.auxSendItemList
+            //! NOTE: an Aux/Group bus channel's own outgoing aux-send slots are configurable
+            //! in the UI but never actually routed by the engine (Mixer::process() only
+            //! consults aux sends for regular instrument tracks) - hide them here instead of
+            //! showing a control that silently does nothing. The column stays present (with
+            //! no items) so this channel's strip keeps the same width as every other section.
+            model: content.channelItem.type === MixerChannelItem.Aux ? [] : content.channelItem.auxSendItemModel
 
             delegate: AuxSendControl {
                 id: auxSendControl
@@ -59,12 +64,9 @@ MixerPanelSection {
                 required property AuxSendItem modelData
                 required property int index
 
-                //! NOTE: reference the Column by its stable id, not `parent` - unlike the
-                //! FX section's delegate (which already does this), this one used
-                //! `parent.horizontalCenter`, which can transiently be null while the
-                //! Repeater destroys/recreates delegates (e.g. auxSendItemListChanged
-                //! firing for other channels while a new bus channel is being added),
-                //! causing "Cannot read property 'horizontalCenter' of null"
+                //! NOTE: reference the Column by its stable id, not `parent` - `parent` can
+                //! transiently be null while a delegate is being (re)parented, so anchor off
+                //! something that's never itself torn down
                 anchors.horizontalCenter: content.horizontalCenter
 
                 auxSendItemModel: modelData

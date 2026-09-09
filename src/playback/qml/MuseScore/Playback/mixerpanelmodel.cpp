@@ -128,6 +128,47 @@ void MixerPanelModel::renameAuxChannel(MixerChannelItem* channelItem, const QStr
     }
 }
 
+void MixerPanelModel::deleteAuxChannel(MixerChannelItem* channelItem)
+{
+    IF_ASSERT_FAILED(channelItem && channelItem->type() == MixerChannelItem::Type::Aux) {
+        return;
+    }
+
+    //! NOTE: the Reverb bus isn't removable - see IPlaybackController::removeAuxBus
+    if (channelItem->isReverbBus()) {
+        return;
+    }
+
+    aux_channel_idx_t index = channelItem->auxBusIndex();
+
+    //! NOTE: must run before removeAuxBus() below - once the bus is gone there is no way
+    //! to tell which other tracks' aux-send slots used to target it
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        if (item != channelItem) {
+            item->clearAuxSendsTargeting(index);
+        }
+    }
+
+    //! NOTE: the channel item itself is removed from m_mixerChannelList via the
+    //! trackRemoved() signal this triggers (see init()), not here
+    controller()->removeAuxBus(index);
+}
+
+bool MixerPanelModel::canAddAuxBus() const
+{
+    return controller()->canAddAuxBus();
+}
+
+void MixerPanelModel::addFxChannel()
+{
+    controller()->addNewAuxBus();
+}
+
+void MixerPanelModel::addGroupChannel()
+{
+    controller()->addNewGroupBus();
+}
+
 int MixerPanelModel::rowCount(const QModelIndex&) const
 {
     return m_mixerChannelList.count();
@@ -188,18 +229,9 @@ void MixerPanelModel::reloadItems()
     addInstrumentTrack(notationPlayback()->metronomeTrackId());
 
     if (configuration()->areAuxChannelsVisible()) {
-        //! NOTE: FX-type buses are grouped together, followed by all Group-type buses,
-        //! rather than interleaved in raw index/creation order - see resolveAuxInsertIndex()
         const auto& auxTrackIdMap = controller()->auxTrackIdMap();
-        for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
-            if (!controller()->isAuxBusGroup(it->first)) {
-                m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
-            }
-        }
-        for (auto it = auxTrackIdMap.cbegin(); it != auxTrackIdMap.cend(); ++it) {
-            if (controller()->isAuxBusGroup(it->first)) {
-                m_mixerChannelList.push_back(buildAuxChannelItem(it->first, it->second));
-            }
+        for (aux_channel_idx_t index : sortedAuxIndices()) {
+            m_mixerChannelList.push_back(buildAuxChannelItem(index, auxTrackIdMap.at(index)));
         }
     }
 
@@ -238,7 +270,7 @@ void MixerPanelModel::onTrackAdded(const TrackId& trackId)
     if (auxIt != auxTracks.end()) {
         if (configuration()->areAuxChannelsVisible()) {
             bool isGroupBus = controller()->isAuxBusGroup(auxIt->first);
-            addItem(buildAuxChannelItem(auxIt->first, trackId), resolveAuxInsertIndex(isGroupBus));
+            addItem(buildAuxChannelItem(auxIt->first, trackId), resolveAuxInsertIndex(auxIt->first, isGroupBus));
         }
     }
 }
@@ -293,6 +325,7 @@ void MixerPanelModel::removeItem(const TrackId trackId)
     endRemoveRows();
 
     updateOutputResourceItemCount();
+    updateAuxSendItemCount();
 
     emit rowCountChanged();
 }
@@ -341,6 +374,28 @@ void MixerPanelModel::setupConnections()
         }
     });
 
+    //! NOTE: refreshes a channel item's LIVE effective mute/forceMute (e.g. every sibling
+    //! that becomes/stops being force-muted as a side effect of some OTHER track's solo
+    //! changing) - see IPlaybackController::trackMuteStateChanged()'s doc comment
+    controller()->trackMuteStateChanged().onReceive(
+        this, [this](const engraving::InstrumentTrackId& instrumentTrackId, bool muted, bool forceMute) {
+        TrackId trackId = muse::value(controller()->instrumentTrackIdMap(), instrumentTrackId);
+
+        if (MixerChannelItem* item = findChannelItem(trackId)) {
+            item->loadMuteForceMuteState(muted, forceMute);
+        }
+    });
+
+    controller()->auxMuteStateChanged().onReceive(
+        this, [this](aux_channel_idx_t index, bool muted, bool forceMute) {
+        const IPlaybackController::AuxTrackIdMap& auxTrackIdMap = controller()->auxTrackIdMap();
+        TrackId trackId = muse::value(auxTrackIdMap, index);
+
+        if (MixerChannelItem* item = findChannelItem(trackId)) {
+            item->loadMuteForceMuteState(muted, forceMute);
+        }
+    });
+
     playback()->sourceParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioSourceParams& params) {
         if (MixerChannelItem* item = findChannelItem(trackId)) {
             item->loadInputParams(params);
@@ -367,15 +422,11 @@ void MixerPanelModel::setupConnections()
         const auto& auxMap = controller()->auxTrackIdMap();
 
         if (visible) {
-            //! NOTE: same FX-then-Group ordering as reloadItems() - see resolveAuxInsertIndex()
-            for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
-                if (!controller()->isAuxBusGroup(it->first) && !findChannelItem(it->second)) {
-                    addItem(buildAuxChannelItem(it->first, it->second), masterChannelIndex());
-                }
-            }
-            for (auto it = auxMap.cbegin(); it != auxMap.cend(); ++it) {
-                if (controller()->isAuxBusGroup(it->first) && !findChannelItem(it->second)) {
-                    addItem(buildAuxChannelItem(it->first, it->second), masterChannelIndex());
+            //! NOTE: same FX-then-Group ordering as reloadItems() - see sortedAuxIndices()
+            for (aux_channel_idx_t index : sortedAuxIndices()) {
+                TrackId trackId = auxMap.at(index);
+                if (!findChannelItem(trackId)) {
+                    addItem(buildAuxChannelItem(index, trackId), masterChannelIndex());
                 }
             }
         } else {
@@ -492,14 +543,54 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
     return INVALID_INDEX;
 }
 
-int MixerPanelModel::resolveAuxInsertIndex(bool isGroupBus) const
+std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 {
-    //! NOTE: FX-type aux buses are grouped together, followed by all Group-type buses,
-    //! then the master channel - a new Group bus always goes right before master, a new
-    //! FX bus goes right before the first existing Group bus (or before master if there
-    //! isn't one yet). Mirrors the two-pass ordering used in reloadItems() and the
-    //! areAuxChannelsVisibleChanged handler in setupConnections().
+    //! NOTE: single source of truth for "FX-type buses first (ascending index), then
+    //! Group-type buses (ascending index)" - shared by reloadItems() and the
+    //! areAuxChannelsVisibleChanged handler in setupConnections(), which both need to
+    //! (re)build the aux section of the channel list in this same order. Must stay
+    //! consistent with resolveAuxInsertIndex() below, which resolves the equivalent
+    //! position for a single newly-added bus rather than the whole list at once.
+    std::vector<aux_channel_idx_t> indices;
+    const auto& auxTrackIdMap = controller()->auxTrackIdMap();
+    indices.reserve(auxTrackIdMap.size());
+
+    for (const auto& pair : auxTrackIdMap) {
+        if (!controller()->isAuxBusGroup(pair.first)) {
+            indices.push_back(pair.first);
+        }
+    }
+    for (const auto& pair : auxTrackIdMap) {
+        if (controller()->isAuxBusGroup(pair.first)) {
+            indices.push_back(pair.first);
+        }
+    }
+
+    return indices;
+}
+
+int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
+{
+    //! NOTE: FX-type aux buses are grouped together (ascending by index), followed by all
+    //! Group-type buses (also ascending by index), then the master channel. Mirrors
+    //! sortedAuxIndices()'s ordering, resolving the equivalent insert position for a single
+    //! newly-added bus rather than the whole list at once - without the index
+    //! comparison below, a bus recreated at a lower, freed index (e.g. "FX3" after deleting
+    //! the old FX3 and re-adding) would always land after every existing same-type sibling
+    //! instead of in its correct sorted position, making the on-screen order depend on
+    //! WHETHER a bus arrived via this incremental path or a full reload, rather than being a
+    //! stable function of the current bus set.
     if (isGroupBus) {
+        for (int i = 0; i < m_mixerChannelList.size(); ++i) {
+            const MixerChannelItem* item = m_mixerChannelList[i];
+            if (item->type() == MixerChannelItem::Type::Master) {
+                return i;
+            }
+            if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus() && item->auxBusIndex() > index) {
+                return i;
+            }
+        }
+
         return masterChannelIndex();
     }
 
@@ -507,6 +598,9 @@ int MixerPanelModel::resolveAuxInsertIndex(bool isGroupBus) const
         const MixerChannelItem* item = m_mixerChannelList[i];
         if (item->type() == MixerChannelItem::Type::Master
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
+            return i;
+        }
+        if (item->type() == MixerChannelItem::Type::Aux && item->auxBusIndex() > index) {
             return i;
         }
     }
@@ -551,6 +645,29 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
             outParams.fxChain = params.fxChain;
             outParams.auxSends = params.auxSends;
             outParams.setControl(params.control);
+
+            //! NOTE: unlike muted (set above via setControl(), which reflects the engine's
+            //! own control params - already correctly pushed by
+            //! PlaybackController::updateSoloMuteStates() before this resolves), solo has no
+            //! engine-side representation at all (see ControlParams - no solo field) and
+            //! IProjectAudioSettings::trackOutputParams() never tracks it either, so
+            //! outParams.solo would otherwise always be left at its default false here. Its
+            //! one real source of truth is INotationSoloMuteState - without this, every
+            //! Mixer-panel rebuild (e.g. right after reopening a saved project) would
+            //! silently clobber the correctly-restored Solo button back to unchecked.
+            outParams.solo = controller()->trackSoloMuteState(instrumentTrackId).solo;
+
+            //! NOTE: forceMute isn't tracked by IProjectAudioSettings either (it's a purely
+            //! live, computed value - see updateSoloMuteStates()), so it would otherwise
+            //! always be left at its default false here too. Without this, right after
+            //! reopening a project with another track soloed, this track's Mute button would
+            //! show checked (muted=true, correctly reflecting the engine's already-applied
+            //! force-mute via setControl() above) but ENABLED instead of disabled - looking
+            //! and behaving like a real manual mute the user must click off themselves,
+            //! instead of the intended "greyed out because something else is soloed" look
+            //! that clears itself once the solo is lifted (see MixerMuteAndSoloSection.qml).
+            outParams.forceMute = controller()->isTrackForceMuted(instrumentTrackId);
+
             loadOutputParams(item, outParams);
         }
     })
@@ -645,6 +762,21 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
     });
 
     AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
+
+    //! NOTE: auxOutputParams() never tracks solo/muted/forceMute - they're deliberately
+    //! excluded from persistence (see updateAuxMuteStates()'s own comment: "muted" isn't
+    //! even written to the project file). Without seeding them here from their real sources,
+    //! this loadOutputParams() call would immediately clobber the correct solo/mute state
+    //! already applied a few lines up via loadSoloMuteState() back to its default false -
+    //! e.g. a Group bus that was actually soloed would show its Solo button unchecked right
+    //! after the Mixer panel is (re)built (mirrors the analogous fix in
+    //! buildInstrumentChannelItem() for instrument tracks' solo/forceMute).
+    const notation::INotationSoloMuteState::SoloMuteState& soloMuteState = audioSettings()->auxSoloMuteState(index);
+    bool forceMute = controller()->isAuxForceMuted(index);
+    outParams.solo = soloMuteState.solo;
+    outParams.muted = soloMuteState.mute || forceMute;
+    outParams.forceMute = forceMute;
+
     loadOutputParams(item, outParams);
 
     playback()->signalChanges(trackId)

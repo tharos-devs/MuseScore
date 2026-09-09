@@ -89,8 +89,13 @@ public:
 
     using AuxTrackIdMap = std::map<muse::audio::aux_channel_idx_t, muse::audio::TrackId>;
     virtual const AuxTrackIdMap& auxTrackIdMap() const = 0;
+    //! NOTE: "Add Aux bus"/"Add Group bus" share the same underlying MAX_AUX_CHANNEL_NUM
+    //! pool - the single source of truth for whether either kind can still be added
+    virtual bool canAddAuxBus() const = 0;
     virtual void addNewAuxBus() = 0;
     virtual void addNewGroupBus() = 0;
+    //! NOTE: no-op for the Reverb bus (REVERB_CHANNEL_IDX) or an unknown index
+    virtual void removeAuxBus(muse::audio::aux_channel_idx_t index) = 0;
 
     virtual muse::async::Channel<muse::audio::TrackId> trackAdded() const = 0;
     virtual muse::async::Channel<muse::audio::TrackId> trackRemoved() const = 0;
@@ -108,6 +113,24 @@ public:
 
     virtual const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const = 0;
     virtual void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) = 0;
+
+    //! NOTE: whether this track is CURRENTLY muted only because some other track/group bus
+    //! is soloed (as opposed to the user's own manual mute, see trackSoloMuteState() above) -
+    //! reflects the last value actually computed/sent by updateSoloMuteStates(), so it's only
+    //! meaningful once that track has been added (false beforehand)
+    virtual bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const = 0;
+    //! NOTE: same as isTrackForceMuted() above, but for an Aux/Group bus's own channel
+    virtual bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const = 0;
+
+    //! NOTE: fires whenever updateSoloMuteStates()/updateAuxMuteStates() actually resends new
+    //! (muted, forceMute) control params to the engine for a track/bus - including for a
+    //! track/bus whose OWN solo/mute button was NOT the one just toggled (e.g. every sibling
+    //! that becomes force-muted, or un-force-muted, as a side effect of some OTHER track's
+    //! solo changing). Without this, only the directly-toggled item's own Mixer UI state ever
+    //! refreshes; every other affected channel item's Mute button/meter would stay stuck
+    //! showing whatever it was at construction time.
+    virtual muse::async::Channel<engraving::InstrumentTrackId, bool /*muted*/, bool /*forceMute*/> trackMuteStateChanged() const = 0;
+    virtual muse::async::Channel<muse::audio::aux_channel_idx_t, bool /*muted*/, bool /*forceMute*/> auxMuteStateChanged() const = 0;
 
     struct PlayParams {
         PlayParams() {}
