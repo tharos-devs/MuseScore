@@ -2276,6 +2276,9 @@ class Ornament : public EngravingItem
     Q_PROPERTY(bool hasIntervalBelow READ hasIntervalBelow)
     /// Whether this ornament displays a cue note.
     Q_PROPERTY(bool showCueNote READ showCueNote)
+    /// The chord containing this ornament's displayed cue note, if one exists.
+    /// \since MuseScore 5.0
+    Q_PROPERTY(apiv1::Chord * cueNoteChord READ cueNoteChord)
     /// The accidental for the interval above the attached note.
     Q_PROPERTY(apiv1::EngravingItem * accidentalAbove READ accidentalAbove)
     /// The accidental for the interval below the attached note.
@@ -2292,6 +2295,7 @@ public:
     bool hasIntervalAbove() const { return ornament()->hasIntervalAbove(); }
     bool hasIntervalBelow() const { return ornament()->hasIntervalBelow(); }
     bool showCueNote() { return ornament()->showCueNote(); }
+    Chord* cueNoteChord() const { return wrap<Chord>(ornament()->cueNoteChord()); }
     EngravingItem* accidentalAbove() const { return wrap<EngravingItem>(ornament()->accidentalAbove()); }
     EngravingItem* accidentalBelow() const { return wrap<EngravingItem>(ornament()->accidentalBelow()); }
     /// \endcond
