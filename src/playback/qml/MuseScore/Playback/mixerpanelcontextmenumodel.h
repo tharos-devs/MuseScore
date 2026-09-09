@@ -120,6 +120,11 @@ signals:
     //! business reaching into -- QML handles it on receiving this.
     void toggleFullScreenRequested();
 
+protected:
+    //! NOTE: overridden to ignore TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_AUX_CHANNELS_COMMAND -
+    //! see the .cpp for why the base class implementation must not be allowed to touch them
+    void onCommandStateChanged(const muse::rcommand::Command& command, const muse::rcommand::CommandState& state) override;
+
 private:
     bool isSectionVisible(MixerSectionType sectionType) const;
 

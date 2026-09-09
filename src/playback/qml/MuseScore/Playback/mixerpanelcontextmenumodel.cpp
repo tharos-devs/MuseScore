@@ -228,6 +228,26 @@ void MixerPanelContextMenuModel::setViewMenuItemChecked(const muse::rcommand::Co
     }
 }
 
+void MixerPanelContextMenuModel::onCommandStateChanged(const muse::rcommand::Command& command, const muse::rcommand::CommandState& state)
+{
+    //! NOTE: TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_AUX_CHANNELS_COMMAND back several
+    //! independent per-section View-menu items (each carrying a different query param,
+    //! e.g. "?section=gain"), but MenuItem::command() (via Uri) strips query params, so
+    //! every one of those items shares the SAME bare command identity here and would
+    //! otherwise all be overwritten with whatever single CommandState the base class last
+    //! saw for that command (playbackcommandsstate.cpp has no case for either command, so
+    //! it defaults to checked=false - permanently stomping every item's real, correctly
+    //! per-section checked state set by buildSectionVisibleItem()/setViewMenuItemChecked()).
+    //! Skip the base class handling entirely for these two; this model already keeps them
+    //! in sync itself via configuration()->isMixerSectionVisibleChanged()/
+    //! areAuxChannelsVisibleChanged() in load(), matched by full query (not just command()).
+    if (command == TOGGLE_MIXER_SECTION_COMMAND || command == TOGGLE_AUX_CHANNELS_COMMAND) {
+        return;
+    }
+
+    AbstractMenuModel::onCommandStateChanged(command, state);
+}
+
 void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionType sectionType)
 {
     switch (sectionType) {
