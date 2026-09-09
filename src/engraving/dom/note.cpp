@@ -2422,6 +2422,15 @@ void Note::reset()
 
 float Note::userVelocityFraction() const
 {
+    //! NOTE: only VeloType::USER_VAL stores an absolute 0-127 velocity that can be expressed
+    //! as a standalone fraction. VeloType::OFFSET_VAL stores a percentage OFFSET (see
+    //! customizeVelocity()) that's only meaningful relative to the dynamics-driven base
+    //! velocity at playback time - dividing it by 127 as if it were absolute would send a
+    //! nonsensical override (e.g. a modest +20% offset misread as ~16% of max velocity).
+    if (m_veloType != VeloType::USER_VAL) {
+        return 0.f;
+    }
+
     return m_userVelocity / 127.f;
 }
 
