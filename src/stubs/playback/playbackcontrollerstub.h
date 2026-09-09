@@ -64,8 +64,10 @@ public:
 
     const InstrumentTrackIdMap& instrumentTrackIdMap() const override;
     const AuxTrackIdMap& auxTrackIdMap() const override;
+    bool canAddAuxBus() const override;
     void addNewAuxBus() override;
     void addNewGroupBus() override;
+    void removeAuxBus(muse::audio::aux_channel_idx_t index) override;
 
     muse::async::Channel<muse::audio::TrackId> trackAdded() const override;
     muse::async::Channel<muse::audio::TrackId> trackRemoved() const override;
@@ -81,6 +83,11 @@ public:
 
     const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
+    bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
+    bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
+
+    muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
+    muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
 
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;

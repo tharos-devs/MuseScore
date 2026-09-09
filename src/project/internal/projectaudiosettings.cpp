@@ -116,6 +116,21 @@ std::vector<aux_channel_idx_t> ProjectAudioSettings::auxOutputParamsIndices() co
     return indices;
 }
 
+void ProjectAudioSettings::removeAuxOutputParams(aux_channel_idx_t index)
+{
+    m_auxOutputParams.erase(index);
+    m_auxSoloMuteStatesMap.erase(index);
+    m_auxIsGroupBusMap.erase(index);
+    m_auxNamesMap.erase(index);
+    //! NOTE: erasing this (rather than leaving it) is what makes a NEW bus later created at
+    //! this same recycled index correctly take a fresh number via takeNextAuxDisplayNumber()
+    //! instead of inheriting this deleted bus's old one - the monotonic counters themselves
+    //! are deliberately never decremented, so that fresh number is still never reused
+    m_auxDisplayNumberMap.erase(index);
+
+    m_settingsChanged.notify();
+}
+
 const TrackInputParamsMap& ProjectAudioSettings::allTrackInputParams() const
 {
     return m_trackInputParamsMap;
@@ -272,6 +287,33 @@ void ProjectAudioSettings::setAuxName(aux_channel_idx_t index, const String& nam
     m_settingsChanged.notify();
 }
 
+aux_channel_idx_t ProjectAudioSettings::auxDisplayNumber(aux_channel_idx_t index) const
+{
+    auto it = m_auxDisplayNumberMap.find(index);
+    return it != m_auxDisplayNumberMap.end() ? it->second : 0;
+}
+
+void ProjectAudioSettings::setAuxDisplayNumber(aux_channel_idx_t index, aux_channel_idx_t number)
+{
+    auto it = m_auxDisplayNumberMap.find(index);
+    if (it != m_auxDisplayNumberMap.end() && it->second == number) {
+        return;
+    }
+
+    m_auxDisplayNumberMap.insert_or_assign(index, number);
+    m_settingsChanged.notify();
+}
+
+aux_channel_idx_t ProjectAudioSettings::takeNextAuxDisplayNumber(bool isGroupBus)
+{
+    aux_channel_idx_t& counter = isGroupBus ? m_nextGroupDisplayNumber : m_nextFxDisplayNumber;
+    aux_channel_idx_t number = counter++;
+
+    m_settingsChanged.notify();
+
+    return number;
+}
+
 void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
 {
     auto inSearch = m_trackInputParamsMap.find(partId);
@@ -354,7 +396,15 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         if (!name.isEmpty()) {
             m_auxNamesMap.emplace(index, String::fromQString(name));
         }
+
+        int displayNumber = auxObject.value("displayNumber").toInt(0);
+        if (displayNumber > 0) {
+            m_auxDisplayNumberMap.emplace(index, static_cast<aux_channel_idx_t>(displayNumber));
+        }
     }
+
+    m_nextFxDisplayNumber = static_cast<aux_channel_idx_t>(rootObj.value("nextFxDisplayNumber").toInt(1));
+    m_nextGroupDisplayNumber = static_cast<aux_channel_idx_t>(rootObj.value("nextGroupDisplayNumber").toInt(1));
 
     QJsonArray tracksArray = rootObj.value("tracks").toArray();
 
@@ -404,6 +454,8 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
 
     rootObj["tracks"] = tracksArray;
     rootObj["activeSoundProfile"] = m_activeSoundProfileName.toQString();
+    rootObj["nextFxDisplayNumber"] = static_cast<int>(m_nextFxDisplayNumber);
+    rootObj["nextGroupDisplayNumber"] = static_cast<int>(m_nextGroupDisplayNumber);
 
     QByteArray json = QJsonDocument(rootObj).toJson();
     writer.writeAudioSettingsJsonFile(ByteArray::fromQByteArrayNoCopy(json));
@@ -692,6 +744,11 @@ QJsonObject ProjectAudioSettings::buildAuxObject(aux_channel_idx_t index, const 
     auto nameSearch = m_auxNamesMap.find(index);
     if (nameSearch != m_auxNamesMap.end()) {
         result.insert("name", nameSearch->second.toQString());
+    }
+
+    auto displayNumberSearch = m_auxDisplayNumberMap.find(index);
+    if (displayNumberSearch != m_auxDisplayNumberMap.end()) {
+        result.insert("displayNumber", static_cast<int>(displayNumberSearch->second));
     }
 
     return result;

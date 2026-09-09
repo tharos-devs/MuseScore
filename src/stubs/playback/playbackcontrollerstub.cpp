@@ -160,11 +160,20 @@ const IPlaybackController::AuxTrackIdMap& PlaybackControllerStub::auxTrackIdMap(
     return m;
 }
 
+bool PlaybackControllerStub::canAddAuxBus() const
+{
+    return false;
+}
+
 void PlaybackControllerStub::addNewAuxBus()
 {
 }
 
 void PlaybackControllerStub::addNewGroupBus()
+{
+}
+
+void PlaybackControllerStub::removeAuxBus(muse::audio::aux_channel_idx_t)
 {
 }
 
@@ -213,6 +222,26 @@ const PlaybackControllerStub::SoloMuteState& PlaybackControllerStub::trackSoloMu
 
 void PlaybackControllerStub::setTrackSoloMuteState(const engraving::InstrumentTrackId&, const SoloMuteState&)
 {
+}
+
+bool PlaybackControllerStub::isTrackForceMuted(const engraving::InstrumentTrackId&) const
+{
+    return false;
+}
+
+bool PlaybackControllerStub::isAuxForceMuted(muse::audio::aux_channel_idx_t) const
+{
+    return false;
+}
+
+muse::async::Channel<engraving::InstrumentTrackId, bool, bool> PlaybackControllerStub::trackMuteStateChanged() const
+{
+    return {};
+}
+
+muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> PlaybackControllerStub::auxMuteStateChanged() const
+{
+    return {};
 }
 
 void PlaybackControllerStub::playElements(const std::vector<const engraving::EngravingItem*>&, const PlayParams&, bool)

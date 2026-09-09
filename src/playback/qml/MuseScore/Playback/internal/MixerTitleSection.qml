@@ -69,12 +69,18 @@ MixerPanelSection {
             return 0.5
         }
 
-        //! NOTE: per-channel-type context menu items - currently only Aux has any (rename);
-        //! this is the natural place to add instrument "Edit color…"/"Reset color" later
+        //! NOTE: per-channel-type context menu items - currently only Aux has any (rename,
+        //! add FX/Group channel, delete channel); this is the natural place to add
+        //! instrument "Edit color…"/"Reset color" later
         function buildContextMenuItems() {
             if (content.isAux) {
                 return [
-                    { id: "renameAux", title: qsTrc("playback", "Rename channel") }
+                    { id: "renameAux", title: qsTrc("playback", "Rename channel") },
+                    {},
+                    { id: "addFxChannel", title: qsTrc("playback", "Add FX channel"), enabled: root.model.canAddAuxBus() },
+                    { id: "addGroupChannel", title: qsTrc("playback", "Add Group channel"), enabled: root.model.canAddAuxBus() },
+                    {},
+                    { id: "deleteChannel", title: qsTrc("playback", "Delete channel"), enabled: !content.channelItem.isReverbBus }
                 ]
             }
 
@@ -196,6 +202,12 @@ MixerPanelSection {
             onHandleMenuItem: function(itemId) {
                 if (itemId === "renameAux") {
                     content.startEditingName()
+                } else if (itemId === "addFxChannel") {
+                    root.model.addFxChannel()
+                } else if (itemId === "addGroupChannel") {
+                    root.model.addGroupChannel()
+                } else if (itemId === "deleteChannel") {
+                    root.model.deleteAuxChannel(content.channelItem)
                 }
             }
         }
