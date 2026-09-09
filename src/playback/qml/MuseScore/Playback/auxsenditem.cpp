@@ -127,7 +127,31 @@ void AuxSendItem::requestAvailableResources()
     if (!data.availableBuses.empty()) {
         result << buildSeparator();
 
+        //! NOTE: FX-type buses are listed together, followed by all Group-type buses,
+        //! rather than interleaved in raw index order - mirrors the mixer channel strip
+        //! ordering in MixerPanelModel::resolveAuxInsertIndex()
+        bool hasFxBus = false;
+        bool hasGroupBus = false;
         for (const BusOption& option : data.availableBuses) {
+            (option.isGroupBus ? hasGroupBus : hasFxBus) = true;
+        }
+
+        for (const BusOption& option : data.availableBuses) {
+            if (option.isGroupBus) {
+                continue;
+            }
+            bool checked = hasTarget && option.index == m_auxIndex;
+            result << buildMenuItem(QString::number(option.index), option.title, checked);
+        }
+
+        if (hasFxBus && hasGroupBus) {
+            result << buildSeparator();
+        }
+
+        for (const BusOption& option : data.availableBuses) {
+            if (!option.isGroupBus) {
+                continue;
+            }
             bool checked = hasTarget && option.index == m_auxIndex;
             result << buildMenuItem(QString::number(option.index), option.title, checked);
         }
@@ -141,11 +165,11 @@ void AuxSendItem::requestAvailableResources()
         }
 
         if (data.canAddBus) {
-            result << buildMenuItem(ADD_AUX_BUS_ID, muse::qtrc("playback", "Add Aux channel"), false);
+            result << buildMenuItem(ADD_AUX_BUS_ID, muse::qtrc("playback", "Add FX channel"), false);
         }
 
         if (data.canAddGroupBus) {
-            result << buildMenuItem(ADD_GROUP_BUS_ID, muse::qtrc("playback", "Add Bus channel"), false);
+            result << buildMenuItem(ADD_GROUP_BUS_ID, muse::qtrc("playback", "Add Group channel"), false);
         }
     }
 
