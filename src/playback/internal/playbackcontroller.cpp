@@ -1908,6 +1908,17 @@ void PlaybackController::setupTracks()
         m_loadingProgress.progress(current, trackCount, title);
 
         if (m_loadingTrackCount == 0) {
+            //! NOTE: each individual track/aux-bus's own onResolve callback already calls
+            //! updateSoloMuteStates(), but during initial project load those resolve in
+            //! whatever order their independent async engine round-trips happen to complete -
+            //! a call triggered by an early one can run before a later track/bus has been
+            //! inserted into m_auxTrackIdMap (for a Group bus) or before its own persisted
+            //! aux-send settings have been read, computing e.g. a wrong force-mute for a Group
+            //! bus that a soloed track sends to, with nothing afterwards to correct it. Doing
+            //! one final, authoritative pass here - once every track/bus is guaranteed loaded -
+            //! removes the dependency on that ordering entirely
+            updateSoloMuteStates();
+
             m_loadingProgress.finish(muse::make_ok());
             m_isPlayAllowedChanged.send(isPlayAllowed());
         }
