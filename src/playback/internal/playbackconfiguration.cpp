@@ -382,18 +382,27 @@ gain_t PlaybackConfiguration::defaultAuxSendValue(aux_channel_idx_t index, Audio
 {
     TRACEFUNC;
 
-    constexpr gain_t DEFAULT_VALUE = 0.30f;
+    constexpr gain_t DEFAULT_REVERB_VALUE = 0.30f;
+
+    //! NOTE: this default only makes sense for the built-in Reverb send - it's a send/return
+    //! effect meant to blend alongside the dry signal, so a non-zero starting point is a
+    //! reasonable convenience. Any OTHER bus (another Aux, or a Group bus) has no such implicit
+    //! "blend a bit of this in" intent: a Group bus is meant to fully capture what's routed to
+    //! it, and a plain Aux bus with nothing configured on it yet has no processing to blend in
+    //! at all - defaulting either to 30% silently added a duplicate, unprocessed copy of the dry
+    //! signal into the mix for every track ever assigned a send to one, well above unity gain.
+    if (index != REVERB_CHANNEL_IDX) {
+        return 0.f;
+    }
 
     if (sourceType == AudioSourceType::MuseSampler) {
-        if (index == REVERB_CHANNEL_IDX) {
-            float lvl = musesamplerInfo()->defaultReverbLevel(instrumentSoundId);
-            return muse::RealIsNull(lvl) ? DEFAULT_VALUE : lvl;
-        }
+        float lvl = musesamplerInfo()->defaultReverbLevel(instrumentSoundId);
+        return muse::RealIsNull(lvl) ? DEFAULT_REVERB_VALUE : lvl;
     } else if (sourceType == AudioSourceType::Vsti) {
         return 0.f;
     }
 
-    return DEFAULT_VALUE;
+    return DEFAULT_REVERB_VALUE;
 }
 
 bool PlaybackConfiguration::muteHiddenInstruments() const
