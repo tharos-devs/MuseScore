@@ -1405,6 +1405,7 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
     trackParams.auxSends = originParams.auxSends;
     trackParams.control = originParams.control();
     trackParams.isGroupBus = isGroupBus;
+    trackParams.auxChannelIndex = index;
 
     std::string title = resolveAuxTrackTitle(resolveAuxBusDisplayNumber(index), originParams, isGroupBus, false);
 
