@@ -961,6 +961,12 @@ InputResourceItem* MixerChannelItem::buildInputResourceItem()
                 continue;
             }
 
+            //! NOTE: a Group bus send always stays at full signal regardless of instrument
+            //! sound (see reassignAuxSend's doc comment) - nothing to recompute here
+            if (playbackController()->isAuxBusGroup(idx)) {
+                continue;
+            }
+
             const muse::String& soundId = m_inputParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
             gain_t newAudioSignalAmount = configuration()->defaultAuxSendValue(idx, m_inputParams.type(), soundId);
 
@@ -1195,9 +1201,19 @@ void MixerChannelItem::reassignAuxSend(AuxSendItem* item, aux_channel_idx_t newB
         resizeAuxSendsWithBlankPadding(m_outParams.auxSends, newBusIndex + 1);
     }
 
-    AudioSourceType sourceType = m_inputParams.isValid() ? m_inputParams.type() : AudioSourceType::Fluid;
-    const muse::String& instrumentSoundId = m_inputParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
-    gain_t signalAmount = configuration()->defaultAuxSendValue(newBusIndex, sourceType, instrumentSoundId);
+    //! NOTE: a Group bus is a full replacement for the track's direct path, not a blend
+    //! (see IPlaybackController::isAuxBusGroup docs) - its send must always start at full
+    //! signal, unlike a regular Aux/FX send where 0% is the correct silent-until-raised
+    //! default (see PlaybackConfiguration::defaultAuxSendValue). Using that same default
+    //! for a Group bus left the send "active" but at 0% signal, which both Mixer::process()
+    //! and PlaybackController::updateSoloMuteStates() treat as not really routed there -
+    //! the track lost its group-exclusive path with no direct fallback either
+    gain_t signalAmount = 1.f;
+    if (!playbackController()->isAuxBusGroup(newBusIndex)) {
+        AudioSourceType sourceType = m_inputParams.isValid() ? m_inputParams.type() : AudioSourceType::Fluid;
+        const muse::String& instrumentSoundId = m_inputParams.resourceMeta.attributeVal(PLAYBACK_SETUP_DATA_ATTRIBUTE);
+        signalAmount = configuration()->defaultAuxSendValue(newBusIndex, sourceType, instrumentSoundId);
+    }
 
     if (oldIndex != AuxSendItem::NO_BUS && oldIndex < m_outParams.auxSends.size() && oldIndex != newBusIndex) {
         m_outParams.auxSends[oldIndex] = blankAuxSendParams();
