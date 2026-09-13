@@ -655,7 +655,16 @@ void MixerChannelItem::subscribeOnAudioSignalChanges(AudioSignalChanges& audioSi
         //!Note There should be no signal changes when the mixer channel is muted.
         //!     But some audio signal changes still might be "on the way" from the times when the mixer channel wasn't muted
         //!     So that we have to just ignore them
-        if (muted()) {
+        //!
+        //!     The same staleness can survive a full playback Stop: a message queued just
+        //!     before Stop (or from just before this channel got force-muted by a solo
+        //!     elsewhere) can be delivered later - e.g. once the solo/mute state that had
+        //!     been suppressing it changes again - well after playback has actually
+        //!     stopped, making a meter briefly jump as if audio were still flowing. Checking
+        //!     isPlaying() here (MixerPanelModel::setupConnections() only resets meters once,
+        //!     at the moment playback stops - it can't also catch a message that arrives afterwards)
+        //!     closes that gap.
+        if (muted() || !playbackController()->isPlaying()) {
             return;
         }
 

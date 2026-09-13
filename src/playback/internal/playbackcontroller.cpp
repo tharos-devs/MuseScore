@@ -889,6 +889,14 @@ void PlaybackController::onPlaybackStatusChanged()
         bool shouldSendOnScoreChange = playing || muse::contains(onlineSounds, pair.second);
         notationPlayback()->setSendEventsOnScoreChange(pair.first, shouldSendOnScoreChange);
     }
+
+    //! NOTE: this is the only place isPlaying()'s underlying state actually changes, but
+    //! isPlayingChanged() had no emitter at all - nothing ever called .send() on it, so every
+    //! subscriber (e.g. MixerPanelModel's meter reset on stop) was permanently dead code. Most
+    //! noticeable stopping mid-playback: unlike reaching a natural silent ending (where the
+    //! last real signal values already decay to near-silence on their own), an abrupt Stop
+    //! leaves every meter frozen at its last live reading with nothing to reset it
+    m_isPlayingChanged.send(playing);
 }
 
 secs_t PlaybackController::playbackStartSecs() const
