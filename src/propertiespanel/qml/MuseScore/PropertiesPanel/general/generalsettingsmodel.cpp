@@ -122,6 +122,8 @@ void GeneralSettingsModel::onNotationChanged(const PropertyIdSet& changedPropert
 {
     loadProperties(changedPropertyIdSet);
 
+    m_appearanceSettingsModel->onNotationChanged(changedPropertyIdSet, changedStyleIdSet);
+
     // Forwarded here rather than relying on PropertiesPanelListModel to reach these nested models
     // directly - only top-level section models are in its own list (see onCurrentNotationChanged()
     // just below, which forwards for the same reason). Without this, an external score change (e.g.

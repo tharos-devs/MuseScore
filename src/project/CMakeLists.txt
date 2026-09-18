@@ -36,7 +36,6 @@ target_sources(project PRIVATE
     inotationwritersregister.h
     iprojectaudiosettings.h
     iprojectvideosettings.h
-    iprojectfilescontroller.h
     iprojectconfiguration.h
     irecentfilescontroller.h
     imscmetareader.h
@@ -86,10 +85,13 @@ target_sources(project PRIVATE
     internal/exportprojectscenario.h
     iopenprojectscenario.h
     isaveprojectscenario.h
+    icloseprojectscenario.h
     internal/openprojectscenario.cpp
     internal/openprojectscenario.h
     internal/saveprojectscenario.cpp
     internal/saveprojectscenario.h
+    internal/closeprojectscenario.cpp
+    internal/closeprojectscenario.h
     internal/recentfilescontroller.cpp
     internal/recentfilescontroller.h
     internal/mscmetareader.cpp

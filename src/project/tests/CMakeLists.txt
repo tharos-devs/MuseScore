@@ -21,6 +21,7 @@
 set(MODULE_TEST project_test)
 
 set(MODULE_TEST_SRC
+    ${CMAKE_CURRENT_LIST_DIR}/mocks/commanddispatchermock.h
     ${CMAKE_CURRENT_LIST_DIR}/mocks/exportprojectscenariomock.h
     ${CMAKE_CURRENT_LIST_DIR}/mocks/mscmetareadermock.h
     ${CMAKE_CURRENT_LIST_DIR}/mocks/notationprojectmock.h
@@ -32,10 +33,12 @@ set(MODULE_TEST_SRC
     ${CMAKE_CURRENT_LIST_DIR}/mocks/projectautosavermock.h
     ${CMAKE_CURRENT_LIST_DIR}/mocks/projectcreatormock.h
     ${CMAKE_CURRENT_LIST_DIR}/mocks/saveprojectscenariomock.h
+    ${CMAKE_CURRENT_LIST_DIR}/utils/promisetest.h
     ${CMAKE_CURRENT_LIST_DIR}/mscmetareadertests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/projectvideosettingstest.cpp
     ${CMAKE_CURRENT_LIST_DIR}/openprojectscenariotests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/saveprojectscenariotests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/closeprojectscenariotests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/templatesrepositorytest.cpp
 )
 
