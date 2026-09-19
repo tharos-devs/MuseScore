@@ -81,6 +81,15 @@ Item {
 
     readonly property bool shouldLoadPanel: width > 0 && height > 0
 
+    // NOTE: fired once the asynchronous Loader below has actually finished
+    // instantiating VideoPanel.qml (after that item's own Component.onCompleted
+    // has already run, per Loader's own semantics -- see NotationPage.qml's use
+    // of this for hitPointsPanelBelowTimeline). Reading hitPointsPanelBelowTimeline
+    // any earlier than this (e.g. from this component's own Component.onCompleted)
+    // sees it still at its pre-load default, since videoPanelLoader.item is still
+    // null at that point -- this signal is the first reliable point to read it.
+    signal panelReady()
+
     // NOTE: this does NOT use QWindow.showFullScreen()/showNormal() at all --
     // tried that first, but it turned out unreliable specifically for this
     // window type (Qt::Tool, frameless -- see KDDockWidgets' FloatingWindow
@@ -186,6 +195,7 @@ Item {
 
         onLoaded: {
             root.updateLoadedItem()
+            root.panelReady()
         }
     }
 

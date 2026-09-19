@@ -611,17 +611,23 @@ DockPage {
             //! longer eats into the width budget -- the floor drops to roughly the
             //! preview+transport column's own minimum (VideoPanel.qml's
             //! previewPaneMinWidth) plus the same chrome margin.
-            //! NOTE: this is intent-documenting more than strictly enforced --
-            //! DockBase::resize()'s own axis routing reads location(), which
-            //! isn't updated by drag-and-drop redocking (dropcontroller.cpp never
-            //! calls setLocation()), so a docked panel's minimumWidth isn't
-            //! reliably re-applied by the framework once it changes after the
-            //! panel is already docked to the side. VideoPanel.qml's own
-            //! button-row content degrades gracefully well past this width
-            //! regardless (progressively hiding the zoom cluster, then
-            //! Load/Recent, rather than overlapping), so this floor not being a
-            //! hard wall doesn't cause visible breakage.
-            minimumWidth: videoPanelLoaderInstance.hitPointsPanelBelowTimeline ? 340 : 640
+            //! NOTE: 340 here is the narrower, stacked-layout floor -- the smaller
+            //! of the two possible floors. The wider 640 floor for the non-stacked
+            //! layout can't be bound declaratively at this level -- like
+            //! contextMenuModel below, it depends on videoPanelLoaderInstance's
+            //! lazily-instantiated content, so a binding referencing it here
+            //! silently never fires (same reasoning as the contextMenuModel
+            //! comment below). It's pushed down imperatively instead once that
+            //! content is ready and whenever it changes (see
+            //! onHitPointsPanelBelowTimelineChanged below). Defaulting to the
+            //! *smaller* floor here (rather than 640) matters: applySizeConstraints()
+            //! (dockbase.cpp) applies minimumWidth to the underlying dock widget
+            //! immediately, and Qt/KDDockWidgets forcibly grows a widget to meet a
+            //! minimum that exceeds its current size -- so defaulting to 640 would
+            //! immediately blow up a persisted width narrower than that (e.g. one
+            //! saved under the stacked layout) the instant this panel is restored
+            //! and loaded, well before the real 340 floor gets pushed down.
+            minimumWidth: 340
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
@@ -656,6 +662,20 @@ DockPage {
                 // Component.onCompleted below in this same file).
                 Component.onCompleted: {
                     videoPanel.contextMenuModel = contextMenuModel
+                }
+
+                //! NOTE: hitPointsPanelBelowTimeline is still at its pre-load
+                //! default here (VideoPanel.qml loads asynchronously -- see
+                //! VideoPanelLoader.qml), so the first read of the real value
+                //! happens on panelReady below instead, once it's guaranteed
+                //! settled. This handler covers the value changing again later,
+                //! e.g. the user live-toggling it via the panel's own "..." menu.
+                onHitPointsPanelBelowTimelineChanged: {
+                    videoPanel.minimumWidth = hitPointsPanelBelowTimeline ? 340 : 640
+                }
+
+                onPanelReady: {
+                    videoPanel.minimumWidth = hitPointsPanelBelowTimeline ? 340 : 640
                 }
 
                 Component.onDestruction: {
