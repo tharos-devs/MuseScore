@@ -36,6 +36,11 @@ Loader {
     property int headerWidth: 98
     property int headerHeight: implicitHeight - spacingAbove - spacingBelow
 
+    //! NOTE: lets a section (e.g. MixerMuteAndSoloSection) replace the plain header label
+    //! with custom content (e.g. global toggle buttons) while every other section keeps
+    //! the default StyledTextLabel below
+    property Component headerComponent: null
+
     property int channelItemWidth: 108
 
     property real spacingAbove: 4
@@ -58,7 +63,7 @@ Loader {
         height: root.spacingAbove + sectionContentList.contentHeight + root.spacingBelow
         spacing: 1 // for separator (will be rendered in MixerPanel.qml)
 
-        StyledTextLabel {
+        Loader {
             visible: root.headerVisible
 
             anchors.top: parent.top
@@ -67,11 +72,22 @@ Loader {
             width: root.headerWidth
             height: root.headerHeight
 
-            leftPadding: 12
-            rightPadding: 12
+            sourceComponent: root.headerComponent ? root.headerComponent : defaultHeaderLabel
+        }
 
-            horizontalAlignment: Qt.AlignRight
-            text: root.headerTitle
+        Component {
+            id: defaultHeaderLabel
+
+            StyledTextLabel {
+                width: root.headerWidth
+                height: root.headerHeight
+
+                leftPadding: 12
+                rightPadding: 12
+
+                horizontalAlignment: Qt.AlignRight
+                text: root.headerTitle
+            }
         }
 
         ListView {

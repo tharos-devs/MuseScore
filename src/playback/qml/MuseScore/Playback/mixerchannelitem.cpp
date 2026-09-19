@@ -143,7 +143,30 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
         //!NOTE Video channels reset their pressure via updateTimerState() in
         //!     setupVideoMeterAnimation() instead, since that also covers the
         //!     non-mute reasons (video not playing) the meter needs to go dark for.
-        if (m_type != Type::Video && muted()) {
+        //!
+        //!     Reset on BOTH directions, not just when becoming muted: an
+        //!     AudioSignalChanges message queued while this channel was still muted (see
+        //!     subscribeOnAudioSignalChanges()'s guard) can be delivered right as it
+        //!     becomes unmuted again, slipping past that guard and briefly showing a
+        //!     stale/leftover reading before the next real update corrects it - most
+        //!     visible when many channels are muted/unmuted at once (e.g. the Mixer's
+        //!     global Mute/Solo toggle), which floods the RPC channel with enough
+        //!     back-to-back state changes for this race to actually land.
+        if (m_type != Type::Video) {
+            resetAudioChannelsVolumePressure();
+        }
+    });
+
+    connect(this, &MixerChannelItem::soloChanged, this, [this]() {
+        //!NOTE: a channel's own solo ending (going from soloed back to normal) can be the
+        //!      last state change it ever gets - confirmed via LOGD instrumentation that a
+        //!      track can simply stop receiving ANY AudioSignalChanges after this transition
+        //!      (unlike the Aux/Master buses, which keep decaying normally), leaving its
+        //!      meter permanently stuck at its last pre-transition reading instead of
+        //!      settling to silence. mutedChanged doesn't fire here (this channel's own
+        //!      muted/forceMute are untouched by ITS OWN solo ending), so this needs its own
+        //!      reset, same idea as the mutedChanged one above.
+        if (m_type != Type::Video) {
             resetAudioChannelsVolumePressure();
         }
     });

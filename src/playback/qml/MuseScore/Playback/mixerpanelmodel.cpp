@@ -59,6 +59,14 @@ static float videoVolumeFromDb(volume_db_t volume)
     return linear <= 0.001f ? 0.f : linear;
 }
 
+//! NOTE: an item can read muted() == true purely because some OTHER item's solo force-muted
+//! it (see MixerChannelItem::loadMuteForceMuteState()) - that's not a real per-channel mute
+//! the user asked for, so the global Mute button must ignore it
+static bool isExplicitlyMuted(const MixerChannelItem* item)
+{
+    return item->muted() && !item->forceMute();
+}
+
 MixerPanelModel::MixerPanelModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
@@ -258,6 +266,105 @@ void MixerPanelModel::addGroupChannel()
     controller()->addNewGroupBus();
 }
 
+//! NOTE: live - true whenever ANY channel (any type except Metronome) is currently muted,
+//! not just right after toggleGlobalMute() runs. So muting a single channel via its own
+//! per-channel button lights up the global button too (see connectGlobalMuteSoloAggregate()).
+bool MixerPanelModel::globalMuteEngaged() const
+{
+    for (const MixerChannelItem* item : m_mixerChannelList) {
+        if (item->type() != MixerChannelItem::Type::Metronome && isExplicitlyMuted(item)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool MixerPanelModel::globalSoloEngaged() const
+{
+    for (const MixerChannelItem* item : m_mixerChannelList) {
+        if (item->type() != MixerChannelItem::Type::Metronome && item->solo()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void MixerPanelModel::toggleGlobalMute()
+{
+    //! NOTE: branches on whether a capture is pending, NOT on globalMuteEngaged() - that
+    //! getter is live (see its own doc comment) and can turn back true from a channel muted
+    //! manually in between the two clicks (e.g. via its own per-channel button). Branching on
+    //! it directly would make THIS click capture that unrelated channel instead of restoring
+    //! the originally-captured set, permanently losing the latter. A pending capture always
+    //! takes priority: it is only ever cleared by actually restoring it.
+    if (!m_mutedTrackIdsBeforeGlobalMute.isEmpty()) {
+        for (const TrackId& trackId : std::as_const(m_mutedTrackIdsBeforeGlobalMute)) {
+            if (MixerChannelItem* item = findChannelItem(trackId)) {
+                item->setMuted(true);
+            }
+        }
+        m_mutedTrackIdsBeforeGlobalMute.clear();
+    } else {
+        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+            if (item->type() == MixerChannelItem::Type::Metronome || !isExplicitlyMuted(item)) {
+                continue;
+            }
+
+            m_mutedTrackIdsBeforeGlobalMute.push_back(item->trackId());
+            item->setMuted(false);
+        }
+    }
+
+    //! NOTE: each setMuted() call above already triggers globalMuteEngagedChanged() via
+    //! connectGlobalMuteSoloAggregate() - this covers the no-op case (nothing to mute/restore)
+    //! where the loop above made no calls at all
+    emit globalMuteEngagedChanged();
+}
+
+void MixerPanelModel::toggleGlobalSolo()
+{
+    //! NOTE: see the matching NOTE in toggleGlobalMute() - same pending-capture priority
+    if (!m_soloedTrackIdsBeforeGlobalSolo.isEmpty()) {
+        for (const TrackId& trackId : std::as_const(m_soloedTrackIdsBeforeGlobalSolo)) {
+            if (MixerChannelItem* item = findChannelItem(trackId)) {
+                item->setSolo(true);
+            }
+        }
+        m_soloedTrackIdsBeforeGlobalSolo.clear();
+    } else {
+        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+            if (item->type() == MixerChannelItem::Type::Metronome || !item->solo()) {
+                continue;
+            }
+
+            m_soloedTrackIdsBeforeGlobalSolo.push_back(item->trackId());
+            item->setSolo(false);
+        }
+    }
+
+    emit globalSoloEngagedChanged();
+}
+
+void MixerPanelModel::connectGlobalMuteSoloAggregate(MixerChannelItem* item)
+{
+    connect(item, &MixerChannelItem::mutedChanged, this, [this]() {
+        emit globalMuteEngagedChanged();
+    });
+
+    //! NOTE: isExplicitlyMuted() depends on forceMute too - e.g. soloing one channel
+    //! force-mutes every other one without changing their own muted flag, which must NOT
+    //! light up the global Mute button (see isExplicitlyMuted())
+    connect(item, &MixerChannelItem::forceMuteChanged, this, [this]() {
+        emit globalMuteEngagedChanged();
+    });
+
+    connect(item, &MixerChannelItem::soloChanged, this, [this]() {
+        emit globalSoloEngagedChanged();
+    });
+}
+
 int MixerPanelModel::rowCount(const QModelIndex&) const
 {
     return m_mixerChannelList.count();
@@ -404,6 +511,13 @@ void MixerPanelModel::addItem(MixerChannelItem* item, int index)
     }
 
     emit rowCountChanged();
+
+    //! NOTE: covers a newly-added item whose muted/solo state was already set (e.g. loaded
+    //! from the project) before connectGlobalMuteSoloAggregate() was wired up to it in its
+    //! build*ChannelItem() factory - that initial state change happened too early to notify
+    //! globalMuteEngaged()/globalSoloEngaged()'s listeners itself
+    emit globalMuteEngagedChanged();
+    emit globalSoloEngagedChanged();
 }
 
 void MixerPanelModel::removeItem(const TrackId trackId)
@@ -434,6 +548,13 @@ void MixerPanelModel::removeItem(const TrackId trackId)
     updateAuxSendItemCount();
 
     emit rowCountChanged();
+
+    //! NOTE: the removed channel may have been the only one contributing to
+    //! globalMuteEngaged()/globalSoloEngaged() - its own mutedChanged/soloChanged
+    //! connections go away with it, so nothing else would otherwise prompt QML to
+    //! re-evaluate those aggregates
+    emit globalMuteEngagedChanged();
+    emit globalSoloEngagedChanged();
 }
 
 void MixerPanelModel::updateItemsPanelsOrder()
@@ -462,6 +583,13 @@ void MixerPanelModel::clear()
     //! NOTE The channel list is being fully rebuilt, so any stored index would point at the wrong
     //! (or a stale/deleted) channel.
     m_selectionAnchorIndex = INVALID_INDEX;
+
+    //! NOTE: same reasoning - a remembered mute/solo snapshot would otherwise reference
+    //! trackIds from the channel list that no longer exists
+    m_mutedTrackIdsBeforeGlobalMute.clear();
+    m_soloedTrackIdsBeforeGlobalSolo.clear();
+    emit globalMuteEngagedChanged();
+    emit globalSoloEngagedChanged();
 }
 
 void MixerPanelModel::setupConnections()
@@ -934,6 +1062,8 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         audioSettings()->setTrackOutputParams(instrumentTrackId, outParams);
     });
 
+    connectGlobalMuteSoloAggregate(item);
+
     return item;
 }
 
@@ -1022,6 +1152,8 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         audioSettings()->setAuxOutputParams(index, outParams);
     });
 
+    connectGlobalMuteSoloAggregate(item);
+
     return item;
 }
 
@@ -1076,6 +1208,8 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem()
         settings->setAttachment(updated);
     });
 
+    connectGlobalMuteSoloAggregate(item);
+
     return item;
 }
 
@@ -1126,6 +1260,8 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
     connect(item, &MixerChannelItem::soloMuteStateChanged, this, [this, item](const notation::INotationSoloMuteState::SoloMuteState&) {
         playback()->setMasterControlParams(item->outputParams().control());
     });
+
+    connectGlobalMuteSoloAggregate(item);
 
     return item;
 }

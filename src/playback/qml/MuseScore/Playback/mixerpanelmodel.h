@@ -53,6 +53,9 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
 
     Q_PROPERTY(int count READ rowCount NOTIFY rowCountChanged)
 
+    Q_PROPERTY(bool globalMuteEngaged READ globalMuteEngaged NOTIFY globalMuteEngagedChanged)
+    Q_PROPERTY(bool globalSoloEngaged READ globalSoloEngaged NOTIFY globalSoloEngagedChanged)
+
     QML_ELEMENT
 
     muse::GlobalInject<IPlaybackConfiguration> configuration;
@@ -77,6 +80,14 @@ public:
     Q_INVOKABLE void addFxChannel();
     Q_INVOKABLE void addGroupChannel();
 
+    //! NOTE: toggleGlobalMute/toggleGlobalSolo are simple on/off toggles, not aggregate
+    //! setters - the first call remembers which channels (all types except Metronome) are
+    //! currently muted/soloed and turns those off; the second call restores mute/solo on
+    //! exactly the channels that were remembered, regardless of what else changed on
+    //! individual channels in between
+    Q_INVOKABLE void toggleGlobalMute();
+    Q_INVOKABLE void toggleGlobalSolo();
+
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -87,10 +98,16 @@ public:
     int navigationOrderStart() const;
     void setNavigationOrderStart(int navigationOrderStart);
 
+    bool globalMuteEngaged() const;
+    bool globalSoloEngaged() const;
+
 signals:
     void navigationSectionChanged();
     void navigationOrderStartChanged();
     void rowCountChanged();
+
+    void globalMuteEngagedChanged();
+    void globalSoloEngagedChanged();
 
 private:
     void classBegin() override {}
@@ -129,6 +146,10 @@ private:
 
     MixerChannelItem* findChannelItem(const muse::audio::TrackId& trackId) const;
 
+    //! NOTE: keeps the global Mute/Solo header buttons' checked state live - see
+    //! globalMuteEngaged()/globalSoloEngaged()
+    void connectGlobalMuteSoloAggregate(MixerChannelItem* item);
+
     void loadOutputParams(MixerChannelItem* item, const project::AudioOutputParams& params);
     void updateOutputResourceItemCount();
     void updateAuxSendItemCount();
@@ -148,5 +169,8 @@ private:
     int m_navigationOrderStart = 1;
 
     int m_selectionAnchorIndex = -1;
+
+    QList<muse::audio::TrackId> m_mutedTrackIdsBeforeGlobalMute;
+    QList<muse::audio::TrackId> m_soloedTrackIdsBeforeGlobalSolo;
 };
 }

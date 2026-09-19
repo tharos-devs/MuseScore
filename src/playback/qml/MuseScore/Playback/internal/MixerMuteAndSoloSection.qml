@@ -31,6 +31,53 @@ import MuseScore.Playback
 MixerPanelSection {
     id: root
 
+    //! NOTE: replaces the plain header label (blank for this section) with global Mute/Solo
+    //! toggles, visually identical to the per-channel ones below - see
+    //! MixerPanelModel::toggleGlobalMute()/toggleGlobalSolo() for the remember/restore logic
+    headerComponent: Component {
+        Item {
+            width: root.headerWidth
+            height: root.headerHeight
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+
+                spacing: 6
+
+                FlatToggleButton {
+                    height: 20
+                    width: 20
+
+                    icon: IconCode.MUTE
+                    checked: root.model.globalMuteEngaged
+
+                    toolTipTitle: qsTrc("playback", "Toggle mutes")
+                    toolTipDescription: qsTrc("playback", "Disable all active mutes; click again to restore them")
+
+                    onToggled: {
+                        root.model.toggleGlobalMute()
+                    }
+                }
+
+                FlatToggleButton {
+                    height: 20
+                    width: 20
+
+                    icon: IconCode.SOLO
+                    checked: root.model.globalSoloEngaged
+
+                    toolTipTitle: qsTrc("playback", "Toggle solos")
+                    toolTipDescription: qsTrc("playback", "Disable all active solos; click again to restore them")
+
+                    onToggled: {
+                        root.model.toggleGlobalSolo()
+                    }
+                }
+            }
+        }
+    }
+
     Item {
         id: content
 
