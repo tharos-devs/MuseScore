@@ -221,6 +221,7 @@ const UiActionList ApplicationUiActions::m_actions = {
              mu::context::CTX_ANY,
              TranslatableString("action", "&Video"),
              TranslatableString("action", "Show/hide video panel"),
+             IconCode::Code::VIDEO,
              ui::Checkable::Yes
              ),
     UiAction(VIDEO_TIMECODE_OFF_CODE,

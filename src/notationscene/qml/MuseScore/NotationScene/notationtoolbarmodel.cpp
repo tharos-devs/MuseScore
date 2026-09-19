@@ -37,6 +37,7 @@ void NotationToolBarModel::load()
     muse::actions::ActionCodeList itemsCodes = {
         "parts",
         "toggle-mixer",
+        "toggle-video-panel",
         "toggle-automation",
         "toggle-note-offset-editor",
         "toggle-note-velocity-editor"
