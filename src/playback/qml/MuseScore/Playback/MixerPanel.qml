@@ -256,15 +256,28 @@ ColumnLayout {
             id: separators
 
             anchors.fill: parent
-            anchors.leftMargin: contextMenuModel.labelsSectionVisible ? prv.headerWidth : prv.channelItemWidth
+            anchors.leftMargin: prv.channelItemWidth + (contextMenuModel.labelsSectionVisible ? prv.headerWidth : 0)
 
             spacing: prv.channelItemWidth
 
             Repeater {
-                model: contextMenuModel.labelsSectionVisible ? mixerPanelModel.count + 1 : mixerPanelModel.count
+                model: mixerPanelModel.count
 
                 SeparatorLine { orientation: Qt.Vertical }
             }
+        }
+
+        //! NOTE: this used to be the leading item in `separators` above (the boundary
+        //! right after the label column) -- pinned in lockstep with the sticky header
+        //! labels (see MixerPanelSection.qml's headerPinOffsetX) via the same
+        //! contentX-cancelling trick, since it would otherwise visibly detach from the
+        //! header as soon as the user scrolled.
+        SeparatorLine {
+            orientation: Qt.Vertical
+            visible: contextMenuModel.labelsSectionVisible
+            z: 2
+
+            x: flickable.contentX + prv.headerWidth
         }
 
         Column {
@@ -287,6 +300,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
                     spacingAbove: 8
 
                     model: mixerPanelModel
@@ -306,6 +320,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -324,6 +339,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -343,6 +359,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
 
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -361,6 +378,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -379,6 +397,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -397,6 +416,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
                     spacingAbove: -3
                     spacingBelow: -2
 
@@ -417,6 +437,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
 
                     model: mixerPanelModel
 
@@ -435,6 +456,7 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    headerPinOffsetX: flickable.contentX
                     spacingAbove: 2
                     spacingBelow: 0
 

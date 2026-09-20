@@ -41,6 +41,15 @@ Loader {
     //! the default StyledTextLabel below
     property Component headerComponent: null
 
+    //! NOTE: fed in from MixerPanel.qml as the enclosing Flickable's contentX --
+    //! binding the header's own x to this exactly cancels the Flickable's
+    //! internal -contentX shift (screen position = header.x - contentX =
+    //! contentX - contentX = 0), so the header always renders pinned at the
+    //! Flickable's own left edge no matter how far the channels have been
+    //! scrolled, while still moving normally with vertical scroll since y is
+    //! untouched.
+    property real headerPinOffsetX: 0
+
     property int channelItemWidth: 108
 
     property real spacingAbove: 4
@@ -58,16 +67,40 @@ Loader {
 
     active: visible
 
-    sourceComponent: Row {
-        width: implicitWidth
+    sourceComponent: Item {
+        id: sectionRow
+
+        readonly property int contentStartX: root.headerVisible ? root.headerWidth + 1 : 0
+
+        width: sectionRow.contentStartX + sectionContentList.width
         height: root.spacingAbove + sectionContentList.contentHeight + root.spacingBelow
-        spacing: 1 // for separator (will be rendered in MixerPanel.qml)
+
+        //! NOTE: opaque backdrop for the pinned header below -- without it, whatever
+        //! channel content has scrolled underneath would show through while the
+        //! header stays put over it. Spans the row's FULL height (not just the
+        //! header label's own spacingAbove..spacingAbove+headerHeight span) --
+        //! otherwise the spacingAbove/spacingBelow margins above and below the
+        //! label are left uncovered, letting slivers of scrolled content bleed
+        //! through at every row boundary.
+        Rectangle {
+            visible: root.headerVisible
+            z: 2
+
+            x: root.headerPinOffsetX
+            y: 0
+
+            width: root.headerWidth
+            height: parent.height
+
+            color: ui.theme.backgroundPrimaryColor
+        }
 
         Loader {
             visible: root.headerVisible
+            z: 2
 
-            anchors.top: parent.top
-            anchors.topMargin: root.spacingAbove
+            x: root.headerPinOffsetX
+            y: root.spacingAbove
 
             width: root.headerWidth
             height: root.headerHeight
@@ -93,8 +126,8 @@ Loader {
         ListView {
             id: sectionContentList
 
-            anchors.top: parent.top
-            anchors.topMargin: root.spacingAbove
+            x: sectionRow.contentStartX
+            y: root.spacingAbove
             width: contentItem.childrenRect.width
             height: Math.max(1, contentHeight) // HACK: if the height is 0, the listview won't create any delegates
             contentHeight: contentItem.childrenRect.height
