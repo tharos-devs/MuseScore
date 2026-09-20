@@ -73,6 +73,17 @@ MixerPanelSection {
                 onNewValueRequested: function(newValue) {
                     content.channelItem.balance = newValue
                 }
+
+                Connections {
+                    target: balanceKnob.mouseArea
+                    function onPressedChanged() {
+                        if (balanceKnob.mouseArea.pressed) {
+                            content.channelItem.beginBalanceChange()
+                        } else {
+                            content.channelItem.endBalanceChange()
+                        }
+                    }
+                }
             }
 
             TextInputField {
@@ -108,7 +119,9 @@ MixerPanelSection {
 
                 onTextEdited: function(newTextValue) {
                     if (content.channelItem.balance !== Number(newTextValue)) {
+                        content.channelItem.beginBalanceChange()
                         content.channelItem.balance = Number(newTextValue)
+                        content.channelItem.endBalanceChange()
                     }
                 }
             }

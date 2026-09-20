@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <qqmlintegration.h>
@@ -86,6 +87,13 @@ public:
     void setMenuDataProvider(const MenuDataProvider& provider);
     void setMenuItemHandler(const MenuItemHandler& handler);
 
+    //! NOTE: brackets a single knob-drag (or discrete keyboard-step) gesture into ONE
+    //! undoable change instead of one per intermediate value - mirrors
+    //! MixerChannelItem::beginVolumeChange() et al. end is a no-op if the value didn't
+    //! actually change, or if called without a matching prior begin.
+    Q_INVOKABLE void beginLevelChange();
+    Q_INVOKABLE void endLevelChange();
+
 public slots:
     void setTitle(const QString& title);
     void setIsActive(bool active);
@@ -97,6 +105,10 @@ signals:
     void auxIndexChanged();
     void isDraggingChanged();
 
+    //! NOTE: MixerChannelItem forwards this (adding this slot's own auxIndex) as its
+    //! own auxSendLevelChangeCommitted - see that signal's NOTE.
+    void levelChangeCommitted(int oldPercentage, int newPercentage);
+
 private:
     MenuDataProvider m_menuDataProvider;
     MenuItemHandler m_menuItemHandler;
@@ -105,6 +117,7 @@ private:
     QString m_title;
     bool m_isActive = false;
     int m_audioSignalPercentage = 0;
+    std::optional<int> m_levelChangeStart;
     //! NOTE: while true, title() reports the current percentage instead of the target
     //! bus name - lets the knob's own slot button show a live value readout in place
     //! while its value is being dragged, matching this control's pre-redesign behavior

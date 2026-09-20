@@ -68,5 +68,6 @@ public:
 
     MOCK_METHOD(notation::IMasterNotationPtr, masterNotation, (), (const, override));
     MOCK_METHOD(IProjectAudioSettingsPtr, audioSettings, (), (const, override));
+    MOCK_METHOD(IProjectUndoStackPtr, undoStack, (), (const, override));
 };
 }

@@ -36,6 +36,22 @@ Slider {
 
     signal volumeLevelMoved(var level)
 
+    //! NOTE: fires once when either the track (root.pressed, the base Slider's own
+    //! tracking) or the custom handle (handleMouseArea.pressed) is first pressed, and
+    //! once when both are released again - lets a caller bracket a whole drag gesture
+    //! (however it started) into a single undoable change instead of one per tick.
+    signal dragStarted()
+    signal dragFinished()
+
+    readonly property bool dragActive: root.pressed || handleMouseArea.pressed
+    onDragActiveChanged: {
+        if (root.dragActive) {
+            root.dragStarted()
+        } else {
+            root.dragFinished()
+        }
+    }
+
     height: 140 + prv.handleHeight
     width: 32 + prv.unitsTextWidth
 
@@ -259,6 +275,8 @@ Slider {
         implicitHeight: prv.handleHeight
 
         MouseArea {
+            id: handleMouseArea
+
             anchors.fill: parent
 
             onDoubleClicked: {

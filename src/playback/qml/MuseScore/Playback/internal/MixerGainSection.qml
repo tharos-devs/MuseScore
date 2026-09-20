@@ -77,6 +77,17 @@ MixerPanelSection {
                 onNewValueRequested: function(newValue) {
                     content.channelItem.gain = newValue
                 }
+
+                Connections {
+                    target: gainKnob.mouseArea
+                    function onPressedChanged() {
+                        if (gainKnob.mouseArea.pressed) {
+                            content.channelItem.beginGainChange()
+                        } else {
+                            content.channelItem.endGainChange()
+                        }
+                    }
+                }
             }
 
             TextInputField {
@@ -110,7 +121,9 @@ MixerPanelSection {
 
                 onTextEdited: function(newTextValue) {
                     if (content.channelItem.gain !== Number(newTextValue)) {
+                        content.channelItem.beginGainChange()
                         content.channelItem.gain = Number(newTextValue)
+                        content.channelItem.endGainChange()
                     }
                 }
             }

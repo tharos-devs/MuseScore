@@ -227,3 +227,22 @@ void AuxSendItem::setIsDragging(bool dragging)
     emit isDraggingChanged();
     emit titleChanged();
 }
+
+void AuxSendItem::beginLevelChange()
+{
+    m_levelChangeStart = audioSignalPercentage();
+}
+
+void AuxSendItem::endLevelChange()
+{
+    if (!m_levelChangeStart) {
+        return;
+    }
+
+    int oldValue = *m_levelChangeStart;
+    m_levelChangeStart.reset();
+
+    if (oldValue != audioSignalPercentage()) {
+        emit levelChangeCommitted(oldValue, audioSignalPercentage());
+    }
+}

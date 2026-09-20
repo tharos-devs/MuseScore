@@ -784,6 +784,79 @@ void MixerChannelItem::setGain(int gain)
     emit controlParamsChanged(m_outParams);
 }
 
+void MixerChannelItem::beginVolumeChange()
+{
+    m_volumeChangeStart = volumeLevel();
+}
+
+void MixerChannelItem::endVolumeChange()
+{
+    if (!m_volumeChangeStart) {
+        return;
+    }
+
+    float oldValue = *m_volumeChangeStart;
+    m_volumeChangeStart.reset();
+
+    //! NOTE: plain != rather than qFuzzyCompare - setVolumeLevel() already no-ops (via
+    //! its own qFuzzyCompare) on an insignificant change, so volumeLevel() is only
+    //! ever DIFFERENT here if a real change actually landed; qFuzzyCompare would also
+    //! wrongly report -infinity (silence, a legitimately reachable value) as "not
+    //! equal to itself", since inf - inf is NaN.
+    if (oldValue != volumeLevel()) {
+        emit volumeChangeCommitted(oldValue, volumeLevel());
+    }
+}
+
+void MixerChannelItem::beginBalanceChange()
+{
+    m_balanceChangeStart = balance();
+}
+
+void MixerChannelItem::endBalanceChange()
+{
+    if (!m_balanceChangeStart) {
+        return;
+    }
+
+    int oldValue = *m_balanceChangeStart;
+    m_balanceChangeStart.reset();
+
+    if (oldValue != balance()) {
+        emit balanceChangeCommitted(oldValue, balance());
+    }
+}
+
+void MixerChannelItem::beginGainChange()
+{
+    m_gainChangeStart = gain();
+}
+
+void MixerChannelItem::endGainChange()
+{
+    if (!m_gainChangeStart) {
+        return;
+    }
+
+    int oldValue = *m_gainChangeStart;
+    m_gainChangeStart.reset();
+
+    if (oldValue != gain()) {
+        emit gainChangeCommitted(oldValue, gain());
+    }
+}
+
+AuxSendItem* MixerChannelItem::auxSendItemForBus(aux_channel_idx_t busIndex) const
+{
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == busIndex) {
+            return item;
+        }
+    }
+
+    return nullptr;
+}
+
 void MixerChannelItem::setSolo(bool solo)
 {
     if (m_outParams.solo == solo) {
@@ -1111,6 +1184,10 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
         });
     });
 
+    connect(newItem, &AuxSendItem::levelChangeCommitted, this, [this, newItem](int oldPercentage, int newPercentage) {
+        emit auxSendLevelChangeCommitted(newItem->auxIndex(), oldPercentage, newPercentage);
+    });
+
     newItem->setMenuDataProvider([this, newItem]() {
         return buildAuxSendMenuData(newItem);
     });
@@ -1214,8 +1291,9 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
     bool ok = false;
     aux_channel_idx_t newBusIndex = static_cast<aux_channel_idx_t>(menuItemId.toUInt(&ok));
     if (ok) {
+        aux_channel_idx_t oldBusIndex = item->auxIndex();
         reassignAuxSend(item, newBusIndex);
-        emit auxSendReassignedByUser(newBusIndex);
+        emit auxSendReassignedByUser(oldBusIndex, newBusIndex);
     }
 }
 

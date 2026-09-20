@@ -64,12 +64,24 @@ MixerPanelSection {
                     content.channelItem.volumeLevel = Math.round(level * 10) / 10
                 }
 
+                onDragStarted: {
+                    content.channelItem.beginVolumeChange()
+                }
+
+                onDragFinished: {
+                    content.channelItem.endVolumeChange()
+                }
+
                 onIncreaseRequested: {
+                    content.channelItem.beginVolumeChange()
                     content.channelItem.volumeLevel += stepSize
+                    content.channelItem.endVolumeChange()
                 }
 
                 onDecreaseRequested: {
+                    content.channelItem.beginVolumeChange()
                     content.channelItem.volumeLevel -= stepSize
+                    content.channelItem.endVolumeChange()
                 }
             }
 

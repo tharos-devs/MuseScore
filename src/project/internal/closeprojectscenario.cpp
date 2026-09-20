@@ -30,7 +30,10 @@ using namespace mu::project;
 using namespace muse;
 using muse::async::Promise;
 
-static const muse::Uri HOME_PAGE_URI("musescore://home");
+//! NOTE: named distinctly from projectactionscontroller.cpp's own file-local HOME_PAGE_URI -
+//! both are "static" (internal linkage), but a Unity build still merges every .cpp in a batch
+//! into one translation unit, where two identically-named file-scope statics collide outright.
+static const muse::Uri CLOSE_SCENARIO_HOME_PAGE_URI("musescore://home");
 
 Promise<Ret> CloseProjectScenario::resolvedPromise(const Ret& ret)
 {
@@ -165,9 +168,9 @@ Promise<Ret> CloseProjectScenario::doCloseProject(bool goToHome)
 
 void CloseProjectScenario::openHomePageIfNeed()
 {
-    if (interactive()->isOpened(HOME_PAGE_URI).val) {
+    if (interactive()->isOpened(CLOSE_SCENARIO_HOME_PAGE_URI).val) {
         return;
     }
 
-    interactive()->open(HOME_PAGE_URI);
+    interactive()->open(CLOSE_SCENARIO_HOME_PAGE_URI);
 }
