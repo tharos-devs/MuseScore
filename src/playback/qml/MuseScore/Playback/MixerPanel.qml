@@ -103,6 +103,13 @@ ColumnLayout {
         readonly property real headerWidth: 98
         readonly property real channelItemWidth: 108
 
+        //! NOTE: right-edge analogue of headerPinOffsetX's left-edge pin -- see
+        //! MixerPanelSection.qml's masterPinOffsetX property for the full
+        //! explanation of the contentX-cancelling trick. Centralized here (rather
+        //! than repeated per section instantiation below) since every section
+        //! needs the exact same value.
+        readonly property real masterPinOffsetX: flickable.contentX + flickable.width - channelItemWidth
+
         function setNavigateControlIndex(index) {
             if (!Boolean(prv.currentNavigateControlIndex) ||
                     index.row !== prv.currentNavigateControlIndex.row ||
@@ -209,7 +216,14 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        contentWidth: contentColumn.width + 1 // for trailing separator
+        //! NOTE: + channelItemWidth reserves the master channel's own slot at the
+        //! tail end -- master's delegate is excluded from contentColumn's normal
+        //! flow (zero width, see MixerPanelSection.qml) since it's rendered
+        //! pinned instead, but the scrollable range still needs to leave that
+        //! much room, or scrolling to the end would put the LAST REGULAR channel
+        //! directly underneath the pinned master column instead of stopping
+        //! just before it.
+        contentWidth: contentColumn.width + 1 + prv.channelItemWidth // for trailing separator + reserved master slot
         contentHeight: Math.max(contentColumn.height, height)
 
         implicitHeight: contentColumn.height
@@ -261,7 +275,14 @@ ColumnLayout {
             spacing: prv.channelItemWidth
 
             Repeater {
-                model: mixerPanelModel.count
+                //! NOTE: -2 to drop both the boundary right before the master channel
+                //! and the trailing one right after it -- master is now pinned
+                //! (excluded from the normal scrolling flow, see
+                //! MixerPanelSection.qml), so neither boundary tracks real scrolled
+                //! content any more; the "before master" one is replaced by the
+                //! dedicated pinned separator below instead, and the trailing one has
+                //! nothing left to bound.
+                model: Math.max(0, mixerPanelModel.count - 2)
 
                 SeparatorLine { orientation: Qt.Vertical }
             }
@@ -278,6 +299,17 @@ ColumnLayout {
             z: 2
 
             x: flickable.contentX + prv.headerWidth
+        }
+
+        //! NOTE: right-edge analogue of the pinned separator above, for the master
+        //! channel's own pinned strip (see MixerPanelSection.qml's masterPinOffsetX) --
+        //! sits immediately to its left so it doesn't visually detach from it either.
+        SeparatorLine {
+            orientation: Qt.Vertical
+            visible: mixerPanelModel.count > 0
+            z: 2
+
+            x: prv.masterPinOffsetX - 1
         }
 
         Column {
@@ -301,6 +333,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: 8
 
                     model: mixerPanelModel
@@ -321,6 +354,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -340,6 +374,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -360,6 +395,7 @@ ColumnLayout {
 
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -379,6 +415,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -398,6 +435,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -417,6 +455,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: -3
                     spacingBelow: -2
 
@@ -438,6 +477,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
 
                     model: mixerPanelModel
 
@@ -457,6 +497,7 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
                     headerPinOffsetX: flickable.contentX
+                    masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: 2
                     spacingBelow: 0
 
