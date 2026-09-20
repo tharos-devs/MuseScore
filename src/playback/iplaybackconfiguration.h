@@ -61,6 +61,12 @@ public:
     virtual bool videoHitPointsPanelVisible() const = 0;
     virtual void setVideoHitPointsPanelVisible(bool visible) = 0;
 
+    virtual bool videoTimelineVisible() const = 0;
+    virtual void setVideoTimelineVisible(bool visible) = 0;
+
+    virtual bool videoControlsVisible() const = 0;
+    virtual void setVideoControlsVisible(bool visible) = 0;
+
     virtual bool videoHitPointsPanelBelowTimeline() const = 0;
     virtual void setVideoHitPointsPanelBelowTimeline(bool belowTimeline) = 0;
 

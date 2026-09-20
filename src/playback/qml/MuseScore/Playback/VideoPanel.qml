@@ -94,6 +94,8 @@ Item {
     //! (a narrow left/right dock especially benefits from the sidebar below,
     //! since there's no room for it beside the video at that width).
     property bool hitPointsPanelBelowTimeline: false
+    property bool timelineVisible: true
+    property bool controlsVisible: true
     readonly property int timelineZoomMax: 10
     property real timelineZoom: 1
     readonly property int timelineFrameRate: Math.max(1, Math.round(videoModel.frameRate))
@@ -200,11 +202,23 @@ Item {
         root.hitPointsPanelVisible = videoModel.hitPointsPanelVisible()
         root.hitPointsPanelHeight = Math.max(root.hitPointsPanelMinHeight, Math.min(root.hitPointsPanelMaxHeight, videoModel.hitPointsPanelHeight()))
         root.hitPointsPanelBelowTimeline = videoModel.hitPointsPanelBelowTimeline()
+        root.timelineVisible = videoModel.timelineVisible()
+        root.controlsVisible = videoModel.controlsVisible()
     }
 
     function toggleHitPointsPanelVisible() {
         root.hitPointsPanelVisible = !root.hitPointsPanelVisible
         videoModel.setHitPointsPanelVisible(root.hitPointsPanelVisible)
+    }
+
+    function toggleTimelineVisible() {
+        root.timelineVisible = !root.timelineVisible
+        videoModel.setTimelineVisible(root.timelineVisible)
+    }
+
+    function toggleControlsVisible() {
+        root.controlsVisible = !root.controlsVisible
+        videoModel.setControlsVisible(root.controlsVisible)
     }
 
     //! NOTE: sets the position directly rather than toggling -- the "Sidebar"
@@ -892,6 +906,7 @@ Item {
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: 30
+                visible: root.controlsVisible
 
                 RowLayout {
                     anchors.left: parent.left
@@ -1205,6 +1220,7 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 88
+                    visible: root.timelineVisible
 
                     StyledFlickable {
                         id: timelineFlickable

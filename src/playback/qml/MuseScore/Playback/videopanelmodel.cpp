@@ -236,6 +236,26 @@ void VideoPanelModel::setHitPointsPanelVisible(bool visible)
     configuration()->setVideoHitPointsPanelVisible(visible);
 }
 
+bool VideoPanelModel::timelineVisible() const
+{
+    return configuration()->videoTimelineVisible();
+}
+
+void VideoPanelModel::setTimelineVisible(bool visible)
+{
+    configuration()->setVideoTimelineVisible(visible);
+}
+
+bool VideoPanelModel::controlsVisible() const
+{
+    return configuration()->videoControlsVisible();
+}
+
+void VideoPanelModel::setControlsVisible(bool visible)
+{
+    configuration()->setVideoControlsVisible(visible);
+}
+
 bool VideoPanelModel::hitPointsPanelBelowTimeline() const
 {
     return configuration()->videoHitPointsPanelBelowTimeline();

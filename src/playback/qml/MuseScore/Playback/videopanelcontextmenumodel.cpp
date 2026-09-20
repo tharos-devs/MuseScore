@@ -37,6 +37,8 @@ static const ActionCode TOGGLE_FULL_SCREEN_ACTION("video-panel-toggle-fullscreen
 static const ActionCode SET_HITPOINTS_PANEL_RIGHT_ACTION("video-panel-set-hitpoints-right");
 static const ActionCode SET_HITPOINTS_PANEL_DOWN_ACTION("video-panel-set-hitpoints-down");
 static const ActionCode TOGGLE_HITPOINTS_PANEL_VISIBLE_ACTION("video-panel-toggle-hitpoints-visible");
+static const ActionCode TOGGLE_TIMELINE_VISIBLE_ACTION("video-panel-toggle-timeline-visible");
+static const ActionCode TOGGLE_CONTROLS_VISIBLE_ACTION("video-panel-toggle-controls-visible");
 
 VideoPanelContextMenuModel::VideoPanelContextMenuModel(QObject* parent)
     : AbstractMenuModel(parent)
@@ -61,6 +63,14 @@ void VideoPanelContextMenuModel::load()
 
     dispatcher()->reg(this, TOGGLE_HITPOINTS_PANEL_VISIBLE_ACTION, [this]() {
         emit toggleHitPointsPanelVisibleRequested();
+    });
+
+    dispatcher()->reg(this, TOGGLE_TIMELINE_VISIBLE_ACTION, [this]() {
+        emit toggleTimelineVisibleRequested();
+    });
+
+    dispatcher()->reg(this, TOGGLE_CONTROLS_VISIBLE_ACTION, [this]() {
+        emit toggleControlsVisibleRequested();
     });
 
     updateItems();
@@ -134,6 +144,40 @@ void VideoPanelContextMenuModel::setHitPointsPanelVisible(bool visible)
     updateItems();
 }
 
+bool VideoPanelContextMenuModel::timelineVisible() const
+{
+    return m_timelineVisible;
+}
+
+void VideoPanelContextMenuModel::setTimelineVisible(bool visible)
+{
+    if (m_timelineVisible == visible) {
+        return;
+    }
+
+    m_timelineVisible = visible;
+    emit timelineVisibleChanged();
+
+    updateItems();
+}
+
+bool VideoPanelContextMenuModel::controlsVisible() const
+{
+    return m_controlsVisible;
+}
+
+void VideoPanelContextMenuModel::setControlsVisible(bool visible)
+{
+    if (m_controlsVisible == visible) {
+        return;
+    }
+
+    m_controlsVisible = visible;
+    emit controlsVisibleChanged();
+
+    updateItems();
+}
+
 QVariantMap VideoPanelContextMenuModel::screenAvailableGeometry(int windowX, int windowY) const
 {
     QScreen* screen = QGuiApplication::screenAt(QPoint(windowX, windowY));
@@ -193,6 +237,33 @@ void VideoPanelContextMenuModel::updateItems()
 
     MenuItemList sidebarItems { rightItem, downItem, makeSeparator(), visibilityItem };
     items << makeMenu(TranslatableString("playback", "Sidebar"), sidebarItems, "video-panel-sidebar-menu");
+
+    //! NOTE Checkmark reflects current visibility, unlike Sidebar's Show/Hide
+    //! item above which flips its label instead -- the timeline only has this
+    //! one toggle, so a checkable item on its own is clearer than a submenu.
+    UiAction timelineAction;
+    timelineAction.title = TranslatableString("playback", "Timeline");
+    timelineAction.code = TOGGLE_TIMELINE_VISIBLE_ACTION;
+    timelineAction.checkable = Checkable::Yes;
+
+    MenuItem* timelineItem = new MenuItem(timelineAction, this);
+    timelineItem->setId("video-panel-timeline-visibility");
+    timelineItem->setState(UiActionState::make_enabled(m_timelineVisible));
+
+    items << timelineItem;
+
+    //! NOTE Same checkable-item pattern as Timeline above, for the transport
+    //! controls toolbar (rewind/play/stop/loop + zoom cluster).
+    UiAction controlsAction;
+    controlsAction.title = TranslatableString("playback", "Controls");
+    controlsAction.code = TOGGLE_CONTROLS_VISIBLE_ACTION;
+    controlsAction.checkable = Checkable::Yes;
+
+    MenuItem* controlsItem = new MenuItem(controlsAction, this);
+    controlsItem->setId("video-panel-controls-visibility");
+    controlsItem->setState(UiActionState::make_enabled(m_controlsVisible));
+
+    items << controlsItem;
 
     if (m_floating) {
         UiAction fullScreenAction;

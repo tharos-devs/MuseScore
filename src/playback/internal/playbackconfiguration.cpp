@@ -55,6 +55,10 @@ static constexpr int VIDEO_HIT_POINTS_PANEL_MAX_WIDTH = 420;
 
 static const Settings::Key VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY(moduleName, "playback/video/hitPointsPanelVisible");
 
+static const Settings::Key VIDEO_TIMELINE_VISIBLE_KEY(moduleName, "playback/video/timelineVisible");
+
+static const Settings::Key VIDEO_CONTROLS_VISIBLE_KEY(moduleName, "playback/video/controlsVisible");
+
 static const Settings::Key VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY(moduleName, "playback/video/hitPointsPanelBelowTimeline");
 
 static const Settings::Key VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY(moduleName, "playback/video/hitPointsPanelHeight");
@@ -146,6 +150,8 @@ void PlaybackConfiguration::init()
     settings()->setDefaultValue(PLAYBACK_CURSOR_TYPE_KEY, Val(PlaybackCursorType::STEPPED));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_WIDTH_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_WIDTH));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(true));
+    settings()->setDefaultValue(VIDEO_TIMELINE_VISIBLE_KEY, Val(true));
+    settings()->setDefaultValue(VIDEO_CONTROLS_VISIBLE_KEY, Val(true));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY, Val(false));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_HEIGHT));
     settings()->setDefaultValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
@@ -292,6 +298,26 @@ bool PlaybackConfiguration::videoHitPointsPanelVisible() const
 void PlaybackConfiguration::setVideoHitPointsPanelVisible(bool visible)
 {
     settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_VISIBLE_KEY, Val(visible));
+}
+
+bool PlaybackConfiguration::videoTimelineVisible() const
+{
+    return settings()->value(VIDEO_TIMELINE_VISIBLE_KEY).toBool();
+}
+
+void PlaybackConfiguration::setVideoTimelineVisible(bool visible)
+{
+    settings()->setSharedValue(VIDEO_TIMELINE_VISIBLE_KEY, Val(visible));
+}
+
+bool PlaybackConfiguration::videoControlsVisible() const
+{
+    return settings()->value(VIDEO_CONTROLS_VISIBLE_KEY).toBool();
+}
+
+void PlaybackConfiguration::setVideoControlsVisible(bool visible)
+{
+    settings()->setSharedValue(VIDEO_CONTROLS_VISIBLE_KEY, Val(visible));
 }
 
 bool PlaybackConfiguration::videoHitPointsPanelBelowTimeline() const

@@ -140,6 +140,17 @@ public:
     Q_INVOKABLE bool hitPointsPanelVisible() const;
     Q_INVOKABLE void setHitPointsPanelVisible(bool visible);
 
+    //! NOTE Persisted user preference for showing/hiding the timeline (scrub bar).
+    //! Same load-once/write-back-on-toggle pattern as hitPointsPanelVisible above.
+    Q_INVOKABLE bool timelineVisible() const;
+    Q_INVOKABLE void setTimelineVisible(bool visible);
+
+    //! NOTE Persisted user preference for showing/hiding the transport controls
+    //! toolbar (rewind/play/stop/loop + zoom cluster). Same load-once/write-
+    //! back-on-toggle pattern as hitPointsPanelVisible above.
+    Q_INVOKABLE bool controlsVisible() const;
+    Q_INVOKABLE void setControlsVisible(bool visible);
+
     //! NOTE Same persisted-on-load/write-back-on-drag pattern as the width/visible
     //! pair above, for the sidebar's alternate "below the timeline" layout.
     Q_INVOKABLE bool hitPointsPanelBelowTimeline() const;

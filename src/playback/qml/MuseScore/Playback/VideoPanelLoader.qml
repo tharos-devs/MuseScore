@@ -118,6 +118,8 @@ Item {
         // window rather than owning that logic itself.
         hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
         hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
+        timelineVisible: videoPanelLoader.item ? videoPanelLoader.item.timelineVisible : true
+        controlsVisible: videoPanelLoader.item ? videoPanelLoader.item.controlsVisible : true
 
         Component.onCompleted: contextMenuModel.load()
 
@@ -130,6 +132,18 @@ Item {
         onToggleHitPointsPanelVisibleRequested: {
             if (videoPanelLoader.item) {
                 videoPanelLoader.item.toggleHitPointsPanelVisible()
+            }
+        }
+
+        onToggleTimelineVisibleRequested: {
+            if (videoPanelLoader.item) {
+                videoPanelLoader.item.toggleTimelineVisible()
+            }
+        }
+
+        onToggleControlsVisibleRequested: {
+            if (videoPanelLoader.item) {
+                videoPanelLoader.item.toggleControlsVisible()
             }
         }
 
