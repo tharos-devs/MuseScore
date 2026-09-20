@@ -224,6 +224,12 @@ public:
     //! left pointing at a bus index that no longer exists
     void clearAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex);
 
+    //! NOTE: assigns this track's next available aux-send slot to target busIndex - the
+    //! same reassignment reassignAuxSend() performs when a user picks a bus from an
+    //! existing slot's own dropdown, exposed here as a single public call for
+    //! MixerPanelModel's "add FX/Group channel for selected tracks" bulk actions.
+    void assignAuxSend(muse::audio::aux_channel_idx_t busIndex);
+
 public slots:
     void setTitle(QString title);
 

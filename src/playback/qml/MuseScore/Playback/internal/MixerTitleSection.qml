@@ -117,6 +117,25 @@ MixerPanelSection {
                 items.push({ id: "deleteChannel", title: qsTrc("playback", "Delete channel"), enabled: !content.channelItem.isReverbBus })
             }
 
+            if (content.isInstrument) {
+                if (items.length > 0) {
+                    items.push({})
+                }
+                items.push({ id: "addFxChannel", title: qsTrc("playback", "Add FX channel"), enabled: root.model.canAddAuxBus() })
+                items.push({ id: "addGroupChannel", title: qsTrc("playback", "Add Group channel"), enabled: root.model.canAddAuxBus() })
+                items.push({})
+                items.push({
+                    id: "addFxChannelForSelectedTracks",
+                    title: qsTrc("playback", "Add FX channel for selected tracks"),
+                    enabled: root.model.canAddAuxBus()
+                })
+                items.push({
+                    id: "addGroupChannelForSelectedTracks",
+                    title: qsTrc("playback", "Add Group channel for selected tracks"),
+                    enabled: root.model.canAddAuxBus()
+                })
+            }
+
             return items
         }
 
@@ -156,6 +175,21 @@ MixerPanelSection {
         border.color: channelItem.selected ? ui.theme.fontPrimaryColor : labelColor
         border.width: channelItem.selected ? 2 : 1
         opacity: content.isDragged ? 0.5 : 1.0
+
+        //! NOTE: safety net for a channel being destroyed while it's part of an active
+        //! drag (e.g. a full model reload - see MixerPanelModel::reload() - firing
+        //! mid-gesture) - onReleased/onCanceled below never get a chance to run in
+        //! that case (the MouseArea they're on is destroyed right along with this
+        //! delegate), which would otherwise leave the OTHER, surviving delegates
+        //! permanently reading a stale root.auxDraggedIndices/auxDropBeforeIndex (the
+        //! drop indicator stuck visible, this kind of channel stuck dimmed) until
+        //! some unrelated later drag happens to overwrite it.
+        Component.onDestruction: {
+            if (content.isDragged) {
+                root.auxDropBeforeIndex = -2
+                root.auxDraggedIndices = []
+            }
+        }
 
         Loader {
             id: nameLoader
@@ -425,6 +459,10 @@ MixerPanelSection {
                     root.model.addFxChannel()
                 } else if (itemId === "addGroupChannel") {
                     root.model.addGroupChannel()
+                } else if (itemId === "addFxChannelForSelectedTracks") {
+                    root.model.addFxChannelForSelectedTracks()
+                } else if (itemId === "addGroupChannelForSelectedTracks") {
+                    root.model.addGroupChannelForSelectedTracks()
                 } else if (itemId === "deleteChannel") {
                     root.model.deleteAuxChannel(content.channelItem)
                 }
