@@ -46,6 +46,30 @@ Item {
     QtObject {
         id: prv
 
+        //! NOTE: the union of every itemRect seen by the currently open popup instance,
+        //! reset in loadPopup() each time a new popup is opened. The popup is anchored to
+        //! this instead of the live itemRect directly so that swapping to a SMALLER glyph
+        //! (e.g. Accent -> Staccato) never pulls it in closer to the note than it already
+        //! was: since the popup is wider than a single note, moving closer to the staff can
+        //! slide it over a neighboring note's own mark, blocking the next click when working
+        //! through a run of several notes sharing an articulation. Growing (a bigger glyph)
+        //! still repositions as needed, since anchoring to a smaller rect would let the new,
+        //! bigger glyph render half-hidden underneath the popup.
+        property rect trackedElementRect: Qt.rect(0, 0, 0, 0)
+
+        function unitedRect(a, b) {
+            if (a.width <= 0 && a.height <= 0) {
+                return b
+            }
+
+            const left = Math.min(a.x, b.x)
+            const top = Math.min(a.y, b.y)
+            const right = Math.max(a.x + a.width, b.x + b.width)
+            const bottom = Math.max(a.y + a.height, b.y + b.height)
+
+            return Qt.rect(left, top, right - left, bottom - top)
+        }
+
         function componentByType(type) {
             switch (type) {
             case AbstractElementPopupModel.TYPE_HARP_DIAGRAM: return harpPedalComp
@@ -68,13 +92,8 @@ Item {
                 return
             }
 
-            // If mouse is hovering over the popup, don't update the position
-            // to avoid jumps while the user is interacting with it
-            if (container.popup.containsMouse) {
-                return
-            }
-
-            const elementRect = container.popup.elementRect
+            prv.trackedElementRect = prv.unitedRect(prv.trackedElementRect, container.popup.elementRect)
+            const elementRect = prv.trackedElementRect
 
             container.x = elementRect.x
             container.y = elementRect.y
@@ -122,13 +141,9 @@ Item {
                 container.closed()
             })
 
+            prv.trackedElementRect = Qt.rect(0, 0, 0, 0)
             prv.updateContainerPosition()
             popup.elementRectChanged.connect(prv.updateContainerPosition)
-            popup.containsMouseChanged.connect(function() {
-                if (!popup.containsMouse) {
-                    prv.updateContainerPosition()
-                }
-            })
 
             //! NOTE: All navigation panels in popups must be in the notation view section.
             //        This is necessary so that popups do not activate navigation in the new section,
