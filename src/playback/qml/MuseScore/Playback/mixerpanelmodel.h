@@ -73,6 +73,15 @@ public:
     Q_INVOKABLE void resetColorForSelectedChannels();
     Q_INVOKABLE void clearSelection();
 
+    //! NOTE: same "apply to every currently-selected channel" idiom as
+    //! setColorForSelectedChannels() above - called instead of setting
+    //! channelItem.muted/.solo directly whenever the clicked channel is itself
+    //! currently selected, so a multi-selection's Mute/Solo buttons move together
+    //! (clicking one clicked-but-unselected channel's own button still only ever
+    //! affects that one channel, same as it always has).
+    Q_INVOKABLE void setMutedForSelectedChannels(bool muted);
+    Q_INVOKABLE void setSoloForSelectedChannels(bool solo);
+
     Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
     Q_INVOKABLE void deleteAuxChannel(mu::playback::MixerChannelItem* channelItem);
 
