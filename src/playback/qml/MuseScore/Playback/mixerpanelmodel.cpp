@@ -422,18 +422,22 @@ void MixerPanelModel::reloadItems()
         }
     }
 
-    if (videoSettings() && videoSettings()->attachment().isValid()) {
-        m_mixerChannelList.push_back(buildVideoChannelItem());
-    }
-
-    addInstrumentTrack(notationPlayback()->metronomeTrackId());
-
+    //! NOTE: aux buses come before video/metronome (both placed immediately left of
+    //! master instead) so the aux section stays adjacent to the instrument tracks
+    //! it routes from, rather than sitting between two channels (video, metronome)
+    //! that have nothing to do with aux routing.
     if (configuration()->areAuxChannelsVisible()) {
         const auto& auxTrackIdMap = controller()->auxTrackIdMap();
         for (aux_channel_idx_t index : sortedAuxIndices()) {
             m_mixerChannelList.push_back(buildAuxChannelItem(index, auxTrackIdMap.at(index)));
         }
     }
+
+    if (videoSettings() && videoSettings()->attachment().isValid()) {
+        m_mixerChannelList.push_back(buildVideoChannelItem());
+    }
+
+    addInstrumentTrack(notationPlayback()->metronomeTrackId());
 
     m_masterChannelItem = buildMasterChannelItem();
     m_mixerChannelList.append(m_masterChannelItem);
@@ -692,11 +696,15 @@ void MixerPanelModel::setupConnections()
         const auto& auxMap = controller()->auxTrackIdMap();
 
         if (visible) {
-            //! NOTE: same FX-then-Group ordering as reloadItems() - see sortedAuxIndices()
+            //! NOTE: same FX-then-Group ordering as reloadItems() - see sortedAuxIndices().
+            //! Inserted via resolveAuxInsertIndex() (not a raw masterChannelIndex()) so
+            //! these land before any existing video/metronome channel rather than
+            //! between it and master - see resolveAuxInsertIndex()'s own NOTE.
             for (aux_channel_idx_t index : sortedAuxIndices()) {
                 TrackId trackId = auxMap.at(index);
                 if (!findChannelItem(trackId)) {
-                    addItem(buildAuxChannelItem(index, trackId), masterChannelIndex());
+                    bool isGroupBus = controller()->isAuxBusGroup(index);
+                    addItem(buildAuxChannelItem(index, trackId), resolveAuxInsertIndex(index, isGroupBus));
                 }
             }
         } else {
@@ -806,7 +814,10 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
 
     // Assumptions:
     // - the last channel is always the master channel
-    // - metronome channel is placed to the immediate left of the master (or auxes if visible)
+    // - metronome channel is placed to the immediate left of the master (video, if
+    //   present, goes immediately left of metronome in turn - see
+    //   resolveVideoInsertIndex()); aux buses, if visible, sit further left still,
+    //   adjacent to the instrument tracks they route from (see resolveAuxInsertIndex())
     // - the InstrumentTrackIds from the mixer channel items are always a correctly
     //   sorted subset of the InstrumentTrackIds from NotationParts
     if (notationPlayback()->isChordSymbolsTrack(newInstrumentTrackId)) {
@@ -888,18 +899,22 @@ std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
 {
     //! NOTE: FX-type aux buses are grouped together (ascending by index), followed by all
-    //! Group-type buses (also ascending by index), then the master channel. Mirrors
-    //! sortedAuxIndices()'s ordering, resolving the equivalent insert position for a single
-    //! newly-added bus rather than the whole list at once - without the index
-    //! comparison below, a bus recreated at a lower, freed index (e.g. "FX3" after deleting
-    //! the old FX3 and re-adding) would always land after every existing same-type sibling
-    //! instead of in its correct sorted position, making the on-screen order depend on
-    //! WHETHER a bus arrived via this incremental path or a full reload, rather than being a
-    //! stable function of the current bus set.
+    //! Group-type buses (also ascending by index), then video/metronome (if present),
+    //! then the master channel. Mirrors sortedAuxIndices()'s ordering, resolving the
+    //! equivalent insert position for a single newly-added bus rather than the whole
+    //! list at once - without the index comparison below, a bus recreated at a lower,
+    //! freed index (e.g. "FX3" after deleting the old FX3 and re-adding) would always
+    //! land after every existing same-type sibling instead of in its correct sorted
+    //! position, making the on-screen order depend on WHETHER a bus arrived via this
+    //! incremental path or a full reload, rather than being a stable function of the
+    //! current bus set. Stopping at video/metronome too (not just master) keeps aux
+    //! buses added after those already exist from landing on the wrong side of them.
     if (isGroupBus) {
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
             const MixerChannelItem* item = m_mixerChannelList[i];
-            if (item->type() == MixerChannelItem::Type::Master) {
+            if (item->type() == MixerChannelItem::Type::Master
+                || item->type() == MixerChannelItem::Type::Video
+                || item->type() == MixerChannelItem::Type::Metronome) {
                 return i;
             }
             if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus() && item->auxBusIndex() > index) {
@@ -913,6 +928,8 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
     for (int i = 0; i < m_mixerChannelList.size(); ++i) {
         const MixerChannelItem* item = m_mixerChannelList[i];
         if (item->type() == MixerChannelItem::Type::Master
+            || item->type() == MixerChannelItem::Type::Video
+            || item->type() == MixerChannelItem::Type::Metronome
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
             return i;
         }
