@@ -1431,6 +1431,10 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
     //! (right now, synchronously) - see IProjectAudioSettings::auxDisplayNumber()'s doc
     //! comment for why this must never be recomputed later from the current sibling set
     ensureAuxDisplayNumberAssigned(index, isGroupBus);
+    //! NOTE: gives this bus an initial (insertion-order) position in the Mixer, so it
+    //! appears at the end of its type's section rather than sorting arbitrarily among
+    //! buses that already have an explicit order from a prior drag-and-drop reorder
+    ensureAuxSortOrderAssigned(index, isGroupBus);
 
     //! NOTE: reserves this index synchronously, right now - m_auxTrackIdMap only gains this
     //! entry once the engine round-trip below actually resolves, which is too late to stop
@@ -1480,13 +1484,14 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, const TrackAddFini
         m_pendingAuxIndices.erase(index);
 
         //! NOTE: the index goes back into resolveFreeAuxBusIndex()'s free pool - for a
-        //! brand-new bus (see isBrandNewBus above), the group-bus flag/display number
-        //! pinned earlier in this same call must be rolled back too, or a LATER bus later
-        //! created at this recycled index would silently inherit this failed attempt's
-        //! leftover metadata
+        //! brand-new bus (see isBrandNewBus above), the group-bus flag/display number/sort
+        //! order pinned earlier in this same call must be rolled back too, or a LATER bus
+        //! later created at this recycled index would silently inherit this failed
+        //! attempt's leftover metadata
         if (isBrandNewBus) {
             audioSettings()->setIsAuxBusGroup(index, false);
             audioSettings()->setAuxDisplayNumber(index, 0);
+            audioSettings()->setAuxSortOrder(index, -1);
         }
 
         LOGE() << "can't add a new aux track, code: [" << code << "] " << msg;
@@ -1531,6 +1536,15 @@ void PlaybackController::ensureAuxDisplayNumberAssigned(aux_channel_idx_t index,
     }
 
     audioSettings()->setAuxDisplayNumber(index, audioSettings()->takeNextAuxDisplayNumber(isGroupBus));
+}
+
+void PlaybackController::ensureAuxSortOrderAssigned(aux_channel_idx_t index, bool isGroupBus)
+{
+    if (audioSettings()->auxSortOrder(index) >= 0) {
+        return;
+    }
+
+    audioSettings()->setAuxSortOrder(index, audioSettings()->takeNextAuxSortOrder(isGroupBus));
 }
 
 void PlaybackController::addNewAuxBus()

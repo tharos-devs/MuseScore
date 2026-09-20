@@ -76,6 +76,33 @@ public:
     Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
     Q_INVOKABLE void deleteAuxChannel(mu::playback::MixerChannelItem* channelItem);
 
+    //! NOTE: returns the aux bus indices of currently-selected channels of the given
+    //! type (FX or Group), in current display order - the set the Mixer's
+    //! drag-and-drop reorder gesture drags together when the press started on an
+    //! already-selected channel of that type.
+    Q_INVOKABLE QVariantList selectedAuxBusIndices(bool isGroupBus) const;
+
+    //! NOTE: returns EVERY aux bus index of the given type (FX or Group), selected or
+    //! not, in current display order - what the drag-and-drop reorder gesture computes
+    //! its live drop target against (see MixerTitleSection.qml).
+    Q_INVOKABLE QVariantList auxBusIndicesOfType(bool isGroupBus) const;
+
+    //! NOTE: this aux bus's row index in THIS model (spanning every channel, not just
+    //! aux ones) - -1 if it doesn't currently exist. Lets MixerPanel.qml's drop
+    //! indicator overlay (spanning the whole channel column, not just the Name row)
+    //! compute which horizontal slot to line up with during an aux drag.
+    Q_INVOKABLE int auxBusModelIndex(int auxBusIndex) const;
+
+    //! NOTE: commits a completed aux drag-and-drop reorder - draggedAuxBusIndices (in
+    //! their current display order) are moved as a block to just before
+    //! dropBeforeAuxBusIndex (or to the end of their type's section if
+    //! dropBeforeAuxBusIndex is -1). All of them, and dropBeforeAuxBusIndex if given,
+    //! must be the same type (FX or Group); this is enforced defensively here, but the
+    //! caller (MixerTitleSection.qml) is expected to never construct a cross-type drag
+    //! in the first place - see resolveAuxInsertIndex()'s NOTE for why sort order (not
+    //! the bus's own stable index) is what actually gets reassigned.
+    Q_INVOKABLE void reorderAuxChannels(const QVariantList& draggedAuxBusIndices, int dropBeforeAuxBusIndex);
+
     Q_INVOKABLE bool canAddAuxBus() const;
     Q_INVOKABLE void addFxChannel();
     Q_INVOKABLE void addGroupChannel();
@@ -134,6 +161,9 @@ private:
     int resolveVideoInsertIndex() const;
     std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
     int resolveAuxInsertIndex(muse::audio::aux_channel_idx_t index, bool isGroupBus) const;
+    //! NOTE: shared by sortedAuxIndices() and resolveAuxInsertIndex(), which must stay
+    //! consistent with each other - see sortedAuxIndices()'s own NOTE.
+    int auxSortOrderOrIndex(muse::audio::aux_channel_idx_t index) const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,

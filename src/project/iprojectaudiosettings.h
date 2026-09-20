@@ -140,6 +140,17 @@ public:
     virtual void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) = 0;
     virtual muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) = 0;
 
+    //! NOTE: a bus's positional SORT order within its type (FX vs Group) - unlike
+    //! auxDisplayNumber above (permanent "FX N"/"Group N" naming, never recomputed),
+    //! this is exactly what the Mixer's drag-and-drop reorder changes: reordering
+    //! reassigns every bus of the dragged type's sort order to 0..N-1 in the new
+    //! sequence (see MixerPanelModel::reorderAuxChannels()). A bus that's never been
+    //! involved in a reorder falls back to insertion order via takeNextAuxSortOrder(),
+    //! same monotonic-counter-per-type shape as takeNextAuxDisplayNumber() above.
+    virtual int auxSortOrder(muse::audio::aux_channel_idx_t index) const = 0;
+    virtual void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order) = 0;
+    virtual int takeNextAuxSortOrder(bool isGroupBus) = 0;
+
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
 
     virtual const playback::SoundProfileName& activeSoundProfile() const = 0;

@@ -72,6 +72,10 @@ public:
     void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) override;
     muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) override;
 
+    int auxSortOrder(muse::audio::aux_channel_idx_t index) const override;
+    void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order) override;
+    int takeNextAuxSortOrder(bool isGroupBus) override;
+
     void removeTrackParams(const engraving::InstrumentTrackId& partId) override;
 
     const playback::SoundProfileName& activeSoundProfile() const override;
@@ -132,6 +136,10 @@ private:
     std::unordered_map<muse::audio::aux_channel_idx_t, muse::audio::aux_channel_idx_t> m_auxDisplayNumberMap;
     muse::audio::aux_channel_idx_t m_nextFxDisplayNumber = 1;
     muse::audio::aux_channel_idx_t m_nextGroupDisplayNumber = 1;
+
+    std::unordered_map<muse::audio::aux_channel_idx_t, int> m_auxSortOrderMap;
+    int m_nextFxSortOrder = 0;
+    int m_nextGroupSortOrder = 0;
 
     std::unordered_map<engraving::InstrumentTrackId, AudioInputParams> m_trackInputParamsMap;
     std::unordered_map<engraving::InstrumentTrackId, AudioOutputParams> m_trackOutputParamsMap;
