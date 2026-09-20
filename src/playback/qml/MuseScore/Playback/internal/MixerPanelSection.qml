@@ -50,6 +50,13 @@ Loader {
     //! untouched.
     property real headerPinOffsetX: 0
 
+    //! NOTE: fed in from MixerPanel.qml as flickable.contentX + flickable.width -
+    //! channelItemWidth -- the right-edge analogue of headerPinOffsetX above.
+    //! Pins the Master channel's own strip so it stays visible at the
+    //! Flickable's right edge no matter how far the other channels have been
+    //! scrolled, same reasoning and same contentX-cancelling trick.
+    property real masterPinOffsetX: 0
+
     property int channelItemWidth: 108
 
     property real spacingAbove: 4
@@ -137,7 +144,88 @@ Loader {
             spacing: 1 // for separators (will be rendered in MixerPanel.qml)
 
             model: root.model
-            delegate: root.delegateComponent
+
+            //! NOTE: wraps root.delegateComponent instead of assigning it directly so the
+            //! master channel (always the model's last row -- see
+            //! MixerPanelModel::masterChannelIndex()'s documented invariant) can be
+            //! excluded here (zero width, no content instantiated) and rendered exactly
+            //! once instead, in the pinned masterPinContent below. Without this, master
+            //! would exist as two simultaneous live, interactive delegates (this one plus
+            //! the pinned one) both bound to the same navigation.row/navigation.panel
+            //! coordinates, which the keyboard-navigation system has no defined behavior
+            //! for.
+            delegate: Item {
+                id: rowWrapper
+
+                required property int index
+                required property MixerChannelItem channelItem
+
+                readonly property bool isMaster: rowWrapper.ListView.view
+                                                  ? rowWrapper.index === rowWrapper.ListView.view.count - 1 : false
+
+                width: rowWrapper.isMaster ? 0 : (rowWrapper.delegateItem ? rowWrapper.delegateItem.width : 0)
+                height: rowWrapper.delegateItem ? rowWrapper.delegateItem.height : 0
+                visible: !rowWrapper.isMaster
+
+                property Item delegateItem: null
+
+                Component.onCompleted: {
+                    if (!rowWrapper.isMaster) {
+                        rowWrapper.delegateItem = root.delegateComponent.createObject(rowWrapper, { channelItem: rowWrapper.channelItem })
+                    }
+                }
+            }
+        }
+
+        //! NOTE: opaque backdrop for the pinned master channel below, same reasoning as
+        //! the header's own backdrop above.
+        Rectangle {
+            visible: root.model && root.model.count > 0
+            z: 2
+
+            x: root.masterPinOffsetX
+            y: 0
+
+            width: root.channelItemWidth
+            height: parent.height
+
+            color: ui.theme.backgroundPrimaryColor
+        }
+
+        //! NOTE: the single live instance of the master channel's strip -- excluded from
+        //! sectionContentList above and rendered here instead, pinned at the Flickable's
+        //! right edge. Rebuilt whenever the underlying MixerChannelItem reference itself
+        //! changes (e.g. a new project is loaded and MixerPanelModel::reloadItems()
+        //! rebuilds the whole channel list) -- ordinary property changes on the SAME
+        //! object propagate live through the instance's own bindings and don't need this.
+        Item {
+            id: masterPinContent
+
+            visible: root.model && root.model.count > 0
+            z: 2
+
+            x: root.masterPinOffsetX
+            y: root.spacingAbove
+
+            width: root.channelItemWidth
+            height: root.headerHeight
+
+            property MixerChannelItem masterChannelItem: root.model && root.model.count > 0
+                                                           ? root.model.get(root.model.count - 1).channelItem : null
+            property Item instance: null
+
+            function rebuildInstance() {
+                if (masterPinContent.instance) {
+                    masterPinContent.instance.destroy()
+                    masterPinContent.instance = null
+                }
+                if (masterPinContent.masterChannelItem) {
+                    masterPinContent.instance = root.delegateComponent.createObject(masterPinContent, { channelItem: masterPinContent.masterChannelItem })
+                }
+            }
+
+            onMasterChannelItemChanged: masterPinContent.rebuildInstance()
+            Component.onCompleted: masterPinContent.rebuildInstance()
         }
     }
 }
