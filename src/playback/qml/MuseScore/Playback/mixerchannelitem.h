@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QObject>
 #include <qqmlintegration.h>
 
@@ -230,6 +232,24 @@ public:
     //! MixerPanelModel's "add FX/Group channel for selected tracks" bulk actions.
     void assignAuxSend(muse::audio::aux_channel_idx_t busIndex);
 
+    //! NOTE: this track's own send slot targeting busIndex, if any - nullptr otherwise.
+    //! Used by MixerPanelModel to key an aux-send LEVEL undo command by (trackId,
+    //! busIndex) instead of a raw AuxSendItem* (which a slot-list rebuild elsewhere -
+    //! compactAuxSendItemKeys() etc. - could otherwise leave dangling by undo time).
+    AuxSendItem* auxSendItemForBus(muse::audio::aux_channel_idx_t busIndex) const;
+
+    //! NOTE: begin/end pairs below bracket a single continuous UI gesture (a slider/knob
+    //! drag, or a discrete text-field/keyboard-step commit treated as a trivial one-tick
+    //! gesture) into ONE undoable change, rather than one per intermediate value while
+    //! dragging. end* is a no-op (no signal fires) if the value didn't actually change
+    //! between begin* and end*, or if end* is called without a matching prior begin*.
+    Q_INVOKABLE void beginVolumeChange();
+    Q_INVOKABLE void endVolumeChange();
+    Q_INVOKABLE void beginBalanceChange();
+    Q_INVOKABLE void endBalanceChange();
+    Q_INVOKABLE void beginGainChange();
+    Q_INVOKABLE void endGainChange();
+
 public slots:
     void setTitle(QString title);
 
@@ -274,8 +294,21 @@ signals:
     //! from assignAuxSend()'s own reassignAuxSend() call (used both by that
     //! dropdown AND by MixerPanelModel's bulk "assign selected tracks to this new
     //! bus" fan-out), or MixerPanelModel's own multi-select fan-out in response to
-    //! this same signal would recurse/double-apply across the selection.
-    void auxSendReassignedByUser(muse::audio::aux_channel_idx_t busIndex);
+    //! this same signal would recurse/double-apply across the selection. oldBusIndex
+    //! is AuxSendItem::NO_BUS when the slot was previously blank - MixerPanelModel
+    //! needs it (captured before the reassignment happens) to make this undoable.
+    void auxSendReassignedByUser(muse::audio::aux_channel_idx_t oldBusIndex, muse::audio::aux_channel_idx_t newBusIndex);
+
+    //! NOTE: fired by the end*Change() methods above once a bracketed gesture actually
+    //! changed the value - MixerPanelModel listens to make these undoable.
+    void volumeChangeCommitted(float oldVolumeLevel, float newVolumeLevel);
+    void balanceChangeCommitted(int oldBalance, int newBalance);
+    void gainChangeCommitted(int oldGain, int newGain);
+    //! NOTE: forwarded from the relevant AuxSendItem's own levelChangeCommitted (see
+    //! its NOTE) - fired here too (with the slot's stable auxIndex added) so
+    //! MixerPanelModel can wire ALL of this channel's continuous-change undo in one
+    //! place, the same way it already does for volume/balance/gain above.
+    void auxSendLevelChangeCommitted(muse::audio::aux_channel_idx_t busIndex, int oldPercentage, int newPercentage);
 
     void inputResourceItemChanged();
     void outputResourceItemListChanged();
@@ -384,5 +417,11 @@ protected:
     //! later being clobbered by the first (now-stale) round-trip's echo. See
     //! moveOutputResourceItem()'s own comment.
     bool m_fxChainUpdatePending = false;
+
+    //! NOTE: set by begin*Change(), consumed and cleared by the matching end*Change() -
+    //! see those methods' own NOTE.
+    std::optional<float> m_volumeChangeStart;
+    std::optional<int> m_balanceChangeStart;
+    std::optional<int> m_gainChangeStart;
 };
 }

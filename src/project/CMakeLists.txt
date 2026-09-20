@@ -36,6 +36,7 @@ target_sources(project PRIVATE
     inotationwritersregister.h
     iprojectaudiosettings.h
     iprojectvideosettings.h
+    iprojectundostack.h
     iprojectconfiguration.h
     irecentfilescontroller.h
     imscmetareader.h
@@ -64,6 +65,8 @@ target_sources(project PRIVATE
     internal/projectaudiosettings.h
     internal/projectvideosettings.cpp
     internal/projectvideosettings.h
+    internal/projectundostack.cpp
+    internal/projectundostack.h
     internal/notationreadersregister.cpp
     internal/notationreadersregister.h
     internal/notationwritersregister.cpp

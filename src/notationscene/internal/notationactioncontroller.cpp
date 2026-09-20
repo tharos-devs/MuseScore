@@ -52,6 +52,7 @@
 #include "notation/inotationinteraction.h"
 
 #include "project/inotationproject.h"
+#include "project/iprojectundostack.h"
 
 #include "qml/MuseScore/NotationScene/abstractelementpopupmodel.h"
 #include "qml/MuseScore/NotationScene/notationviewinputcontroller.h"
@@ -116,8 +117,14 @@ void NotationActionController::init()
 
     // global commands
     registerCommand(CANCEL_COMMAND, &Controller::resetState);
-    registerCommand(UNDO_COMMAND, &Interaction::undo);
-    registerCommand(REDO_COMMAND, &Interaction::redo);
+    registerCommand(UNDO_COMMAND, [this]() {
+        m_undoRedoCoordinator.undo(currentNotation(), globalContext()->currentProject());
+        seekSelectedElement();
+    });
+    registerCommand(REDO_COMMAND, [this]() {
+        m_undoRedoCoordinator.redo(currentNotation(), globalContext()->currentProject());
+        seekSelectedElement();
+    });
 
     // navigation and selection commands
 
@@ -1108,6 +1115,12 @@ void NotationActionController::init()
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
         auto notation = globalContext()->currentNotation();
         if (notation) {
+            //! NOTE: must happen as soon as this document becomes current, not lazily on
+            //! the user's first Ctrl+Z - see NotationUndoRedoCoordinator::track()'s own
+            //! NOTE for why a later first call would silently miss every push made
+            //! before it.
+            m_undoRedoCoordinator.track(notation, globalContext()->currentProject());
+
             auto interaction = notation->interaction();
 
             interaction->selectionChanged().onNotify(this, [this]() {
@@ -1133,6 +1146,18 @@ void NotationActionController::init()
             undoStack->stackChanged().onNotify(this, [this]() {
                 m_stackChanged.notify();
             }, Asyncable::Mode::SetReplace);
+
+            //! NOTE: the Edit menu's Undo/Redo enabled state (and this class's own
+            //! canUndo()/canRedo(), see below) need to reflect BOTH the score's own
+            //! undo stack and the project-level one (Mixer changes) - a pure Mixer
+            //! edit with no score edits pending must still leave Undo enabled.
+            if (project::INotationProjectPtr project = globalContext()->currentProject()) {
+                if (project::IProjectUndoStackPtr projectUndoStack = project->undoStack()) {
+                    projectUndoStack->stackChanged().onNotify(this, [this]() {
+                        m_stackChanged.notify();
+                    }, Asyncable::Mode::SetReplace);
+                }
+            }
 
             notation->style()->styleChanged().onNotify(this, [this]() {
                 m_currentNotationStyleChanged.notify();
@@ -1161,6 +1186,13 @@ void NotationActionController::init()
     globalContext()->playbackState()->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
         m_isNoteInputAllowedChanged.send(isNoteInputAllowed());
     }, Asyncable::Mode::SetReplace);
+
+    //! NOTE: covers a notation that was already current before this init() ran and
+    //! subscribed to currentNotationChanged() above (track() is idempotent, so this
+    //! is harmless even if that notification also fires normally afterward).
+    if (INotationPtr notation = globalContext()->currentNotation()) {
+        m_undoRedoCoordinator.track(notation, globalContext()->currentProject());
+    }
 }
 
 void NotationActionController::setViewController(INotationViewController* controller)
@@ -3178,12 +3210,12 @@ bool NotationActionController::elementHasPopup(const EngravingItem* e) const
 
 bool NotationActionController::canUndo() const
 {
-    return currentNotationUndoStack() ? currentNotationUndoStack()->canUndo() : false;
+    return m_undoRedoCoordinator.canUndo(currentNotation(), globalContext()->currentProject());
 }
 
 bool NotationActionController::canRedo() const
 {
-    return currentNotationUndoStack() ? currentNotationUndoStack()->canRedo() : false;
+    return m_undoRedoCoordinator.canRedo(currentNotation(), globalContext()->currentProject());
 }
 
 muse::async::Notification NotationActionController::stackChanged() const

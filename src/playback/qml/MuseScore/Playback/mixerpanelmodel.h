@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <functional>
+#include <optional>
 #include <vector>
 
 #include <QAbstractListModel>
@@ -36,6 +38,7 @@
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectvideosettings.h"
+#include "project/iprojectundostack.h"
 #include "ui/qml/Muse/Ui/navigationsection.h"
 
 #include "iplaybackcontroller.h"
@@ -173,6 +176,12 @@ private:
     void subscribeOnAutomationChanges();
 
     void onVideoAttachmentChanged();
+    //! NOTE: shared by setColorForSelectedChannels()/resetColorForSelectedChannels() -
+    //! applies color to every currently-selected channel and pushes a single undo
+    //! command for the whole batch, keyed by each channel's stable trackId() rather
+    //! than a raw MixerChannelItem* (which the undo/redo closures might otherwise
+    //! outlive - see the QPointer<MixerPanelModel> guard in the .cpp).
+    void applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName);
     //! NOTE: captures every currently-selected instrument track, then requests a new
     //! aux bus of the given type - the actual assignment happens later, once
     //! onTrackAdded() sees that bus resolve (see m_pendingAuxAssignTrackIds' own NOTE
@@ -201,6 +210,20 @@ private:
     //! globalMuteEngaged()/globalSoloEngaged()
     void connectGlobalMuteSoloAggregate(MixerChannelItem* item);
 
+    //! NOTE: makes every channel's volume/balance/gain/aux-send-level bracketed
+    //! gestures (see MixerChannelItem::beginVolumeChange() et al.) undoable - called
+    //! for every channel type, same as connectGlobalMuteSoloAggregate() above.
+    void connectContinuousChangeUndo(MixerChannelItem* item);
+
+    //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
+    //! pushes a single undo command that just re-invokes the given MixerChannelItem
+    //! setter with the old/new value, looked up fresh by trackId() at undo/redo time
+    //! (never a captured MixerChannelItem* - see applyColorToSelectedChannels()'s own
+    //! NOTE on why).
+    template<typename T>
+    void pushChannelFieldUndoCommand(const muse::audio::TrackId& trackId, const muse::TranslatableString& actionName,
+                                     void (MixerChannelItem::* setter)(T), T oldValue, T newValue);
+
     void loadOutputParams(MixerChannelItem* item, const project::AudioOutputParams& params);
     void updateOutputResourceItemCount();
     void updateAuxSendItemCount();
@@ -210,6 +233,7 @@ private:
     project::INotationProjectPtr currentProject() const;
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectVideoSettingsPtr videoSettings() const;
+    project::IProjectUndoStackPtr projectUndoStack() const;
     notation::INotationPlaybackPtr notationPlayback() const;
     notation::INotationPartsPtr masterNotationParts() const;
 
@@ -231,5 +255,59 @@ private:
     //! trackAdded() fires; this can't be done synchronously right after requesting it.
     QList<muse::audio::TrackId> m_pendingAuxAssignTrackIds;
     bool m_pendingAuxAssignIsGroupBus = false;
+
+    //! NOTE: an aux bus's (index, trackId) pair is NOT stable across a remove+recreate
+    //! cycle - addNewAuxBus()/addNewGroupBus() always hand out a fresh index and the
+    //! engine always assigns a fresh trackId, even when "recreating" a bus an undo
+    //! command is trying to restore. A command's redo/undo closures share ONE of these
+    //! (by shared_ptr), mutated in place by onTrackAdded() whenever a recreate resolves,
+    //! so repeated undo/redo/undo/redo cycling on the same add or delete keeps acting on
+    //! whichever (index, trackId) that bus MOST RECENTLY got - not the one it had when
+    //! the command was first pushed, which a plain captured-by-value pair would.
+    struct AuxBusIdentity {
+        muse::audio::aux_channel_idx_t index = 0;
+        muse::audio::TrackId trackId = -1;
+    };
+
+    //! NOTE: the full identity of a bus this model's OWN redo (see
+    //! makeRecreateAuxBusClosure()) just asked PlaybackController to recreate - consumed
+    //! by onTrackAdded() once that bus resolves, to restore its original name/display
+    //! number/sort order/output params, reassign the same tracks, and update `identity`
+    //! in place (see AuxBusIdentity above), since addNewAuxBus()/addNewGroupBus()
+    //! otherwise only ever hand out fresh defaults. Also doubles as the signal that a
+    //! just-resolved bus came from OUR redo rather than a fresh user action, so
+    //! onTrackAdded() doesn't push a second undo command for the same addition.
+    struct PendingAuxRedo {
+        bool isGroupBus = false;
+        project::AudioOutputParams outParams;
+        muse::String name;
+        muse::audio::aux_channel_idx_t displayNumber = 0;
+        int sortOrder = -1;
+        QList<muse::audio::TrackId> assignedTrackIds;
+        std::shared_ptr<AuxBusIdentity> identity;
+    };
+    std::optional<PendingAuxRedo> m_pendingAuxRedo;
+
+    //! NOTE: captures everything needed to make a just-created aux bus undoable - undo
+    //! removes it, redo recreates it and restores its identity via m_pendingAuxRedo
+    //! above. Shares its AuxBusIdentity with makeRemoveAuxBusClosure() below so both
+    //! ends of the command track the bus's CURRENT (index, trackId), not just the one
+    //! captured at push time - see AuxBusIdentity's own NOTE.
+    std::function<void()> makeRecreateAuxBusClosure(bool isGroupBus, const project::AudioOutputParams& outParams, const muse::String& name,
+                                                    muse::audio::aux_channel_idx_t displayNumber, int sortOrder,
+                                                    const QList<muse::audio::TrackId>& assignedTrackIds,
+                                                    std::shared_ptr<AuxBusIdentity> identity);
+
+    //! NOTE: removes the bus AuxBusIdentity currently points at - but only after
+    //! verifying it's still actually there (same index AND same trackId), since aux
+    //! indices are a recycled pool: without this check, a stale command (e.g. one from
+    //! before an intervening manual delete+recreate of the same slot) could silently
+    //! remove a completely unrelated, later bus that happened to land on the same
+    //! index. A no-longer-matching identity means this command is stale - it just no-ops
+    //! rather than acting on the wrong bus.
+    std::function<void()> makeRemoveAuxBusClosure(std::shared_ptr<AuxBusIdentity> identity);
+
+    void pushAddAuxBusUndoCommand(muse::audio::aux_channel_idx_t index, const muse::audio::TrackId& trackId, bool isGroupBus,
+                                  const QList<muse::audio::TrackId>& assignedTrackIds);
 };
 }

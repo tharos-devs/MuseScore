@@ -58,7 +58,11 @@ static Promise<T> resolvedPromise(const T& value)
     });
 }
 
-static const muse::Uri UPLOAD_PROGRESS_URI("musescore://project/upload/progress");
+//! NOTE: named distinctly from projectactionscontroller.cpp's own file-local static of the
+//! same underlying value - both are "static" (internal linkage), but a Unity build still
+//! merges every .cpp in a batch into one translation unit, where two identically-named
+//! file-scope statics collide outright.
+static const muse::Uri SAVE_SCENARIO_UPLOAD_PROGRESS_URI("musescore://project/upload/progress");
 
 static constexpr int RETRY_SAVE_BTN_ID = int(IInteractive::Button::CustomButton);
 static constexpr int SAVE_AS_BTN_ID    = RETRY_SAVE_BTN_ID + 1;
@@ -654,17 +658,17 @@ SaveProjectScenario::AudioFile SaveProjectScenario::exportMp3(const INotationPtr
 
 void SaveProjectScenario::showUploadProgressDialog()
 {
-    if (interactive()->isOpened(UPLOAD_PROGRESS_URI).val) {
+    if (interactive()->isOpened(SAVE_SCENARIO_UPLOAD_PROGRESS_URI).val) {
         return;
     }
 
-    interactive()->open(UPLOAD_PROGRESS_URI);
+    interactive()->open(SAVE_SCENARIO_UPLOAD_PROGRESS_URI);
 }
 
 void SaveProjectScenario::closeUploadProgressDialog()
 {
-    if (interactive()->isOpened(UPLOAD_PROGRESS_URI).val) {
-        interactive()->closeSync(UriQuery(UPLOAD_PROGRESS_URI));
+    if (interactive()->isOpened(SAVE_SCENARIO_UPLOAD_PROGRESS_URI).val) {
+        interactive()->closeSync(UriQuery(SAVE_SCENARIO_UPLOAD_PROGRESS_URI));
     }
 }
 

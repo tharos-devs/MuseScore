@@ -37,6 +37,8 @@ target_sources(notationscene PRIVATE
     internal/midiinputoutputcontroller.h
     internal/notationactioncontroller.cpp
     internal/notationactioncontroller.h
+    internal/notationundoredocoordinator.cpp
+    internal/notationundoredocoordinator.h
     internal/notationuiactions.cpp
     internal/notationuiactions.h
     internal/notationactionsshortcutsmigrator.cpp

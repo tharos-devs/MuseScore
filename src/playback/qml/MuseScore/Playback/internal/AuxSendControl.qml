@@ -90,8 +90,16 @@ Item {
             Connections {
                 target: audioSignalAmountKnob.mouseArea
                 function onPressedChanged() {
-                    if (root.auxSendItemModel) {
-                        root.auxSendItemModel.isDragging = audioSignalAmountKnob.mouseArea.pressed
+                    if (!root.auxSendItemModel) {
+                        return
+                    }
+
+                    root.auxSendItemModel.isDragging = audioSignalAmountKnob.mouseArea.pressed
+
+                    if (audioSignalAmountKnob.mouseArea.pressed) {
+                        root.auxSendItemModel.beginLevelChange()
+                    } else {
+                        root.auxSendItemModel.endLevelChange()
                     }
                 }
             }

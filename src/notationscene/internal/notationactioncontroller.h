@@ -46,6 +46,7 @@
 #include "notation/notationtypes.h"
 
 #include "inotationviewcontroller.h"
+#include "notationundoredocoordinator.h"
 
 namespace mu::notation {
 class NotationActionController : public INotationCommandsController, public muse::actions::Actionable, public muse::rcommand::Commandable,
@@ -327,5 +328,10 @@ private:
     using IsActionEnabledFunc = std::function<bool ()>;
     std::map<muse::actions::ActionCode, IsActionEnabledFunc> m_isEnabledMap;
     std::unordered_set<muse::actions::ActionCode> m_isAllowedDuringPlayback;
+
+    //! NOTE: mutable - canUndo()/canRedo() (both const) query it, and its lookup can
+    //! lazily create a document's tracking state (see track()'s own NOTE on why that
+    //! shouldn't normally happen, but stays a safe no-op fallback if it ever does).
+    mutable NotationUndoRedoCoordinator m_undoRedoCoordinator;
 };
 }

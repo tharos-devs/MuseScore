@@ -105,6 +105,7 @@ NotationProject::~NotationProject()
 {
     m_projectAudioSettings = nullptr;
     m_projectVideoSettings = nullptr;
+    m_projectUndoStack = nullptr;
     m_masterNotation = nullptr;
     m_engravingProject = nullptr;
 }
@@ -118,6 +119,7 @@ void NotationProject::setupProject()
     m_masterNotation = std::shared_ptr<MasterNotation>(new MasterNotation(this, iocContext()));
     m_projectAudioSettings = std::shared_ptr<ProjectAudioSettings>(new ProjectAudioSettings(iocContext()));
     m_projectVideoSettings = std::make_shared<ProjectVideoSettings>();
+    m_projectUndoStack = std::make_shared<ProjectUndoStack>();
 }
 
 Ret NotationProject::load(const muse::io::path_t& path, const OpenParams& openParams, const std::string& format_)
@@ -1302,4 +1304,9 @@ IProjectAudioSettingsPtr NotationProject::audioSettings() const
 IProjectVideoSettingsPtr NotationProject::videoSettings() const
 {
     return m_projectVideoSettings;
+}
+
+IProjectUndoStackPtr NotationProject::undoStack() const
+{
+    return m_projectUndoStack;
 }

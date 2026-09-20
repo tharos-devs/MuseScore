@@ -46,10 +46,14 @@ using namespace mu::notation;
 using namespace muse;
 using muse::async::Promise;
 
-static const muse::Uri NOTATION_PAGE_URI("musescore://notation");
+//! NOTE: named distinctly from projectactionscontroller.cpp's own file-local statics of the
+//! same underlying value - both are "static" (internal linkage), but a Unity build still
+//! merges every .cpp in a batch into one translation unit, where two identically-named
+//! file-scope statics collide outright.
+static const muse::Uri OPEN_SCENARIO_NOTATION_PAGE_URI("musescore://notation");
 
-static const QString MUSESCORE_URL_SCHEME("musescore");
-static const QString OPEN_SCORE_URL_HOSTNAME("open-score");
+static const QString OPEN_SCENARIO_MUSESCORE_URL_SCHEME("musescore");
+static const QString OPEN_SCENARIO_OPEN_SCORE_URL_HOSTNAME("open-score");
 
 bool OpenProjectScenario::isBusy(BusyStatus status) const
 {
@@ -211,8 +215,8 @@ bool OpenProjectScenario::isUrlSupported(const QUrl& url) const
         return isFileSupported(muse::io::path_t(url));
     }
 
-    if (url.scheme() == MUSESCORE_URL_SCHEME) {
-        if (url.host() == OPEN_SCORE_URL_HOSTNAME) {
+    if (url.scheme() == OPEN_SCENARIO_MUSESCORE_URL_SCHEME) {
+        if (url.host() == OPEN_SCENARIO_OPEN_SCORE_URL_HOSTNAME) {
             return true;
         }
     }
@@ -273,7 +277,7 @@ Promise<Ret> OpenProjectScenario::openProject(const ProjectFile& file)
         return openProject(file.path(), file.displayNameOverride);
     }
 
-    if (file.url.scheme() == MUSESCORE_URL_SCHEME) {
+    if (file.url.scheme() == OPEN_SCENARIO_MUSESCORE_URL_SCHEME) {
         return openMuseScoreUrl(file.url);
     }
 
@@ -476,7 +480,7 @@ Ret OpenProjectScenario::finishOpening()
         });
     };
 
-    if (interactive()->isOpened(NOTATION_PAGE_URI).val) {
+    if (interactive()->isOpened(OPEN_SCENARIO_NOTATION_PAGE_URI).val) {
         showUpdateNotification();
     } else {
         async::Channel<Uri> opened = interactive()->opened();
@@ -490,7 +494,7 @@ Ret OpenProjectScenario::finishOpening()
         });
     }
 
-    return openPageIfNeed(NOTATION_PAGE_URI);
+    return openPageIfNeed(OPEN_SCENARIO_NOTATION_PAGE_URI);
 }
 
 Promise<Ret> OpenProjectScenario::downloadAndOpenCloudProject(int scoreId, const QString& hash, const QString& secret, bool isOwner)
@@ -590,7 +594,7 @@ Promise<Ret> OpenProjectScenario::downloadCloudProject(int scoreId, const muse::
 
 Promise<Ret> OpenProjectScenario::openMuseScoreUrl(const QUrl& url)
 {
-    if (url.host() == OPEN_SCORE_URL_HOSTNAME) {
+    if (url.host() == OPEN_SCENARIO_OPEN_SCORE_URL_HOSTNAME) {
         return openScoreFromMuseScoreCom(url);
     }
 

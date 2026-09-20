@@ -77,7 +77,9 @@ MixerPanelSection {
 
             onTextEdited: function(newTextValue) {
                 if (content.channelItem.volumeLevel !== Number(newTextValue)) {
+                    content.channelItem.beginVolumeChange()
                     content.channelItem.volumeLevel = Number(newTextValue)
+                    content.channelItem.endVolumeChange()
                 }
             }
         }
