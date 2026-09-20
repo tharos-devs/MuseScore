@@ -312,6 +312,47 @@ ColumnLayout {
             x: prv.masterPinOffsetX - 1
         }
 
+        //! NOTE: the aux drag-and-drop reorder gesture's drop-position indicator (see
+        //! MixerTitleSection.qml, the only section that actually drives this - titleSection
+        //! is that section's own id, so its auxDropBeforeIndex/etc. properties are read
+        //! directly from here). Drawn at this shared MixerPanel.qml level, spanning the
+        //! whole channel column (every section stacked, not just the Name row it's
+        //! dragged from), rather than as a per-row indicator local to MixerTitleSection -
+        //! a plain child of flickable (not one of the pinned/contentX-cancelled overlays
+        //! above) so it scrolls normally along with the channel it's pointing at.
+        Rectangle {
+            id: auxDropIndicator
+
+            visible: titleSection.auxDropBeforeIndex !== -2
+            z: 3
+
+            anchors.bottom: parent.bottom
+            height: contentColumn.height
+
+            width: 2
+            color: ui.theme.accentColor
+
+            x: {
+                if (!auxDropIndicator.visible) {
+                    return 0
+                }
+
+                let targetModelIndex
+                if (titleSection.auxDropBeforeIndex === -1) {
+                    targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxLastOfTypeIndex) + 1
+                } else {
+                    targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxDropBeforeIndex)
+                }
+
+                if (targetModelIndex < 0) {
+                    return 0
+                }
+
+                let columnStartX = contextMenuModel.labelsSectionVisible ? (prv.headerWidth + 1) : 0
+                return columnStartX + targetModelIndex * (prv.channelItemWidth + 1) - 1
+            }
+        }
+
         Column {
             id: contentColumn
 

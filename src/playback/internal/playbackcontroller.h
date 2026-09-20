@@ -247,6 +247,11 @@ private:
     //! NOTE: permanently pins this bus's display number on first call (a no-op if already
     //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
     void ensureAuxDisplayNumberAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus);
+    //! NOTE: gives this bus an initial sort order (insertion order) on first call, a no-op
+    //! if already assigned (e.g. reloading an already-saved project) - see
+    //! IProjectAudioSettings::auxSortOrder()'s doc comment. Unlike the display number
+    //! above, this CAN change later, via MixerPanelModel::reorderAuxChannels().
+    void ensureAuxSortOrderAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus);
 
     void setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive);
     project::AudioOutputParams trackOutputParams(const engraving::InstrumentTrackId& instrumentTrackId) const;

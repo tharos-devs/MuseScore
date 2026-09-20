@@ -251,6 +251,178 @@ void MixerPanelModel::deleteAuxChannel(MixerChannelItem* channelItem)
     controller()->removeAuxBus(index);
 }
 
+QVariantList MixerPanelModel::selectedAuxBusIndices(bool isGroupBus) const
+{
+    QVariantList result;
+
+    for (aux_channel_idx_t index : sortedAuxIndices()) {
+        if (controller()->isAuxBusGroup(index) != isGroupBus) {
+            continue;
+        }
+
+        const MixerChannelItem* item = findChannelItem(controller()->auxTrackIdMap().at(index));
+        if (item && item->selected()) {
+            result.push_back(static_cast<int>(index));
+        }
+    }
+
+    return result;
+}
+
+QVariantList MixerPanelModel::auxBusIndicesOfType(bool isGroupBus) const
+{
+    QVariantList result;
+
+    for (aux_channel_idx_t index : sortedAuxIndices()) {
+        if (controller()->isAuxBusGroup(index) == isGroupBus) {
+            result.push_back(static_cast<int>(index));
+        }
+    }
+
+    return result;
+}
+
+int MixerPanelModel::auxBusModelIndex(int auxBusIndex) const
+{
+    const IPlaybackController::AuxTrackIdMap& auxTrackIdMap = controller()->auxTrackIdMap();
+    auto it = auxTrackIdMap.find(static_cast<aux_channel_idx_t>(auxBusIndex));
+    if (it == auxTrackIdMap.end()) {
+        return INVALID_INDEX;
+    }
+
+    return indexOf(it->second);
+}
+
+void MixerPanelModel::reorderAuxChannels(const QVariantList& draggedAuxBusIndices, int dropBeforeAuxBusIndex)
+{
+    if (draggedAuxBusIndices.isEmpty()) {
+        return;
+    }
+
+    std::vector<aux_channel_idx_t> dragged;
+    dragged.reserve(draggedAuxBusIndices.size());
+    for (const QVariant& v : draggedAuxBusIndices) {
+        dragged.push_back(static_cast<aux_channel_idx_t>(v.toInt()));
+    }
+
+    const IPlaybackController::AuxTrackIdMap& auxTrackIdMap = controller()->auxTrackIdMap();
+
+    //! NOTE: defensive - MixerTitleSection.qml is expected to only ever gather same-type,
+    //! currently-existing buses into a single drag targeting a same-type,
+    //! currently-existing drop position, but none of that is ever trusted blindly
+    //! across the QML/C++ boundary:
+    //! - a stray cross-type index would silently corrupt both sections' sort order;
+    //! - a bus deleted (e.g. via the context menu, or Undo) in the moment between the
+    //!   drag starting and this call - the mouse button can stay held for an arbitrary
+    //!   time - would otherwise crash on the unchecked auxTrackIdMap.at() calls below.
+    if (!muse::contains(auxTrackIdMap, dragged.front())) {
+        return;
+    }
+    bool isGroupBus = controller()->isAuxBusGroup(dragged.front());
+
+    for (aux_channel_idx_t index : dragged) {
+        IF_ASSERT_FAILED(muse::contains(auxTrackIdMap, index)
+                         && controller()->isAuxBusGroup(index) == isGroupBus) {
+            return;
+        }
+    }
+    if (dropBeforeAuxBusIndex >= 0) {
+        auto dropIndex = static_cast<aux_channel_idx_t>(dropBeforeAuxBusIndex);
+        IF_ASSERT_FAILED(muse::contains(auxTrackIdMap, dropIndex)
+                         && controller()->isAuxBusGroup(dropIndex) == isGroupBus) {
+            return;
+        }
+    }
+
+    //! NOTE: the row right after the last bus of this type - i.e. right before whatever
+    //! immediately follows it (another aux type, video/metronome, or master). Deliberately
+    //! NOT resolveAuxInsertIndex(): that resolves where a bus's OWN persisted sort order
+    //! currently ranks it among siblings, which is right for an incrementally-added bus
+    //! (whose order is either freshly assigned or already correctly reloaded), but wrong
+    //! here - a dragged bus's persisted order is stale until the bookkeeping loop below
+    //! runs, so ranking it among siblings would put a "drop at the end" back wherever its
+    //! OLD order happened to place it instead of genuinely at the end.
+    auto endOfSectionRow = [this, isGroupBus]() {
+        for (int i = 0; i < m_mixerChannelList.size(); ++i) {
+            const MixerChannelItem* item = m_mixerChannelList[i];
+            if (item->type() == MixerChannelItem::Type::Master
+                || item->type() == MixerChannelItem::Type::Video
+                || item->type() == MixerChannelItem::Type::Metronome) {
+                return i;
+            }
+            if (!isGroupBus && item->type() == MixerChannelItem::Type::Aux && item->isGroupBus()) {
+                return i;
+            }
+        }
+
+        return masterChannelIndex();
+    };
+
+    //! NOTE: relocates m_mixerChannelList's actual rows directly (via the same
+    //! beginRemoveRows()/beginInsertRows() primitives addItem()/removeItem() already use,
+    //! as a remove-then-reinsert rather than a genuine beginMoveRows() - its
+    //! destinationChild has fiddly, easy-to-get-wrong-in-a-way-that-corrupts-the-view
+    //! indexing conventions that differ from QList::move()'s own, and correctness here
+    //! matters more than avoiding one extra delegate recreation per dragged channel)
+    //! rather than doing a full reload() - this still preserves each MixerChannelItem's
+    //! object identity, so runtime UI state that isn't itself persisted (selected() in
+    //! particular - the dragged channels should stay visibly selected right after the
+    //! drop) survives the reorder.
+    //!
+    //! Moves one dragged bus at a time, in the given (already-in-display-order)
+    //! sequence, to just before the drop target - recomputing both rows fresh each
+    //! iteration since every move shifts subsequent rows.
+    bool movedAny = false;
+
+    for (aux_channel_idx_t draggedIndex : dragged) {
+        int fromRow = indexOf(auxTrackIdMap.at(draggedIndex));
+
+        int toRow = dropBeforeAuxBusIndex >= 0
+                    ? indexOf(auxTrackIdMap.at(static_cast<aux_channel_idx_t>(dropBeforeAuxBusIndex)))
+                    : endOfSectionRow();
+
+        if (fromRow < 0 || toRow < 0 || fromRow == toRow) {
+            continue;
+        }
+
+        MixerChannelItem* item = m_mixerChannelList[fromRow];
+
+        beginRemoveRows(QModelIndex(), fromRow, fromRow);
+        m_mixerChannelList.removeAt(fromRow);
+        endRemoveRows();
+
+        //! NOTE: removing fromRow shifts every row after it down by one - toRow must be
+        //! adjusted to still refer to the same logical position now that fromRow is gone
+        //! (mirrors beginInsertRows()'s own "insert before whatever currently sits at
+        //! this row" convention, applied to the list state right after the removal).
+        int adjustedToRow = toRow > fromRow ? toRow - 1 : toRow;
+
+        beginInsertRows(QModelIndex(), adjustedToRow, adjustedToRow);
+        m_mixerChannelList.insert(adjustedToRow, item);
+        endInsertRows();
+
+        movedAny = true;
+    }
+
+    if (!movedAny) {
+        return;
+    }
+
+    updateItemsPanelsOrder();
+
+    //! NOTE: bookkeeping only from here - the visual reorder already happened above via
+    //! the moves; this just makes it survive a project reload (see
+    //! IProjectAudioSettings::auxSortOrder()). Walks the list's actual, now-final
+    //! physical order rather than re-deriving it, since sortedAuxIndices() would still
+    //! read the OLD persisted values this loop is about to replace.
+    int order = 0;
+    for (const MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+        if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus() == isGroupBus) {
+            audioSettings()->setAuxSortOrder(item->auxBusIndex(), order++);
+        }
+    }
+}
+
 bool MixerPanelModel::canAddAuxBus() const
 {
     return controller()->canAddAuxBus();
@@ -870,10 +1042,23 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
     return INVALID_INDEX;
 }
 
+int MixerPanelModel::auxSortOrderOrIndex(aux_channel_idx_t index) const
+{
+    //! NOTE: sort order is the user's drag-and-drop reorder position (see
+    //! reorderAuxChannels()), not the bus's own stable index - falling back to the
+    //! index for a bus that's never had one assigned is only a defensive fallback in
+    //! practice, since PlaybackController::ensureAuxSortOrderAssigned() gives every bus
+    //! a real one (initially matching its ascending-index position) as soon as it's
+    //! loaded. Shared by sortedAuxIndices() and resolveAuxInsertIndex() below, which
+    //! must stay consistent with each other.
+    int order = audioSettings()->auxSortOrder(index);
+    return order >= 0 ? order : static_cast<int>(index);
+}
+
 std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 {
-    //! NOTE: single source of truth for "FX-type buses first (ascending index), then
-    //! Group-type buses (ascending index)" - shared by reloadItems() and the
+    //! NOTE: single source of truth for "FX-type buses first (by sort order), then
+    //! Group-type buses (by sort order)" - shared by reloadItems() and the
     //! areAuxChannelsVisibleChanged handler in setupConnections(), which both need to
     //! (re)build the aux section of the channel list in this same order. Must stay
     //! consistent with resolveAuxInsertIndex() below, which resolves the equivalent
@@ -882,33 +1067,45 @@ std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
     const auto& auxTrackIdMap = controller()->auxTrackIdMap();
     indices.reserve(auxTrackIdMap.size());
 
-    for (const auto& pair : auxTrackIdMap) {
-        if (!controller()->isAuxBusGroup(pair.first)) {
-            indices.push_back(pair.first);
-        }
-    }
+    std::vector<aux_channel_idx_t> fxIndices;
+    std::vector<aux_channel_idx_t> groupIndices;
     for (const auto& pair : auxTrackIdMap) {
         if (controller()->isAuxBusGroup(pair.first)) {
-            indices.push_back(pair.first);
+            groupIndices.push_back(pair.first);
+        } else {
+            fxIndices.push_back(pair.first);
         }
     }
+
+    auto bySortOrder = [this](aux_channel_idx_t a, aux_channel_idx_t b) {
+        return auxSortOrderOrIndex(a) < auxSortOrderOrIndex(b);
+    };
+    std::stable_sort(fxIndices.begin(), fxIndices.end(), bySortOrder);
+    std::stable_sort(groupIndices.begin(), groupIndices.end(), bySortOrder);
+
+    indices.insert(indices.end(), fxIndices.begin(), fxIndices.end());
+    indices.insert(indices.end(), groupIndices.begin(), groupIndices.end());
 
     return indices;
 }
 
 int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
 {
-    //! NOTE: FX-type aux buses are grouped together (ascending by index), followed by all
-    //! Group-type buses (also ascending by index), then video/metronome (if present),
-    //! then the master channel. Mirrors sortedAuxIndices()'s ordering, resolving the
+    //! NOTE: FX-type aux buses are grouped together (by sort order), followed by all
+    //! Group-type buses (also by sort order), then video/metronome (if present), then
+    //! the master channel. Mirrors sortedAuxIndices()'s ordering, resolving the
     //! equivalent insert position for a single newly-added bus rather than the whole
-    //! list at once - without the index comparison below, a bus recreated at a lower,
-    //! freed index (e.g. "FX3" after deleting the old FX3 and re-adding) would always
-    //! land after every existing same-type sibling instead of in its correct sorted
-    //! position, making the on-screen order depend on WHETHER a bus arrived via this
-    //! incremental path or a full reload, rather than being a stable function of the
-    //! current bus set. Stopping at video/metronome too (not just master) keeps aux
-    //! buses added after those already exist from landing on the wrong side of them.
+    //! list at once - without the sort-order comparison below, a bus recreated at a
+    //! lower, freed index (e.g. "FX3" after deleting the old FX3 and re-adding), or one
+    //! reloading from a saved project with a persisted (possibly drag-and-drop
+    //! reordered) position, would always land after every existing same-type sibling
+    //! instead of in its correct sorted position, making the on-screen order depend on
+    //! WHETHER a bus arrived via this incremental path or a full reload, rather than
+    //! being a stable function of the current bus set and its persisted order. Stopping
+    //! at video/metronome too (not just master) keeps aux buses added after those
+    //! already exist from landing on the wrong side of them.
+    int ownOrder = auxSortOrderOrIndex(index);
+
     if (isGroupBus) {
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
             const MixerChannelItem* item = m_mixerChannelList[i];
@@ -917,7 +1114,8 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
                 || item->type() == MixerChannelItem::Type::Metronome) {
                 return i;
             }
-            if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus() && item->auxBusIndex() > index) {
+            if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus()
+                && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
                 return i;
             }
         }
@@ -933,7 +1131,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
             return i;
         }
-        if (item->type() == MixerChannelItem::Type::Aux && item->auxBusIndex() > index) {
+        if (item->type() == MixerChannelItem::Type::Aux && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
             return i;
         }
     }

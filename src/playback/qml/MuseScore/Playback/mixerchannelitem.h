@@ -54,6 +54,10 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(bool outputOnly READ outputOnly CONSTANT)
     Q_PROPERTY(bool isGroupBus READ isGroupBus CONSTANT)
     Q_PROPERTY(bool isReverbBus READ isReverbBus CONSTANT)
+    //! NOTE: only meaningful for Type::Aux channels - see auxBusIndex()'s own doc comment.
+    //! No NOTIFY: read once by the Mixer's aux drag-and-drop reorder gesture, never bound
+    //! to live QML UI.
+    Q_PROPERTY(int auxBusIndex READ auxBusIndex)
 
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
 

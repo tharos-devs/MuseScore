@@ -127,6 +127,8 @@ void ProjectAudioSettings::removeAuxOutputParams(aux_channel_idx_t index)
     //! instead of inheriting this deleted bus's old one - the monotonic counters themselves
     //! are deliberately never decremented, so that fresh number is still never reused
     m_auxDisplayNumberMap.erase(index);
+    //! NOTE: same reasoning as m_auxDisplayNumberMap above, for sort order
+    m_auxSortOrderMap.erase(index);
 
     m_settingsChanged.notify();
 }
@@ -315,6 +317,33 @@ aux_channel_idx_t ProjectAudioSettings::takeNextAuxDisplayNumber(bool isGroupBus
     return number;
 }
 
+int ProjectAudioSettings::auxSortOrder(aux_channel_idx_t index) const
+{
+    auto it = m_auxSortOrderMap.find(index);
+    return it != m_auxSortOrderMap.end() ? it->second : -1;
+}
+
+void ProjectAudioSettings::setAuxSortOrder(aux_channel_idx_t index, int order)
+{
+    auto it = m_auxSortOrderMap.find(index);
+    if (it != m_auxSortOrderMap.end() && it->second == order) {
+        return;
+    }
+
+    m_auxSortOrderMap.insert_or_assign(index, order);
+    m_settingsChanged.notify();
+}
+
+int ProjectAudioSettings::takeNextAuxSortOrder(bool isGroupBus)
+{
+    int& counter = isGroupBus ? m_nextGroupSortOrder : m_nextFxSortOrder;
+    int order = counter++;
+
+    m_settingsChanged.notify();
+
+    return order;
+}
+
 void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
 {
     auto inSearch = m_trackInputParamsMap.find(partId);
@@ -402,10 +431,16 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         if (displayNumber > 0) {
             m_auxDisplayNumberMap.emplace(index, static_cast<aux_channel_idx_t>(displayNumber));
         }
+
+        if (auxObject.contains("sortOrder")) {
+            m_auxSortOrderMap.emplace(index, auxObject.value("sortOrder").toInt(-1));
+        }
     }
 
     m_nextFxDisplayNumber = static_cast<aux_channel_idx_t>(rootObj.value("nextFxDisplayNumber").toInt(1));
     m_nextGroupDisplayNumber = static_cast<aux_channel_idx_t>(rootObj.value("nextGroupDisplayNumber").toInt(1));
+    m_nextFxSortOrder = rootObj.value("nextFxSortOrder").toInt(0);
+    m_nextGroupSortOrder = rootObj.value("nextGroupSortOrder").toInt(0);
 
     QJsonArray tracksArray = rootObj.value("tracks").toArray();
 
@@ -457,6 +492,8 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
     rootObj["activeSoundProfile"] = m_activeSoundProfileName.toQString();
     rootObj["nextFxDisplayNumber"] = static_cast<int>(m_nextFxDisplayNumber);
     rootObj["nextGroupDisplayNumber"] = static_cast<int>(m_nextGroupDisplayNumber);
+    rootObj["nextFxSortOrder"] = m_nextFxSortOrder;
+    rootObj["nextGroupSortOrder"] = m_nextGroupSortOrder;
 
     QByteArray json = QJsonDocument(rootObj).toJson();
     writer.writeAudioSettingsJsonFile(ByteArray::fromQByteArrayNoCopy(json));
@@ -761,6 +798,11 @@ QJsonObject ProjectAudioSettings::buildAuxObject(aux_channel_idx_t index, const 
     auto displayNumberSearch = m_auxDisplayNumberMap.find(index);
     if (displayNumberSearch != m_auxDisplayNumberMap.end()) {
         result.insert("displayNumber", static_cast<int>(displayNumberSearch->second));
+    }
+
+    auto sortOrderSearch = m_auxSortOrderMap.find(index);
+    if (sortOrderSearch != m_auxSortOrderMap.end()) {
+        result.insert("sortOrder", sortOrderSearch->second);
     }
 
     return result;
