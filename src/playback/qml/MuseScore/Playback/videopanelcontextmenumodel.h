@@ -62,6 +62,18 @@ class VideoPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
     //! Full screen's own label flip.
     Q_PROPERTY(bool hitPointsPanelVisible READ hitPointsPanelVisible WRITE setHitPointsPanelVisible NOTIFY hitPointsPanelVisibleChanged)
 
+    //! NOTE Whether the timeline (scrub bar) is currently shown -- fed in from
+    //! VideoPanel.qml, same reasoning as hitPointsPanelVisible above. Flips
+    //! the "Timeline" item's checkmark, same pattern as Full screen's own
+    //! label flip.
+    Q_PROPERTY(bool timelineVisible READ timelineVisible WRITE setTimelineVisible NOTIFY timelineVisibleChanged)
+
+    //! NOTE Whether the transport controls toolbar (rewind/play/stop/loop +
+    //! zoom cluster) is currently shown -- fed in from VideoPanel.qml, same
+    //! reasoning as timelineVisible above. Flips the "Controls" item's
+    //! checkmark, same pattern as Timeline's own checkmark.
+    Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE setControlsVisible NOTIFY controlsVisibleChanged)
+
     QML_ELEMENT
 
 public:
@@ -93,6 +105,12 @@ public:
     bool hitPointsPanelVisible() const;
     void setHitPointsPanelVisible(bool visible);
 
+    bool timelineVisible() const;
+    void setTimelineVisible(bool visible);
+
+    bool controlsVisible() const;
+    void setControlsVisible(bool visible);
+
 signals:
     //! NOTE Actually toggling full screen needs a QQuickWindow (via the
     //! Window attached property), which this menu-item-list model has no
@@ -112,6 +130,20 @@ signals:
     void toggleHitPointsPanelVisibleRequested();
     void hitPointsPanelVisibleChanged();
 
+    //! NOTE Actually hiding/showing the timeline needs the panel's own
+    //! ColumnLayout, which this menu-item-list model has no business reaching
+    //! into -- QML handles it on receiving this, same as
+    //! toggleHitPointsPanelVisibleRequested above.
+    void toggleTimelineVisibleRequested();
+    void timelineVisibleChanged();
+
+    //! NOTE Actually hiding/showing the controls toolbar needs the panel's own
+    //! ColumnLayout, which this menu-item-list model has no business reaching
+    //! into -- QML handles it on receiving this, same as
+    //! toggleTimelineVisibleRequested above.
+    void toggleControlsVisibleRequested();
+    void controlsVisibleChanged();
+
 private:
     void updateItems();
 
@@ -119,5 +151,7 @@ private:
     bool m_isFullScreen = false;
     bool m_hitPointsPanelBelowTimeline = false;
     bool m_hitPointsPanelVisible = true;
+    bool m_timelineVisible = true;
+    bool m_controlsVisible = true;
 };
 }

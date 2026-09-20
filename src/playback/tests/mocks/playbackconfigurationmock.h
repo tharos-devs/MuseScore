@@ -95,5 +95,11 @@ public:
     MOCK_METHOD(muse::async::Notification, onlineSoundsShowProgressBarModeChanged, (), (const, override));
 
     MOCK_METHOD(bool, shouldMeasureInputLag, (), (const, override));
+
+    MOCK_METHOD(bool, videoTimelineVisible, (), (const, override));
+    MOCK_METHOD(void, setVideoTimelineVisible, (bool visible), (override));
+
+    MOCK_METHOD(bool, videoControlsVisible, (), (const, override));
+    MOCK_METHOD(void, setVideoControlsVisible, (bool visible), (override));
 };
 }

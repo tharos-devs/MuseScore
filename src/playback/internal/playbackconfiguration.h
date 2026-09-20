@@ -64,6 +64,12 @@ public:
     bool videoHitPointsPanelVisible() const override;
     void setVideoHitPointsPanelVisible(bool visible) override;
 
+    bool videoTimelineVisible() const override;
+    void setVideoTimelineVisible(bool visible) override;
+
+    bool videoControlsVisible() const override;
+    void setVideoControlsVisible(bool visible) override;
+
     bool videoHitPointsPanelBelowTimeline() const override;
     void setVideoHitPointsPanelBelowTimeline(bool belowTimeline) override;
 
