@@ -62,6 +62,15 @@ Item {
                 return b
             }
 
+            //! NOTE: a degenerate incoming rect (e.g. the element's canvasBoundingRect()
+            //! is momentarily empty - mid-removal, not yet laid out) has no real area to
+            //! union in - unioning it anyway would drag the tracked rect's corner down to
+            //! b's (0-sized) position, which can be far from where the real content is.
+            //! Keep the current tracked rect untouched instead of corrupting it.
+            if (b.width <= 0 && b.height <= 0) {
+                return a
+            }
+
             const left = Math.min(a.x, b.x)
             const top = Math.min(a.y, b.y)
             const right = Math.max(a.x + a.width, b.x + b.width)
