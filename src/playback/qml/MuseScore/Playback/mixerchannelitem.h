@@ -269,6 +269,14 @@ signals:
     void auxSendsParamsChanged(const project::AudioOutputParams& params);
     void soloMuteStateChanged(const notation::INotationSoloMuteState::SoloMuteState& state);
 
+    //! NOTE: fires only when the user interactively picks a bus from an existing
+    //! send slot's own dropdown (handleAuxSendMenuItem's numeric-id branch) - NOT
+    //! from assignAuxSend()'s own reassignAuxSend() call (used both by that
+    //! dropdown AND by MixerPanelModel's bulk "assign selected tracks to this new
+    //! bus" fan-out), or MixerPanelModel's own multi-select fan-out in response to
+    //! this same signal would recurse/double-apply across the selection.
+    void auxSendReassignedByUser(muse::audio::aux_channel_idx_t busIndex);
+
     void inputResourceItemChanged();
     void outputResourceItemListChanged();
 

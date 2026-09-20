@@ -139,7 +139,16 @@ MixerPanelSection {
                 }
 
                 onToggled: {
-                    content.channelItem.muted = !checked
+                    //! NOTE: applies to the whole current selection when the clicked
+                    //! channel is itself part of it (same "clicked-and-selected drags/
+                    //! affects the whole selection, otherwise just this one" idiom as
+                    //! the multi-select drag reorder and "add channel for selected
+                    //! tracks" actions elsewhere in this file's siblings)
+                    if (content.channelItem.selected) {
+                        root.model.setMutedForSelectedChannels(!checked)
+                    } else {
+                        content.channelItem.muted = !checked
+                    }
                 }
             }
 
@@ -172,7 +181,13 @@ MixerPanelSection {
                 }
 
                 onToggled: {
-                    content.channelItem.solo = !content.channelItem.solo
+                    //! NOTE: same "clicked-and-selected applies to the whole
+                    //! selection" idiom as the Mute button above
+                    if (content.channelItem.selected) {
+                        root.model.setSoloForSelectedChannels(!content.channelItem.solo)
+                    } else {
+                        content.channelItem.solo = !content.channelItem.solo
+                    }
                 }
             }
         }

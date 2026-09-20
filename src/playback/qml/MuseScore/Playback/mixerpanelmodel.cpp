@@ -182,6 +182,53 @@ void MixerPanelModel::resetColorForSelectedChannels()
     }
 }
 
+void MixerPanelModel::setMutedForSelectedChannels(bool muted)
+{
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        if (!item->selected()) {
+            continue;
+        }
+
+        //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button
+        //! `enabled: !(muted && forceMute)` guard - a channel showing muted purely
+        //! because ANOTHER channel's solo force-muted it isn't something the user is
+        //! directly interacting with right now, so a multi-select fan-out shouldn't
+        //! silently overwrite its own persisted manual mute state as a side effect
+        //! of muting/unmuting a DIFFERENT selected channel.
+        if (item->muted() && item->forceMute()) {
+            continue;
+        }
+
+        item->setMuted(muted);
+    }
+}
+
+void MixerPanelModel::setSoloForSelectedChannels(bool solo)
+{
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        if (!item->selected()) {
+            continue;
+        }
+
+        //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button `enabled`/
+        //! `visible` guards - solo is only meaningful for a non-Aux channel or a
+        //! Group-type Aux bus (see that file's own NOTE on why a plain send/return
+        //! bus is excluded). The mute condition is deliberately the OPPOSITE of the
+        //! Mute case above: `muted && !forceMute` (manually muted), not `muted &&
+        //! forceMute` - a force-muted channel's own Solo button stays enabled by
+        //! design (soloing it is exactly how you hand the solo over to it), so
+        //! skipping it here would silently block the very channel the user just
+        //! clicked Solo on from ever taking the solo while part of a selection.
+        bool soloEligible = item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
+        bool manuallyMuted = item->muted() && !item->forceMute();
+        if (!soloEligible || manuallyMuted) {
+            continue;
+        }
+
+        item->setSolo(solo);
+    }
+}
+
 void MixerPanelModel::clearSelection()
 {
     for (MixerChannelItem* item : m_mixerChannelList) {
@@ -1356,6 +1403,29 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentTrackId);
         outParams.color = item->color();
         audioSettings()->setTrackOutputParams(instrumentTrackId, outParams);
+    });
+
+    //! NOTE: fans a user-picked aux-send bus out to every OTHER selected instrument
+    //! track, mirroring the multi-select behavior color/drag-reorder/mute/solo
+    //! already have - a no-op unless this item itself is currently selected (picking
+    //! a bus on an unselected channel affects only that one channel, same as
+    //! clicking its own Mute/Solo button would).
+    connect(item, &MixerChannelItem::auxSendReassignedByUser, this, [this, item](aux_channel_idx_t busIndex) {
+        if (!item->selected()) {
+            return;
+        }
+
+        for (MixerChannelItem* other : std::as_const(m_mixerChannelList)) {
+            if (other == item || !other->selected()) {
+                continue;
+            }
+
+            bool isInstrument = other->type() == MixerChannelItem::Type::PrimaryInstrument
+                                || other->type() == MixerChannelItem::Type::SecondaryInstrument;
+            if (isInstrument) {
+                other->assignAuxSend(busIndex);
+            }
+        }
     });
 
     connectGlobalMuteSoloAggregate(item);

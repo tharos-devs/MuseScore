@@ -168,7 +168,11 @@ MixerPanelSection {
         //! MouseArea's onPositionChanged below for how root.auxDraggedIndices is filled.
         //! The drop-position indicator itself is drawn in MixerPanel.qml instead (see
         //! its own NOTE), spanning the full channel column rather than just this row.
-        readonly property bool isDragged: root.auxDropBeforeIndex !== -2
+        //! Requires isAux first: a non-Aux channel's auxBusIndex defaults to 0, which
+        //! is also the Reverb bus's real index (REVERB_CHANNEL_IDX) - without this
+        //! guard, dragging Reverb itself would match that default on every
+        //! instrument/master/video/metronome channel too, dimming all of them.
+        readonly property bool isDragged: content.isAux && root.auxDropBeforeIndex !== -2
                                            && root.auxDraggedIndices.indexOf(channelItem.auxBusIndex) !== -1
 
         color: Utils.colorWithAlpha(labelColor, resolveLabelColorOpacity())

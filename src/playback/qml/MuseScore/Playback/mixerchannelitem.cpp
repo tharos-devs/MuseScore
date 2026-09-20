@@ -1215,6 +1215,7 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
     aux_channel_idx_t newBusIndex = static_cast<aux_channel_idx_t>(menuItemId.toUInt(&ok));
     if (ok) {
         reassignAuxSend(item, newBusIndex);
+        emit auxSendReassignedByUser(newBusIndex);
     }
 }
 
@@ -1585,6 +1586,20 @@ void MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
 
 void MixerChannelItem::assignAuxSend(aux_channel_idx_t busIndex)
 {
+    //! NOTE: a no-op if this track already has a real (non-blank) slot targeting
+    //! busIndex - without this check, a caller with no visibility into this track's
+    //! existing slots (e.g. MixerPanelModel's multi-select aux-send fan-out) could
+    //! add a SECOND slot targeting the same bus via the blank-slot search below,
+    //! silently doubling this track's signal into it. The interactive per-slot
+    //! dropdown never hits this case itself - buildAuxSendMenuData() already excludes
+    //! a bus every OTHER of this track's own slots targets from that dropdown - but
+    //! this method has no such per-slot context to rely on.
+    for (const AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == busIndex) {
+            return;
+        }
+    }
+
     ensureTrailingBlankAuxSlot();
 
     //! NOTE: based on auxIndex(), not isBlank() - see buildAuxSendMenuData/hasBlankAuxSendSlot

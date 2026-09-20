@@ -160,8 +160,27 @@ Loader {
                 required property int index
                 required property MixerChannelItem channelItem
 
-                readonly property bool isMaster: rowWrapper.ListView.view
-                                                  ? rowWrapper.index === rowWrapper.ListView.view.count - 1 : false
+                //! NOTE: deliberately type-based (channelItem.type), not the
+                //! previous index === ListView.view.count - 1 - that positional
+                //! check is live/reactive, but it's only ever CONSULTED once, in
+                //! Component.onCompleted below, to decide whether to build this
+                //! delegate's content at all. During a multi-item drag reorder
+                //! (MixerPanelModel::reorderAuxChannels() fires several back-to-back
+                //! beginRemoveRows()/beginInsertRows() pairs synchronously, one per
+                //! dragged channel), a row sitting right at the boundary being
+                //! repeatedly disturbed - e.g. Metronome, immediately after the
+                //! dragged type's own section - gets its delegate destroyed and
+                //! recreated multiple times in quick succession, shifting between
+                //! its real index and index count-1 on every pass. If a recreation
+                //! happens to land on a pass where it transiently reads as "last
+                //! row", isMaster is true just for that one onCompleted call, its
+                //! content is never built, and - since onCompleted never re-runs -
+                //! it stays permanently empty even once the index settles back to
+                //! its real value afterward: the channel just vanishes. channelItem
+                //! (bound to this row's actual model DATA, not its transient
+                //! position) can never misidentify a non-Master row this way.
+                readonly property bool isMaster: rowWrapper.channelItem
+                                                  && rowWrapper.channelItem.type === MixerChannelItem.Master
 
                 width: rowWrapper.isMaster ? 0 : (rowWrapper.delegateItem ? rowWrapper.delegateItem.width : 0)
                 height: rowWrapper.delegateItem ? rowWrapper.delegateItem.height : 0
