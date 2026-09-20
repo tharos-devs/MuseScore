@@ -438,6 +438,61 @@ void MixerPanelModel::addGroupChannel()
     controller()->addNewGroupBus();
 }
 
+void MixerPanelModel::addFxChannelForSelectedTracks()
+{
+    requestNewAuxBusForSelectedTracks(false);
+}
+
+void MixerPanelModel::addGroupChannelForSelectedTracks()
+{
+    requestNewAuxBusForSelectedTracks(true);
+}
+
+void MixerPanelModel::requestNewAuxBusForSelectedTracks(bool isGroupBus)
+{
+    //! NOTE: refuses a second, overlapping request rather than letting it clobber the
+    //! first one's pending list - addNewAuxBus()/addNewGroupBus() are async (see
+    //! m_pendingAuxAssignTrackIds' own NOTE), so without this, clicking either "for
+    //! selected tracks" action twice before the first bus resolves would silently
+    //! leave one of the two newly-created buses with no tracks assigned to it.
+    if (!m_pendingAuxAssignTrackIds.isEmpty()) {
+        return;
+    }
+
+    //! NOTE: re-checked synchronously here rather than relied on solely via the
+    //! context-menu item's own enabled binding, which can go stale between the menu
+    //! opening and the click (e.g. another bus added elsewhere in that window - the
+    //! same race class already documented at PlaybackController::addAuxTrack()'s
+    //! m_pendingAuxIndices reservation). If the bus pool is already full,
+    //! addNewAuxBus()/addNewGroupBus() below silently do nothing and trackAdded()
+    //! never fires - committing to a pending list first would leave it stuck forever.
+    if (!controller()->canAddAuxBus()) {
+        return;
+    }
+
+    QList<TrackId> selectedInstrumentTrackIds;
+    for (const MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+        bool isInstrument = item->type() == MixerChannelItem::Type::PrimaryInstrument
+                            || item->type() == MixerChannelItem::Type::SecondaryInstrument;
+        if (isInstrument && item->selected()) {
+            selectedInstrumentTrackIds.push_back(item->trackId());
+        }
+    }
+
+    if (selectedInstrumentTrackIds.isEmpty()) {
+        return;
+    }
+
+    m_pendingAuxAssignTrackIds = selectedInstrumentTrackIds;
+    m_pendingAuxAssignIsGroupBus = isGroupBus;
+
+    if (isGroupBus) {
+        controller()->addNewGroupBus();
+    } else {
+        controller()->addNewAuxBus();
+    }
+}
+
 //! NOTE: live - true whenever ANY channel (any type except Metronome) is currently muted,
 //! not just right after toggleGlobalMute() runs. So muting a single channel via its own
 //! per-channel button lights up the global button too (see connectGlobalMuteSoloAggregate()).
@@ -644,9 +699,35 @@ void MixerPanelModel::onTrackAdded(const TrackId& trackId)
     });
 
     if (auxIt != auxTracks.end()) {
+        bool isGroupBus = controller()->isAuxBusGroup(auxIt->first);
+
         if (configuration()->areAuxChannelsVisible()) {
-            bool isGroupBus = controller()->isAuxBusGroup(auxIt->first);
             addItem(buildAuxChannelItem(auxIt->first, trackId), resolveAuxInsertIndex(auxIt->first, isGroupBus));
+        }
+
+        //! NOTE: consumes a pending "add channel for selected tracks" request (see
+        //! requestNewAuxBusForSelectedTracks()) once its new bus actually resolves
+        //! here - deliberately NOT nested inside the areAuxChannelsVisible() check
+        //! above, since assigning selected tracks needs only the new bus's index and
+        //! their own (independently visible) channel items, not a visible
+        //! MixerChannelItem for the bus itself; nesting it there would strand a
+        //! pending request forever if Aux channels happened to be hidden at the
+        //! moment this resolves. Gated on isGroupBus matching too, not just "a
+        //! pending request exists", since this fires for ANY newly-added aux bus -
+        //! including one the user creates via a completely unrelated "Add FX/Group
+        //! channel" action while this request is still in flight (a narrow race, but
+        //! a real one: bus creation is async, see m_pendingAuxAssignTrackIds' own
+        //! NOTE - requestNewAuxBusForSelectedTracks() also refuses to start a second
+        //! overlapping request, so at most one is ever in flight at a time).
+        if (!m_pendingAuxAssignTrackIds.isEmpty() && isGroupBus == m_pendingAuxAssignIsGroupBus) {
+            const QList<TrackId> pendingTrackIds = m_pendingAuxAssignTrackIds;
+            m_pendingAuxAssignTrackIds.clear();
+
+            for (const TrackId& pendingTrackId : pendingTrackIds) {
+                if (MixerChannelItem* trackItem = findChannelItem(pendingTrackId)) {
+                    trackItem->assignAuxSend(auxIt->first);
+                }
+            }
         }
     }
 }

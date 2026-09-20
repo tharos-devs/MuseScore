@@ -1582,3 +1582,19 @@ void MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
         blankAuxSend(item);
     }
 }
+
+void MixerChannelItem::assignAuxSend(aux_channel_idx_t busIndex)
+{
+    ensureTrailingBlankAuxSlot();
+
+    //! NOTE: based on auxIndex(), not isBlank() - see buildAuxSendMenuData/hasBlankAuxSendSlot
+    //! for why. A no-op if every slot is already a real send and the track is at
+    //! AUX_SEND_SLOT_LIMIT - ensureTrailingBlankAuxSlot() above silently can't make room
+    //! for one more in that case, same as the per-slot "Add Aux send" menu item would.
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() == AuxSendItem::NO_BUS) {
+            reassignAuxSend(item, busIndex);
+            return;
+        }
+    }
+}

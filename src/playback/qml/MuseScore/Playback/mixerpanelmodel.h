@@ -107,6 +107,13 @@ public:
     Q_INVOKABLE void addFxChannel();
     Q_INVOKABLE void addGroupChannel();
 
+    //! NOTE: same underlying bus creation as addFxChannel()/addGroupChannel() above,
+    //! but also assigns every currently-selected instrument track to the new bus once
+    //! it actually exists - see requestNewAuxBusForSelectedTracks()'s own NOTE for why
+    //! that assignment can't happen synchronously, right here.
+    Q_INVOKABLE void addFxChannelForSelectedTracks();
+    Q_INVOKABLE void addGroupChannelForSelectedTracks();
+
     //! NOTE: toggleGlobalMute/toggleGlobalSolo are simple on/off toggles, not aggregate
     //! setters - the first call remembers which channels (all types except Metronome) are
     //! currently muted/soloed and turns those off; the second call restores mute/solo on
@@ -157,6 +164,11 @@ private:
     void subscribeOnAutomationChanges();
 
     void onVideoAttachmentChanged();
+    //! NOTE: captures every currently-selected instrument track, then requests a new
+    //! aux bus of the given type - the actual assignment happens later, once
+    //! onTrackAdded() sees that bus resolve (see m_pendingAuxAssignTrackIds' own NOTE
+    //! for why this can't be synchronous).
+    void requestNewAuxBusForSelectedTracks(bool isGroupBus);
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
     int resolveVideoInsertIndex() const;
     std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
@@ -202,5 +214,13 @@ private:
 
     QList<muse::audio::TrackId> m_mutedTrackIdsBeforeGlobalMute;
     QList<muse::audio::TrackId> m_soloedTrackIdsBeforeGlobalSolo;
+
+    //! NOTE: instrument tracks to assign to the next aux bus of m_pendingAuxAssignIsGroupBus's
+    //! type once it actually resolves via onTrackAdded() - addNewAuxBus()/addNewGroupBus()
+    //! are fire-and-forget (no return value, no promise), so the new bus's own index is
+    //! only knowable once the engine round-trip completes and IPlaybackController::
+    //! trackAdded() fires; this can't be done synchronously right after requesting it.
+    QList<muse::audio::TrackId> m_pendingAuxAssignTrackIds;
+    bool m_pendingAuxAssignIsGroupBus = false;
 };
 }
