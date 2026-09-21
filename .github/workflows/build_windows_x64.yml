@@ -1,4 +1,4 @@
-name: 'Build: macOS'
+name: 'Build: Windows x64'
 
 on:
   workflow_dispatch:
@@ -24,13 +24,9 @@ concurrency:
   group: ${{ github.workflow }} ${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # This information is public and can be extracted by anyone from the final .app file
-  APPLE_TEAM_ID: 6EPAF2X3PR
-
 jobs:
-  macos_universal:
-    runs-on: xcode-27
+  windows_x64:
+    runs-on: windows-2025
     steps:
     - name: Clone repository
       uses: actions/checkout@v7
@@ -38,12 +34,11 @@ jobs:
         submodules: recursive
 
     - name: Configure workflow
+      shell: bash
       env:
         SENTRY_MUSE_MU4_KEY: ${{ secrets.SENTRY_MUSE_MU4_KEY }}
         SENTRY_MUSE_MU4_SANDBOX_KEY: ${{ secrets.SENTRY_MUSE_MU4_SANDBOX_KEY }}
         SENTRY_PROJECT: ${{ inputs.sentry_project }}
-        APPLE_USERNAME: ${{ secrets.APPLE_USERNAME }}
-        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         TRANSIFEX_API_TOKEN: ${{ secrets.TRANSIFEX_API_TOKEN }}
         OSUOSL_SSH_ENCRYPT_SECRET: ${{ secrets.OSUOSL_SSH_ENCRYPT_SECRET }}
       run: |
@@ -52,18 +47,6 @@ jobs:
 
         bash ./buildscripts/ci/tools/make_build_number.sh
         BUILD_NUMBER=$(cat ./build.artifacts/env/build_number.env)
-
-        DO_NOTARIZE='false'
-        if [ "$BUILD_MODE" != "devel" ]; then
-          DO_NOTARIZE='true'
-          if [ -z "$APPLE_USERNAME" ]; then
-            echo "::warning::APPLE_USERNAME is empty; notarization disabled"
-            DO_NOTARIZE='false'
-          elif [ -z "$APPLE_PASSWORD" ]; then
-            echo "::warning::APPLE_PASSWORD is empty, notarization disabled"
-            DO_NOTARIZE='false'
-          fi
-        fi
 
         DO_UPDATE_TS='false'
         if [[ "$BUILD_MODE" == "testing" || "$BUILD_MODE" == "stable" ]]; then
@@ -111,14 +94,13 @@ jobs:
           fi
         fi
 
-        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU4_${BUILD_NUMBER}_Mac_${GITHUB_REF#refs/heads/}")"
+        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU4_${BUILD_NUMBER}_Win_${GITHUB_REF#refs/heads/}")"
 
         echo "github.repository: ${{ github.repository }}"
         echo "BUILD_MODE=$BUILD_MODE" | tee -a $GITHUB_ENV
         echo "BUILD_NUMBER=$BUILD_NUMBER" | tee -a $GITHUB_ENV
         echo "DO_UPDATE_TS=$DO_UPDATE_TS" | tee -a $GITHUB_ENV
         echo "DO_PLACEHOLDER_TRANSLATIONS=$DO_PLACEHOLDER_TRANSLATIONS" | tee -a $GITHUB_ENV
-        echo "DO_NOTARIZE=$DO_NOTARIZE" | tee -a $GITHUB_ENV
         echo "DO_UPLOAD_SYMBOLS=$DO_UPLOAD_SYMBOLS" | tee -a $GITHUB_ENV
         echo "SENTRY_PROJECT=$SENTRY_PROJECT" | tee -a $GITHUB_ENV
         echo "SENTRY_URL=$SENTRY_URL" | tee -a $GITHUB_ENV
@@ -126,92 +108,63 @@ jobs:
         echo "UPLOAD_ARTIFACT_NAME=$UPLOAD_ARTIFACT_NAME" | tee -a $GITHUB_ENV
 
     - parallel:
-      - name: Restore ccache files
-        id: restore-ccache
-        uses: actions/cache/restore@v6
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
         with:
-          path: ${{ github.workspace }}/.ccache
-          key: ${{runner.os}}-${{runner.arch}}-ccache-
-          restore-keys: ${{runner.os}}-${{runner.arch}}-ccache-
-      - name: Setup ccache
+          version: 6.10.2
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
+          cache: true
+      - name: Setup environment
         run: |
-          brew install ccache
-          bash ./buildscripts/ci/tools/setup_ccache_config.sh
-
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
-      with:
-        version: 6.10.2
-        host: 'mac'
-        target: 'desktop'
-        arch: 'clang_64'
-        modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets'
-        cache: true
+          buildscripts\ci\windows\setup.bat
 
     - parallel:
       - name: Generate _en.ts files
+        shell: bash
         env:
           LUPDATE_ARGS: ""
           POSTPROCESS_ARGS: "--warn-only ${{ env.DO_PLACEHOLDER_TRANSLATIONS == 'true' && '--generate-placeholder-translations' || '' }}"
+          POSTPROCESS_LAUNCHER: "python3 -X utf8"
         run: |
           bash ./tools/translations/run_lupdate.sh
       - name: Update .ts files (tx pull)
         if: env.DO_UPDATE_TS == 'true'
-        uses: transifex/cli-action@v2
+        uses: cbjeukendrup/cli-action@windows
         with:
           token: ${{ secrets.TRANSIFEX_API_TOKEN }}
           args: "pull -f"
 
+    - name: Register msvc problem matcher
+      run: echo "::add-matcher::.github/problem_matchers/msvc.json"
+
     - name: Build
+      shell: cmd
       env:
         DOCKWIDGETS_V2: ${{ inputs.dockwidgets_v2 == 'ON' && 'ON' || 'OFF' }}
       run: |
-        bash ./buildscripts/ci/macos/build.sh -n "${BUILD_NUMBER}" --crash_log_url "${SENTRY_URL}" --dockwidgets_v2 "${DOCKWIDGETS_V2}"
-    - name: Show ccache stats
-      run: |
-        ccache -sv
+        buildscripts\ci\windows\build.bat -n %BUILD_NUMBER% --crash_log_url "%SENTRY_URL%" --dockwidgets_v2 %DOCKWIDGETS_V2%
     - name: Package
+      shell: cmd
       env:
-        MAC_SIGN_CERTIFICATE_ENCRYPT_SECRET: ${{ secrets.MAC_SIGN_CERTIFICATE_ENCRYPT_SECRET }}
-        MAC_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.MAC_SIGN_CERTIFICATE_PASSWORD }}
-        APPLE_USERNAME: ${{ secrets.APPLE_USERNAME }}
-        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        WIN_SIGN_S3_SECRET: ${{ secrets.WIN_SIGN_S3_SECRET }}
+        WIN_SIGN_S3_KEY: ${{ secrets.WIN_SIGN_S3_KEY }}
+        WIN_MSI_GUID: ${{ env.BUILD_MODE == 'stable' && secrets.WIN_MSI_STABLE_MU4_GUID || secrets.WIN_MSI_TESTING_MU4_GUID }}
       run: |
-        PACKAGE_ARGS=(
-          --signsecret "${MAC_SIGN_CERTIFICATE_ENCRYPT_SECRET}"
-          --signpass "${MAC_SIGN_CERTIFICATE_PASSWORD}"
-        )
-        if [ "$DO_NOTARIZE" = "true" ]; then
-          PACKAGE_ARGS+=(
-            --user "${APPLE_USERNAME}"
-            --password "${APPLE_PASSWORD}"
-            --team-id "$APPLE_TEAM_ID"
-          )
-        fi
-
-        bash ./buildscripts/ci/macos/package.sh "${PACKAGE_ARGS[@]}"
-
-    - name: Notarize
-      if: env.DO_NOTARIZE == 'true'
-      env:
-        APPLE_USERNAME: ${{ secrets.APPLE_USERNAME }}
-        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      run: |
-        bash ./buildscripts/ci/macos/notarize.sh -u "${APPLE_USERNAME}" -p "${APPLE_PASSWORD}" -t "$APPLE_TEAM_ID"
+        buildscripts\ci\windows\package.bat --signsecret "%WIN_SIGN_S3_SECRET%" --signkey "%WIN_SIGN_S3_KEY%" --guid %WIN_MSI_GUID%
     - name: Checksum
       run: |
         bash ./buildscripts/ci/tools/checksum.sh
     - name: Generate and upload dump symbols
       if: env.DO_UPLOAD_SYMBOLS == 'true'
+      shell: bash
       env:
         SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_MUSE_AUTH_TOKEN }}
       run: |
-        APP_BIN=$(pwd)/applebuild/mscore.app/Contents/MacOS/mscore
-        GENERATE_ARCHS=("x86_64 arm64")
-        BUILD_DIR=$(pwd)/applebuild
+        APP_BIN=$(pwd)/build.release/MuseScoreStudio5.pdb
         cmake -DAPP_BIN=${APP_BIN} \
-              -DGENERATE_ARCHS="${GENERATE_ARCHS}" \
-              -DBUILD_DIR=${BUILD_DIR} \
               -DSENTRY_URL=https://sentry.musescore.com \
               -DSENTRY_ORG=sentry \
               -DSENTRY_AUTH_TOKEN="${SENTRY_AUTH_TOKEN}" \
@@ -220,25 +173,14 @@ jobs:
               -P buildscripts/ci/crashdumps/ci_generate_and_upload.cmake
     - name: Publish to OSUOSL
       if: env.DO_PUBLISH == 'true'
+      shell: bash
       env:
         OSUOSL_SSH_ENCRYPT_SECRET: ${{ secrets.OSUOSL_SSH_ENCRYPT_SECRET }}
       run: |
-        bash ./buildscripts/ci/tools/osuosl/publish.sh -s "${OSUOSL_SSH_ENCRYPT_SECRET}" --os macos -v 4
+        bash ./buildscripts/ci/tools/osuosl/publish.sh -s "${OSUOSL_SSH_ENCRYPT_SECRET}" --os windows -v 4
     - name: Upload artifacts on GitHub
+      if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
         name: ${{ env.UPLOAD_ARTIFACT_NAME }}
-        path: ./build.artifacts/
-
-    - name: Prepare ccache files for saving
-      id: prepare-save-ccache
-      if: always()
-      run: |
-        ccache --recompress 10
-        echo "CCACHE_TIMESTAMP=$(date -u +"%F-%T")" | tee -a $GITHUB_OUTPUT
-    - name: Save ccache files
-      if: always()
-      uses: actions/cache/save@v6
-      with:
-        key: ${{ steps.restore-ccache.outputs.cache-primary-key }}${{ steps.prepare-save-ccache.outputs.CCACHE_TIMESTAMP }}
-        path: ${{ github.workspace }}/.ccache
+        path: build.artifacts\
