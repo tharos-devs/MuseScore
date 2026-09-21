@@ -57,3 +57,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed the Master channel's VST3 FX editor not opening on double-click in the Mixer — MuseScore#34763 (issue #33872) (2026-08-31).
 - Fixed the Mixer's Master channel Mute button having no actual audio effect — MuseScore#34747 (issue #34746) (2026-08-30).
 - Fixed Mixer manual volume/pan resetting to 0 dB, and the Solo button reverting, after toggling Solo and playing back — MuseScore#34676 (issue #34673) (2026-08-25).
+
+## Fixes (custom-only)
+
+- Fixed muting a Mixer Group bus not silencing its member tracks' sends to an unrelated, shared Aux FX bus (e.g. a reverb), which kept leaking their audio through that bus instead of going fully silent (2026-09-21).
