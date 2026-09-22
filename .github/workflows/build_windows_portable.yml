@@ -76,7 +76,11 @@ jobs:
 
     - parallel:
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        # NOTE: pinned, not the floating @v4 tag -- v4.4.0+ switched an internal step to
+        # GitHub's new "$/action" self-repository syntax, which this CI runner doesn't yet
+        # support ("Expected format {org}/{repo}[/path]@ref. Actual '$/action'"). v4.3.1 is
+        # the last release before that change; bump once runners catch up.
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: 6.10.2
           host: 'windows'

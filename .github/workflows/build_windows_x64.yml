@@ -109,7 +109,9 @@ jobs:
 
     - parallel:
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        # NOTE: see build_windows_portable.yml's identical note -- pinned to work around
+        # v4.4.0+'s unsupported "$/action" self-repo syntax.
+        uses: jurplel/install-qt-action@v4.3.1
         with:
           version: 6.10.2
           host: 'windows'
