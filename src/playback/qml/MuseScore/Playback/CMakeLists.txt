@@ -69,6 +69,7 @@ qt_add_qml_module(playback_qml
         internal/AudioResourceControl.qml
         internal/AuxSendControl.qml
         internal/KnobControl.qml
+        internal/KnobDragValueTooltip.qml
         internal/MeasureAndBeatFields.qml
         internal/MixerAuxSendsSection.qml
         internal/MixerBalanceSection.qml

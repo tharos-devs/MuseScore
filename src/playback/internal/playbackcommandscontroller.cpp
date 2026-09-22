@@ -74,6 +74,7 @@ void PlaybackCommandsController::init()
 
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
     registerCommand(TOGGLE_AUX_CHANNELS_COMMAND, [this]() { return toggleAuxChannels(); });
+    registerCommand(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, [this]() { return toggleMixerCondensedView(); });
 
     // compat
     {
@@ -101,6 +102,7 @@ void PlaybackCommandsController::init()
             { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },
             { "toggle-mixer-section", TOGGLE_MIXER_SECTION_COMMAND, mixerSectionToggle },
             { "toggle-aux-channels", TOGGLE_AUX_CHANNELS_COMMAND, {} },
+            { "toggle-mixer-condensed-view", TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, {} },
         };
 
         registerActionToCommand(this, actionToCommand, dispatcher(), actionsDispatcher());
@@ -135,6 +137,13 @@ muse::Ret PlaybackCommandsController::toggleAuxChannels()
 {
     bool visible = configuration()->areAuxChannelsVisible();
     configuration()->setAuxChannelsVisible(!visible);
+    return make_ok();
+}
+
+muse::Ret PlaybackCommandsController::toggleMixerCondensedView()
+{
+    bool enabled = configuration()->isMixerCondensedViewEnabled();
+    configuration()->setMixerCondensedViewEnabled(!enabled);
     return make_ok();
 }
 

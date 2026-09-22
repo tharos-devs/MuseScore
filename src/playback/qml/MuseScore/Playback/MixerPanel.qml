@@ -101,14 +101,32 @@ ColumnLayout {
         property bool isPanelActivated: false
 
         readonly property real headerWidth: 98
-        readonly property real channelItemWidth: 108
+
+        //! NOTE: the Mixer's "Condensed view" option (View menu) narrows every
+        //! regular channel's width to trade precision for screen space -- see the
+        //! individual section files (Gain/Balance/Fader) for what each row gives
+        //! up. The Master channel is deliberately excluded (see
+        //! masterChannelItemWidth below): it's a single fixed column, not one of
+        //! many scrolling channels, so there's no space pressure to relieve there.
+        readonly property real normalChannelItemWidth: 108
+        //! NOTE: 66, not a rounder 54-56, because the Fader row's own minimum content
+        //! width (VolumeSlider's fixed 44px, which keeps its dB ruler even in condensed
+        //! view -- see MixerFaderSection.qml -- plus a tightened spacing of 2px plus the
+        //! L/R meters' 14px) is 60px; the extra 6px beyond that is deliberate breathing
+        //! room so the meters don't sit flush against the column's right edge.
+        readonly property real condensedChannelItemWidth: 66
+        readonly property real channelItemWidth: contextMenuModel.condensedViewEnabled ? condensedChannelItemWidth : normalChannelItemWidth
+
+        readonly property real masterChannelItemWidth: normalChannelItemWidth
 
         //! NOTE: right-edge analogue of headerPinOffsetX's left-edge pin -- see
         //! MixerPanelSection.qml's masterPinOffsetX property for the full
         //! explanation of the contentX-cancelling trick. Centralized here (rather
         //! than repeated per section instantiation below) since every section
-        //! needs the exact same value.
-        readonly property real masterPinOffsetX: flickable.contentX + flickable.width - channelItemWidth
+        //! needs the exact same value. Uses masterChannelItemWidth (not
+        //! channelItemWidth) since the pinned column it positions is Master's,
+        //! which stays at its normal width even in condensed view.
+        readonly property real masterPinOffsetX: flickable.contentX + flickable.width - masterChannelItemWidth
 
         function setNavigateControlIndex(index) {
             if (!Boolean(prv.currentNavigateControlIndex) ||
@@ -223,7 +241,7 @@ ColumnLayout {
         //! much room, or scrolling to the end would put the LAST REGULAR channel
         //! directly underneath the pinned master column instead of stopping
         //! just before it.
-        contentWidth: contentColumn.width + 1 + prv.channelItemWidth // for trailing separator + reserved master slot
+        contentWidth: contentColumn.width + 1 + prv.masterChannelItemWidth // for trailing separator + reserved master slot
         contentHeight: Math.max(contentColumn.height, height)
 
         implicitHeight: contentColumn.height
@@ -373,6 +391,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: 8
@@ -394,6 +414,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -414,6 +436,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -435,6 +459,8 @@ ColumnLayout {
                     headerWidth: prv.headerWidth
 
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -455,6 +481,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -475,6 +503,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -495,6 +525,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: -3
@@ -517,6 +549,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
 
@@ -537,6 +571,8 @@ ColumnLayout {
                     headerVisible: contextMenuModel.labelsSectionVisible
                     headerWidth: prv.headerWidth
                     channelItemWidth: prv.channelItemWidth
+                    masterChannelItemWidth: prv.masterChannelItemWidth
+                    condensedView: contextMenuModel.condensedViewEnabled
                     headerPinOffsetX: flickable.contentX
                     masterPinOffsetX: prv.masterPinOffsetX
                     spacingAbove: 2

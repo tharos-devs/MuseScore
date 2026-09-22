@@ -56,7 +56,7 @@ MixerPanelSection {
 
         property bool editingName: false
 
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
         height: 22
 
         readonly property bool isInstrument: channelItem.type === MixerChannelItem.PrimaryInstrument

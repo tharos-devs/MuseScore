@@ -33,6 +33,10 @@ Item {
 
     property color accentColor: ui.theme.accentColor
 
+    //! NOTE: forwarded to the internal AudioResourceControl -- see its own `compact`
+    //! for why the Mixer's condensed view needs this.
+    property bool compact: false
+
     readonly property string title: root.auxSendItemModel ? root.auxSendItemModel.title : ""
 
     property NavigationPanel navigationPanel: null
@@ -83,10 +87,21 @@ Item {
                 root.auxSendItemModel.audioSignalPercentage = newValue
             }
 
+            //! NOTE: same opaque-background drag readout as MixerGainSection.qml/
+            //! MixerBalanceSection.qml's knobs -- unlike Gain/Pan, this knob never has a
+            //! permanent numeric field to fall back on (in ANY view, not just condensed),
+            //! so this is the only way to read the exact percentage while dragging.
+            KnobDragValueTooltip {
+                visible: audioSignalAmountKnob.mouseArea.pressed
+                text: Math.round(audioSignalAmountKnob.value) + "%"
+            }
+
             //! NOTE: while dragging, the slot button next to the knob (resourceControl,
-            //! below) shows the live percentage in place of the target bus name - restores
-            //! this control's pre-redesign behavior, driven from the model's own title()
-            //! (see AuxSendItem::isDragging) rather than a separate floating readout
+            //! below) ALSO shows the live percentage in place of the target bus name -
+            //! restores this control's pre-redesign behavior, driven from the model's own
+            //! title() (see AuxSendItem::isDragging). Kept alongside the floating readout
+            //! above rather than removed: it's the only readout at all when the button is
+            //! wide enough to show it, and harmless duplication when it isn't.
             Connections {
                 target: audioSignalAmountKnob.mouseArea
                 function onPressedChanged() {
@@ -110,6 +125,8 @@ Item {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
+
+            compact: root.compact
 
             resourceItemModel: root.auxSendItemModel
 

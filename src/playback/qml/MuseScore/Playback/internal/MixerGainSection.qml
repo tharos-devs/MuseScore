@@ -38,9 +38,11 @@ MixerPanelSection {
         required property MixerChannelItem channelItem
 
         height: contentRow.implicitHeight
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
+
+        readonly property bool condensedRow: root.isCondensedRow(channelItem)
 
         Row {
             id: contentRow
@@ -64,6 +66,15 @@ MixerPanelSection {
                 stepSize: 1
                 isBalanceKnob: true
                 accentColor: content.channelItem.hasCustomColor ? content.channelItem.color : ui.theme.accentColor
+
+                //! NOTE: condensed view hides the always-on numeric field below, so this
+                //! is the only way left to read the exact value -- shown only while
+                //! actively dragging, same "reveal on interaction" precedent as
+                //! AuxSendControl's isDragging title swap.
+                KnobDragValueTooltip {
+                    visible: content.condensedRow && gainKnob.mouseArea.pressed
+                    text: Math.round(content.channelItem.gain) + "dB"
+                }
 
                 navigation.panel: content.channelItem.panel
                 navigation.row: root.navigationRowStart
@@ -92,6 +103,8 @@ MixerPanelSection {
 
             TextInputField {
                 id: gainTextInputField
+
+                visible: !content.condensedRow
 
                 anchors.verticalCenter: gainKnob.verticalCenter
 

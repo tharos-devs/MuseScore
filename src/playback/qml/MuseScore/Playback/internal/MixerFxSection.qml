@@ -53,7 +53,7 @@ MixerPanelSection {
         y: 0
 
         height: childrenRect.height
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
 
@@ -144,6 +144,10 @@ MixerPanelSection {
                     id: resourceControl
 
                     anchors.horizontalCenter: parent.horizontalCenter
+                    //! NOTE: see MixerSoundSection.qml's identical binding -- stays at
+                    //! the component's own 96 default until condensed view narrows
+                    //! slotRoot (== content.width) past 104.
+                    width: Math.min(96, slotRoot.width - 8)
 
                     resourceItemModel: slotRoot.modelData
 

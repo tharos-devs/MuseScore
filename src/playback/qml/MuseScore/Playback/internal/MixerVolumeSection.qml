@@ -38,7 +38,7 @@ MixerPanelSection {
         required property MixerChannelItem channelItem
 
         height: childrenRect.height
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
 

@@ -47,6 +47,8 @@ class MixerPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
     Q_PROPERTY(bool muteAndSoloSectionVisible READ muteAndSoloSectionVisible NOTIFY muteAndSoloSectionVisibleChanged)
     Q_PROPERTY(bool titleSectionVisible READ titleSectionVisible NOTIFY titleSectionVisibleChanged)
 
+    Q_PROPERTY(bool condensedViewEnabled READ condensedViewEnabled NOTIFY condensedViewEnabledChanged)
+
     //! NOTE Full screen only makes sense once this panel is its own floating
     //! window -- when docked, "full screen" would apply to the whole MuseScore
     //! window instead (there's no separate window to fullscreen), which isn't
@@ -80,6 +82,8 @@ public:
     bool muteAndSoloSectionVisible() const;
     bool titleSectionVisible() const;
 
+    bool condensedViewEnabled() const;
+
     bool floating() const;
     void setFloating(bool floating);
 
@@ -112,6 +116,8 @@ signals:
     void muteAndSoloSectionVisibleChanged();
     void titleSectionVisibleChanged();
 
+    void condensedViewEnabledChanged();
+
     void floatingChanged();
     void isFullScreenChanged();
 
@@ -138,6 +144,7 @@ private:
 
     muse::uicomponents::MenuItem* buildSectionVisibleItem(MixerSectionType sectionType);
     muse::uicomponents::MenuItem* buildAuxChannelsVisibleItem();
+    muse::uicomponents::MenuItem* buildCondensedViewItem();
 
     void emitMixerSectionVisibilityChanged(MixerSectionType sectionType);
 

@@ -59,6 +59,32 @@ Loader {
 
     property int channelItemWidth: 108
 
+    //! NOTE: fed in from MixerPanel.qml (contextMenuModel.condensedViewEnabled) -- lets
+    //! individual sections (Gain/Balance/Fader so far) trade precision for width when the
+    //! user has turned on the Mixer's "Condensed view" option, on top of the narrower
+    //! channelItemWidth they already get from MixerPanel.qml in that mode.
+    property bool condensedView: false
+
+    //! NOTE: the Master channel's own width, independent from channelItemWidth above --
+    //! condensed view narrows regular channels (channelItemWidth) but always keeps Master
+    //! at its normal width, so it defaults to matching channelItemWidth here and only
+    //! diverges when MixerPanel.qml explicitly feeds a different value in.
+    property int masterChannelItemWidth: channelItemWidth
+
+    //! NOTE: centralizes the Master-vs-regular-channel width rule every concrete section
+    //! (MixerGainSection.qml etc.) needs for its own per-channel content -- previously
+    //! each of the 9 section files re-derived this ternary independently.
+    function rowWidthFor(channelItem) {
+        return channelItem.type === MixerChannelItem.Master ? root.masterChannelItemWidth : root.channelItemWidth
+    }
+
+    //! NOTE: centralizes the "does condensed view apply to THIS row" rule (excluding
+    //! Master, which never narrows) -- previously redefined identically in each section
+    //! that needed it (Gain/Balance/Fader/AuxSends).
+    function isCondensedRow(channelItem) {
+        return root.condensedView && channelItem.type !== MixerChannelItem.Master
+    }
+
     property real spacingAbove: 4
     property real spacingBelow: 4
 
@@ -205,7 +231,7 @@ Loader {
             x: root.masterPinOffsetX
             y: 0
 
-            width: root.channelItemWidth
+            width: root.masterChannelItemWidth
             height: parent.height
 
             color: ui.theme.backgroundPrimaryColor
@@ -226,7 +252,7 @@ Loader {
             x: root.masterPinOffsetX
             y: root.spacingAbove
 
-            width: root.channelItemWidth
+            width: root.masterChannelItemWidth
             height: root.headerHeight
 
             property MixerChannelItem masterChannelItem: root.model && root.model.count > 0
