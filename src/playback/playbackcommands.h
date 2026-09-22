@@ -51,4 +51,5 @@ inline static const muse::rcommand::Command RELOAD_PLAYBACK_CACHE_COMMAND("comma
 
 inline static const muse::rcommand::Command TOGGLE_MIXER_SECTION_COMMAND("command://playback/toggle-mixer-section"); // with params
 inline static const muse::rcommand::Command TOGGLE_AUX_CHANNELS_COMMAND("command://playback/toggle-aux-channels");
+inline static const muse::rcommand::Command TOGGLE_MIXER_CONDENSED_VIEW_COMMAND("command://playback/toggle-mixer-condensed-view");
 }

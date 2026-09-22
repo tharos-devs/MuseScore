@@ -209,6 +209,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString("playback", "Toggle aux channels"),
         InputSchema(),
         Decoration()
+    },
+    CommandInfo{
+        TOGGLE_MIXER_CONDENSED_VIEW_COMMAND,
+        TranslatableString("playback", "Toggle mixer condensed view"),
+        TranslatableString("playback", "Toggle mixer condensed view"),
+        InputSchema(),
+        Decoration()
     }
 };
 

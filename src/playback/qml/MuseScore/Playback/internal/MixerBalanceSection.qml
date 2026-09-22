@@ -38,9 +38,11 @@ MixerPanelSection {
         required property MixerChannelItem channelItem
 
         height: contentRow.implicitHeight
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
+
+        readonly property bool condensedRow: root.isCondensedRow(channelItem)
 
         Row {
             id: contentRow
@@ -60,6 +62,14 @@ MixerPanelSection {
                 accentColor: content.channelItem.hasCustomColor ? content.channelItem.color : ui.theme.accentColor
                 enabled: !content.channelItem.hasBalanceAutomation
                 opacity: enabled ? 1.0 : ui.theme.itemOpacityDisabled
+
+                //! NOTE: see MixerGainSection.qml's identical overlay -- condensed view
+                //! hides the always-on numeric field below, so this is the only way
+                //! left to read the exact value, shown only while actively dragging.
+                KnobDragValueTooltip {
+                    visible: content.condensedRow && balanceKnob.mouseArea.pressed
+                    text: Math.round(content.channelItem.balance)
+                }
 
                 navigation.panel: content.channelItem.panel
                 navigation.row: root.navigationRowStart
@@ -88,6 +98,8 @@ MixerPanelSection {
 
             TextInputField {
                 id: balanceTextInputField
+
+                visible: !content.condensedRow
 
                 anchors.verticalCenter: balanceKnob.verticalCenter
 

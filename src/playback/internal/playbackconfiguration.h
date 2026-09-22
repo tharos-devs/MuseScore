@@ -88,6 +88,10 @@ public:
     void setAuxChannelsVisible(bool visible) override;
     muse::async::Channel<bool> areAuxChannelsVisibleChanged() const override;
 
+    bool isMixerCondensedViewEnabled() const override;
+    void setMixerCondensedViewEnabled(bool enabled) override;
+    muse::async::Channel<bool> isMixerCondensedViewEnabledChanged() const override;
+
     muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                             const muse::String& instrumentSoundId) const override;
 
@@ -134,6 +138,7 @@ private:
     muse::async::Channel<bool> m_playNotesOnMidiInputChanged;
     muse::async::Channel<bool> m_areAuxChannelsVisibleChanged;
     muse::async::Channel<MixerSectionType, bool> m_isMixerSectionVisibleChanged;
+    muse::async::Channel<bool> m_isMixerCondensedViewEnabledChanged;
 
     muse::async::Channel<bool> m_muteHiddenInstrumentsChanged;
 };

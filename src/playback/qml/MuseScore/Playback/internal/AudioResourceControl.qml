@@ -47,6 +47,13 @@ Item {
 
     property bool resourcePickingActive: false
 
+    //! NOTE Opt-in for callers too narrow to fit [bypass][title][menu] side by side even
+    //! with hover reveal (the Mixer's condensed Aux sends row -- see
+    //! MixerAuxSendsSection.qml): drops the bypass button and title text entirely and
+    //! always shows just the menu button (full width, not hover-gated), since that's the
+    //! only one of the three with no other way at all to trigger it.
+    property bool compact: false
+
     readonly property bool showAdditionalButtons: rootMouseArea.containsMouse || (navigationPanel ? navigationPanel.highlight : false) || resourcePickingActive
 
     //! NOTE Named separately from the title button's `enabled` below -- when
@@ -108,6 +115,12 @@ Item {
     height: 24
     width: 96
 
+    //! NOTE: in the Mixer's condensed view, this control's width can be narrower than
+    //! the hover-revealed bypass/menu buttons need (see showAdditionalButtons above) --
+    //! without clipping, their painted pixels would bleed past this control's own
+    //! bounds into the neighboring channel instead of just being tightly fitted/cut off.
+    clip: true
+
     QtObject {
         id: prv
 
@@ -133,7 +146,7 @@ Item {
             Layout.preferredWidth: root.height
             Layout.alignment: Qt.AlignLeft
 
-            visible: root.supportsByPassing && root.showAdditionalButtons
+            visible: root.supportsByPassing && root.showAdditionalButtons && !root.compact
             active: visible
 
             sourceComponent: FlatButton {
@@ -164,6 +177,11 @@ Item {
 
                     NavigationFocusBorder {
                         navigationCtrl: activityButton.navigation
+                        //! NOTE: root now clips (see root.clip above) to contain condensed
+                        //! view's hover-revealed buttons -- this border must stay inside
+                        //! that clip region too, or it gets cut off on the side facing the
+                        //! control's own edge.
+                        drawOutsideParent: false
                     }
 
                     states: [
@@ -211,7 +229,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            visible: root.supportsTitle
+            visible: root.supportsTitle && !root.compact
             active: visible
 
             sourceComponent: FlatButton {
@@ -251,6 +269,8 @@ Item {
 
                     NavigationFocusBorder {
                         navigationCtrl: titleButton.navigation
+                        //! NOTE: see activityButtonBackground's identical note above.
+                        drawOutsideParent: false
                     }
 
                     states: [
@@ -351,12 +371,12 @@ Item {
         Loader {
             id: selectorLoader
 
-            Layout.fillWidth: !titleLoader.visible
+            Layout.fillWidth: root.compact || !titleLoader.visible
             Layout.fillHeight: true
             Layout.preferredWidth: root.height
             Layout.alignment: Qt.AlignRight
 
-            visible: root.showAdditionalButtons && root.supportsMenu
+            visible: root.supportsMenu && (root.compact || root.showAdditionalButtons)
             active: visible
 
             sourceComponent: FlatButton {
@@ -377,7 +397,12 @@ Item {
                     height: menuButton.height
 
                     StyledIconLabel {
-                        anchors.right: parent.right
+                        //! NOTE: centered when this button is the ONLY thing in the control
+                        //! (compact mode, or a blank slot with no title) -- pinned to the
+                        //! right, sized to a small square, when it sits beside a visible
+                        //! title button instead.
+                        anchors.right: titleLoader.visible ? parent.right : undefined
+                        anchors.centerIn: titleLoader.visible ? undefined : parent
                         width: titleLoader.visible ? parent.width : parent.height
                         height: parent.height
                         iconCode: IconCode.SMALL_ARROW_DOWN
@@ -397,6 +422,8 @@ Item {
 
                     NavigationFocusBorder {
                         navigationCtrl: menuButton.navigation
+                        //! NOTE: see activityButtonBackground's identical note above.
+                        drawOutsideParent: false
                     }
 
                     states: [

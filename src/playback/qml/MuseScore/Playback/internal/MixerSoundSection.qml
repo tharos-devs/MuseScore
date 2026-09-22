@@ -40,7 +40,7 @@ MixerPanelSection {
         required property MixerChannelItem channelItem
 
         height: resourceControl.height
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
 
@@ -51,6 +51,11 @@ MixerPanelSection {
 
             anchors.horizontalCenter: parent.horizontalCenter
             height: 26
+            //! NOTE: defaults to the component's own 96 in both the normal (108-wide)
+            //! and Master cases (content.width - 8 = 100/100, min still 96) -- only
+            //! actually shrinks the control below 96 when condensed view narrows
+            //! content.width past that.
+            width: Math.min(96, content.width - 8)
 
             supportsByPassing: false
             resourceItemModel: content.channelItem.inputResourceItem ?? null

@@ -62,6 +62,7 @@ private:
 
     muse::Ret toggleMixerSection(const muse::rcommand::Params& params);
     muse::Ret toggleAuxChannels();
+    muse::Ret toggleMixerCondensedView();
 
     void registerCommand(const muse::rcommand::Command&, const std::function<muse::Ret()>&);
     void registerCommand(const muse::rcommand::Command&, const std::function<muse::Ret(const muse::rcommand::Params&)>&);

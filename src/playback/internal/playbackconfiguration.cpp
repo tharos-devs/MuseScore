@@ -97,6 +97,8 @@ static const Settings::Key MUTE_HIDDEN_INSTRUMENTS(moduleName, "playback/mixer/m
 static const Settings::Key AUX_CHANNELS_VISIBLE(moduleName, "playback/mixer/auxChannelsVisible");
 static const Settings::Key AUX_CHANNELS_VISIBLE_MIGRATED(moduleName, "playback/mixer/auxChannelsVisibleMigratedFromPerIndex");
 
+static const Settings::Key MIXER_CONDENSED_VIEW_ENABLED(moduleName, "playback/mixer/condensedViewEnabled");
+
 //! NOTE: the per-index "auxChannel<N>Visible" keys these replace (used up until this
 //! feature); kept only so migrateAuxChannelsVisibleSetting() can read a user's old
 //! preference once - never registered with setDefaultValue, so they are never re-created
@@ -200,6 +202,11 @@ void PlaybackConfiguration::init()
 
     settings()->valueChanged(AUX_CHANNELS_VISIBLE).onReceive(this, [this](const Val& val) {
         m_areAuxChannelsVisibleChanged.send(val.toBool());
+    });
+
+    settings()->setDefaultValue(MIXER_CONDENSED_VIEW_ENABLED, Val(false));
+    settings()->valueChanged(MIXER_CONDENSED_VIEW_ENABLED).onReceive(this, [this](const Val& val) {
+        m_isMixerCondensedViewEnabledChanged.send(val.toBool());
     });
 
     settings()->setDefaultValue(ONLINE_SOUNDS_SHOW_ERROR, Val(true));
@@ -401,6 +408,21 @@ void PlaybackConfiguration::setAuxChannelsVisible(bool visible)
 muse::async::Channel<bool> PlaybackConfiguration::areAuxChannelsVisibleChanged() const
 {
     return m_areAuxChannelsVisibleChanged;
+}
+
+bool PlaybackConfiguration::isMixerCondensedViewEnabled() const
+{
+    return settings()->value(MIXER_CONDENSED_VIEW_ENABLED).toBool();
+}
+
+void PlaybackConfiguration::setMixerCondensedViewEnabled(bool enabled)
+{
+    settings()->setSharedValue(MIXER_CONDENSED_VIEW_ENABLED, Val(enabled));
+}
+
+muse::async::Channel<bool> PlaybackConfiguration::isMixerCondensedViewEnabledChanged() const
+{
+    return m_isMixerCondensedViewEnabledChanged;
 }
 
 gain_t PlaybackConfiguration::defaultAuxSendValue(aux_channel_idx_t index, AudioSourceType sourceType,

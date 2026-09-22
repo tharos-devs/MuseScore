@@ -41,9 +41,11 @@ MixerPanelSection {
         y: 0
 
         height: childrenRect.height
-        width: root.channelItemWidth
+        width: root.rowWidthFor(channelItem)
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
+
+        readonly property bool condensedRow: root.isCondensedRow(channelItem)
 
         spacing: 4
 
@@ -59,7 +61,7 @@ MixerPanelSection {
             model: content.channelItem.type === MixerChannelItem.Aux ? [] : content.channelItem.auxSendItemModel
 
             delegate: Item {
-                width: root.channelItemWidth
+                width: root.rowWidthFor(content.channelItem)
                 height: auxSendControl.height
 
                 required property AuxSendItem modelData
@@ -69,6 +71,13 @@ MixerPanelSection {
                     id: auxSendControl
 
                     anchors.horizontalCenter: parent.horizontalCenter
+                    //! NOTE: see MixerSoundSection.qml's identical binding -- stays at
+                    //! the component's own 96 default until condensed view narrows
+                    //! this row past 104. In condensed view this narrows further still,
+                    //! to knob(27) + spacing(8) + an 18px arrow button.
+                    width: content.condensedRow ? 53 : Math.min(96, parent.width - 8)
+
+                    compact: content.condensedRow
 
                     auxSendItemModel: parent.modelData
 

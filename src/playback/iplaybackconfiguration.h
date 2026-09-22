@@ -86,6 +86,10 @@ public:
     virtual void setAuxChannelsVisible(bool visible) = 0;
     virtual muse::async::Channel<bool> areAuxChannelsVisibleChanged() const = 0;
 
+    virtual bool isMixerCondensedViewEnabled() const = 0;
+    virtual void setMixerCondensedViewEnabled(bool enabled) = 0;
+    virtual muse::async::Channel<bool> isMixerCondensedViewEnabledChanged() const = 0;
+
     virtual muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                                     const muse::String& instrumentSoundId) const = 0;
 

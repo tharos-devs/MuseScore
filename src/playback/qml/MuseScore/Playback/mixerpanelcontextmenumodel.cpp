@@ -114,6 +114,11 @@ bool MixerPanelContextMenuModel::titleSectionVisible() const
     return isSectionVisible(MixerSectionType::Title);
 }
 
+bool MixerPanelContextMenuModel::condensedViewEnabled() const
+{
+    return configuration()->isMixerCondensedViewEnabled();
+}
+
 bool MixerPanelContextMenuModel::floating() const
 {
     return m_floating;
@@ -188,6 +193,13 @@ void MixerPanelContextMenuModel::load()
         emitMixerSectionVisibilityChanged(sectionType);
     });
 
+    configuration()->isMixerCondensedViewEnabledChanged().onReceive(this, [this](bool newEnabledValue) {
+        auto query = rcommand::make_query(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, rcommand::Params());
+        setViewMenuItemChecked(query, newEnabledValue);
+
+        emit condensedViewEnabledChanged();
+    });
+
     updateItems();
 }
 
@@ -216,6 +228,16 @@ MenuItem* MixerPanelContextMenuModel::buildAuxChannelsVisibleItem()
     return item;
 }
 
+MenuItem* MixerPanelContextMenuModel::buildCondensedViewItem()
+{
+    MenuItem* item = new MenuItem(this);
+    item->setTitle(TranslatableString("playback", "Condensed view"));
+    item->setCheckable(true);
+    item->setChecked(configuration()->isMixerCondensedViewEnabled());
+    item->setCommandQuery(rcommand::make_query(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, rcommand::Params()));
+    return item;
+}
+
 void MixerPanelContextMenuModel::setViewMenuItemChecked(const muse::rcommand::CommandQuery& query, bool checked)
 {
     MenuItem& viewMenu = findMenu(VIEW_MENU_ID);
@@ -241,7 +263,8 @@ void MixerPanelContextMenuModel::onCommandStateChanged(const muse::rcommand::Com
     //! Skip the base class handling entirely for these two; this model already keeps them
     //! in sync itself via configuration()->isMixerSectionVisibleChanged()/
     //! areAuxChannelsVisibleChanged() in load(), matched by full query (not just command()).
-    if (command == TOGGLE_MIXER_SECTION_COMMAND || command == TOGGLE_AUX_CHANNELS_COMMAND) {
+    if (command == TOGGLE_MIXER_SECTION_COMMAND || command == TOGGLE_AUX_CHANNELS_COMMAND
+        || command == TOGGLE_MIXER_CONDENSED_VIEW_COMMAND) {
         return;
     }
 
@@ -264,9 +287,10 @@ void MixerPanelContextMenuModel::onActionsStateChanges(const muse::actions::Acti
 
     const std::string mixerSectionPrefix = TOGGLE_MIXER_SECTION_COMMAND.toString();
     const std::string auxChannelsCode = TOGGLE_AUX_CHANNELS_COMMAND.toString();
+    const std::string condensedViewCode = TOGGLE_MIXER_CONDENSED_VIEW_COMMAND.toString();
 
     for (const ActionCode& code : codes) {
-        if (code == auxChannelsCode || code.rfind(mixerSectionPrefix, 0) == 0) {
+        if (code == auxChannelsCode || code == condensedViewCode || code.rfind(mixerSectionPrefix, 0) == 0) {
             continue;
         }
         filtered.push_back(code);
@@ -320,6 +344,8 @@ void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionT
 void MixerPanelContextMenuModel::updateItems()
 {
     MenuItemList viewMenuItems {
+        buildCondensedViewItem(),
+        makeSeparator(),
         buildSectionVisibleItem(MixerSectionType::Labels),
         buildSectionVisibleItem(MixerSectionType::Sound),
         buildSectionVisibleItem(MixerSectionType::Gain),
