@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-09-22
+- Added a "Condensed view" toggle to the Mixer's View menu, narrowing every regular channel column to trade per-row precision for screen space (Master keeps its normal width and full detail).
+
 ### 2026-09-20
 - Added full undo/redo support to the Mixer panel, covering channel color, aux-bus routing, drag-reorder, channel add/delete, and volume/pan/gain/aux-send-level changes.
 - Mute, Solo, and Aux-send bus picks now apply to an entire multi-selected group of Mixer channels at once, not just the one clicked.
