@@ -124,6 +124,7 @@ public:
     //! sync cycle later than the score, or stop on its own before the score does (e.g. once
     //! it reaches its own end while the score keeps playing). Pushed by the Video panel as
     //! the real Qt Multimedia playback state changes; read by the Mixer's Video channel meter.
+    //! Always false for a video without an audio track, so that meter stays dark.
     virtual bool isVideoPlaying() const = 0;
     virtual void setIsVideoPlaying(bool playing) = 0;
     virtual muse::async::Notification isVideoPlayingChanged() const = 0;

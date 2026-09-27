@@ -583,11 +583,21 @@ Item {
         }
 
         function onPlaybackStateChanged() {
-            videoModel.setVideoElementPlaying(video.playbackState === MediaPlayer.PlayingState)
+            root.updateVideoElementPlaying()
+        }
+
+        function onHasAudioChanged() {
+            root.updateVideoElementPlaying()
         }
     }
 
     Component.onDestruction: videoModel.setVideoElementPlaying(false)
+
+    // A video with no audio track reports "not playing" so the Mixer's Video
+    // channel meter stays dark instead of showing its simulated level.
+    function updateVideoElementPlaying() {
+        videoModel.setVideoElementPlaying(video.playbackState === MediaPlayer.PlayingState && video.hasAudio)
+    }
 
     function pageTimelineToKeepPlayheadVisible() {
         if (!videoModel.hasVideo || video.duration <= 0 || timelineFlickable.contentWidth <= timelineFlickable.width) {
