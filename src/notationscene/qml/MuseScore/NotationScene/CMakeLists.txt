@@ -102,6 +102,10 @@ qt_add_qml_module(notationscene_qml
         notevelocitygeometry.h
         notevelocityoverlay.cpp
         notevelocityoverlay.h
+        articulationmapoverlay.cpp
+        articulationmapoverlay.h
+        notationarticulationmapcontroller.cpp
+        notationarticulationmapcontroller.h
         paintedengravingitem.cpp
         paintedengravingitem.h
         partlistmodel.cpp

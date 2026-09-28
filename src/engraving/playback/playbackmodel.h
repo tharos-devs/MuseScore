@@ -94,6 +94,7 @@ public:
     muse::async::Channel<InstrumentTrackId> trackRemoved() const;
 
     muse::mpe::dynamic_level_t appliableDynamicLevel(track_idx_t trackIdx, int tick) const;
+    std::optional<ResolvedArticulation> resolvedArticulation(track_idx_t trackIdx, int tick) const;
 
 private:
     static const InstrumentTrackId METRONOME_TRACK_ID;

@@ -24,7 +24,9 @@
 
 #include <cmath>
 
+#include "dom/chord.h"
 #include "dom/lyrics.h"
+#include "dom/masterscore.h"
 #include "dom/measure.h"
 #include "dom/measurerepeat.h"
 #include "dom/part.h"
@@ -37,6 +39,8 @@
 #include "dom/stafftext.h"
 
 #include "engraving/automation/automationdata.h"
+#include "engraving/articulationmap/articulationmapdata.h"
+#include "engraving/infrastructure/eidregister.h"
 
 #include "utils/arrangementutils.h"
 #include "utils/expressionutils.h"
@@ -295,6 +299,7 @@ void PlaybackContext::update(const track_idx_t trackFrom, const track_idx_t trac
     }
 
     m_dynamicsCurveByTrack.clear();
+    updateLatchedArticulationMarks();
 
     for (const RepeatSegment* repeatSegment : m_score->repeatList(expandRepeats)) {
         const int repeatStartTick = repeatSegment->tick;
@@ -708,4 +713,90 @@ bool PlaybackContext::hasOnlyOneLyricsVerse(const RepeatSegment* repeat, const t
     const auto end = trackIt->second.lower_bound(endTick);
 
     return start == end;
+}
+
+const ExpressionMap* PlaybackContext::expressionMap(const InstrumentTrackId& trackId) const
+{
+    const ArticulationMapDataConstPtr data = m_score->articulationMapData();
+    return data ? data->map(trackId) : nullptr;
+}
+
+std::optional<ArticulationMark> PlaybackContext::articulationMark(const Chord* chord) const
+{
+    const ArticulationMapDataConstPtr data = m_score->articulationMapData();
+    if (!data || data->marks().empty()) {
+        return std::nullopt;
+    }
+
+    const EID chordId = chord->eid();
+    return chordId.isValid() ? data->mark(chordId) : std::nullopt;
+}
+
+std::optional<ArticulationMark> PlaybackContext::latchedArticulationMark(const staff_idx_t staffIdx, const int tick) const
+{
+    auto staffIt = m_latchedArticulationMarksByStaff.find(staffIdx);
+    if (staffIt == m_latchedArticulationMarksByStaff.cend()) {
+        return std::nullopt;
+    }
+
+    auto it = findLessOrEqual(staffIt->second, tick);
+    if (it == staffIt->second.cend()) {
+        return std::nullopt;
+    }
+
+    return it->second;
+}
+
+//! NOTE: marks are few, so the whole index is rebuilt on each update: a latched mark affects every following chord
+void PlaybackContext::updateLatchedArticulationMarks()
+{
+    m_latchedArticulationMarksByStaff.clear();
+
+    const ArticulationMapDataConstPtr data = m_score->articulationMapData();
+    if (!data) {
+        return;
+    }
+
+    for (const auto& [chordId, mark] : data->marks()) {
+        if (mark.scope != ArticulationMark::Scope::Latched) {
+            continue;
+        }
+
+        const Chord* chord = ArticulationMapData::chordOfMark(m_score->masterScore(), chordId);
+        if (!chord) {
+            continue;
+        }
+
+        m_latchedArticulationMarksByStaff[chord->staffIdx()][chord->tick().ticks()] = mark;
+    }
+}
+
+//! NOTE: nullopt erases, so that a chord which stopped resolving anything isn't shown with its former articulation
+void PlaybackContext::setResolvedArticulation(const track_idx_t trackIdx, const int tick,
+                                              const std::optional<ResolvedArticulation>& articulation)
+{
+    if (articulation) {
+        m_resolvedArticulationsByTrack[trackIdx][tick] = *articulation;
+        return;
+    }
+
+    auto trackIt = m_resolvedArticulationsByTrack.find(trackIdx);
+    if (trackIt != m_resolvedArticulationsByTrack.end()) {
+        trackIt->second.erase(tick);
+    }
+}
+
+std::optional<ResolvedArticulation> PlaybackContext::resolvedArticulation(const track_idx_t trackIdx, const int tick) const
+{
+    auto trackIt = m_resolvedArticulationsByTrack.find(trackIdx);
+    if (trackIt == m_resolvedArticulationsByTrack.cend()) {
+        return std::nullopt;
+    }
+
+    auto it = trackIt->second.find(tick);
+    if (it == trackIt->second.cend()) {
+        return std::nullopt;
+    }
+
+    return it->second;
 }

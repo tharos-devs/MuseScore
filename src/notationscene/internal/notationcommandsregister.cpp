@@ -2943,6 +2943,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::DYNAMIC_FORTE, rcommand::Checkable::Yes)
     },
     CommandInfo {
+        TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND,
+        TranslatableString("action", "Articulations"),
+        TranslatableString("action", "Toggle articulation map editor"),
+        InputSchema(),
+        Decoration(IconCode::Code::ARTICULATION, rcommand::Checkable::Yes)
+    },
+    CommandInfo {
         RESET_NOTE_OFFSETS_COMMAND,
         TranslatableString("action", "Reset note offsets"),
         TranslatableString("action", "Reset note offsets"),

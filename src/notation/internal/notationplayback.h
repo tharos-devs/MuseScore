@@ -67,6 +67,7 @@ public:
     muse::async::Channel<engraving::InstrumentTrackId> trackRemoved() const override;
 
     muse::mpe::dynamic_level_t appliableDynamicLevel(engraving::track_idx_t trackIdx, int tick) const override;
+    std::optional<engraving::ResolvedArticulation> resolvedArticulation(engraving::track_idx_t trackIdx, int tick) const override;
 
     muse::audio::secs_t totalPlayTime() const override;
     muse::async::Channel<muse::audio::secs_t> totalPlayTimeChanged() const override;

@@ -44,6 +44,7 @@
 #include "notationautomationcontroller.h"
 #include "notationnoteoffsetcontroller.h"
 #include "notationnotevelocitycontroller.h"
+#include "notationarticulationmapcontroller.h"
 #include "noteinputcursor.h"
 #include "notationruler.h"
 #include "playbackcursor.h"
@@ -299,6 +300,8 @@ private:
     std::unique_ptr<NotationNoteOffsetController> m_notationNoteOffsetController;
     QQuickItem* m_noteVelocityOverlayContainer = nullptr;
     std::unique_ptr<NotationNoteVelocityController> m_notationNoteVelocityController;
+    QQuickItem* m_articulationMapOverlayContainer = nullptr;
+    std::unique_ptr<NotationArticulationMapController> m_notationArticulationMapController;
 
     // Toggled by a standalone Cmd/Ctrl *tap* (pressed and released with nothing
     // else happening in between - see keyPressEvent()/keyReleaseEvent()/event()), swaps which of

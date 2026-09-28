@@ -52,7 +52,25 @@ StyledToolBarView {
     // still getting its own delegate: a SplitButton whose dropdown arrow picks the automation type
     // directly, instead of a plain toggle-only button.
     sourceComponentCallback: function(type) {
-        return type === ToolBarItemType.USER_TYPE ? automationButtonComponent : null
+        if (type === ToolBarItemType.USER_TYPE) {
+            return automationButtonComponent
+        }
+
+        //! NOTE: USER_TYPE + 1, see notationtoolbarmodel.cpp
+        if (type === ToolBarItemType.USER_TYPE + 1) {
+            return articulationMapButtonComponent
+        }
+
+        return null
+    }
+
+    Component {
+        id: articulationMapButtonComponent
+
+        StyledToolBarItem {
+            iconFont: Qt.font({ family: ui.theme.toolbarIconsFont.family,
+                                pixelSize: Math.round(ui.theme.toolbarIconsFont.pixelSize * 0.8) })
+        }
     }
 
     Component {

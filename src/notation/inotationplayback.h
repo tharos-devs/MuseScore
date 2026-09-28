@@ -28,6 +28,7 @@
 #include "async/channel.h"
 #include "mpe/events.h"
 #include "engraving/types/types.h"
+#include "engraving/articulationmap/articulationmaptypes.h"
 
 #include "types/loopboundaries.h"
 #include "types/tempo.h"
@@ -70,6 +71,8 @@ public:
     // Dynamic level (marking/hairpin only, no per-note override) that would apply at this tick,
     // for use by UI that needs a musically-coherent baseline (e.g. a velocity editor).
     virtual muse::mpe::dynamic_level_t appliableDynamicLevel(engraving::track_idx_t trackIdx, int tick) const = 0;
+    //! NOTE: the articulation-map articulation the chord of this track (voice) at this tick plays, if its instrument has a map
+    virtual std::optional<engraving::ResolvedArticulation> resolvedArticulation(engraving::track_idx_t trackIdx, int tick) const = 0;
 
     virtual muse::audio::secs_t totalPlayTime() const = 0;
     virtual muse::async::Channel<muse::audio::secs_t> totalPlayTimeChanged() const = 0;

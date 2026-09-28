@@ -112,6 +112,8 @@ target_sources(engraving PRIVATE
     editing/editaccidentalbrackets.h
     editing/editautomationpoints.cpp
     editing/editautomationpoints.h
+    editing/editarticulationmap.cpp
+    editing/editarticulationmap.h
     editing/editbeam.cpp
     editing/editbeam.h
     editing/editstaffbrackets.cpp
@@ -377,6 +379,15 @@ target_sources(engraving PRIVATE
     automation/internal/automationrw.h
     automation/internal/scoreautomationcontroller.cpp
     automation/internal/scoreautomationcontroller.h
+
+    articulationmap/articulationmaptypes.h
+    articulationmap/articulationmaptypes_fwd.h
+    articulationmap/articulationmapparser.cpp
+    articulationmap/articulationmapparser.h
+    articulationmap/articulationmapdata.cpp
+    articulationmap/articulationmapdata.h
+    articulationmap/internal/articulationmaprw.cpp
+    articulationmap/internal/articulationmaprw.h
 
     ${RENDERING_SCORE_SRC}
     ${RENDERING_SINGLE_SRC}

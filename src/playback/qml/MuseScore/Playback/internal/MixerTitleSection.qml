@@ -134,6 +134,22 @@ MixerPanelSection {
                     title: qsTrc("playback", "Add Group channel for selected tracks"),
                     enabled: root.model.canAddAuxBus()
                 })
+
+                items.push({})
+                items.push({ id: "loadArticulationMap", title: qsTrc("playback", "Load articulation map…") })
+                if (root.model.hasArticulationMap(content.channelItem)) {
+                    let mapName = root.model.articulationMapName(content.channelItem)
+                    items.push({
+                        id: "reloadArticulationMap",
+                        title: mapName.length > 0 ? qsTrc("playback", "Reload articulation map (%1)").arg(mapName)
+                                                  : qsTrc("playback", "Reload articulation map")
+                    })
+                    items.push({
+                        id: "removeArticulationMap",
+                        title: mapName.length > 0 ? qsTrc("playback", "Remove articulation map (%1)").arg(mapName)
+                                                  : qsTrc("playback", "Remove articulation map")
+                    })
+                }
             }
 
             return items
@@ -424,6 +440,8 @@ MixerPanelSection {
                     if (!content.channelItem.selected) {
                         root.model.selectChannel(content.channelItem, false, false)
                     }
+                    //! NOTE: rebuilt on each show, some items depend on state without a change signal (articulation map)
+                    contextMenuLoader.items = content.buildContextMenuItems()
                     contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
                 } else if (mouse.button === Qt.LeftButton) {
                     root.model.selectChannel(content.channelItem, extendSelection, rangeSelection)
@@ -467,6 +485,12 @@ MixerPanelSection {
                     root.model.addFxChannelForSelectedTracks()
                 } else if (itemId === "addGroupChannelForSelectedTracks") {
                     root.model.addGroupChannelForSelectedTracks()
+                } else if (itemId === "loadArticulationMap") {
+                    root.model.loadArticulationMap(content.channelItem)
+                } else if (itemId === "reloadArticulationMap") {
+                    root.model.reloadArticulationMap(content.channelItem)
+                } else if (itemId === "removeArticulationMap") {
+                    root.model.removeArticulationMap(content.channelItem)
                 } else if (itemId === "deleteChannel") {
                     root.model.deleteAuxChannel(content.channelItem)
                 }

@@ -34,6 +34,7 @@
 #include "notation/inotationautomation.h" // IWYU pragma: keep
 #include "notation/inotationnoteoffsets.h" // IWYU pragma: keep
 #include "notation/inotationnotevelocity.h" // IWYU pragma: keep
+#include "notation/inotationarticulationmaps.h" // IWYU pragma: keep
 #include "notation/inotationinteraction.h"
 #include "notation/inotationnoteinput.h" // IWYU pragma: keep
 #include "notation/inotationselection.h" // IWYU pragma: keep
@@ -59,6 +60,7 @@ static const ActionCode TOGGLE_CONCERT_PITCH_CODE("concert-pitch");
 static const ActionCode TOGGLE_AUTOMATION_CODE("toggle-automation");
 static const ActionCode TOGGLE_NOTE_OFFSET_EDITOR_CODE("toggle-note-offset-editor");
 static const ActionCode TOGGLE_NOTE_VELOCITY_EDITOR_CODE("toggle-note-velocity-editor");
+static const ActionCode TOGGLE_ARTICULATION_MAP_EDITOR_CODE("toggle-articulation-map-editor");
 
 // avoid translation duplication
 
@@ -2732,6 +2734,14 @@ const UiActionList NotationUiActions::s_actions = {
              IconCode::Code::DYNAMIC_FORTE,
              Checkable::Yes
              ),
+    UiAction(TOGGLE_ARTICULATION_MAP_EDITOR_CODE,
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Articulations"),
+             TranslatableString("action", "Toggle articulation map editor"),
+             IconCode::Code::ARTICULATION,
+             Checkable::Yes
+             ),
 };
 
 const UiActionList NotationUiActions::s_scoreConfigActions = {
@@ -2958,6 +2968,7 @@ void NotationUiActions::init()
         m_actionCheckedChanged.send({ TOGGLE_AUTOMATION_CODE });
         m_actionCheckedChanged.send({ TOGGLE_NOTE_OFFSET_EDITOR_CODE });
         m_actionCheckedChanged.send({ TOGGLE_NOTE_VELOCITY_EDITOR_CODE });
+        m_actionCheckedChanged.send({ TOGGLE_ARTICULATION_MAP_EDITOR_CODE });
 
         if (const IMasterNotationPtr masterNotation = m_controller->currentMasterNotation()) {
             masterNotation->automation()->automationModeEnabledChanged().onNotify(this, [this]() {
@@ -2970,6 +2981,10 @@ void NotationUiActions::init()
 
             masterNotation->noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
                 m_actionCheckedChanged.send({ TOGGLE_NOTE_VELOCITY_EDITOR_CODE });
+            }, Asyncable::Mode::SetReplace);
+
+            masterNotation->articulationMaps()->overlayEnabledChanged().onNotify(this, [this]() {
+                m_actionCheckedChanged.send({ TOGGLE_ARTICULATION_MAP_EDITOR_CODE });
             }, Asyncable::Mode::SetReplace);
         }
     });
@@ -3097,6 +3112,11 @@ bool NotationUiActions::actionChecked(const UiAction& act) const
     if (act.code == TOGGLE_NOTE_VELOCITY_EDITOR_CODE) {
         const IMasterNotationPtr masterNotation = m_controller->currentMasterNotation();
         return masterNotation ? masterNotation->noteVelocity()->isEditModeEnabled() : false;
+    }
+
+    if (act.code == TOGGLE_ARTICULATION_MAP_EDITOR_CODE) {
+        const IMasterNotationPtr masterNotation = m_controller->currentMasterNotation();
+        return masterNotation ? masterNotation->articulationMaps()->isOverlayEnabled() : false;
     }
 
     if (isScoreConfigAction(act.code)) {

@@ -36,6 +36,8 @@
 
 #include "engraving/automation/automationdata.h"
 #include "engraving/automation/internal/automationrw.h"
+#include "engraving/articulationmap/articulationmapdata.h"
+#include "engraving/articulationmap/internal/articulationmaprw.h"
 
 #include "compat/compatutils.h"
 #include "compat/readstyle.h"
@@ -216,6 +218,14 @@ Ret MscLoader::loadMscz(MasterScore* masterScore, const MscReader& mscReader, rw
         AutomationDataPtr automationData = std::make_shared<AutomationData>();
         AutomationRW::read(*automationData, ba);
         masterScore->setAutomationData(automationData);
+    }
+
+    // Read articulation maps
+    {
+        ByteArray ba = mscReader.readArticulationMapsJsonFile();
+        ArticulationMapDataPtr articulationMapData = std::make_shared<ArticulationMapData>();
+        ArticulationMapRW::read(*articulationMapData, ba);
+        masterScore->setArticulationMapData(articulationMapData);
     }
 
     return ret;

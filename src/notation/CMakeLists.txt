@@ -36,6 +36,7 @@ target_sources(notation PRIVATE
     inotationselectionfilter.h
     inotationselectionrange.h
     inotationautomation.h
+    inotationarticulationmaps.h
     inotationnoteoffsets.h
     inotationnotevelocity.h
     inotationinteraction.h
@@ -85,6 +86,8 @@ target_sources(notation PRIVATE
     internal/notationcontextconfiguration.h
     internal/notationautomation.cpp
     internal/notationautomation.h
+    internal/notationarticulationmaps.cpp
+    internal/notationarticulationmaps.h
     internal/notationnoteoffsets.cpp
     internal/notationnoteoffsets.h
     internal/notationnotevelocity.cpp

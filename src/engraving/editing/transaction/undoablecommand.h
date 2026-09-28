@@ -153,6 +153,9 @@ enum class CommandType : signed char {
     // Automation
     EditAutomationPoints,
 
+    // Articulation maps
+    EditArticulationMap,
+
     // Other
     InsertTime,
     ChangeScoreOrder,

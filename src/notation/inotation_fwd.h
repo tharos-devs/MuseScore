@@ -85,6 +85,9 @@ using INotationPlaybackPtr = std::shared_ptr<INotationPlayback>;
 class INotationAutomation;
 using INotationAutomationPtr = std::shared_ptr<INotationAutomation>;
 
+class INotationArticulationMaps;
+using INotationArticulationMapsPtr = std::shared_ptr<INotationArticulationMaps>;
+
 class INotationNoteOffsets;
 using INotationNoteOffsetsPtr = std::shared_ptr<INotationNoteOffsets>;
 

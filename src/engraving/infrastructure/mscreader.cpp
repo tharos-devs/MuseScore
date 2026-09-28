@@ -261,6 +261,15 @@ muse::ByteArray MscReader::readAutomationJsonFile() const
     return fileData(u"automation.json");
 }
 
+muse::ByteArray MscReader::readArticulationMapsJsonFile() const
+{
+    if (!fileExists(u"articulationmaps.json")) {
+        return ByteArray();
+    }
+
+    return fileData(u"articulationmaps.json");
+}
+
 // =======================================================================
 // Readers
 // =======================================================================

@@ -208,6 +208,11 @@ void MscWriter::writeAutomationJsonFile(const muse::ByteArray& data)
     addFileData(u"automation.json", data);
 }
 
+void MscWriter::writeArticulationMapsJsonFile(const muse::ByteArray& data)
+{
+    addFileData(u"articulationmaps.json", data);
+}
+
 void MscWriter::writeMeta()
 {
     if (m_meta.isWritten) {

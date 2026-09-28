@@ -35,6 +35,9 @@
 #include "async/asyncable.h"
 #include "audio/main/iplayback.h"
 #include "context/iglobalcontext.h"
+#include "global/iglobalconfiguration.h"
+#include "global/io/ifilesystem.h"
+#include "interactive/iinteractive.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectvideosettings.h"
@@ -65,6 +68,9 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
     muse::ContextInject<IPlaybackController> controller = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<muse::IInteractive> interactive = { this };
+    muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
+    muse::GlobalInject<muse::io::IFileSystem> fileSystem;
 
 public:
     explicit MixerPanelModel(QObject* parent = nullptr);
@@ -133,6 +139,13 @@ public:
     //! individual channels in between
     Q_INVOKABLE void toggleGlobalMute();
     Q_INVOKABLE void toggleGlobalSolo();
+
+    //! NOTE: articulation maps drive keyswitch/CC articulation changes of third-party VST instruments
+    Q_INVOKABLE bool hasArticulationMap(mu::playback::MixerChannelItem* channelItem) const;
+    Q_INVOKABLE QString articulationMapName(mu::playback::MixerChannelItem* channelItem) const;
+    Q_INVOKABLE void loadArticulationMap(mu::playback::MixerChannelItem* channelItem);
+    Q_INVOKABLE void reloadArticulationMap(mu::playback::MixerChannelItem* channelItem);
+    Q_INVOKABLE void removeArticulationMap(mu::playback::MixerChannelItem* channelItem);
 
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -231,6 +244,7 @@ private:
     project::AudioOutputParams effectiveMasterOutputParams() const;
 
     project::INotationProjectPtr currentProject() const;
+    void loadArticulationMapFile(MixerChannelItem* channelItem, const muse::io::path_t& path, bool isReload);
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectVideoSettingsPtr videoSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;

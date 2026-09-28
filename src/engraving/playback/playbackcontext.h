@@ -26,6 +26,7 @@
 #include "mpe/events.h"
 
 #include "engraving/automation/automationtypes.h"
+#include "engraving/articulationmap/articulationmaptypes.h"
 
 #include "../types/types.h"
 
@@ -39,6 +40,7 @@ class MeasureRepeat;
 class TextBase;
 class ChordRest;
 class RepeatSegment;
+class Chord;
 
 class PlaybackContext
 {
@@ -67,6 +69,16 @@ public:
     muse::mpe::DynamicAutomationLayers dynamicLevelLayers(const track_idx_t trackFrom, const track_idx_t trackTo) const;
 
     bool hasSoundFlags(const track_idx_t trackFrom, const track_idx_t trackTo) const;
+
+    const ExpressionMap* expressionMap(const InstrumentTrackId& trackId) const;
+    std::optional<ArticulationMark> articulationMark(const Chord* chord) const;
+    //! NOTE: the latest latched mark of the staff at or before the given tick
+    std::optional<ArticulationMark> latchedArticulationMark(const staff_idx_t staffIdx, const int tick) const;
+
+    //! NOTE: recorded while rendering, for the UI to show exactly what playback resolved - per track (voice),
+    //! so simultaneous chords of different voices keep their own result
+    void setResolvedArticulation(const track_idx_t trackIdx, const int tick, const std::optional<ResolvedArticulation>& articulation);
+    std::optional<ResolvedArticulation> resolvedArticulation(const track_idx_t trackIdx, const int tick) const;
 
     void update(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo, bool expandRepeats = true);
     void clear(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo);
@@ -99,6 +111,8 @@ private:
 
     const AutomationCurve* dynamicsCurve(const track_idx_t trackIdx) const;
 
+    void updateLatchedArticulationMarks();
+
     bool hasOnlyOneLyricsVerse(const RepeatSegment* repeat, const track_idx_t track) const;
 
     const Score* m_score = nullptr;
@@ -109,6 +123,8 @@ private:
     TextArticulationsByTrack m_textArticulationsByTrack;
     SyllablesByTrack m_syllablesByTrack;
     PlayTechniquesByTrack m_playTechniquesByTrack;
+    std::map<staff_idx_t, std::map<int /*chordTick*/, ArticulationMark> > m_latchedArticulationMarksByStaff;
+    std::map<track_idx_t, std::map<int /*chordTick*/, ResolvedArticulation> > m_resolvedArticulationsByTrack;
 
     std::unordered_map<const ChordRest*, int> m_currentVerseNumByChordRest;
     std::map<track_idx_t, std::set<int /*tick*/> > m_multiVerseLyricsPositionMap;

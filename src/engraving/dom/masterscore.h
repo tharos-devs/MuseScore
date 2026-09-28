@@ -109,6 +109,10 @@ public:
     void setAutomationData(AutomationDataPtr data);
     void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true) override;
 
+    ArticulationMapDataConstPtr articulationMapData() const override;
+    void setArticulationMapData(ArticulationMapDataPtr data);
+    void editArticulationMap(const EditArticulationMapChanges& changes) override;
+
     /// Always call this before calling `repeatList()`
     /// No need to set it back after use, because everyone always calls it before using `repeatList()`
     void setExpandRepeats(bool expandRepeats);
@@ -230,6 +234,7 @@ private:
     RepeatList* m_expandedRepeatList = nullptr;
     RepeatList* m_nonExpandedRepeatList = nullptr;
     ScoreAutomationController* m_automationController = nullptr;
+    ArticulationMapDataPtr m_articulationMapData;
     bool m_expandRepeats = true;
 
     std::vector<Excerpt*> m_excerpts;
