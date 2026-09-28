@@ -916,7 +916,16 @@ Ret NotationProject::writeProject(MscWriter& msczWriter, bool createThumbnail, c
     }
 
     // Write engraving project
+    const bool thumbnailRelayouts = createThumbnail
+                                    && m_engravingProject->masterScore()->layoutMode() != engraving::LayoutMode::PAGE;
     ret = m_engravingProject->writeMscz(msczWriter, createThumbnail, ctx);
+
+    //! NOTE The thumbnail is rendered by relayouting the score in page mode and back, which recreates
+    //! all Pages and Systems outside of any transaction: views must drop their cached layout pointers
+    if (thumbnailRelayouts) {
+        m_masterNotation->notation()->notationChanged().send(RectF());
+    }
+
     if (!ret) {
         LOGE() << "failed write engraving project to mscz: " << ret.toString();
         return make_ret(notation::Err::UnknownError);
