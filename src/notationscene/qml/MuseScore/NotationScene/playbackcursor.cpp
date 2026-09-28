@@ -82,6 +82,7 @@ void PlaybackCursor::setNotation(INotationPtr notation)
     if (m_notation) {
         m_notation->elements()->msScore()->changesChannel().disconnect(this);
         m_notation->viewModeChanged().disconnect(this);
+        m_notation->notationChanged().disconnect(this);
     }
 
     if (notation) {
@@ -90,6 +91,11 @@ void PlaybackCursor::setNotation(INotationPtr notation)
         });
 
         notation->viewModeChanged().onNotify(this, [this]() {
+            m_cache.clear();
+        });
+
+        // a relayout outside of a transaction (e.g. the thumbnail on save) has no ScoreChanges
+        notation->notationChanged().onReceive(this, [this](const RectF&) {
             m_cache.clear();
         });
     }
