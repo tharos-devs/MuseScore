@@ -68,8 +68,6 @@ public:
     //! NOTE: live drag preview, without touching the score
     void setChipPreviewX(int index, qreal xN);
 
-    void setColors(const QColor& background, const QColor& text);
-
     bool isDragging() const;
 
     void paint(QPainter* painter) override;
@@ -94,8 +92,6 @@ private:
 
     QVector<ChipData> m_chips;
     QVector<LineData> m_lines;
-    QColor m_backgroundColor;
-    QColor m_textColor;
 
     int m_hoveredChip = -1;
     bool m_hoveringChip = false;

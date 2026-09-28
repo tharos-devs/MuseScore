@@ -30,7 +30,6 @@
 #include "async/asyncable.h"
 #include "context/iglobalcontext.h"
 #include "modularity/ioc.h"
-#include "notation/inotationconfiguration.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/notationtypes.h"
 #include "playback/iplaybackcontroller.h"
@@ -43,7 +42,6 @@ class ArticulationMapOverlay;
 class NotationArticulationMapController : public muse::Contextable, public muse::async::Asyncable
 {
     muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
-    muse::GlobalInject<INotationConfiguration> notationConfiguration;
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
 
 public:

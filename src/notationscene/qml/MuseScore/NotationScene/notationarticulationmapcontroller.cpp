@@ -353,15 +353,6 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
         overlay = new ArticulationMapOverlay(m_overlaysParent);
         overlay->setVisible(false);
 
-        // Matches the paper the lane sits on, not the workspace around the pages
-        const QColor paper = notationConfiguration() ? notationConfiguration()->foregroundColor() : QColor(Qt::white);
-        const double luminance = 0.299 * paper.red() + 0.587 * paper.green() + 0.114 * paper.blue();
-        if (luminance > 128.0) {
-            overlay->setColors(QColor(255, 255, 255, 235), QColor(30, 30, 30));
-        } else {
-            overlay->setColors(QColor(30, 30, 30, 235), QColor(235, 235, 235));
-        }
-
         QObject::connect(overlay, &ArticulationMapOverlay::clicked, [this, key](int chipIndex, qreal xN, const QPointF& globalPos) {
             onClicked(key, chipIndex, xN, globalPos);
         });

@@ -41,6 +41,7 @@ constexpr static qreal ARTMAP_CHIP_CORNER_RADIUS_PX = 3.0;
 constexpr static qreal ARTMAP_MIN_FONT_PX = 9.0;
 constexpr static qreal ARTMAP_MAX_FONT_PX = 13.0;
 constexpr static qreal ARTMAP_LINE_WIDTH_PX = 2.0;
+constexpr static int ARTMAP_HOVERED_CHIP_ALPHA = 60;
 
 static QColor artMapTextColorFor(const QColor& fill)
 {
@@ -76,13 +77,6 @@ void ArticulationMapOverlay::setChipPreviewX(int index, qreal xN)
     }
 
     m_chips[index].xN = xN;
-    update();
-}
-
-void ArticulationMapOverlay::setColors(const QColor& background, const QColor& text)
-{
-    m_backgroundColor = background;
-    m_textColor = text;
     update();
 }
 
@@ -126,11 +120,7 @@ void ArticulationMapOverlay::paint(QPainter* painter)
 {
     painter->setRenderHint(QPainter::Antialiasing);
 
-    QColor borderColor = m_textColor;
-    borderColor.setAlpha(60);
-    painter->setPen(QPen(borderColor, 1.0));
-    painter->setBrush(m_backgroundColor);
-    painter->drawRoundedRect(QRectF(0.5, 0.5, width() - 1.0, height() - 1.0), ARTMAP_CHIP_CORNER_RADIUS_PX, ARTMAP_CHIP_CORNER_RADIUS_PX);
+    // No lane background: notes and ledger lines below the staff stay visible through it
 
     const qreal midY = height() / 2.0;
     for (const LineData& line : m_lines) {
@@ -156,17 +146,25 @@ void ArticulationMapOverlay::paint(QPainter* painter)
             painter->drawLine(QPointF(chip.chordXN * width(), 0), QPointF(chip.chordXN * width(), height()));
         }
 
-        // The color says which articulation
-        const QColor textColor = artMapTextColorFor(chip.color);
+        // The color says which articulation. The hovered chip turns see-through, to see the notes and
+        // staff under it; once pressed (e.g. to drag it) it's opaque again
+        const bool hovered = index == m_hoveredChip;
+        const bool pressed = m_pressed && index == m_activeChip;
+        const bool seeThrough = hovered && !pressed;
+        QColor fillColor = chip.color;
+        if (seeThrough) {
+            fillColor.setAlpha(ARTMAP_HOVERED_CHIP_ALPHA);
+        }
+        const QColor textColor = seeThrough ? chip.color : artMapTextColorFor(chip.color);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(chip.color);
+        painter->setBrush(fillColor);
         painter->drawRoundedRect(rect, ARTMAP_CHIP_CORNER_RADIUS_PX, ARTMAP_CHIP_CORNER_RADIUS_PX);
 
         const QRectF textRect = rect;
 
         // Shrunk chips show as many leading letters as fit (no ellipsis), down to the first one,
         // then become a plain colored tick; the text stays centered, so both paddings stay equal
-        const QString& text = index == m_hoveredChip ? chip.fullName : chip.label;
+        const QString& text = hovered ? chip.fullName : chip.label;
         const qreal textWidth = textRect.width() - 2 * ARTMAP_CHIP_PADDING_X_PX;
         QString shownText = text;
         while (shownText.size() > 1 && metrics.horizontalAdvance(shownText) > textWidth) {
@@ -242,6 +240,7 @@ void ArticulationMapOverlay::mousePressEvent(QMouseEvent* e)
     m_dragStartXPx = e->position().x();
     m_movedPastClickThreshold = false;
     e->accept();
+    update();
 }
 
 void ArticulationMapOverlay::mouseMoveEvent(QMouseEvent* e)
@@ -271,6 +270,7 @@ void ArticulationMapOverlay::mouseReleaseEvent(QMouseEvent* e)
     m_pressed = false;
     m_activeChip = -1;
     m_movedPastClickThreshold = false;
+    update();
 
     if (wasDrag) {
         emit chipDragged(chip, (e->position().x() - m_dragStartXPx) / std::max(1.0, width()), true);
@@ -289,4 +289,5 @@ void ArticulationMapOverlay::mouseUngrabEvent()
     m_pressed = false;
     m_activeChip = -1;
     m_movedPastClickThreshold = false;
+    update();
 }
