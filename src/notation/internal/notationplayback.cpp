@@ -223,6 +223,11 @@ muse::mpe::dynamic_level_t NotationPlayback::appliableDynamicLevel(track_idx_t t
     return m_playbackModel.appliableDynamicLevel(trackIdx, tick);
 }
 
+std::optional<mu::engraving::ResolvedArticulation> NotationPlayback::resolvedArticulation(track_idx_t trackIdx, int tick) const
+{
+    return m_playbackModel.resolvedArticulation(trackIdx, tick);
+}
+
 void NotationPlayback::updateLoopBoundaries()
 {
     LoopBoundaries newBoundaries;

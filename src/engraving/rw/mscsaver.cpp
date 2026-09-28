@@ -39,6 +39,8 @@
 #include "dom/page.h"
 
 #include "engraving/automation/internal/automationrw.h"
+#include "engraving/articulationmap/articulationmapdata.h"
+#include "engraving/articulationmap/internal/articulationmaprw.h"
 
 #include "rwregister.h"
 #include "inoutdata.h"
@@ -191,6 +193,17 @@ bool MscSaver::writeMscz(MasterScore* score, MscWriter& mscWriter, bool createTh
             if (!data.empty()) {
                 mscWriter.writeAutomationJsonFile(data);
             }
+        }
+    }
+
+    // Write articulation maps
+    {
+        if (score->articulationMapData() && !score->articulationMapData()->isEmpty()) {
+            const MasterScore* masterScore = score->masterScore();
+            mscWriter.writeArticulationMapsJsonFile(ArticulationMapRW::write(*score->articulationMapData(),
+                                                                             [masterScore](const EID& chordId) {
+                return ArticulationMapData::chordOfMark(masterScore, chordId) != nullptr;
+            }));
         }
     }
 

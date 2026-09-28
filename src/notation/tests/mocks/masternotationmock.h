@@ -59,5 +59,6 @@ public:
     MOCK_METHOD(INotationPlaybackPtr, playback, (), (const, override));
     MOCK_METHOD(void, initNotationSoloMuteState, (const INotationPtr notation), (override));
     MOCK_METHOD(INotationAutomationPtr, automation, (), (const, override));
+    MOCK_METHOD(INotationArticulationMapsPtr, articulationMaps, (), (const, override));
 };
 }

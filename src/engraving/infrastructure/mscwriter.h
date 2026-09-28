@@ -68,6 +68,7 @@ public:
     void writeVideoSettingsJsonFile(const muse::ByteArray& data);
     void writeViewSettingsJsonFile(const muse::ByteArray& data, const muse::io::path_t& pathPrefix = "");
     void writeAutomationJsonFile(const muse::ByteArray& data);
+    void writeArticulationMapsJsonFile(const muse::ByteArray& data);
 
 private:
 

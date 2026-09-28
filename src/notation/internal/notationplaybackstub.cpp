@@ -111,6 +111,11 @@ muse::mpe::dynamic_level_t NotationPlaybackStub::appliableDynamicLevel(track_idx
     return muse::mpe::dynamicLevelFromType(muse::mpe::DynamicType::Natural);
 }
 
+std::optional<mu::engraving::ResolvedArticulation> NotationPlaybackStub::resolvedArticulation(track_idx_t, int) const
+{
+    return std::nullopt;
+}
+
 muse::audio::secs_t NotationPlaybackStub::totalPlayTime() const
 {
     return muse::audio::secs_t();

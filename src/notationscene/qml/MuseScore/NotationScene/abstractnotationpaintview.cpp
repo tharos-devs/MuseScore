@@ -167,6 +167,22 @@ void AbstractNotationPaintView::load()
     });
 
     m_notationNoteVelocityController = std::make_unique<NotationNoteVelocityController>(m_noteVelocityOverlayContainer, iocContext());
+
+    // Articulation map lanes sit under the staves, above the other overlays so their chips stay clickable
+    m_articulationMapOverlayContainer = new QQuickItem(this);
+    m_articulationMapOverlayContainer->setClip(true);
+    m_articulationMapOverlayContainer->setZ(2.0);
+    m_articulationMapOverlayContainer->setWidth(width());
+    m_articulationMapOverlayContainer->setHeight(height());
+    connect(this, &QQuickItem::widthChanged, m_articulationMapOverlayContainer, [this]() {
+        m_articulationMapOverlayContainer->setWidth(width());
+    });
+    connect(this, &QQuickItem::heightChanged, m_articulationMapOverlayContainer, [this]() {
+        m_articulationMapOverlayContainer->setHeight(height());
+    });
+
+    m_notationArticulationMapController = std::make_unique<NotationArticulationMapController>(m_articulationMapOverlayContainer,
+                                                                                              iocContext());
     m_playbackCursor = std::make_unique<PlaybackCursor>(iocContext());
     m_playbackCursor->setVisible(false);
     m_noteInputCursor = std::make_unique<NoteInputCursor>(iocContext(), notationConfiguration()->thinNoteInputCursor());
@@ -455,6 +471,12 @@ void AbstractNotationPaintView::onLoadNotation(INotationPtr)
         scheduleRedraw();
     });
 
+    // FIXME: only un-/re-subscribe when master notation changes
+    m_notationArticulationMapController->init();
+    m_notation->masterNotation()->articulationMaps()->overlayEnabledChanged().onNotify(this, [this]() {
+        scheduleRedraw();
+    });
+
     if (isMainView()) {
         connect(this, &QQuickPaintedItem::focusChanged, this, [this](bool focused) {
             if (notation()) {
@@ -564,6 +586,10 @@ void AbstractNotationPaintView::onMatrixChanged(const Transform& oldMatrix, cons
 
     if (m_notationNoteOffsetController) {
         m_notationNoteOffsetController->setViewMatrix(newMatrix);
+    }
+
+    if (m_notationArticulationMapController) {
+        m_notationArticulationMapController->setViewMatrix(newMatrix);
     }
 
     if (m_notationNoteVelocityController) {
@@ -1014,8 +1040,10 @@ void AbstractNotationPaintView::paint(QPainter* qp)
     const bool isPrinting = publishMode() || m_inputController->readonly();
     const INotationNoteOffsetsPtr noteOffsets = notationNoteOffsets();
     const INotationNoteVelocityPtr noteVelocity = notationNoteVelocity();
+    const INotationArticulationMapsPtr articulationMaps = m_notation ? m_notation->masterNotation()->articulationMaps() : nullptr;
     const bool dimNotation = automationMode() || (noteOffsets && noteOffsets->isEditModeEnabled())
-                             || (noteVelocity && noteVelocity->isEditModeEnabled());
+                             || (noteVelocity && noteVelocity->isEditModeEnabled())
+                             || (articulationMaps && articulationMaps->isOverlayEnabled());
     notation()->painting()->paintView(painter, toLogical(rect), isPrinting, dimNotation);
 
     const INotationNoteInputPtr noteInput = notationNoteInput();

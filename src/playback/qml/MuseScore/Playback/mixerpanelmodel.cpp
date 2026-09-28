@@ -34,6 +34,8 @@
 
 #include "notation/imasternotation.h"
 #include "notation/inotationautomation.h"
+#include "notation/inotationarticulationmaps.h"
+#include "engraving/articulationmap/articulationmapparser.h"
 #include "notation/inotationparts.h"
 #include "notation/inotationplayback.h"
 
@@ -2129,6 +2131,124 @@ IProjectUndoStackPtr MixerPanelModel::projectUndoStack() const
 INotationPlaybackPtr MixerPanelModel::notationPlayback() const
 {
     return currentProject() ? currentProject()->masterNotation()->playback() : nullptr;
+}
+
+static mu::notation::INotationArticulationMapsPtr articulationMapsOf(const project::INotationProjectPtr& project)
+{
+    return project && project->masterNotation() ? project->masterNotation()->articulationMaps() : nullptr;
+}
+
+bool MixerPanelModel::hasArticulationMap(MixerChannelItem* channelItem) const
+{
+    return !articulationMapName(channelItem).isNull();
+}
+
+QString MixerPanelModel::articulationMapName(MixerChannelItem* channelItem) const
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!channelItem || !maps || !maps->data()) {
+        return QString();
+    }
+
+    const notation::ExpressionMap* map = maps->data()->map(channelItem->instrumentTrackId());
+    if (!map) {
+        return QString();
+    }
+
+    return map->name.empty() ? QString("") : map->name.toQString();
+}
+
+void MixerPanelModel::loadArticulationMap(MixerChannelItem* channelItem)
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!channelItem || !maps) {
+        return;
+    }
+
+    const muse::io::path_t dir = globalConfiguration()->userDataPath() + "/ArticulationMaps";
+    if (!fileSystem()->exists(dir)) {
+        fileSystem()->makePath(dir);
+    }
+
+    const std::vector<std::string> filter { muse::trc("playback", "Articulation map") + " (*.txt)" };
+    const muse::io::path_t path = interactive()->selectOpeningFileSync(muse::trc("playback", "Load articulation map"), dir, filter);
+    if (path.empty()) {
+        return;
+    }
+
+    loadArticulationMapFile(channelItem, path, false /*isReload*/);
+}
+
+void MixerPanelModel::reloadArticulationMap(MixerChannelItem* channelItem)
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!channelItem || !maps || !maps->data()) {
+        return;
+    }
+
+    const notation::ExpressionMap* map = maps->data()->map(channelItem->instrumentTrackId());
+    if (!map) {
+        return;
+    }
+
+    //! NOTE: e.g. a score from another computer: the file is elsewhere, let the user pick it again
+    if (map->sourcePath.empty() || !fileSystem()->exists(map->sourcePath)) {
+        loadArticulationMap(channelItem);
+        return;
+    }
+
+    loadArticulationMapFile(channelItem, map->sourcePath, true /*isReload*/);
+}
+
+void MixerPanelModel::loadArticulationMapFile(MixerChannelItem* channelItem, const muse::io::path_t& path, bool isReload)
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!maps) {
+        return;
+    }
+
+    const muse::RetVal<muse::ByteArray> file = fileSystem()->readFile(path);
+    if (!file.ret) {
+        interactive()->error(muse::trc("playback", "Cannot read the articulation map"), file.ret.text());
+        return;
+    }
+
+    engraving::ArticulationMapParser::Result result = engraving::ArticulationMapParser::parse(muse::String::fromUtf8(file.val));
+    if (result.map.name.empty()) {
+        result.map.name = muse::io::completeBasename(path).toString();
+    }
+
+    std::string errorDetails;
+    for (const engraving::ArticulationMapParser::Error& error : result.errors) {
+        errorDetails += muse::qtrc("playback", "Line %1: %2").arg(error.line).arg(error.message.toQString()).toStdString() + "\n";
+    }
+
+    if (result.map.entries.empty()) {
+        interactive()->error(muse::trc("playback", "This articulation map contains no articulation"), errorDetails);
+        return;
+    }
+
+    if (!errorDetails.empty()) {
+        interactive()->warning(muse::trc("playback", "Some lines of the articulation map were ignored"), errorDetails);
+    }
+
+    notation::EditArticulationMapChanges changes;
+    result.map.sourcePath = path.toString();
+    changes.maps.emplace(channelItem->instrumentTrackId(), std::move(result.map));
+    maps->edit(changes, isReload ? muse::TranslatableString("undoableAction", "Reload articulation map")
+               : muse::TranslatableString("undoableAction", "Load articulation map"));
+}
+
+void MixerPanelModel::removeArticulationMap(MixerChannelItem* channelItem)
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!channelItem || !maps) {
+        return;
+    }
+
+    notation::EditArticulationMapChanges changes;
+    changes.maps.emplace(channelItem->instrumentTrackId(), std::nullopt);
+    maps->edit(changes, muse::TranslatableString("undoableAction", "Remove articulation map"));
 }
 
 INotationPartsPtr MixerPanelModel::masterNotationParts() const

@@ -37,6 +37,7 @@
 #include "modularity/ioc.h"
 
 #include "../automation/automationtypes_fwd.h"
+#include "../articulationmap/articulationmaptypes_fwd.h"
 #include "../types/constants.h"
 
 #include "../rendering/layoutoptions.h"
@@ -862,6 +863,9 @@ public:
 
     virtual AutomationDataConstPtr automationData() const;
     virtual void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true);
+
+    virtual ArticulationMapDataConstPtr articulationMapData() const;
+    virtual void editArticulationMap(const EditArticulationMapChanges& changes);
 
     friend class Chord;
 

@@ -51,6 +51,7 @@
 #include "excerptnotation.h"
 #include "masternotationparts.h"
 #include "notationautomation.h"
+#include "notationarticulationmaps.h"
 #include "notationnoteoffsets.h"
 #include "notationnotevelocity.h"
 #include "types/scorecreateoptions.h"
@@ -94,6 +95,7 @@ MasterNotation::MasterNotation(project::INotationProject* project, const muse::m
 #endif
 
     m_notationAutomation = std::make_shared<NotationAutomation>(undoStack());
+    m_notationArticulationMaps = std::make_shared<NotationArticulationMaps>(undoStack());
     m_notationNoteOffsets = std::make_shared<NotationNoteOffsets>();
     m_notationNoteVelocity = std::make_shared<NotationNoteVelocity>();
 
@@ -173,6 +175,7 @@ void MasterNotation::setMasterScore(mu::engraving::MasterScore* score, bool disa
 
     setScore(score);
     std::static_pointer_cast<NotationAutomation>(m_notationAutomation)->setMasterScore(score);
+    std::static_pointer_cast<NotationArticulationMaps>(m_notationArticulationMaps)->setMasterScore(score);
 
     score->updateSwing();
 
@@ -272,6 +275,7 @@ Ret MasterNotation::setupNewScore(mu::engraving::MasterScore* score, const Score
 
     setScore(score);
     std::static_pointer_cast<NotationAutomation>(m_notationAutomation)->setMasterScore(score);
+    std::static_pointer_cast<NotationArticulationMaps>(m_notationArticulationMaps)->setMasterScore(score);
 
     undoStack()->lock();
 
@@ -769,6 +773,11 @@ INotationPlaybackPtr MasterNotation::playback() const
 INotationAutomationPtr MasterNotation::automation() const
 {
     return m_notationAutomation;
+}
+
+INotationArticulationMapsPtr MasterNotation::articulationMaps() const
+{
+    return m_notationArticulationMaps;
 }
 
 INotationNoteOffsetsPtr MasterNotation::noteOffsets() const

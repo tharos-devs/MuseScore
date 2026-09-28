@@ -28,6 +28,8 @@ using namespace mu::notation;
 using namespace muse::uicomponents;
 using namespace muse::actions;
 
+static constexpr int ARTICULATION_MAP_ITEM_TYPE = ToolBarItemType::USER_TYPE + 1;
+
 void NotationToolBarModel::load()
 {
     if (m_loaded) {
@@ -40,7 +42,8 @@ void NotationToolBarModel::load()
         "toggle-video-panel",
         "toggle-automation",
         "toggle-note-offset-editor",
-        "toggle-note-velocity-editor"
+        "toggle-note-velocity-editor",
+        "toggle-articulation-map-editor"
     };
 
     ToolBarItemList items;
@@ -60,6 +63,12 @@ void NotationToolBarModel::load()
         // letting the view pick a different delegate component for it.
         if (code == "toggle-automation") {
             item->setType(ToolBarItemType::USER_TYPE);
+        }
+
+        // Its glyph is drawn larger than the others by the icon font - a delegate of its own
+        // (see NotationToolBar.qml) scales it down, without changing the shared toolbar item
+        if (code == "toggle-articulation-map-editor") {
+            item->setType(static_cast<ToolBarItemType::Type>(ARTICULATION_MAP_ITEM_TYPE));
         }
 
         items << item;

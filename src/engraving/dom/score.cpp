@@ -5171,6 +5171,13 @@ void Score::editAutomationPoints(const AutomationCurveKey& key, AutomationPointE
     m_masterScore->editAutomationPoints(key, edits, undoable);
 }
 
+ArticulationMapDataConstPtr Score::articulationMapData() const { return m_masterScore->articulationMapData(); }
+
+void Score::editArticulationMap(const EditArticulationMapChanges& changes)
+{
+    m_masterScore->editArticulationMap(changes);
+}
+
 TransactionManager* Score::transactionManager() const { return m_masterScore->transactionManager(); }
 UndoStack* Score::undoStack() const { return m_masterScore->undoStack(); }
 const RepeatList& Score::repeatList()  const { return m_masterScore->repeatList(); }

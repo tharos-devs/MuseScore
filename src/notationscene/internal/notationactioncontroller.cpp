@@ -42,6 +42,7 @@
 #include "notation/inotationautomation.h" // IWYU pragma: keep
 #include "notation/inotationnoteoffsets.h" // IWYU pragma: keep
 #include "notation/inotationnotevelocity.h" // IWYU pragma: keep
+#include "notation/inotationarticulationmaps.h" // IWYU pragma: keep
 #include "notation/inotationelements.h"
 #include "notation/inotationmidiinput.h"
 #include "notation/inotationnoteinput.h"
@@ -595,6 +596,7 @@ void NotationActionController::init()
     registerCommandWithParams(SELECT_AUTOMATION_TYPE_COMMAND, &Controller::selectAutomationType);
     registerCommand(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, &Controller::toggleNoteOffsetEditor);
     registerCommand(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, &Controller::toggleNoteVelocityEditor);
+    registerCommand(TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::toggleArticulationMapEditor);
     registerCommand(RESET_NOTE_OFFSETS_COMMAND, &Controller::resetNoteOffsets);
     registerCommand(RESET_NOTE_VELOCITIES_COMMAND, &Controller::resetNoteVelocities);
 
@@ -1072,6 +1074,7 @@ void NotationActionController::init()
             { "toggle-automation", TOGGLE_AUTOMATION_COMMAND, {} },
             { "toggle-note-offset-editor", TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, {} },
             { "toggle-note-velocity-editor", TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, {} },
+            { "toggle-articulation-map-editor", TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, {} },
             { "string-up", GOTO_STRING_ABOVE_COMMAND, {} },
             { "string-down", GOTO_STRING_BELOW_COMMAND, {} },
             { "move-up", MOVE_UP_COMMAND, {} },
@@ -1163,20 +1166,14 @@ void NotationActionController::init()
                 m_currentNotationStyleChanged.notify();
             }, Asyncable::Mode::SetReplace);
 
-            if (const IMasterNotationPtr masterNotation = notation->masterNotation()) {
-                masterNotation->automation()->automationModeEnabledChanged().onNotify(this, [this]() {
-                    m_automationModeEnabledChanged.notify();
-                }, Asyncable::Mode::SetReplace);
-
-                masterNotation->noteOffsets()->editModeEnabledChanged().onNotify(this, [this]() {
-                    m_noteOffsetEditModeEnabledChanged.notify();
-                }, Asyncable::Mode::SetReplace);
-
-                masterNotation->noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
-                    m_noteVelocityEditModeEnabledChanged.notify();
-                }, Asyncable::Mode::SetReplace);
-            }
+            subscribeToEditModes(notation->masterNotation());
         }
+
+        //! NOTE: each document has its own edit modes - whoever shows their state must re-read it
+        m_automationModeEnabledChanged.notify();
+        m_noteOffsetEditModeEnabledChanged.notify();
+        m_noteVelocityEditModeEnabledChanged.notify();
+        m_articulationMapEditModeEnabledChanged.notify();
 
         m_textEditingChanged.send(isTextEditing());
         m_noteInputStateChanged.notify();
@@ -1192,7 +1189,31 @@ void NotationActionController::init()
     //! is harmless even if that notification also fires normally afterward).
     if (INotationPtr notation = globalContext()->currentNotation()) {
         m_undoRedoCoordinator.track(notation, globalContext()->currentProject());
+        subscribeToEditModes(notation->masterNotation());
     }
+}
+
+void NotationActionController::subscribeToEditModes(const IMasterNotationPtr& masterNotation)
+{
+    if (!masterNotation) {
+        return;
+    }
+
+    masterNotation->automation()->automationModeEnabledChanged().onNotify(this, [this]() {
+        m_automationModeEnabledChanged.notify();
+    }, Asyncable::Mode::SetReplace);
+
+    masterNotation->noteOffsets()->editModeEnabledChanged().onNotify(this, [this]() {
+        m_noteOffsetEditModeEnabledChanged.notify();
+    }, Asyncable::Mode::SetReplace);
+
+    masterNotation->noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
+        m_noteVelocityEditModeEnabledChanged.notify();
+    }, Asyncable::Mode::SetReplace);
+
+    masterNotation->articulationMaps()->overlayEnabledChanged().onNotify(this, [this]() {
+        m_articulationMapEditModeEnabledChanged.notify();
+    }, Asyncable::Mode::SetReplace);
 }
 
 void NotationActionController::setViewController(INotationViewController* controller)
@@ -3258,6 +3279,16 @@ muse::async::Notification NotationActionController::noteVelocityEditModeEnabledC
     return m_noteVelocityEditModeEnabledChanged;
 }
 
+bool NotationActionController::isArticulationMapEditModeEnabled() const
+{
+    return currentMasterNotation() ? currentMasterNotation()->articulationMaps()->isOverlayEnabled() : false;
+}
+
+muse::async::Notification NotationActionController::articulationMapEditModeEnabledChanged() const
+{
+    return m_articulationMapEditModeEnabledChanged;
+}
+
 muse::async::Notification NotationActionController::automationModeEnabledChanged() const
 {
     return m_automationModeEnabledChanged;
@@ -3354,6 +3385,19 @@ void NotationActionController::toggleNoteVelocityEditor()
 
     const bool isEnabled = masterNotation->noteVelocity()->isEditModeEnabled();
     masterNotation->noteVelocity()->setEditModeEnabled(!isEnabled);
+}
+
+void NotationActionController::toggleArticulationMapEditor()
+{
+    TRACEFUNC;
+
+    IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (!masterNotation) {
+        return;
+    }
+
+    const bool isEnabled = masterNotation->articulationMaps()->isOverlayEnabled();
+    masterNotation->articulationMaps()->setOverlayEnabled(!isEnabled);
 }
 
 void NotationActionController::resetNoteOffsets()

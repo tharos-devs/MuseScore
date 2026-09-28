@@ -488,6 +488,7 @@ inline static const muse::rcommand::Command TOGGLE_AUTOMATION_COMMAND("command:/
 inline static const muse::rcommand::Command SELECT_AUTOMATION_TYPE_COMMAND("command://notation/select-automation-type"); // with params
 inline static const muse::rcommand::Command TOGGLE_NOTE_OFFSET_EDITOR_COMMAND("command://notation/toggle-note-offset-editor");
 inline static const muse::rcommand::Command TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND("command://notation/toggle-note-velocity-editor");
+inline static const muse::rcommand::Command TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND("command://notation/toggle-articulation-map-editor");
 inline static const muse::rcommand::Command RESET_NOTE_OFFSETS_COMMAND("command://notation/reset-note-offsets");
 inline static const muse::rcommand::Command RESET_NOTE_VELOCITIES_COMMAND("command://notation/reset-note-velocities");
 

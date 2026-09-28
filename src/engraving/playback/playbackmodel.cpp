@@ -394,6 +394,11 @@ muse::async::Channel<InstrumentTrackId> PlaybackModel::trackRemoved() const
     return m_trackRemoved;
 }
 
+std::optional<ResolvedArticulation> PlaybackModel::resolvedArticulation(track_idx_t trackIdx, int tick) const
+{
+    return m_playbackCtx ? m_playbackCtx->resolvedArticulation(trackIdx, tick) : std::nullopt;
+}
+
 dynamic_level_t PlaybackModel::appliableDynamicLevel(track_idx_t trackIdx, int tick) const
 {
     if (!m_playbackCtx) {
@@ -812,7 +817,8 @@ bool PlaybackModel::hasToReloadScore(const ScoreChanges& changes) const
 bool PlaybackModel::hasAutomationChange(const ScoreChanges& changes) const
 {
     for (const auto& pair : changes.changedObjects) {
-        if (muse::contains(pair.second, CommandType::EditAutomationPoints)) {
+        if (muse::contains(pair.second, CommandType::EditAutomationPoints)
+            || muse::contains(pair.second, CommandType::EditArticulationMap)) {
             return true;
         }
     }

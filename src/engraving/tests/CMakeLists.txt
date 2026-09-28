@@ -108,6 +108,8 @@ set(MODULE_TEST_SRC
     ${CMAKE_CURRENT_LIST_DIR}/automation/automationrw_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/automation/scoreautomationcontroller_tests.cpp
 
+    ${CMAKE_CURRENT_LIST_DIR}/articulationmap/articulationmapparser_tests.cpp
+
     ${CMAKE_CURRENT_LIST_DIR}/mocks/engravingconfigurationmock.h
 
     ${CMAKE_CURRENT_LIST_DIR}/lv_tests.cpp

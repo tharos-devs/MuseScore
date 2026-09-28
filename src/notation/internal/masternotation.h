@@ -74,6 +74,7 @@ public:
     void initNotationSoloMuteState(const INotationPtr notation) override;
 
     INotationAutomationPtr automation() const override;
+    INotationArticulationMapsPtr articulationMaps() const override;
     INotationNoteOffsetsPtr noteOffsets() const override;
     INotationNoteVelocityPtr noteVelocity() const override;
 
@@ -104,6 +105,7 @@ private:
     muse::async::Notification m_excerptsChanged;
     INotationPlaybackPtr m_notationPlayback = nullptr;
     INotationAutomationPtr m_notationAutomation = nullptr;
+    INotationArticulationMapsPtr m_notationArticulationMaps = nullptr;
     INotationNoteOffsetsPtr m_notationNoteOffsets = nullptr;
     INotationNoteVelocityPtr m_notationNoteVelocity = nullptr;
     muse::async::Notification m_hasPartsChanged;

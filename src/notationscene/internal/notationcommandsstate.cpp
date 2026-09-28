@@ -359,6 +359,10 @@ void NotationCommandsState::init()
         updateCommandStates({ TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND });
     });
 
+    controller()->articulationMapEditModeEnabledChanged().onNotify(this, [this]() {
+        updateCommandStates({ TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND });
+    });
+
     controller()->debuggingOptionsChanged().onNotify(this, [this]() {
         updateCommandStates(DEBUG_COMMANDS);
     });
@@ -380,6 +384,9 @@ void NotationCommandsState::deinit()
     controller()->scoreConfigChanged().disconnect(this);
     controller()->notationStyleChanged().disconnect(this);
     controller()->automationModeEnabledChanged().disconnect(this);
+    controller()->noteOffsetEditModeEnabledChanged().disconnect(this);
+    controller()->noteVelocityEditModeEnabledChanged().disconnect(this);
+    controller()->articulationMapEditModeEnabledChanged().disconnect(this);
     controller()->debuggingOptionsChanged().disconnect(this);
 }
 
@@ -505,6 +512,10 @@ CommandState NotationCommandsState::doCommandState(const Command& command) const
 
     if (command == TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND) {
         return CommandState(true, controller()->isNoteVelocityEditModeEnabled());
+    }
+
+    if (command == TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND) {
+        return CommandState(true, controller()->isArticulationMapEditModeEnabled());
     }
 
     if (muse::contains(DEBUG_COMMANDS, command)) {

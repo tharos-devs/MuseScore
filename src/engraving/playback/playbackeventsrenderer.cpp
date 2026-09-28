@@ -28,6 +28,8 @@
 #include "dom/harmony.h"
 #include "dom/measure.h"
 #include "dom/note.h"
+#include "dom/part.h"
+#include "dom/masterscore.h"
 #include "dom/sig.h"
 #include "dom/staff.h"
 #include "dom/utils.h"
@@ -42,6 +44,8 @@
 #include "renderers/chordarticulationsrenderer.h"
 
 #include "filters/chordfilter.h"
+
+#include "engraving/articulationmap/articulationmaptypes.h"
 
 using namespace mu::engraving;
 using namespace muse;
@@ -90,6 +94,78 @@ static muse::mpe::NoteEvent buildMetronomeEvent(const TimeSigFrac& timeSig, cons
                           bps);
 }
 
+//! NOTE: resolves which articulation of the instrument's articulation map this chord plays, by priority:
+//! a mark on the chord itself > a score articulation mapped by alias > the staff's latest latched mark > the map's default,
+//! and emits it with the chord's notes. The audio side skips it when it doesn't change from the previous chord
+//! A keyswitch switches the whole plugin, so for an instrument on several staves (piano, harp...),
+//! only its first staff drives the articulations - the others follow it
+static void appendArticulationMapEvent(const Chord* chord, const RenderingContext& ctx, PlaybackEventList& events,
+                                       bool recordResolved)
+{
+    const ExpressionMap* map = ctx.playbackCtx->expressionMap(makeInstrumentTrackId(chord));
+    if (!map) {
+        return;
+    }
+
+    const Part* part = chord->part();
+    if (!part || chord->staffIdx() != part->trackRange().startTrack / VOICES) {
+        return;
+    }
+
+    const ExpressionMapEntry* entry = nullptr;
+    ResolvedArticulation::Source source = ResolvedArticulation::Source::Default;
+    int tickOffset = 0;
+
+    if (const std::optional<ArticulationMark> ownMark = ctx.playbackCtx->articulationMark(chord)) {
+        entry = map->entry(ownMark->entryId);
+        tickOffset = entry ? ownMark->tickOffset : 0;
+        source = ResolvedArticulation::Source::OwnMark;
+    }
+
+    if (!entry) {
+        entry = map->entryForArticulations(ctx.commonArticulations);
+        source = ResolvedArticulation::Source::Alias;
+    }
+
+    if (!entry) {
+        if (const std::optional<ArticulationMark> latched = ctx.playbackCtx->latchedArticulationMark(chord->staffIdx(),
+                                                                                                     chord->tick().ticks())) {
+            entry = map->entry(latched->entryId);
+            source = ResolvedArticulation::Source::Latched;
+        }
+    }
+
+    if (!entry && !map->defaultEntryId.empty()) {
+        entry = map->entry(map->defaultEntryId);
+        source = ResolvedArticulation::Source::Default;
+    }
+
+    const bool resolved = entry && !entry->messages.empty();
+
+    if (recordResolved) {
+        ctx.playbackCtx->setResolvedArticulation(chord->track(), chord->tick().ticks(),
+                                                 resolved ? std::optional<ResolvedArticulation>({ entry->id, source }) : std::nullopt);
+    }
+
+    if (!resolved) {
+        return;
+    }
+
+    const int chordTick = chord->tick().ticks() + ctx.positionTickOffset;
+    const timestamp_t tickOffsetDuration = tickOffset != 0
+                                           ? timestampFromTicks(ctx.score,
+                                                                chordTick + tickOffset) - timestampFromTicks(ctx.score, chordTick)
+                                           : timestamp_t(0);
+
+    mpe::MidiMessagesEvent event;
+    event.messages = entry->messages;
+    event.messagesOffset = tickOffsetDuration + timestamp_t(map->keyswitchOffsetMsFor(*entry) * 1000);
+    event.notesOffset = timestamp_t(entry->notesOffsetMs * 1000);
+    event.layerIdx = static_cast<mpe::layer_idx_t>(chord->track());
+
+    events.emplace_back(std::move(event));
+}
+
 void PlaybackEventsRenderer::render(const EngravingItem* item, const int tickPositionOffset,
                                     const ArticulationsProfilePtr profile, const PlaybackContextPtr playbackCtx,
                                     PlaybackEventsMap& result) const
@@ -106,8 +182,10 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
                                     const PlaybackContextPtr playbackCtx, const ArticulationsProfilePtr profile,
                                     PlaybackEventsMap& result) const
 {
+    const Chord* chord = nullptr;
+
     if (item->isChord()) {
-        const Chord* chord = toChord(item);
+        chord = toChord(item);
         mpe::PlaybackEventList& events = result[actualTimestamp];
 
         for (const Note* note : chord->notes()) {
@@ -115,10 +193,28 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
                                  actualDynamicLevel, playbackCtx, profile, events);
         }
     } else if (item->isNote()) {
+        chord = toNote(item)->chord();
         renderFixedNoteEvent(toNote(item), actualTimestamp, actualDuration,
                              actualDynamicLevel, playbackCtx, profile, result[actualTimestamp]);
     } else {
         UNREACHABLE;
+    }
+
+    //! NOTE: so that auditioning a note (e.g. clicking it) plays it with its own articulation
+    //! Marks and staff indices belong to the master score, while the auditioned item may come from a part
+    if (chord && !chord->score()->isMaster()) {
+        const EngravingItem* linked = chord->findLinkedInScore(chord->masterScore());
+        chord = linked && linked->isChord() ? toChord(linked) : nullptr;
+    }
+
+    if (chord && playbackCtx->expressionMap(makeInstrumentTrackId(chord))) {
+        const Score* score = chord->score();
+        const int tick = chord->tick().ticks();
+        const int tickOffset = score ? score->repeatList().tick2utick(tick) - tick : 0;
+
+        RenderingContext ctx = engraving::buildRenderingCtx(chord, tickOffset, profile, playbackCtx);
+        ChordArticulationsParser::buildChordArticulationMap(chord, ctx, ctx.commonArticulations);
+        appendArticulationMapEvent(chord, ctx, result[actualTimestamp], false /*recordResolved*/);
     }
 }
 
@@ -341,6 +437,7 @@ void PlaybackEventsRenderer::renderNoteEvents(const Chord* chord, const int tick
     if (!newEvents.empty()) {
         PlaybackEventList& list = result[ctx.nominalTimestamp];
         list.insert(list.end(), std::make_move_iterator(newEvents.begin()), std::make_move_iterator(newEvents.end()));
+        appendArticulationMapEvent(chord, ctx, list, true /*recordResolved*/);
     }
 }
 

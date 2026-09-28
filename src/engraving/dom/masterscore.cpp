@@ -25,6 +25,8 @@
 
 #include "compat/writescorehook.h"
 #include "editing/editautomationpoints.h"
+#include "editing/editarticulationmap.h"
+#include "articulationmap/articulationmapdata.h"
 #include "editing/editkeysig.h"
 #include "editing/editmeasures.h"
 #include "editing/transaction/transaction.h"
@@ -157,6 +159,29 @@ void MasterScore::editAutomationPoints(const AutomationCurveKey& key, Automation
     } else {
         m_automationController->editPoints(key, edits);
     }
+}
+
+ArticulationMapDataConstPtr MasterScore::articulationMapData() const
+{
+    return m_articulationMapData;
+}
+
+void MasterScore::setArticulationMapData(ArticulationMapDataPtr data)
+{
+    m_articulationMapData = std::move(data);
+}
+
+void MasterScore::editArticulationMap(const EditArticulationMapChanges& changes)
+{
+    if (changes.empty()) {
+        return;
+    }
+
+    if (!m_articulationMapData) {
+        m_articulationMapData = std::make_shared<ArticulationMapData>();
+    }
+
+    undo(new EditArticulationMap(this, m_articulationMapData.get(), changes));
 }
 
 void MasterScore::onTimeInserted(const Fraction& tick, const Fraction& len, const std::vector<RepeatSegmentInfo>& oldSegments)
