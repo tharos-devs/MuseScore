@@ -4,6 +4,10 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-09-28
+- Added articulation maps for third-party VST3 instruments (Kontakt, VSL Synchron Player, EastWest Opus, Musio...): a text file per sample library describes each articulation's keyswitches/CC/program change, loaded per instrument from the Mixer, and score articulations (staccato, pizz., tremolo...) switch it automatically.
+- Added an "Articulations" toolbar toggle showing a lane under each staff with the articulation each passage plays, where clicking a note picks another articulation (e.g. play a notated staccato as staccatissimo) and dragging a chip adjusts when the change is sent.
+
 ### 2026-09-22
 - Added a "Condensed view" toggle to the Mixer's View menu, narrowing every regular channel column to trade per-row precision for screen space (Master keeps its normal width and full detail).
 
