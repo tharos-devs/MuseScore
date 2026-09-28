@@ -53,6 +53,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed a crash (then a frozen app with audio still playing) when starting playback after saving in Continuous view: saving's thumbnail relayout left the playback cursor and the score view pointing at deleted layout (2026-09-28).
 - Fixed a popup-positioning bug, shared by the Dynamics and Articulation popups, where swapping to a differently-sized glyph made the popup jump or render half-hidden under it (2026-09-20).
 - Fixed a dock-panel bug where a panel (e.g. the Mixer) could reopen snapped to the wrong screen position after a sibling panel sharing its dock group had been dragged elsewhere (2026-09-19).
 - Fixed a dock-framework bug (a destructive recursive equal-width layout pass) that could silently reset any panel's saved width on relaunch — surfaced through the Video panel, but the root cause applies to any dock panel (2026-09-19).
