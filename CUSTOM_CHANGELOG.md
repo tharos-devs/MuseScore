@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-09-29
+- Added MIDI CC automation for VST3 instruments: a "MIDI CC" submenu in the toolbar's Automation dropdown and in a VST3 staff's context menu shows a Modulation (CC1), Volume (CC7) or Expression (CC11) curve over the staff, drawn and edited like the Tempo curve (add/move points, double-click to remove, value tooltip while dragging), and sent to the plugin during playback. "Other MIDI CC…" picks any of the 128 controllers from a searchable list; the ones picked are kept with the score.
+- The toolbar's Automation button now shows the name of the curve being edited (Dynamics, Tempo, Modulation...).
 - Added an articulation map editor (View menu, or a Mixer track's new "Articulation map" submenu) to build a sample library's articulations without writing the text file by hand: folders become the picker's submenus, drag and drop sets the order, each articulation gets its activation sequence (Note On + Off / MIDI CC / Program Change), color, delays and default flag, and can be disabled without deleting it. Opened from a track, it can save and reload the map into it in one click.
 - The articulation lane now marks which note a click would give an articulation to, and keeps marking it while the articulation menu is open.
 
@@ -57,6 +59,11 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed automation curves with a repeat: points drawn after the repeat actually went into its second pass (so nothing was played after the repeat), and editing a repeated bar moved a point shown in another bar (2026-09-29).
+- Fixed automation curves (dynamics, and MIDI CC) playing at the wrong time after a repeat when Play Repeats is off (2026-09-29).
+- Fixed automation curves in Page view drawing a point near a line break on the neighboring line too, where it could be dragged by mistake (2026-09-29).
+- Fixed pressing on an automation line and dragging right away snapping the new point back to the bottom instead of creating it where it was dropped (2026-09-29).
+- Fixed Tempo curve points that couldn't be removed: a user point hidden under a tempo marking's point, and an edited tempo marking's point after the marking itself was deleted (2026-09-29).
 - Fixed a crash (then a frozen app with audio still playing) when starting playback after saving in Continuous view: saving's thumbnail relayout left the playback cursor and the score view pointing at deleted layout (2026-09-28).
 - Fixed a popup-positioning bug, shared by the Dynamics and Articulation popups, where swapping to a differently-sized glyph made the popup jump or render half-hidden under it (2026-09-20).
 - Fixed a dock-panel bug where a panel (e.g. the Mixer) could reopen snapped to the wrong screen position after a sibling panel sharing its dock group had been dragged elsewhere (2026-09-19).
