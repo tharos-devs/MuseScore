@@ -312,6 +312,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem("toggle-video-panel"),
         makeMenuItem(DOCK_TOGGLE_PERCUSSION_COMMAND),
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
+        makeMenuItem(OPEN_ARTICULATION_MAP_EDITOR_COMMAND),
         makeSeparator(),
         makeMenu(TranslatableString("appshell/menu/view", "&Toolbars"), {
             makeMenuItem(DOCK_TOGGLE_PLAYBACK_COMMAND),

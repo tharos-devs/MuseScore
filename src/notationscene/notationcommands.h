@@ -421,6 +421,7 @@ inline static const muse::rcommand::Command OPEN_MEASURE_PROPERTIES_COMMAND("com
 inline static const muse::rcommand::Command OPEN_TRANSPOSE_COMMAND("command://notation/open-transpose");
 inline static const muse::rcommand::Command OPEN_PARTS_COMMAND("command://notation/open-parts");
 inline static const muse::rcommand::Command OPEN_EDITGRIDSIZE_COMMAND("command://notation/open-editgridsize");
+inline static const muse::rcommand::Command OPEN_ARTICULATION_MAP_EDITOR_COMMAND("command://notation/open-articulation-map-editor");
 inline static const muse::rcommand::Command OPEN_REALIZECHORDSYMBOLS_COMMAND("command://notation/open-realizechordsymbols");
 
 // style commands

@@ -42,11 +42,13 @@ struct ExpressionMapEntry {
     std::optional<int> keyswitchOffsetMs; // overrides ExpressionMap::keyswitchOffsetMs
     int notesOffsetMs = 0; // shifts the notes played with this articulation (e.g. slow legato attacks)
     std::optional<uint32_t> color; // 0xRRGGBB, how the articulation is shown in the score
+    bool disabled = false; // kept in the file, but never offered nor sent
 
     bool operator==(const ExpressionMapEntry& e) const
     {
         return id == e.id && messages == e.messages && aliases == e.aliases
-               && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && color == e.color;
+               && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && color == e.color
+               && disabled == e.disabled;
     }
 };
 
@@ -59,11 +61,12 @@ struct ExpressionMap {
     muse::String defaultEntryId;
     std::vector<ExpressionMapEntry> entries;
 
+    //! NOTE: a disabled entry is not found, so whatever selects it falls back to the next choice
     const ExpressionMapEntry* entry(const muse::String& id) const
     {
         for (const ExpressionMapEntry& e : entries) {
             if (e.id == id) {
-                return &e;
+                return e.disabled ? nullptr : &e;
             }
         }
 
@@ -74,6 +77,10 @@ struct ExpressionMap {
     const ExpressionMapEntry* entryForArticulations(const muse::mpe::ArticulationMap& articulations) const
     {
         for (const ExpressionMapEntry& e : entries) {
+            if (e.disabled) {
+                continue;
+            }
+
             for (const muse::mpe::ArticulationType type : e.aliases) {
                 if (articulations.contains(type)) {
                     return &e;

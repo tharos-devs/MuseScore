@@ -409,6 +409,11 @@ void NotationCommandsState::updateCommandStates(const std::vector<Command>& comm
 
 CommandState NotationCommandsState::doCommandState(const Command& command) const
 {
+    // edits files, no score needed
+    if (command == OPEN_ARTICULATION_MAP_EDITOR_COMMAND) {
+        return CommandState(true, false);
+    }
+
     if (!isProjectOpened()) {
         return CommandState(false, false);
     }

@@ -63,6 +63,11 @@ public:
     explicit ArticulationMapOverlay(QQuickItem* parent);
 
     void setContent(const QVector<ChipData>& chips, const QVector<LineData>& lines);
+
+    //! NOTE: the chords of the lane, to show which one a click would give an articulation to
+    void setChordPositions(const QVector<qreal>& chordXNs);
+    //! NOTE: keeps that marker on a chord (e.g. while its articulation menu is open), -1 to release it
+    void setPinnedTargetX(qreal xN);
     const QVector<ChipData>& chips() const;
 
     //! NOTE: live drag preview, without touching the score
@@ -89,9 +94,15 @@ protected:
 private:
     QRectF chipRectPx(const ChipData& chip) const;
     int hitTestPx(const QPointF& posPx) const;
+    qreal targetChordXN(const QPointF& posPx, int hitChip) const;
+    void drawTargetMarker(QPainter* painter, qreal xN) const;
 
     QVector<ChipData> m_chips;
     QVector<LineData> m_lines;
+    QVector<qreal> m_chordXNs;
+
+    qreal m_hoverTargetXN = -1.0;
+    qreal m_pinnedTargetXN = -1.0;
 
     int m_hoveredChip = -1;
     bool m_hoveringChip = false;
