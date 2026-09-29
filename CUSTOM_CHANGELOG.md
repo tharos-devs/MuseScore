@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-09-29
+- In automation mode, the curve points inside the score's range selection are selected together: dragging one moves them all up or down at once (across lines and instruments), undone in one step.
 - Added curved (Bezier) segments to the MIDI CC, Volume, Pan and Tempo automation curves: hovering a segment reveals a small diamond handle in its middle, dragged up or down to bend the segment (double-click to straighten it again), played exactly as drawn.
 - In automation mode, the score's right-click menu now shows "MIDI CC" right below "Automation type".
 - Added MIDI CC automation for VST3 instruments: a "MIDI CC" submenu in the toolbar's Automation dropdown and in a VST3 staff's context menu shows a Modulation (CC1), Volume (CC7) or Expression (CC11) curve over the staff, drawn and edited like the Tempo curve (add/move points, double-click to remove, value tooltip while dragging), and sent to the plugin during playback. "Other MIDI CC…" picks any of the 128 controllers from a searchable list; the ones picked are kept with the score.
