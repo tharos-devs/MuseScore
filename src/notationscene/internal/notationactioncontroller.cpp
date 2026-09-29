@@ -36,6 +36,8 @@
 #include "engraving/dom/text.h"
 #include "engraving/dom/sig.h"
 #include "engraving/editing/noteinput.h"
+#include "engraving/articulationmap/articulationmapparser.h"
+#include "engraving/articulationmap/articulationmapdata.h"
 
 #include "notation/imasternotation.h"
 #include "notation/inotation.h"
@@ -527,6 +529,10 @@ void NotationActionController::init()
     registerCommand(OPEN_PARTS_COMMAND, &Controller::openPartsDialog);
     registerCommand(OPEN_EDITGRIDSIZE_COMMAND, &Controller::openEditGridSizeDialog);
     registerCommand(OPEN_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::openArticulationMapEditor);
+    registerCommandWithParams(LOAD_ARTICULATION_MAP_COMMAND, &Controller::loadArticulationMap);
+    registerCommandWithParams(EDIT_ARTICULATION_MAP_COMMAND, &Controller::editArticulationMap);
+    registerCommandWithParams(RELOAD_ARTICULATION_MAP_COMMAND, &Controller::reloadArticulationMap);
+    registerCommandWithParams(REMOVE_ARTICULATION_MAP_COMMAND, &Controller::removeArticulationMap);
     registerCommand(OPEN_REALIZECHORDSYMBOLS_COMMAND, &Controller::openRealizeChordSymbolsDialog);
 
     // style commands
@@ -2823,6 +2829,153 @@ void NotationActionController::openPartsDialog()
 void NotationActionController::openArticulationMapEditor()
 {
     interactive()->open("musescore://notation/articulationmapeditor");
+}
+
+//! NOTE: the instrument an articulation map command applies to (its partId / instrumentId params)
+static std::optional<mu::engraving::InstrumentTrackId> articulationMapTrackId(const muse::rcommand::Params& params)
+{
+    if (!params.contains("partId") || !params.contains("instrumentId")) {
+        return std::nullopt;
+    }
+
+    bool ok = false;
+    const uint64_t partId = QString::fromStdString(params.at("partId").toString()).toULongLong(&ok);
+    if (!ok) {
+        return std::nullopt;
+    }
+
+    return mu::engraving::InstrumentTrackId { muse::ID(partId), muse::String::fromStdString(params.at("instrumentId").toString()) };
+}
+
+muse::Ret NotationActionController::loadArticulationMap(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    if (!trackId || !currentMasterNotation()) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    const muse::io::path_t dir = globalConfiguration()->userDataPath() + "/ArticulationMaps";
+    if (!fileSystem()->exists(dir)) {
+        fileSystem()->makePath(dir);
+    }
+
+    const std::vector<std::string> filter { muse::trc("playback", "Articulation map") + " (*.txt)" };
+    const muse::io::path_t path = interactive()->selectOpeningFileSync(muse::trc("playback", "Load articulation map"), dir, filter);
+    if (!path.empty()) {
+        loadArticulationMapFile(*trackId, path, false /*isReload*/);
+    }
+
+    return muse::make_ok();
+}
+
+muse::Ret NotationActionController::reloadArticulationMap(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!trackId || !maps || !maps->data()) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    const ExpressionMap* map = maps->data()->map(*trackId);
+    if (!map) {
+        return muse::make_ok();
+    }
+
+    //! NOTE: e.g. a score from another computer: the file is elsewhere, let the user pick it again
+    if (map->sourcePath.empty() || !fileSystem()->exists(map->sourcePath)) {
+        return loadArticulationMap(params);
+    }
+
+    loadArticulationMapFile(*trackId, map->sourcePath, true /*isReload*/);
+    return muse::make_ok();
+}
+
+void NotationActionController::loadArticulationMapFile(const mu::engraving::InstrumentTrackId& trackId, const muse::io::path_t& path,
+                                                       bool isReload)
+{
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!maps) {
+        return;
+    }
+
+    const muse::RetVal<muse::ByteArray> file = fileSystem()->readFile(path);
+    if (!file.ret) {
+        interactive()->error(muse::trc("playback", "Cannot read the articulation map"), file.ret.text());
+        return;
+    }
+
+    mu::engraving::ArticulationMapParser::Result result = mu::engraving::ArticulationMapParser::parse(muse::String::fromUtf8(file.val));
+    if (result.map.name.empty()) {
+        result.map.name = muse::io::completeBasename(path).toString();
+    }
+
+    std::string errorDetails;
+    for (const mu::engraving::ArticulationMapParser::Error& error : result.errors) {
+        errorDetails += muse::qtrc("playback", "Line %1: %2").arg(error.line).arg(error.message.toQString()).toStdString() + "\n";
+    }
+
+    if (result.map.entries.empty()) {
+        interactive()->error(muse::trc("playback", "This articulation map contains no articulation"), errorDetails);
+        return;
+    }
+
+    if (!errorDetails.empty()) {
+        interactive()->warning(muse::trc("playback", "Some lines of the articulation map were ignored"), errorDetails);
+    }
+
+    EditArticulationMapChanges changes;
+    result.map.sourcePath = path.toString();
+    changes.maps.emplace(trackId, std::move(result.map));
+    maps->edit(changes, isReload ? muse::TranslatableString("undoableAction", "Reload articulation map")
+               : muse::TranslatableString("undoableAction", "Load articulation map"));
+}
+
+muse::Ret NotationActionController::editArticulationMap(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!trackId || !maps || !maps->data()) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    const ExpressionMap* map = maps->data()->map(*trackId);
+    if (!map) {
+        return muse::make_ok();
+    }
+
+    //! NOTE: edit the file the map was loaded from; without it (e.g. a score from another
+    //! computer), start from the copy stored in the score
+    muse::UriQuery uri("musescore://notation/articulationmapeditor");
+    if (!map->sourcePath.empty() && fileSystem()->exists(map->sourcePath)) {
+        uri.addParam("mapFilePath", muse::Val(map->sourcePath.toStdString()));
+    } else {
+        uri.addParam("mapText", muse::Val(map->sourceText.toStdString()));
+    }
+
+    // lets the editor reload the map into this track
+    uri.addParam("partId", muse::Val(std::to_string(trackId->partId.toUint64())));
+    uri.addParam("instrumentId", muse::Val(trackId->instrumentId.toStdString()));
+
+    interactive()->open(uri);
+    return muse::make_ok();
+}
+
+muse::Ret NotationActionController::removeArticulationMap(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!trackId || !maps) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    EditArticulationMapChanges changes;
+    changes.maps.emplace(*trackId, std::nullopt);
+    maps->edit(changes, muse::TranslatableString("undoableAction", "Remove articulation map"));
+    return muse::make_ok();
 }
 
 muse::io::path_t NotationActionController::selectStyleFile(bool forLoad)

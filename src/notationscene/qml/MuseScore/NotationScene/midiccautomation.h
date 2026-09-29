@@ -105,15 +105,20 @@ inline QString controllerTitle(int controller)
     return name.isEmpty() ? controllerNumber(controller) : QStringLiteral("%1 %2").arg(controllerNumber(controller), name);
 }
 
-//! NOTE: MIDI CC automation only reaches VST instruments (MuseSounds/soundfonts don't get these controllers)
-inline bool isVstInstrument(const project::INotationProjectPtr& project, const engraving::Part* part)
+inline bool isVstTrack(const project::INotationProjectPtr& project, const engraving::InstrumentTrackId& trackId)
 {
-    if (!project || !part || !project->audioSettings()) {
+    if (!project || !project->audioSettings()) {
         return false;
     }
 
-    const engraving::InstrumentTrackId trackId { part->id(), part->instrumentId() };
     return project->audioSettings()->trackInputParams(trackId).type() == muse::audio::AudioSourceType::Vsti;
+}
+
+//! NOTE: MIDI CC automation only reaches VST instruments (MuseSounds/soundfonts don't get these controllers).
+//! Its curves belong to the part's first instrument
+inline bool isVstInstrument(const project::INotationProjectPtr& project, const engraving::Part* part)
+{
+    return part && isVstTrack(project, engraving::InstrumentTrackId { part->id(), part->instrumentId() });
 }
 
 inline bool hasVstInstrument(const project::INotationProjectPtr& project, const engraving::Score* score)

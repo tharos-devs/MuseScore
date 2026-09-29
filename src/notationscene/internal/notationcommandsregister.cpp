@@ -1606,6 +1606,46 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo{
+        LOAD_ARTICULATION_MAP_COMMAND,
+        TranslatableString("action", "Load…"),
+        TranslatableString("action", "Load articulation map"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        EDIT_ARTICULATION_MAP_COMMAND,
+        TranslatableString("action", "Edit…"),
+        TranslatableString("action", "Edit articulation map"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        RELOAD_ARTICULATION_MAP_COMMAND,
+        TranslatableString("action", "Reload"),
+        TranslatableString("action", "Reload articulation map"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        REMOVE_ARTICULATION_MAP_COMMAND,
+        TranslatableString("action", "Remove"),
+        TranslatableString("action", "Remove articulation map"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
         OPEN_EDITGRIDSIZE_COMMAND,
         TranslatableString("action", "&Grid size…"),
         TranslatableString("action", "Grid size"),

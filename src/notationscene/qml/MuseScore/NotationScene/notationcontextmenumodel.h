@@ -80,6 +80,7 @@ private:
     bool isVstInstrumentStaff() const;
     muse::uicomponents::MenuItemList makeMidiCcItems();
     muse::uicomponents::MenuItem* makeMidiCcMenu();
+    muse::uicomponents::MenuItem* makeArticulationMapMenu();
     bool isDrumsetStaff() const;
 
     INotationInteractionPtr interaction() const;

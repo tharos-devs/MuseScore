@@ -31,6 +31,8 @@
 
 #include "modularity/ioc.h"
 #include "interactive/iinteractive.h"
+#include "global/iglobalconfiguration.h"
+#include "global/io/ifilesystem.h"
 #include "actions/iactionsdispatcher.h"
 #include "rcommand/commandtypes.h"
 #include "rcommand/icommandsstate.h"
@@ -61,6 +63,8 @@ class NotationActionController : public INotationCommandsController, public muse
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<context::IUiContextResolver> uiContextResolver = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
+    muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
+    muse::GlobalInject<muse::io::IFileSystem> fileSystem;
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
 
 public:
@@ -221,6 +225,11 @@ private:
     void openTransposeDialog();
     void openPartsDialog();
     void openArticulationMapEditor();
+    muse::Ret loadArticulationMap(const muse::rcommand::Params& params);
+    muse::Ret editArticulationMap(const muse::rcommand::Params& params);
+    muse::Ret reloadArticulationMap(const muse::rcommand::Params& params);
+    muse::Ret removeArticulationMap(const muse::rcommand::Params& params);
+    void loadArticulationMapFile(const engraving::InstrumentTrackId& trackId, const muse::io::path_t& path, bool isReload);
     void openTupletOtherDialog();
     void openStaffTextPropertiesDialog();
     void openMeasurePropertiesDialog();
