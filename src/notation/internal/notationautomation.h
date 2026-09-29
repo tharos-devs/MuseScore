@@ -43,6 +43,9 @@ public:
     AutomationDataConstPtr automationData() const override;
     void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) override;
 
+    std::vector<uint8_t> customMidiCcs() const override;
+    void addCustomMidiCc(uint8_t controller) override;
+
     //! NOTE: called by MasterNotation whenever the underlying score changes
     void setMasterScore(engraving::MasterScore* masterScore);
 

@@ -82,11 +82,20 @@ StyledToolBarView {
             property var itemData
 
             icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
-            text: Boolean(itemData) && itemData.showTitle ? itemData.title : ""
+            // Shows which curve is being edited, in the space the "Automation" title would take
+            // (so the button never changes size - a longer name is cut off)
+            text: Boolean(itemData) && itemData.showTitle ? automationTypeMenuModel.currentTitle : ""
+            textWidth: Math.ceil(titleMetrics.advanceWidth)
             checked: Boolean(itemData) && itemData.checked
             enabled: Boolean(itemData) ? itemData.enabled : false
 
-            toolTipTitle: Boolean(itemData) ? itemData.title : ""
+            TextMetrics {
+                id: titleMetrics
+                font: ui.theme.bodyFont
+                text: Boolean(control.itemData) ? control.itemData.title : ""
+            }
+
+            toolTipTitle: Boolean(itemData) ? itemData.title + " \u2013 " + automationTypeMenuModel.currentTitle : ""
             toolTipDescription: Boolean(itemData) ? itemData.description : ""
 
             menuItems: automationTypeMenuModel.items

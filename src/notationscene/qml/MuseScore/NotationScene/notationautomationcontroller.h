@@ -129,15 +129,21 @@ private:
 
     SysStaffToPolylinesMap createPolylinesForSystem(const System* system);
     muse::uicomponents::PolylinePlot* createPolylineForStaff(const System* system, staff_idx_t staffIdx);
-    QVector<PointData> pointsDataInStaff(const mu::engraving::Staff* staff, const muse::RectF& sysStaffCanvasRect, int startTick,
-                                         int endTick) const;
+    QVector<PointData> pointsDataInStaff(const System* system, const mu::engraving::Staff* staff,
+                                         const muse::RectF& sysStaffCanvasRect) const;
 
     mu::engraving::AutomationType currentAutomationType() const;
+    //! NOTE: the key of the curve currently shown on the staff (incl. the current MIDI CC number for MidiCC)
+    mu::engraving::AutomationCurveKey currentCurveKeyFor(const mu::engraving::Staff* staff) const;
 
     void applyPolylineStyle(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     void applyPolylineColors(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     // TODO: apply within a range? (for efficiency)
     void applyPolylineColorsUnderLine(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    void applyLockedPoints(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    bool isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const;
+    int utickForTick(int tick) const;
+    std::optional<int> firstPassTickForUtick(int utick) const;
 
     QColor inversionRelativeColor(const muse::ui::ThemeStyleKey& key) const;
 
@@ -145,8 +151,9 @@ private:
     void updatePolylinesColors();
     void onCurrentNotationChanged();
     void rebuildAllPolylines();
+    void scheduleRebuild();
 
-    void updateStaffPointsInRange(const SysStaffKey& key, int tickFrom, int tickTo);
+    void updateStaffPoints(const SysStaffKey& key);
 
     void mergePendingChanges(const mu::engraving::AutomationChanges& changes);
     void mergePendingScoreChanges(const mu::engraving::ScoreChanges& changes);
@@ -173,5 +180,6 @@ private:
     mu::engraving::AutomationChanges m_pendingChanges;
     PendingScoreState m_pendingScoreState;
     bool m_updateScheduled = false;
+    bool m_rebuildScheduled = false;
 };
 }

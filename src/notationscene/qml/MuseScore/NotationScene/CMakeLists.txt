@@ -68,6 +68,9 @@ qt_add_qml_module(notationscene_qml
         internal/undoredotoolbarmodel.h
         loopmarker.cpp
         loopmarker.h
+        midiccautomation.h
+        midiccselectmodel.cpp
+        midiccselectmodel.h
         notationautomationcontroller.h
         notationautomationcontroller.cpp
         notationcontextmenumodel.cpp
@@ -229,6 +232,7 @@ qt_add_qml_module(notationscene_qml
         PianoKeyboardPanel.qml
         SelectionFilterPanel.qml
         SelectMeasuresCountDialog.qml
+        SelectMidiCcDialog.qml
         styledialog/AccidentalsPage.qml
         styledialog/BeamsPage.qml
         styledialog/BendsPage.qml

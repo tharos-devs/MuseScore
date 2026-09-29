@@ -26,6 +26,8 @@
 
 #include "notationscene/notationcommands.h"
 
+#include "midiccautomation.h"
+
 using namespace mu::notation;
 using namespace mu::engraving;
 using namespace muse::uicomponents;
@@ -44,7 +46,27 @@ void AutomationTypeMenuModel::init()
     // rather than asserting like the default SetOnce mode does.
     notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
         updateItems();
+        emit currentTitleChanged();
     }, muse::async::Asyncable::Mode::SetReplace);
+}
+
+QString AutomationTypeMenuModel::currentTitle() const
+{
+    switch (notationConfiguration()->currentAutomationType()) {
+    case AutomationType::Dynamics: return QStringLiteral("Dynamics");
+    case AutomationType::Tempo: return QStringLiteral("Tempo");
+    case AutomationType::Volume: return QStringLiteral("Volume");
+    case AutomationType::Pan: return QStringLiteral("Pan");
+    case AutomationType::MidiCC: {
+        // Just the name, the button's width being fixed - the number only for a controller without a standard name
+        const int controller = notationConfiguration()->currentAutomationMidiCc();
+        const QString name = midicc::controllerName(controller);
+        return name.isEmpty() ? midicc::controllerNumber(controller) : name;
+    }
+    case AutomationType::Unknown: break;
+    }
+
+    return QString();
 }
 
 void AutomationTypeMenuModel::updateItems()
@@ -59,7 +81,26 @@ void AutomationTypeMenuModel::updateItems()
         makeAutomationTypeItem(AutomationType::Tempo, "tempo", TranslatableString::untranslatable("Tempo")),
         makeAutomationTypeItem(AutomationType::Volume, "volume", TranslatableString::untranslatable("Volume")),
         makeAutomationTypeItem(AutomationType::Pan, "pan", TranslatableString::untranslatable("Pan")),
+        makeSeparator(),
+        makeMidiCcMenu(),
     });
+}
+
+MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()
+{
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
+
+    const MenuItemList items = midicc::makeMenuItems(
+        [this](const muse::rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
+        [this]() { return makeSeparator(); },
+        notationConfiguration().get(), automation);
+
+    // MIDI CCs only reach VST instruments
+    const bool enabled = masterNotation && midicc::hasVstInstrument(globalContext()->currentProject(), masterNotation->masterScore());
+    MenuItem* menu = makeMenu(TranslatableString::untranslatable("MIDI CC"), items, "midi-cc", enabled);
+    menu->setChecked(notationConfiguration()->currentAutomationType() == AutomationType::MidiCC);
+    return menu;
 }
 
 MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,

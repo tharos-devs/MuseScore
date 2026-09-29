@@ -68,6 +68,7 @@ static const Settings::Key KEYBOARD_ZOOM_PRECISION(module_name, "ui/canvas/zoomP
 static const Settings::Key MOUSE_ZOOM_PRECISION(module_name, "ui/canvas/zoomPrecisionMouse");
 
 static const Settings::Key CURRENT_AUTOMATION_TYPE(module_name, "notation/automation/currentType");
+static const Settings::Key CURRENT_AUTOMATION_MIDI_CC(module_name, "notation/automation/currentMidiCc");
 
 static const Settings::Key USER_STYLES_PATH(module_name, "application/paths/myStyles");
 static const Settings::Key USER_MUSIC_FONTS_PATH(module_name, "application/paths/myMusicFonts");
@@ -233,7 +234,15 @@ void NotationConfiguration::init()
 
     settings()->setDefaultValue(CURRENT_AUTOMATION_TYPE, Val(engraving::AutomationType::Dynamics));
     settings()->valueChanged(CURRENT_AUTOMATION_TYPE).onReceive(this, [this](const Val&) {
-        m_currentAutomationTypeChanged.notify();
+        if (!m_isSettingCurrentAutomation) {
+            m_currentAutomationTypeChanged.notify();
+        }
+    });
+    settings()->setDefaultValue(CURRENT_AUTOMATION_MIDI_CC, Val(1));
+    settings()->valueChanged(CURRENT_AUTOMATION_MIDI_CC).onReceive(this, [this](const Val&) {
+        if (!m_isSettingCurrentAutomation) {
+            m_currentAutomationTypeChanged.notify();
+        }
     });
 
     settings()->setDefaultValue(USER_STYLES_PATH, Val(globalConfiguration()->userDataPath() + "/Styles"));
@@ -725,6 +734,27 @@ void NotationConfiguration::setCurrentAutomationType(engraving::AutomationType t
 Notification NotationConfiguration::currentAutomationTypeChanged() const
 {
     return m_currentAutomationTypeChanged;
+}
+
+int NotationConfiguration::currentAutomationMidiCc() const
+{
+    return std::clamp(settings()->value(CURRENT_AUTOMATION_MIDI_CC).toInt(), 0, 127);
+}
+
+void NotationConfiguration::setCurrentAutomationToMidiCc(int controller)
+{
+    const int newController = std::clamp(controller, 0, 127);
+    if (currentAutomationType() == engraving::AutomationType::MidiCC && currentAutomationMidiCc() == newController) {
+        return;
+    }
+
+    // Both values change at once: notify only when both are set, so no listener ever sees one without the other
+    m_isSettingCurrentAutomation = true;
+    settings()->setSharedValue(CURRENT_AUTOMATION_MIDI_CC, Val(newController));
+    settings()->setSharedValue(CURRENT_AUTOMATION_TYPE, Val(engraving::AutomationType::MidiCC));
+    m_isSettingCurrentAutomation = false;
+
+    m_currentAutomationTypeChanged.notify();
 }
 
 int NotationConfiguration::mouseZoomPrecision() const

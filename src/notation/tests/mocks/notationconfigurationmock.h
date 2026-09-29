@@ -111,6 +111,8 @@ public:
     MOCK_METHOD(engraving::AutomationType, currentAutomationType, (), (const, override));
     MOCK_METHOD(void, setCurrentAutomationType, (engraving::AutomationType), (override));
     MOCK_METHOD(muse::async::Notification, currentAutomationTypeChanged, (), (const, override));
+    MOCK_METHOD(int, currentAutomationMidiCc, (), (const, override));
+    MOCK_METHOD(void, setCurrentAutomationToMidiCc, (int), (override));
 
     MOCK_METHOD(int, mouseZoomPrecision, (), (const, override));
     MOCK_METHOD(void, setMouseZoomPrecision, (int), (override));

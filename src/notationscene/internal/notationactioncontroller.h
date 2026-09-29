@@ -279,6 +279,8 @@ private:
 
     void toggleAutomation();
     muse::Ret selectAutomationType(const muse::rcommand::Params& params);
+    void selectAutomationMidiCc(int controller);
+    void enableAutomationMode();
     void toggleNoteOffsetEditor();
     void toggleNoteVelocityEditor();
     void toggleArticulationMapEditor();

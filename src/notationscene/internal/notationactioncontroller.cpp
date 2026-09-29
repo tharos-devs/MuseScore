@@ -57,6 +57,7 @@
 
 #include "qml/MuseScore/NotationScene/abstractelementpopupmodel.h"
 #include "qml/MuseScore/NotationScene/notationviewinputcontroller.h"
+#include "qml/MuseScore/NotationScene/midiccautomation.h"
 
 #include "../notationcommands.h"
 
@@ -3456,6 +3457,22 @@ muse::Ret NotationActionController::selectAutomationType(const muse::rcommand::P
     const std::string type = params.at("type").toString();
     mu::engraving::AutomationType automationType = mu::engraving::AutomationType::Dynamics;
 
+    if (type == "midicc") {
+        if (!params.contains("cc")) {
+            // "Other MIDI CC…": let the user pick any controller first
+            muse::UriQuery query("musescore://notation/selectmidicc");
+            query.addParam("controller", Val(configuration()->currentAutomationMidiCc()));
+            interactive()->open(query)
+            .onResolve(this, [this](const Val& v) {
+                selectAutomationMidiCc(v.toInt());
+            });
+            return muse::make_ok();
+        }
+
+        selectAutomationMidiCc(params.at("cc").toInt());
+        return muse::make_ok();
+    }
+
     if (type == "tempo") {
         automationType = mu::engraving::AutomationType::Tempo;
     } else if (type == "volume") {
@@ -3465,16 +3482,36 @@ muse::Ret NotationActionController::selectAutomationType(const muse::rcommand::P
     }
 
     configuration()->setCurrentAutomationType(automationType);
+    enableAutomationMode();
 
-    // Picking a type is a clear enough intent to see its curve - auto-enable automation mode if it
-    // was off, rather than requiring a separate toggle first. Harmless no-op for the existing
-    // right-click "Automation type" submenu, which is only reachable when the mode is already on.
+    return muse::make_ok();
+}
+
+void NotationActionController::selectAutomationMidiCc(int controller)
+{
+    if (controller < 0 || controller > mu::engraving::MAX_MIDI_CC) {
+        return;
+    }
+
+    // A controller outside the predefined ones becomes part of the score's own MIDI CC list
+    IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (masterNotation && !muse::contains(midicc::predefinedControllers(), controller)) {
+        masterNotation->automation()->addCustomMidiCc(static_cast<uint8_t>(controller));
+    }
+
+    configuration()->setCurrentAutomationToMidiCc(controller);
+    enableAutomationMode();
+}
+
+// Picking a type is a clear enough intent to see its curve - auto-enable automation mode if it
+// was off, rather than requiring a separate toggle first. Harmless no-op for the existing
+// right-click "Automation type" submenu, which is only reachable when the mode is already on.
+void NotationActionController::enableAutomationMode()
+{
     IMasterNotationPtr masterNotation = currentMasterNotation();
     if (masterNotation && !masterNotation->automation()->isAutomationModeEnabled()) {
         masterNotation->automation()->setAutomationModeEnabled(true);
     }
-
-    return muse::make_ok();
 }
 
 bool NotationActionController::isNoteInputActionAllowed() const

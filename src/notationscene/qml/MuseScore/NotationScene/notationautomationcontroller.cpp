@@ -24,10 +24,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <set>
 
 #include "segmentcanvasinterpolation.h"
+#include "midiccautomation.h"
 
 #include "uicomponents/qml/Muse/UiComponents/polylineplot.h"
 
@@ -37,6 +39,10 @@
 #include "engraving/automation/tempovalues.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/part.h"
+#include "engraving/dom/repeatlist.h"
+#include "engraving/dom/segment.h"
+#include "engraving/dom/spanner.h"
+#include "engraving/infrastructure/eidregister.h"
 #include "engraving/dom/staff.h"
 
 #include "notation/imasternotation.h"
@@ -203,13 +209,18 @@ static muse::real_t automationValueFromDisplay(AutomationType type, double displ
         return std::clamp(normalized, mu::engraving::MIN_NORMALIZED_TEMPO, mu::engraving::MAX_NORMALIZED_TEMPO);
     }
 
+    if (type == AutomationType::MidiCC) {
+        // Snap to the 128 values a MIDI controller can actually take
+        return muse::real_t(std::round(std::clamp(displayValue, 0.0, 1.0) * 127.0) / 127.0);
+    }
+
     return muse::real_t(displayValue);
 }
 
 // Formats a point's "display"-space value (as tracked live by PolylinePlot during a drag, i.e. the
 // same value passed as pointMoved's y argument) into the drag tooltip's label text, in each
 // automation type's own natural unit - reuses the fader-curve helpers above rather than duplicating them
-static QString formattedActivePointValue(AutomationType type, double pointDomainY)
+static QString formattedActivePointValue(AutomationType type, double pointDomainY, int midiCc)
 {
     // Point Y is stored inverted relative to the display range - "higher value == lower Y" (see the
     // "1.0 - automationValueToDisplay(...)" convention used when building/editing points above) - so
@@ -218,6 +229,10 @@ static QString formattedActivePointValue(AutomationType type, double pointDomain
 
     if (type == AutomationType::Dynamics) {
         return QString("%1%").arg(qRound(displayValue * 100.0));
+    }
+
+    if (type == AutomationType::MidiCC) {
+        return QString("CC%1: %2").arg(midiCc).arg(qRound(displayValue * 127.0));
     }
 
     if (type == AutomationType::Volume) {
@@ -240,6 +255,31 @@ static QString formattedActivePointValue(AutomationType type, double pointDomain
     // not MIDI CC10 - the engine's balance_t is -1.0..+1.0, shown there as a signed -100..+100 percentage
     const int panValue = qRound((displayValue - 0.5) * 2.0 * 100.0);
     return panValue > 0 ? QString("+%1").arg(panValue) : QString::number(panValue);
+}
+
+//! NOTE: whether the item a point was generated from (e.g. a tempo marking) is still in the score - a deleted
+//! item stays registered (and parented) while the undo stack keeps it, so the register alone can't tell
+static bool isLinkedItemInScore(const mu::engraving::Score* score, const mu::engraving::EID& itemId)
+{
+    const mu::engraving::EngravingObject* obj = score ? score->masterScore()->eidRegister()->itemFromEID(itemId) : nullptr;
+    if (!obj || !obj->isEngravingItem()) {
+        return false;
+    }
+
+    const mu::engraving::EngravingItem* item = mu::engraving::toEngravingItem(obj);
+    if (item->isSpanner()) {
+        // The map is keyed by the spanner's start tick
+        const auto range = item->score()->spannerMap().map().equal_range(item->tick().ticks());
+        return std::any_of(range.first, range.second, [item](const auto& pair) { return pair.second == item; });
+    }
+
+    const mu::engraving::EngravingObject* parent = item->parent();
+    if (parent && parent->isSegment()) {
+        const Segment* segment = mu::engraving::toSegment(parent);
+        return segment->measure() && muse::contains(segment->annotations(), const_cast<mu::engraving::EngravingItem*>(item));
+    }
+
+    return true;
 }
 
 static const Segment* lastSegmentOfSystem(const System* system)
@@ -269,7 +309,8 @@ static AutomationCurveKey curveKeyFor(AutomationType type, const Staff* staff)
     case AutomationType::Tempo:
         return AutomationCurveKey::global(type);
     case AutomationType::Volume:
-    case AutomationType::Pan: {
+    case AutomationType::Pan:
+    case AutomationType::MidiCC: {
         const Part* part = staff->part();
         const InstrumentTrackId trackId { part->id(), part->instrumentId() };
         return AutomationCurveKey::instrument(type, trackId);
@@ -312,6 +353,7 @@ static bool isStructuralChange(const mu::engraving::ScoreChanges& changes)
     return false;
 }
 
+// Also the reference the area under the line is filled from - MIDI CCs keep 0, so it's always filled from the bottom
 static qreal defaultValueFor(AutomationType type)
 {
     if (type == AutomationType::Pan) {
@@ -402,7 +444,12 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         return nullptr;
     }
 
-    const AutomationCurveKey curveKey = curveKeyFor(currentAutomationType(), staff);
+    const AutomationCurveKey curveKey = currentCurveKeyFor(staff);
+    if (curveKey.type == AutomationType::MidiCC && !midicc::isVstInstrument(globalContext()->currentProject(), staff->part())) {
+        // MIDI CCs only reach VST instruments
+        return nullptr;
+    }
+
     if (curveKey.isGlobal() && staffIdx != firstVisibleStaffIdx(score())) {
         // Score-scoped automation is only drawn on the score's first staff
         return nullptr;
@@ -413,9 +460,6 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         return nullptr;
     }
 
-    const int systemStartTick = system->first()->tick().ticks();
-    const int systemEndTick = system->last()->endTick().ticks();
-
     const Measure* firstMeasure = system->firstMeasure();
     const Segment* firstSeg = firstMeasure ? firstMeasure->first(mu::engraving::SegmentType::Duration) : nullptr;
     const Segment* lastSeg = lastSegmentOfSystem(system);
@@ -425,7 +469,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     PolylinePlot* polyline = new PolylinePlot(m_linesParent);
 
     const muse::RectF staffCanvasRect = sysStaff->bbox().translated(system->canvasPos());
-    const QVector<PointData> pointsData = pointsDataInStaff(staff, staffCanvasRect, systemStartTick, systemEndTick);
+    const QVector<PointData> pointsData = pointsDataInStaff(system, staff, staffCanvasRect);
 
     const SysStaffKey key(system, staffIdx);
     m_pointsDataByStaff[key] = pointsData;
@@ -440,7 +484,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         pointsForPolyline.emplace_back(pointData.qPointF);
     }
     polyline->setPoints(pointsForPolyline);
-
+    applyLockedPoints(polyline, key);
     applyPolylineStyle(polyline, key);
     polyline->setVisible(false);
 
@@ -460,8 +504,13 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         }
 
         const PointData& oldPointData = pointsDataIt->second[pointIdx];
+
+        // Pressing on the line inserts a pending point (not in the curve yet, see pointAdded below) that
+        // PolylinePlot lets the user drag right away - press-and-drag must create it at the drop position
+        const bool isPendingPoint = oldPointData.polylinePointIndex < 0;
+
         const mu::engraving::AutomationPoint* automationPoint = automationPointAt(key, oldPointData.tick);
-        const bool editRestricted = !automationPoint || automationPoint->generated || automationPoint->itemId.has_value();
+        const bool editRestricted = !isPendingPoint && isScoreDrivenPoint(automationPoint);
         const qreal clampedX = editRestricted ? oldPointData.qPointF.x() : std::clamp(x, minX, maxX);
 
         const auto setPreviewPoint = [this, polyline, pointIdx, key](const QPointF& point) {
@@ -473,6 +522,11 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         };
 
         if (completed) {
+            if (isPendingPoint) {
+                requestAddPoint(key, clampedX, y);
+                return;
+            }
+
             if (!requestEditPoint(oldPointData, key, clampedX, y)) {
                 // Edit was rejected - snap the point back to where it actually is instead of
                 // leaving the live-drag preview stuck at the rejected position
@@ -491,7 +545,8 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     // NOT shown on hover alone - with closely-spaced points that would be too noisy/intrusive.
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::activePointChanged, [this, polyline]() {
         polyline->setActivePointLabel(polyline->hasActivePoint()
-                                      ? formattedActivePointValue(currentAutomationType(), polyline->activePointValue())
+                                      ? formattedActivePointValue(currentAutomationType(), polyline->activePointValue(),
+                                                                  notationConfiguration()->currentAutomationMidiCc())
                                       : QString());
     });
 
@@ -535,30 +590,85 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     return polyline;
 }
 
-QVector<NotationAutomationController::PointData> NotationAutomationController::pointsDataInStaff(const mu::engraving::Staff* staff,
-                                                                                                 const muse::RectF& sysStaffCanvasRect,
-                                                                                                 int startTick, int endTick) const
+QVector<NotationAutomationController::PointData> NotationAutomationController::pointsDataInStaff(const System* system,
+                                                                                                 const mu::engraving::Staff* staff,
+                                                                                                 const muse::RectF& sysStaffCanvasRect)
+const
 {
     QVector<PointData> points;
-    IF_ASSERT_FAILED(staff && score() && automationData()) {
+    IF_ASSERT_FAILED(system && staff && score() && automationData() && sysStaffCanvasRect.width() > 0) {
         return points;
     }
 
     const AutomationType type = currentAutomationType();
-
-    int currentPointIndex = 0;
-    const mu::engraving::AutomationCurveKey key = curveKeyFor(type, staff);
+    const mu::engraving::AutomationCurveKey key = currentCurveKeyFor(staff);
     const mu::engraving::AutomationCurve& curve = automationData()->curve(key);
 
-    // Start at the first point >= startTick rather than curve.begin() - resolvedInValue() only ever
-    // looks backward via std::prev(it), which works on any valid iterator, not just one reached by
-    // walking from the beginning
-    for (auto it = curve.lower_bound(startTick); it != curve.end(); ++it) {
-        const int tick = it->first;
-        const bool isPastEnd = tick > endTick;
+    const int systemStartTick = system->first()->tick().ticks();
+    const int systemEndTick = system->last()->endTick().ticks();
 
-        const Fraction frac = Fraction::fromTicks(tick);
-        const Segment* seg = score()->tick2leftSegmentMM(frac);
+    // Neighbors outside the system can't be placed via their own segment: it belongs to another system
+    // (in Page view, typically the next line, back on the left of the page). They're only needed for the
+    // line to enter/leave the system with the right slope, so they're laid out by extrapolating this system's
+    // tick-to-x ratio past its edges...
+    const Measure* firstMeasure = system->firstMeasure();
+    const Segment* firstSeg = firstMeasure ? firstMeasure->first(mu::engraving::SegmentType::Duration) : nullptr;
+    const Segment* lastSeg = lastSegmentOfSystem(system);
+    const double systemStartX = firstSeg ? firstSeg->canvasX() : sysStaffCanvasRect.x();
+    const double systemEndX = lastSeg ? lastSeg->canvasX() + lastSeg->width() : sysStaffCanvasRect.x() + sysStaffCanvasRect.width();
+    const double pxPerTick = systemEndTick > systemStartTick ? (systemEndX - systemStartX) / (systemEndTick - systemStartTick) : 0.0;
+
+    const auto toStaffX = [&](double canvasX) {
+        return (canvasX - sysStaffCanvasRect.x()) / sysStaffCanvasRect.width();
+    };
+
+    const auto displayY = [type](mu::engraving::real_t value) {
+        // Point in/out values are rescaled to the display range - higher value == lower Y...
+        return 1.0 - automationValueToDisplay(type, value);
+    };
+
+    struct OutsidePoint {
+        int tick = 0;
+        QPointF point;
+    };
+    std::optional<OutsidePoint> leftOutside;
+    std::optional<OutsidePoint> rightOutside;
+
+    // The curve is stored in expanded (repeats unrolled) utick space, the score shows each tick once: each point
+    // is shown at its tick on the first pass through it (edits are mirrored to every pass, see utickForTick)
+    struct TickPoint {
+        int tick = 0;
+        mu::engraving::real_t resolvedIn = 0.;
+        mu::engraving::real_t outValue = 0.;
+    };
+    std::vector<TickPoint> tickPoints;
+    for (auto curveIt = curve.cbegin(); curveIt != curve.cend(); ++curveIt) {
+        if (const std::optional<int> tick = firstPassTickForUtick(curveIt->first)) {
+            tickPoints.push_back({ *tick, mu::engraving::resolveInValue(curve, curveIt), curveIt->second.value.outValue });
+        }
+    }
+    std::stable_sort(tickPoints.begin(), tickPoints.end(), [](const TickPoint& a, const TickPoint& b) { return a.tick < b.tick; });
+
+    for (const TickPoint& tickPoint : tickPoints) {
+        const int tick = tickPoint.tick;
+        const mu::engraving::real_t resolvedIn = tickPoint.resolvedIn;
+        const mu::engraving::real_t outValue = tickPoint.outValue;
+
+        if (tick < systemStartTick) {
+            // The value the line leaves this point with
+            leftOutside = OutsidePoint { tick, QPointF(toStaffX(systemStartX - (systemStartTick - tick) * pxPerTick),
+                                                       displayY(outValue)) };
+            continue;
+        }
+
+        if (tick >= systemEndTick) {
+            // The value the line arrives at this point with
+            rightOutside = OutsidePoint { tick, QPointF(toStaffX(systemEndX + (tick - systemEndTick) * pxPerTick),
+                                                        displayY(resolvedIn)) };
+            break;
+        }
+
+        const Segment* seg = score()->tick2leftSegmentMM(Fraction::fromTicks(tick));
         if (!seg) { //! FIXME: fix automation curve on measure repeats
             continue;
         }
@@ -568,30 +678,45 @@ QVector<NotationAutomationController::PointData> NotationAutomationController::p
         // the segment's tick, and the duration of the segment (in ticks)...
         const int tickDiff = tick - seg->tick().ticks();
         const double tickRatio = static_cast<double>(tickDiff) / seg->ticks().ticks();
-        const double pointXInSeg = tickRatio * seg->width(); // The point's x relative to the segment
+        const double pointXInStaff = toStaffX(seg->canvasX() + tickRatio * seg->width());
 
-        const double segXInStaff = seg->canvasX() - sysStaffCanvasRect.x(); // The segment's x relative to the staff
-        const double pointXInStaff = (segXInStaff + pointXInSeg) / sysStaffCanvasRect.width();
-
-        // Point in/out values are rescaled to the display range - higher value == lower Y...
-        const mu::engraving::AutomationPoint& autoPoint = it->second;
-        const mu::engraving::real_t resolvedIn = mu::engraving::resolveInValue(curve, it);
-        if (resolvedIn == autoPoint.value.outValue) {
-            const QPointF qpf(pointXInStaff, 1.0 - automationValueToDisplay(type, resolvedIn));
-            points.emplace_back(PointData(currentPointIndex++, tick, qpf, PointData::PointType::BOTH));
+        if (resolvedIn == outValue) {
+            points.emplace_back(PointData(-1, tick, QPointF(pointXInStaff, displayY(resolvedIn)), PointData::PointType::BOTH));
         } else {
-            const QPointF qpfIn(pointXInStaff, 1.0 - automationValueToDisplay(type, resolvedIn));
-            points.emplace_back(PointData(currentPointIndex++, tick, qpfIn, PointData::PointType::IN));
-
-            const QPointF qpfOut(pointXInStaff, 1.0 - automationValueToDisplay(type, autoPoint.value.outValue));
-            points.emplace_back(PointData(currentPointIndex++, tick, qpfOut, PointData::PointType::OUT));
+            points.emplace_back(PointData(-1, tick, QPointF(pointXInStaff, displayY(resolvedIn)), PointData::PointType::IN));
+            points.emplace_back(PointData(-1, tick, QPointF(pointXInStaff, displayY(outValue)), PointData::PointType::OUT));
         }
+    }
 
-        if (isPastEnd) {
-            // Included one point past the range - its own resolved value may depend on the outValue
-            // of the last in-range point, which could have just changed
-            break;
+    // ...and then moved along that same straight line, far enough past the edges that PolylinePlot neither
+    // shows nor lets anyone drag them (it still shows points slightly past its edges, clamped onto them)
+    constexpr double OUTSIDE_POINT_OFFSET = 0.5;
+
+    const auto yOnLine = [](const QPointF& from, const QPointF& to, double x) {
+        if (muse::RealIsEqual(from.x(), to.x())) {
+            return from.y();
         }
+        return from.y() + (to.y() - from.y()) * (x - from.x()) / (to.x() - from.x());
+    };
+
+    if (leftOutside) {
+        const std::optional<QPointF> next = !points.isEmpty() ? std::optional(points.front().qPointF)
+                                            : rightOutside ? std::optional(rightOutside->point) : std::nullopt;
+        const double x = -OUTSIDE_POINT_OFFSET;
+        const double y = next ? yOnLine(leftOutside->point, *next, x) : leftOutside->point.y();
+        points.prepend(PointData(-1, leftOutside->tick, QPointF(x, y), PointData::PointType::BOTH));
+    }
+
+    if (rightOutside) {
+        // With no point inside the system, the left neighbor (already moved along the same line) is the previous one
+        const std::optional<QPointF> prev = !points.isEmpty() ? std::optional(points.back().qPointF) : std::nullopt;
+        const double x = 1.0 + OUTSIDE_POINT_OFFSET;
+        const double y = prev ? yOnLine(*prev, rightOutside->point, x) : rightOutside->point.y();
+        points.append(PointData(-1, rightOutside->tick, QPointF(x, y), PointData::PointType::BOTH));
+    }
+
+    for (int i = 0; i < points.size(); ++i) {
+        points[i].polylinePointIndex = i;
     }
 
     return points;
@@ -831,6 +956,29 @@ void NotationAutomationController::onCurrentNotationChanged()
             rebuildAllPolylines();
         }, Asyncable::Mode::SetReplace /* FIXME */);
     }
+
+    // MIDI CC curves are only drawn on VST instruments, so switching an instrument's sound source changes which staves get one
+    const project::INotationProjectPtr project = globalContext()->currentProject();
+    if (project && project->audioSettings()) {
+        project->audioSettings()->trackInputParamsChanged().onReceive(this, [this](const InstrumentTrackId&) {
+            if (currentAutomationType() == AutomationType::MidiCC) {
+                scheduleRebuild();
+            }
+        }, Asyncable::Mode::SetReplace /* FIXME */);
+    }
+}
+
+void NotationAutomationController::scheduleRebuild()
+{
+    if (m_rebuildScheduled) {
+        return;
+    }
+    m_rebuildScheduled = true;
+
+    muse::async::Async::call(this, [this]() {
+        m_rebuildScheduled = false;
+        rebuildAllPolylines();
+    });
 }
 
 void NotationAutomationController::mergePendingScoreChanges(const mu::engraving::ScoreChanges& changes)
@@ -924,7 +1072,7 @@ void NotationAutomationController::processPendingChanges()
             }
         }
 
-        updateStaffPointsInRange(key, systemStartTick, systemEndTick);
+        updateStaffPoints(key);
     }
 
     updatePolylinesGeometry();
@@ -953,7 +1101,9 @@ void NotationAutomationController::rebuildAllPolylines()
     updatePolylinesGeometry();
 }
 
-void NotationAutomationController::updateStaffPointsInRange(const SysStaffKey& key, int tickFrom, int tickTo)
+//! NOTE: the whole system is recomputed - a system only holds a handful of points, and its edge points
+//! (see pointsDataInStaff) depend on its neighbors, whatever range actually changed
+void NotationAutomationController::updateStaffPoints(const SysStaffKey& key)
 {
     auto mapIt = m_stavesToLinesMap.find(key);
     IF_ASSERT_FAILED(key.isValid() && mapIt != m_stavesToLinesMap.end() && !mapIt->second.empty()) {
@@ -968,37 +1118,8 @@ void NotationAutomationController::updateStaffPointsInRange(const SysStaffKey& k
     }
 
     const muse::RectF staffCanvasRect = sysStaff->bbox().translated(key.system->canvasPos());
-    const QVector<PointData> newRangeData = pointsDataInStaff(staff, staffCanvasRect, tickFrom, tickTo);
-
     QVector<PointData>& pointsData = m_pointsDataByStaff[key];
-
-    int firstIdx = 0;
-    while (firstIdx < pointsData.size() && pointsData.at(firstIdx).tick < tickFrom) {
-        ++firstIdx;
-    }
-    int lastIdx = firstIdx;
-    while (lastIdx < pointsData.size() && pointsData.at(lastIdx).tick <= tickTo) {
-        ++lastIdx;
-    }
-    if (!newRangeData.isEmpty() && newRangeData.back().tick > tickTo) {
-        const int trailingTick = newRangeData.back().tick;
-        while (lastIdx < pointsData.size() && pointsData.at(lastIdx).tick == trailingTick) {
-            ++lastIdx;
-        }
-    }
-
-    QVector<PointData> updatedPointsData;
-    updatedPointsData.reserve(pointsData.size() - (lastIdx - firstIdx) + newRangeData.size());
-    for (int i = 0; i < firstIdx; ++i) {
-        updatedPointsData.push_back(pointsData.at(i));
-    }
-    for (const PointData& pointData : newRangeData) {
-        updatedPointsData.push_back(pointData);
-    }
-    for (int i = lastIdx; i < pointsData.size(); ++i) {
-        updatedPointsData.push_back(pointsData.at(i));
-    }
-    pointsData = updatedPointsData;
+    pointsData = pointsDataInStaff(key.system, staff, staffCanvasRect);
 
     QVector<QPointF> points;
     points.reserve(pointsData.size());
@@ -1006,8 +1127,33 @@ void NotationAutomationController::updateStaffPointsInRange(const SysStaffKey& k
         points.push_back(pointData.qPointF);
     }
     polyline->setPoints(points);
+    applyLockedPoints(polyline, key);
     applyPolylineColorsUnderLine(polyline, key);
     polyline->update();
+}
+
+//! NOTE: points generated from the score (e.g. a tempo marking's) can't be removed or moved in time, so where
+//! one overlaps a point of the user's own, a click must pick the user's
+void NotationAutomationController::applyLockedPoints(PolylinePlot* polyline, const SysStaffKey& key) const
+{
+    const auto pointsDataIt = m_pointsDataByStaff.find(key);
+    if (pointsDataIt == m_pointsDataByStaff.end()) {
+        return;
+    }
+
+    QVector<bool> locked;
+    locked.reserve(pointsDataIt->second.size());
+    for (const PointData& pointData : pointsDataIt->second) {
+        // A pending point (being added right now) isn't in the curve yet, but belongs to the user
+        if (pointData.polylinePointIndex < 0) {
+            locked.push_back(false);
+            continue;
+        }
+
+        const mu::engraving::AutomationPoint* point = automationPointAt(key, pointData.tick);
+        locked.push_back(isScoreDrivenPoint(point));
+    }
+    polyline->setLockedPoints(locked);
 }
 
 void NotationAutomationController::mergePendingChanges(const mu::engraving::AutomationChanges& changes)
@@ -1044,6 +1190,8 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
     // Only touch the staves that were actually affected and whose system overlaps the changed tick
     // range, and only recompute points within that range, rather than the whole score or even the
     // whole staff
+    const bool hasRepeats = score()->masterScore()->expandedRepeatList().size() > 1;
+
     for (const auto& [key, polylines] : m_stavesToLinesMap) {
         IF_ASSERT_FAILED(key.isValid()) {
             continue;
@@ -1055,15 +1203,29 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
         const bool staffAffected = affectedStaffIds.find(staff->id()) != affectedStaffIds.end();
         const mu::engraving::InstrumentTrackId staffTrackId { staff->part()->id(), staff->part()->instrumentId() };
         const bool trackAffected = affectedTrackIds.find(staffTrackId) != affectedTrackIds.end();
-        const bool globalCurveAffected = globalAffected && curveKeyFor(currentAutomationType(), staff).isGlobal();
+        const bool globalCurveAffected = globalAffected && currentCurveKeyFor(staff).isGlobal();
         if (!staffAffected && !trackAffected && !globalCurveAffected) {
             continue;
         }
+        // A system also depends on its neighbor points outside of it (they shape its edges): its range of
+        // influence reaches them, or is unbounded on a side without any neighbor (a new point could become one)
         const System* system = key.system;
         const int systemStartTick = system->first()->tick().ticks();
         const int systemEndTick = system->last()->endTick().ticks();
-        if (systemEndTick >= changes.tickFrom && systemStartTick <= changes.tickTo) {
-            updateStaffPointsInRange(key, changes.tickFrom, changes.tickTo);
+        int influenceFrom = std::numeric_limits<int>::min();
+        int influenceTo = std::numeric_limits<int>::max();
+        const auto pointsDataIt = m_pointsDataByStaff.find(key);
+        if (pointsDataIt != m_pointsDataByStaff.end() && !pointsDataIt->second.isEmpty()) {
+            if (pointsDataIt->second.front().tick < systemStartTick) {
+                influenceFrom = pointsDataIt->second.front().tick;
+            }
+            if (pointsDataIt->second.back().tick >= systemEndTick) {
+                influenceTo = pointsDataIt->second.back().tick;
+            }
+        }
+        // changes' range is in expanded utick space: with repeats, it doesn't map onto a single score tick range
+        if (hasRepeats || (influenceTo >= changes.tickFrom && influenceFrom <= changes.tickTo)) {
+            updateStaffPoints(key);
         }
     }
 
@@ -1091,10 +1253,12 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
     const bool tickChanged = newTick != oldPointData.tick;
 
     // STEP 3 - Fetch the point being edited...
-    const mu::engraving::AutomationCurveKey curveKey = curveKeyFor(currentAutomationType(), staff);
+    const mu::engraving::AutomationCurveKey curveKey = currentCurveKeyFor(staff);
 
     const mu::engraving::AutomationCurve& curve = automationData()->curve(curveKey);
-    const auto existingIt = curve.find(oldPointData.tick);
+    const int oldUtick = utickForTick(oldPointData.tick);
+    const int newUtick = utickForTick(newTick);
+    const auto existingIt = curve.find(oldUtick);
     IF_ASSERT_FAILED(existingIt != curve.end()) {
         return false;
     }
@@ -1126,9 +1290,12 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
             editedPoint.value.outValue = newValue;
         }
         editedPoint.generated = false;
+        if (editedPoint.itemId && !isLinkedItemInScore(score(), *editedPoint.itemId)) {
+            editedPoint.itemId.reset(); // its item was deleted: now just a point of the user's own
+        }
 
         mu::engraving::AutomationPointEdits edits {
-            { newTick, MovePoint { editedPoint, oldPointData.tick } }
+            { newUtick, MovePoint { editedPoint, oldUtick } }
         };
 
         editAutomationPoints(curveKey, edits);
@@ -1151,11 +1318,13 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
     mu::engraving::AutomationPoint newPoint;
     newPoint.value.outValue = newValue;
     newPoint.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { newPoint.value.outValue, originalEase };
-    newPoint.itemId = existingPoint.itemId;
+    if (existingPoint.itemId && isLinkedItemInScore(score(), *existingPoint.itemId)) {
+        newPoint.itemId = existingPoint.itemId;
+    }
 
     mu::engraving::AutomationPointEdits edits {
-        { oldPointData.tick, SetPoint { updatedOldPoint } },
-        { newTick, SetPoint { newPoint } }
+        { oldUtick, SetPoint { updatedOldPoint } },
+        { newUtick, SetPoint { newPoint } }
     };
 
     editAutomationPoints(curveKey, edits);
@@ -1188,10 +1357,10 @@ bool NotationAutomationController::requestAddPoint(const SysStaffKey& key, qreal
                                                                                mu::engraving::AutomationPoint::Ease::none() };
     newPoint.generated = false;
 
-    const mu::engraving::AutomationCurveKey curveKey = curveKeyFor(currentAutomationType(), staff);
+    const mu::engraving::AutomationCurveKey curveKey = currentCurveKeyFor(staff);
 
     mu::engraving::AutomationPointEdits edits {
-        { *newTick, SetPoint { newPoint } }
+        { utickForTick(*newTick), SetPoint { newPoint } }
     };
 
     editAutomationPoints(curveKey, edits);
@@ -1206,7 +1375,7 @@ bool NotationAutomationController::requestRemovePoint(const PointData& pointData
     }
 
     const mu::engraving::AutomationPoint* automationPoint = automationPointAt(key, pointData.tick);
-    if (!automationPoint || automationPoint->generated || automationPoint->itemId.has_value()) {
+    if (isScoreDrivenPoint(automationPoint)) {
         return false;
     }
 
@@ -1215,10 +1384,10 @@ bool NotationAutomationController::requestRemovePoint(const PointData& pointData
         return false;
     }
 
-    const mu::engraving::AutomationCurveKey curveKey = curveKeyFor(currentAutomationType(), staff);
+    const mu::engraving::AutomationCurveKey curveKey = currentCurveKeyFor(staff);
 
     mu::engraving::AutomationPointEdits edits {
-        { pointData.tick, ErasePoint {} }
+        { utickForTick(pointData.tick), ErasePoint {} }
     };
 
     editAutomationPoints(curveKey, edits);
@@ -1244,9 +1413,9 @@ const mu::engraving::AutomationPoint* NotationAutomationController::automationPo
         return nullptr;
     }
 
-    const mu::engraving::AutomationCurveKey curveKey = curveKeyFor(currentAutomationType(), staff);
+    const mu::engraving::AutomationCurveKey curveKey = currentCurveKeyFor(staff);
     const mu::engraving::AutomationCurve& curve = automationData()->curve(curveKey);
-    const auto it = curve.find(tick);
+    const auto it = curve.find(utickForTick(tick));
     if (it == curve.end()) {
         return nullptr;
     }
@@ -1254,9 +1423,59 @@ const mu::engraving::AutomationPoint* NotationAutomationController::automationPo
     return &it->second;
 }
 
+//! NOTE: automation curves live in expanded (repeats unrolled) utick space, while the score shows - and the user
+//! edits - each tick once. A tick maps to its utick on the first pass through it; ScoreAutomationController mirrors
+//! every edit to the other passes
+int NotationAutomationController::utickForTick(int tick) const
+{
+    const mu::engraving::RepeatList& repeatList = score()->masterScore()->expandedRepeatList();
+    for (const mu::engraving::RepeatSegment* segment : repeatList) {
+        if (tick >= segment->tick && tick < segment->endTick()) {
+            return tick + (segment->utick - segment->tick);
+        }
+    }
+
+    // e.g. right at the end of the score
+    return repeatList.empty() ? tick : tick + (repeatList.back()->utick - repeatList.back()->tick);
+}
+
+//! NOTE: the tick of a curve point, when that utick is on the first pass through its tick (otherwise nullopt:
+//! it's a mirrored copy, shown through the first pass one)
+std::optional<int> NotationAutomationController::firstPassTickForUtick(int utick) const
+{
+    const mu::engraving::RepeatList& repeatList = score()->masterScore()->expandedRepeatList();
+    if (repeatList.empty()) {
+        return utick;
+    }
+
+    auto segmentIt = repeatList.findRepeatSegmentFromUTick(utick);
+    if (segmentIt == repeatList.cend()) {
+        segmentIt = std::prev(repeatList.cend()); // e.g. right at the end of the score
+    }
+
+    const int tick = utick - ((*segmentIt)->utick - (*segmentIt)->tick);
+    return utickForTick(tick) == utick ? std::optional(tick) : std::nullopt;
+}
+
+//! NOTE: a point that follows the score rather than the user: generated, or still tied to an item of the score
+//! (e.g. a tempo marking) - such a point can't be removed or moved in time
+bool NotationAutomationController::isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const
+{
+    return !point || point->generated || (point->itemId && isLinkedItemInScore(score(), *point->itemId));
+}
+
 AutomationType NotationAutomationController::currentAutomationType() const
 {
     return notationConfiguration()->currentAutomationType();
+}
+
+AutomationCurveKey NotationAutomationController::currentCurveKeyFor(const Staff* staff) const
+{
+    AutomationCurveKey key = curveKeyFor(currentAutomationType(), staff);
+    if (key.type == AutomationType::MidiCC) {
+        key.controller = static_cast<uint8_t>(notationConfiguration()->currentAutomationMidiCc());
+    }
+    return key;
 }
 
 INotationAutomationPtr NotationAutomationController::automation() const

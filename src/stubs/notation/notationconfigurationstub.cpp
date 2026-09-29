@@ -292,6 +292,15 @@ muse::async::Notification NotationConfigurationStub::currentAutomationTypeChange
     return n;
 }
 
+int NotationConfigurationStub::currentAutomationMidiCc() const
+{
+    return 1;
+}
+
+void NotationConfigurationStub::setCurrentAutomationToMidiCc(int)
+{
+}
+
 qreal NotationConfigurationStub::scalingFromZoomPercentage(int) const
 {
     return 0.0;
