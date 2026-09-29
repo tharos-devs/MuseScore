@@ -50,6 +50,8 @@ public:
 
     virtual AutomationDataConstPtr automationData() const = 0;
     virtual void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) = 0;
+    //! NOTE: edits to several curves at once, as a single undoable step
+    virtual void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve) = 0;
 
     //! NOTE: MIDI CCs the user picked for this score, besides the predefined ones (undoable, saved with the score)
     virtual std::vector<uint8_t> customMidiCcs() const = 0;

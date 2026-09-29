@@ -49,6 +49,9 @@
 #include "notation/inotation.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationelements.h" // IWYU pragma: keep
+#include "notation/inotationinteraction.h"
+#include "notation/inotationselection.h"
+#include "notation/inotationselectionrange.h"
 
 #include "global/async/async.h"
 #include "global/containers.h"
@@ -400,6 +403,7 @@ void NotationAutomationController::init()
         } else {
             updatePolylinesGeometry();
         }
+        refreshGroupFlags(); // the selection may have changed while automation was hidden
     }, Asyncable::Mode::SetReplace /* FIXME */);
 
     notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
@@ -531,6 +535,25 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         const bool editRestricted = !isPendingPoint && isScoreDrivenPoint(automationPoint);
         const qreal clampedX = editRestricted ? oldPointData.qPointF.x() : std::clamp(x, minX, maxX);
 
+        // A point of the range selection: the whole selection moves with it, vertically only
+        if (m_groupDrag.active || (!isPendingPoint && isGroupSelected(key, oldPointData))) {
+            if (!m_groupDrag.active) {
+                startGroupDrag();
+            }
+
+            const auto originsIt = m_groupDrag.origins.find(key);
+            const qreal originY = originsIt != m_groupDrag.origins.end() && pointIdx < originsIt->second.size()
+                                  ? originsIt->second.at(pointIdx).y() : oldPointData.qPointF.y();
+            const qreal delta = y - originY;
+
+            if (completed) {
+                commitGroupDrag(delta);
+            } else {
+                previewGroupDrag(delta);
+            }
+            return;
+        }
+
         const auto setPreviewPoint = [this, polyline, pointIdx, key](const QPointF& point) {
             QVector<QPointF> points = polyline->points();
             points.replace(pointIdx, point);
@@ -604,6 +627,15 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
             return;
         }
         requestRemovePoint(pointsDataIt->second.at(pointIdx), key);
+    });
+
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::dragCancelled, [this]() {
+        cancelGroupDrag();
+    });
+
+    // Every press ends here: a group drag not committed by then (e.g. a click with a little jitter) is dropped
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::interactionFinished, [this]() {
+        cancelGroupDrag();
     });
 
     // Previewed by PolylinePlot itself while dragging, committed on release
@@ -977,6 +1009,13 @@ void NotationAutomationController::onCurrentNotationChanged()
         }, Asyncable::Mode::SetReplace /* FIXME */);
     }
 
+    // Points inside MuseScore's range selection are shown selected (and move together)
+    if (currentNotation()) {
+        currentNotation()->interaction()->selectionChanged().onNotify(this, [this]() {
+            refreshGroupFlags();
+        }, Asyncable::Mode::SetReplace /* FIXME */);
+    }
+
     // MIDI CC curves are only drawn on VST instruments, so switching an instrument's sound source changes which staves get one
     const project::INotationProjectPtr project = globalContext()->currentProject();
     if (project && project->audioSettings()) {
@@ -1108,6 +1147,7 @@ void NotationAutomationController::rebuildAllPolylines()
     }
     m_stavesToLinesMap.clear();
     m_pointsDataByStaff.clear();
+    m_groupDrag = GroupDrag(); // its polylines are gone
 
     if (!score()) {
         // Happens on close...
@@ -1222,6 +1262,232 @@ void NotationAutomationController::applyPointFlags(PolylinePlot* polyline, const
         locked.push_back(pointsData.at(i).polylinePointIndex >= 0 && isScoreDrivenPoint(automationPoints.at(i)));
     }
     polyline->setLockedPoints(locked);
+
+    QVector<bool> groupSelected;
+    groupSelected.reserve(pointsData.size());
+    for (int i = 0; i < pointsData.size(); ++i) {
+        groupSelected.push_back(isGroupSelectable(key, pointsData.at(i), automationPoints.at(i)));
+    }
+    polyline->setGroupSelectedPoints(groupSelected);
+}
+
+void NotationAutomationController::applyGroupFlags(PolylinePlot* polyline, const SysStaffKey& key) const
+{
+    const auto pointsDataIt = m_pointsDataByStaff.find(key);
+    if (!polyline || pointsDataIt == m_pointsDataByStaff.end()) {
+        return;
+    }
+
+    QVector<bool> groupSelected;
+    groupSelected.reserve(pointsDataIt->second.size());
+    for (const PointData& pointData : pointsDataIt->second) {
+        groupSelected.push_back(isGroupSelected(key, pointData));
+    }
+    polyline->setGroupSelectedPoints(groupSelected);
+}
+
+//! NOTE: only while automation is shown - enabling it refreshes them
+void NotationAutomationController::refreshGroupFlags()
+{
+    if (!automation() || !automation()->isAutomationModeEnabled()) {
+        return;
+    }
+
+    for (const auto& [key, polylines] : m_stavesToLinesMap) {
+        if (!polylines.empty()) {
+            applyGroupFlags(*polylines.begin(), key);
+        }
+    }
+}
+
+//! NOTE: whether MuseScore's range selection covers this tick of this staff's curve
+bool NotationAutomationController::isInRangeSelection(const Staff* staff, int tick) const
+{
+    const INotationPtr notation = currentNotation();
+    const INotationSelectionPtr selection = notation ? notation->interaction()->selection() : nullptr;
+    if (!selection || !selection->isRange() || !staff) {
+        return false;
+    }
+
+    const INotationSelectionRangePtr range = selection->range();
+    if (tick < range->startTick().ticks() || tick >= range->endTick().ticks()) {
+        return false;
+    }
+
+    const AutomationCurveKey key = currentCurveKeyFor(staff);
+    if (key.isGlobal()) {
+        return true; // e.g. Tempo: any selected staff
+    }
+
+    const staff_idx_t from = range->startStaffIndex();
+    const staff_idx_t to = range->endStaffIndex(); // exclusive
+    if (key.trackId()) {
+        // An instrument's curve: any of its staves
+        for (const Staff* partStaff : staff->part()->staves()) {
+            if (partStaff->idx() >= from && partStaff->idx() < to) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    return staff->idx() >= from && staff->idx() < to;
+}
+
+//! NOTE: a point of the user's own inside the range selection. Not a tempo past the top of the display range: shown
+//! clamped there, moving it by the group's offset would drop its actual value
+bool NotationAutomationController::isGroupSelectable(const SysStaffKey& key, const PointData& pointData,
+                                                     const mu::engraving::AutomationPoint* point) const
+{
+    if (pointData.outside || pointData.polylinePointIndex < 0 || isScoreDrivenPoint(point)) {
+        return false;
+    }
+
+    if (currentAutomationType() == AutomationType::Tempo && pointData.qPointF.y() <= 0.0) {
+        return false;
+    }
+
+    const Staff* staff = score() ? score()->staff(key.staffIdx) : nullptr;
+    return isInRangeSelection(staff, pointData.tick);
+}
+
+bool NotationAutomationController::isGroupSelected(const SysStaffKey& key, const PointData& pointData) const
+{
+    if (pointData.outside || pointData.polylinePointIndex < 0) {
+        return false;
+    }
+
+    return isGroupSelectable(key, pointData, automationPointAt(key, pointData.tick));
+}
+
+//! NOTE: the selection can't change during the drag: its points are gathered once
+void NotationAutomationController::startGroupDrag()
+{
+    m_groupDrag = GroupDrag();
+    m_groupDrag.active = true;
+
+    for (const auto& [key, polylines] : m_stavesToLinesMap) {
+        const auto pointsDataIt = m_pointsDataByStaff.find(key);
+        if (polylines.empty() || pointsDataIt == m_pointsDataByStaff.end()) {
+            continue;
+        }
+
+        std::vector<int> selected;
+        for (int i = 0; i < pointsDataIt->second.size(); ++i) {
+            if (isGroupSelected(key, pointsDataIt->second.at(i))) {
+                selected.push_back(i);
+            }
+        }
+
+        const QVector<QPointF> points = (*polylines.begin())->points();
+        if (!selected.empty() && points.size() == pointsDataIt->second.size()) {
+            m_groupDrag.origins.emplace(key, points);
+            m_groupDrag.selected.emplace(key, std::move(selected));
+        }
+    }
+}
+
+//! NOTE: the same vertical offset for every selected point, on every system, each clamped to the display range
+void NotationAutomationController::previewGroupDrag(qreal delta)
+{
+    for (const auto& [key, selected] : m_groupDrag.selected) {
+        const auto linesIt = m_stavesToLinesMap.find(key);
+        if (linesIt == m_stavesToLinesMap.end() || linesIt->second.empty()) {
+            continue;
+        }
+
+        QVector<QPointF> points = m_groupDrag.origins.at(key);
+        for (const int i : selected) {
+            points[i].setY(std::clamp(points[i].y() + delta, 0.0, 1.0));
+        }
+
+        PolylinePlot* polyline = *linesIt->second.begin();
+        polyline->setPoints(points);
+        applyPolylineColorsUnderLine(polyline, key);
+        polyline->update();
+    }
+}
+
+void NotationAutomationController::commitGroupDrag(qreal delta)
+{
+    const AutomationType type = currentAutomationType();
+
+    // Several polyline points can stand for the same curve point (its in and out values)
+    std::map<AutomationCurveKey, std::map<int /*utick*/, mu::engraving::AutomationPoint> > editedPoints;
+
+    for (const auto& [key, selected] : m_groupDrag.selected) {
+        const auto pointsDataIt = m_pointsDataByStaff.find(key);
+        const Staff* staff = score() ? score()->staff(key.staffIdx) : nullptr;
+        const QVector<QPointF>& origins = m_groupDrag.origins.at(key);
+        if (!staff || pointsDataIt == m_pointsDataByStaff.end() || origins.size() != pointsDataIt->second.size()) {
+            continue; // rebuilt under the drag
+        }
+
+        const AutomationCurveKey curveKey = currentCurveKeyFor(staff);
+        for (const int i : selected) {
+            const PointData& pointData = pointsDataIt->second.at(i);
+            const mu::engraving::AutomationPoint* existing = automationPointAt(key, pointData.tick);
+            if (!existing) {
+                continue;
+            }
+
+            const bool isIn = pointData.pointType == PointData::PointType::IN;
+            const mu::engraving::real_t referenceValue = isIn
+                                                         ? mu::engraving::resolveInValue(automationData()->curve(curveKey),
+                                                                                         automationData()->curve(curveKey).find(
+                                                                                             utickForTick(pointData.tick)))
+                                                         : existing->value.outValue;
+            const double display = 1.0 - std::clamp(origins.at(i).y() + delta, 0.0, 1.0);
+            const mu::engraving::real_t value = automationValueFromDisplay(type, display, referenceValue);
+            if (muse::RealIsEqual(value, referenceValue)) {
+                continue; // unchanged (e.g. already at the edge): left as it is
+            }
+
+            const int utick = utickForTick(pointData.tick);
+            auto it = editedPoints[curveKey].try_emplace(utick, *existing).first;
+            setEditedValue(it->second, pointData.pointType, value);
+        }
+    }
+
+    std::vector<std::pair<AutomationCurveKey, mu::engraving::AutomationPointEdits> > editsByCurve;
+    for (const auto& [curveKey, points] : editedPoints) {
+        mu::engraving::AutomationPointEdits edits;
+        for (const auto& [utick, point] : points) {
+            edits.push_back({ utick, SetPoint { point } });
+        }
+        if (!edits.empty()) {
+            editsByCurve.emplace_back(curveKey, std::move(edits));
+        }
+    }
+
+    // Nothing to write: back to the points as they are (no rebuild here - this runs inside the dragged polyline's
+    // own mouse event handling)
+    if (editsByCurve.empty() || !automation()) {
+        cancelGroupDrag();
+        return;
+    }
+
+    m_groupDrag = GroupDrag();
+    automation()->editPoints(editsByCurve);
+}
+
+void NotationAutomationController::cancelGroupDrag()
+{
+    if (!m_groupDrag.active) {
+        return;
+    }
+
+    const GroupDrag groupDrag = std::move(m_groupDrag);
+    m_groupDrag = GroupDrag();
+
+    for (const auto& [key, points] : groupDrag.origins) {
+        const auto it = m_stavesToLinesMap.find(key);
+        if (it != m_stavesToLinesMap.end() && !it->second.empty()) {
+            PolylinePlot* polyline = *it->second.begin();
+            polyline->setPoints(points);
+            applyPolylineColorsUnderLine(polyline, key);
+        }
+    }
 }
 
 void NotationAutomationController::mergePendingChanges(const mu::engraving::AutomationChanges& changes)
@@ -1346,21 +1612,7 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
 
     if (!tickChanged || pointType == PointData::PointType::BOTH) {
         mu::engraving::AutomationPoint editedPoint = existingPoint;
-        const mu::engraving::AutomationPoint::Ease preservedEase
-            = mu::engraving::ease(editedPoint).value_or(mu::engraving::AutomationPoint::Ease::none());
-        if (pointType == PointData::PointType::IN) {
-            // The user explicitly chose this arrival value; it no longer follows whatever precedes it
-            editedPoint.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { newValue, preservedEase };
-        } else if (pointType == PointData::PointType::BOTH) {
-            editedPoint.value.outValue = newValue;
-            editedPoint.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { editedPoint.value.outValue, preservedEase };
-        } else {
-            editedPoint.value.outValue = newValue;
-        }
-        editedPoint.generated = false;
-        if (editedPoint.itemId && !isLinkedItemInScore(score(), *editedPoint.itemId)) {
-            editedPoint.itemId.reset(); // its item was deleted: now just a point of the user's own
-        }
+        setEditedValue(editedPoint, pointType, newValue);
 
         mu::engraving::AutomationPointEdits edits {
             { newUtick, MovePoint { editedPoint, oldUtick } }
@@ -1398,6 +1650,26 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
     editAutomationPoints(curveKey, edits);
 
     return true;
+}
+
+void NotationAutomationController::setEditedValue(mu::engraving::AutomationPoint& point, PointData::PointType pointType,
+                                                  mu::engraving::real_t value) const
+{
+    const mu::engraving::AutomationPoint::Ease preservedEase
+        = mu::engraving::ease(point).value_or(mu::engraving::AutomationPoint::Ease::none());
+    if (pointType == PointData::PointType::IN) {
+        // The user explicitly chose this arrival value; it no longer follows whatever precedes it
+        point.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { value, preservedEase };
+    } else if (pointType == PointData::PointType::BOTH) {
+        point.value.outValue = value;
+        point.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { point.value.outValue, preservedEase };
+    } else {
+        point.value.outValue = value;
+    }
+    point.generated = false;
+    if (point.itemId && !isLinkedItemInScore(score(), *point.itemId)) {
+        point.itemId.reset(); // its item was deleted: now just a point of the user's own
+    }
 }
 
 bool NotationAutomationController::requestAddPoint(const SysStaffKey& key, qreal x, qreal y)
