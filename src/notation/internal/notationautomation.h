@@ -42,6 +42,7 @@ public:
 
     AutomationDataConstPtr automationData() const override;
     void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) override;
+    void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve) override;
 
     std::vector<uint8_t> customMidiCcs() const override;
     void addCustomMidiCc(uint8_t controller) override;

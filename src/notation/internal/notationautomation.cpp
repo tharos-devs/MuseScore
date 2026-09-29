@@ -73,6 +73,22 @@ void NotationAutomation::editPoints(const AutomationCurveKey& key, AutomationPoi
     });
 }
 
+void NotationAutomation::editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve)
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Edit automation points"),
+                             [&](engraving::Transaction&) {
+        for (auto& [key, edits] : editsByCurve) {
+            if (!edits.empty()) {
+                m_masterScore->editAutomationPoints(key, edits);
+            }
+        }
+    });
+}
+
 std::vector<uint8_t> NotationAutomation::customMidiCcs() const
 {
     const AutomationDataConstPtr data = automationData();

@@ -143,6 +143,20 @@ private:
     void applyPolylineColorsUnderLine(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     void applyPointFlags(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     bool requestSegmentBend(const SysStaffKey& key, int segmentIndex, qreal value);
+
+    //! NOTE: the in, out or both values of an existing point, as an edit sets them
+    void setEditedValue(mu::engraving::AutomationPoint& point, PointData::PointType pointType, mu::engraving::real_t value) const;
+
+    // Points inside MuseScore's range selection move together (vertically)
+    bool isInRangeSelection(const mu::engraving::Staff* staff, int tick) const;
+    bool isGroupSelectable(const SysStaffKey& key, const PointData& pointData, const mu::engraving::AutomationPoint* point) const;
+    bool isGroupSelected(const SysStaffKey& key, const PointData& pointData) const;
+    void applyGroupFlags(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    void refreshGroupFlags();
+    void startGroupDrag();
+    void previewGroupDrag(qreal delta);
+    void commitGroupDrag(qreal delta);
+    void cancelGroupDrag();
     bool isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const;
     int utickForTick(int tick) const;
     std::optional<int> firstPassTickForUtick(int utick) const;
@@ -183,5 +197,12 @@ private:
     PendingScoreState m_pendingScoreState;
     bool m_updateScheduled = false;
     bool m_rebuildScheduled = false;
+
+    struct GroupDrag {
+        bool active = false;
+        std::map<SysStaffKey, QVector<QPointF> > origins; // the points of every polyline with selected points, at start
+        std::map<SysStaffKey, std::vector<int> > selected; // their selected points (indices), at start
+    };
+    GroupDrag m_groupDrag;
 };
 }
