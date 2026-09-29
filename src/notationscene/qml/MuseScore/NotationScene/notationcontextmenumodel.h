@@ -77,6 +77,8 @@ private:
     bool isSingleSelection() const;
     bool canSelectSimilarInRange() const;
     bool canSelectSimilar() const;
+    bool isVstInstrumentStaff() const;
+    muse::uicomponents::MenuItemList makeMidiCcItems();
     bool isDrumsetStaff() const;
 
     INotationInteractionPtr interaction() const;

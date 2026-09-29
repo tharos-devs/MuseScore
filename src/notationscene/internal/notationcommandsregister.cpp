@@ -2975,7 +2975,8 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString::untranslatable("Automation type"),
         TranslatableString::untranslatable("Select automation type"),
         InputSchema({
-            { "type", Arg(DataType::String, u"Automation type (dynamics, volume, pan)") },
+            { "type", Arg(DataType::String, u"Automation type (dynamics, tempo, volume, pan, midicc)") },
+            { "cc", Arg(DataType::Integer, u"MIDI CC number for midicc (asks for one when omitted)", Val(0), Val(127)) },
         }),
         Decoration(rcommand::Checkable::Yes)
     },

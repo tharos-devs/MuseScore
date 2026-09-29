@@ -50,6 +50,10 @@ public:
 
     virtual AutomationDataConstPtr automationData() const = 0;
     virtual void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) = 0;
+
+    //! NOTE: MIDI CCs the user picked for this score, besides the predefined ones (undoable, saved with the score)
+    virtual std::vector<uint8_t> customMidiCcs() const = 0;
+    virtual void addCustomMidiCc(uint8_t controller) = 0;
 };
 
 using INotationAutomationPtr = std::shared_ptr<INotationAutomation>;

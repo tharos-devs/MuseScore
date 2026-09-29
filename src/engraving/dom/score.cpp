@@ -5171,6 +5171,11 @@ void Score::editAutomationPoints(const AutomationCurveKey& key, AutomationPointE
     m_masterScore->editAutomationPoints(key, edits, undoable);
 }
 
+void Score::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
+{
+    m_masterScore->setCustomMidiCcs(controllers);
+}
+
 ArticulationMapDataConstPtr Score::articulationMapData() const { return m_masterScore->articulationMapData(); }
 
 void Score::editArticulationMap(const EditArticulationMapChanges& changes)

@@ -61,6 +61,9 @@ public:
 
     void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits);
 
+    std::vector<uint8_t> customMidiCcs() const;
+    void setCustomMidiCcs(const std::vector<uint8_t>& controllers);
+
     AutomationDataConstPtr automationData() const { return m_automationData; }
     void setAutomationData(AutomationDataPtr data) { m_automationData = std::move(data); }
 

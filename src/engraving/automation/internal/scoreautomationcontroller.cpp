@@ -439,6 +439,20 @@ void ScoreAutomationController::update(const ScoreChanges& changes)
     update(request, m_automationData->curves());
 }
 
+std::vector<uint8_t> ScoreAutomationController::customMidiCcs() const
+{
+    return m_automationData ? m_automationData->customMidiCcs() : std::vector<uint8_t>();
+}
+
+void ScoreAutomationController::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
+{
+    if (!m_automationData) {
+        m_automationData = std::make_shared<AutomationData>();
+    }
+
+    m_automationData->setCustomMidiCcs(controllers);
+}
+
 void ScoreAutomationController::editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits)
 {
     IF_ASSERT_FAILED(m_automationData && m_score) {

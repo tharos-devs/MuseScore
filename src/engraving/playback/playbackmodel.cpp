@@ -89,7 +89,8 @@ void PlaybackModel::load(Score* score)
         clearExpiredEvents(tickRange.tickFrom, tickRange.tickTo, trackRange.trackFrom, trackRange.trackTo, &trackChanges);
 
         const InstrumentTrackIdSet oldTracks = existingTrackIdSet();
-        update(tickRange.tickFrom, tickRange.tickTo, trackRange.trackFrom, trackRange.trackTo, &trackChanges);
+        update(tickRange.tickFrom, tickRange.tickTo, trackRange.trackFrom, trackRange.trackTo, &trackChanges,
+               clearedTimestampRanges(tickRange.tickFrom, tickRange.tickTo));
 
         notifyAboutChanges(oldTracks, trackChanges);
     });
@@ -410,11 +411,11 @@ dynamic_level_t PlaybackModel::appliableDynamicLevel(track_idx_t trackIdx, int t
 }
 
 void PlaybackModel::update(const int tickFrom, const int tickTo, const track_idx_t trackFrom, const track_idx_t trackTo,
-                           ChangedTrackIdSet* trackChanges)
+                           ChangedTrackIdSet* trackChanges, const std::optional<PlaybackContext::TimestampRanges>& rerenderedRanges)
 {
     m_score->masterScore()->setExpandRepeats(m_expandRepeats);
     updateSetupData();
-    updateContext(trackFrom, trackTo, tickFrom, tickTo);
+    updateContext(trackFrom, trackTo, tickFrom, tickTo, rerenderedRanges);
     updateEvents(tickFrom, tickTo, trackFrom, trackTo, trackChanges);
 }
 
@@ -452,7 +453,11 @@ void PlaybackModel::updateSetupData()
     metronomeSetupData.scoreId = scoreId;
 }
 
-void PlaybackModel::updateContext(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo)
+//! NOTE: rerenderedRanges - the timestamp ranges whose events were just cleared, when only part of the score is
+//! re-rendered: events elsewhere are kept as they are (see applyContextToTrackData), so MIDI CC curves aren't
+//! sampled anywhere else
+void PlaybackModel::updateContext(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo,
+                                  const std::optional<PlaybackContext::TimestampRanges>& rerenderedRanges)
 {
     m_playbackCtx->update(trackFrom, trackTo, tickFrom, tickTo, m_expandRepeats);
 
@@ -471,12 +476,21 @@ void PlaybackModel::updateContext(const track_idx_t trackFrom, const track_idx_t
             continue;
         }
 
-        const PartData data {
+        PartData data {
             m_playbackCtx->dynamicLevelLayers(trackRange.startTrack, trackRange.endTrack),
             m_playbackCtx->soundPresets(trackRange.startTrack, trackRange.endTrack),
             m_playbackCtx->textArticulations(trackRange.startTrack, trackRange.endTrack),
-            m_playbackCtx->syllables(trackRange.startTrack, trackRange.endTrack)
+            m_playbackCtx->syllables(trackRange.startTrack, trackRange.endTrack),
+            {}
         };
+
+        for (const InstrumentTrackId& trackId : trackIds) {
+            auto controllers = m_playbackCtx->midiControllerEvents(trackId, static_cast<layer_idx_t>(trackRange.startTrack),
+                                                                   rerenderedRanges);
+            if (!controllers.empty()) {
+                data.midiControllers.emplace(trackId, std::move(controllers));
+            }
+        }
 
         for (const InstrumentTrackId& trackId : trackIds) {
             applyContextToTrackData(trackId, data);
@@ -507,6 +521,11 @@ void PlaybackModel::applyContextToTrackData(const InstrumentTrackId& trackId, co
     appendEvents(data.soundPresets);
     appendEvents(data.textArticulations);
     appendEvents(data.syllables);
+
+    const auto controllersIt = data.midiControllers.find(trackId);
+    if (controllersIt != data.midiControllers.end()) {
+        appendEvents(controllersIt->second);
+    }
 }
 
 void PlaybackModel::processSegment(const int tickPositionOffset, const Segment* segment, const std::set<staff_idx_t>& staffIdxSet,
@@ -876,6 +895,31 @@ void mu::engraving::PlaybackModel::removeEventsFromRange(const track_idx_t track
 
         removeTrackEvents(chordSymbolsTrackId(part->id()), timestampFrom, timestampTo, trackChanges);
     }
+}
+
+//! NOTE: the timestamp ranges clearExpiredEvents() clears for these ticks, or nullopt when it clears everything
+std::optional<PlaybackContext::TimestampRanges> PlaybackModel::clearedTimestampRanges(const int tickFrom, const int tickTo) const
+{
+    const Measure* lastMeasure = m_score ? m_score->lastMeasure() : nullptr;
+    if (!lastMeasure || (tickFrom <= 0 && tickTo >= lastMeasure->endTick().ticks())) {
+        return std::nullopt;
+    }
+
+    PlaybackContext::TimestampRanges ranges;
+    for (const RepeatSegment* repeatSegment : repeatList()) {
+        const int tickPositionOffset = repeatSegment->utick - repeatSegment->tick;
+        const int repeatStartTick = repeatSegment->tick;
+        const int repeatEndTick = repeatSegment->endTick();
+
+        if (repeatStartTick > tickTo || repeatEndTick <= tickFrom) {
+            continue;
+        }
+
+        ranges.emplace_back(timestampFromTicks(m_score, std::max(tickFrom, repeatStartTick) + tickPositionOffset),
+                            timestampFromTicks(m_score, std::min(tickTo, repeatEndTick - 1) + tickPositionOffset));
+    }
+
+    return ranges;
 }
 
 void PlaybackModel::clearExpiredEvents(const int tickFrom, const int tickTo, const track_idx_t trackFrom, const track_idx_t trackTo,

@@ -57,4 +57,25 @@ private:
     std::map<utick_t, std::optional<AutomationPoint> > m_pointStates; // tick -> point to write next, or nullopt to erase
     std::optional<ChangedRange> m_changedRange;
 };
+
+//! NOTE: replaces the score's custom MIDI CC list (see AutomationData::customMidiCcs)
+class EditCustomMidiCcs : public UndoableCommand
+{
+    OBJECT_ALLOCATOR(engraving, EditCustomMidiCcs)
+
+public:
+    EditCustomMidiCcs(Score* score, ScoreAutomationController* controller, std::vector<uint8_t> controllers);
+
+    UNDO_TYPE(CommandType::EditCustomMidiCcs)
+    UNDO_NAME("EditCustomMidiCcs")
+    // Nothing to re-layout or re-render: it's only the list the MIDI CC menus show
+    UNDO_CHANGED_OBJECTS({})
+
+private:
+    void flip() override;
+
+    Score* m_score = nullptr;
+    ScoreAutomationController* m_controller = nullptr;
+    std::vector<uint8_t> m_controllers;
+};
 }

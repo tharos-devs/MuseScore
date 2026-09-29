@@ -26,6 +26,7 @@
 
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
+#include "context/iglobalcontext.h"
 #include "notation/inotationconfiguration.h"
 #include "engraving/automation/automationtypes.h"
 
@@ -43,13 +44,23 @@ class AutomationTypeMenuModel : public muse::uicomponents::AbstractMenuModel
     Q_OBJECT
     QML_ELEMENT;
 
+    Q_PROPERTY(QString currentTitle READ currentTitle NOTIFY currentTitleChanged)
+
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
+    muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
 public:
     Q_INVOKABLE void init();
 
+    //! NOTE: the name of the curve currently shown, e.g. "Tempo", "Expression" or "CC21"
+    QString currentTitle() const;
+
+signals:
+    void currentTitleChanged();
+
 private:
     void updateItems();
+    muse::uicomponents::MenuItem* makeMidiCcMenu();
     muse::uicomponents::MenuItem* makeAutomationTypeItem(mu::engraving::AutomationType type, const std::string& queryTypeParam,
                                                          const muse::TranslatableString& title);
 };

@@ -25,6 +25,8 @@
 #include "engraving/dom/masterscore.h"
 #include "engraving/editing/transaction/transaction.h"
 
+#include "global/containers.h"
+
 #include "translation.h"
 #include "log.h"
 
@@ -68,6 +70,30 @@ void NotationAutomation::editPoints(const AutomationCurveKey& key, AutomationPoi
     m_undoStack->transaction(muse::TranslatableString("undoableAction", "Edit automation points"),
                              [&](engraving::Transaction&) {
         m_masterScore->editAutomationPoints(key, edits);
+    });
+}
+
+std::vector<uint8_t> NotationAutomation::customMidiCcs() const
+{
+    const AutomationDataConstPtr data = automationData();
+    return data ? data->customMidiCcs() : std::vector<uint8_t>();
+}
+
+void NotationAutomation::addCustomMidiCc(uint8_t controller)
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    std::vector<uint8_t> controllers = customMidiCcs();
+    if (muse::contains(controllers, controller)) {
+        return;
+    }
+    controllers.push_back(controller);
+
+    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Add MIDI CC%1").arg(static_cast<int>(controller)),
+                             [&](engraving::Transaction&) {
+        m_masterScore->setCustomMidiCcs(controllers);
     });
 }
 

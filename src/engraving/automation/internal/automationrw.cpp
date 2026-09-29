@@ -35,6 +35,7 @@ static const std::unordered_map<AutomationType, muse::String> AUTOMATION_TYPE_TO
     { AutomationType::Tempo, u"Tempo" },
     { AutomationType::Volume, u"Volume" },
     { AutomationType::Pan, u"Pan" },
+    { AutomationType::MidiCC, u"MidiCC" },
 };
 
 static constexpr const char* TYPE_KEY = "type";
@@ -52,6 +53,11 @@ static constexpr const char* ITEM_ID_KEY = "itemId";
 static constexpr const char* GENERATED_KEY = "generated";
 static constexpr const char* TICK_KEY = "tick";
 static constexpr const char* POINTS_KEY = "points";
+static constexpr const char* CONTROLLER_KEY = "controller";
+static constexpr const char* CONTROLLERS_KEY = "controllers";
+
+//! NOTE: not a curve - holds the score's custom MIDI CC list (see AutomationData::customMidiCcs)
+static const muse::String CUSTOM_MIDI_CC_LIST_TYPE = u"MidiCCList";
 
 static const std::string IN_VALUE_KIND_FROM_PREVIOUS = "FromPrevious";
 
@@ -63,6 +69,18 @@ static AutomationCurveKey readKey(const muse::JsonObject& obj)
         InstrumentTrackId trackId;
         trackId.partId = muse::ID(obj.value(PART_ID_KEY).toString().toStdString());
         trackId.instrumentId = obj.value(INSTRUMENT_ID_KEY).toString();
+
+        if (type == AutomationType::MidiCC) {
+            const int controller = obj.contains(CONTROLLER_KEY) ? obj.value(CONTROLLER_KEY).toInt() : -1;
+            if (controller < 0 || controller > MAX_MIDI_CC) {
+                // Keeps the MidiCC type, so the caller can tell this invalid key apart from a real bug
+                AutomationCurveKey invalidKey;
+                invalidKey.type = AutomationType::MidiCC;
+                return invalidKey;
+            }
+            return AutomationCurveKey::midiCc(trackId, static_cast<uint8_t>(controller));
+        }
+
         return AutomationCurveKey::instrument(type, trackId);
     }
 
@@ -121,6 +139,9 @@ static void writeKey(const AutomationCurveKey& key, muse::JsonObject& obj)
     if (const std::optional<InstrumentTrackId> trackId = key.trackId()) {
         obj[PART_ID_KEY] = trackId->partId.toStdString();
         obj[INSTRUMENT_ID_KEY] = trackId->instrumentId;
+        if (key.type == AutomationType::MidiCC) {
+            obj[CONTROLLER_KEY] = static_cast<int>(key.controller);
+        }
         return;
     }
 
@@ -177,11 +198,29 @@ void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
     }
 
     AutomationCurveMap curves;
+    std::vector<uint8_t> customMidiCcs;
 
     const muse::JsonArray rootArray = doc.rootArray();
     for (size_t i = 0; i < rootArray.size(); ++i) {
         const muse::JsonObject curveObj = rootArray.at(i).toObject();
+
+        if (curveObj.value(TYPE_KEY).toString() == CUSTOM_MIDI_CC_LIST_TYPE) {
+            const muse::JsonArray controllers = curveObj.value(CONTROLLERS_KEY).toArray();
+            for (size_t j = 0; j < controllers.size(); ++j) {
+                const int controller = controllers.at(j).toInt();
+                if (controller >= 0 && controller <= MAX_MIDI_CC && !muse::contains(customMidiCcs, static_cast<uint8_t>(controller))) {
+                    customMidiCcs.push_back(static_cast<uint8_t>(controller));
+                }
+            }
+            continue;
+        }
+
         const AutomationCurveKey key = readKey(curveObj);
+        if (key.type == AutomationType::MidiCC && !key.isValid()) {
+            LOGW() << "Skipping MIDI CC automation curve with an invalid controller number";
+            continue;
+        }
+
         IF_ASSERT_FAILED(key.isValid()) {
             continue;
         }
@@ -202,6 +241,7 @@ void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
     }
 
     data.setCurves(curves);
+    data.setCustomMidiCcs(customMidiCcs);
 }
 
 muse::ByteArray AutomationRW::write(const AutomationData& data, bool writeGenerated)
@@ -232,6 +272,18 @@ muse::ByteArray AutomationRW::write(const AutomationData& data, bool writeGenera
             curveObj[POINTS_KEY] = pointArray;
             rootArray << curveObj;
         }
+    }
+
+    if (!data.customMidiCcs().empty()) {
+        muse::JsonArray controllers;
+        for (const uint8_t controller : data.customMidiCcs()) {
+            controllers << static_cast<int>(controller);
+        }
+
+        muse::JsonObject listObj;
+        listObj[TYPE_KEY] = CUSTOM_MIDI_CC_LIST_TYPE;
+        listObj[CONTROLLERS_KEY] = controllers;
+        rootArray << listObj;
     }
 
     return muse::JsonDocument(rootArray).toJson();

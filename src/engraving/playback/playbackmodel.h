@@ -120,6 +120,7 @@ private:
         std::map<muse::mpe::timestamp_t, muse::mpe::SoundPresetChangeEventList> soundPresets;
         std::map<muse::mpe::timestamp_t, muse::mpe::TextArticulationEventList> textArticulations;
         std::map<muse::mpe::timestamp_t, muse::mpe::SyllableEventList> syllables;
+        std::map<InstrumentTrackId, std::map<muse::mpe::timestamp_t, muse::mpe::ControllerChangeEventList> > midiControllers;
     };
 
     InstrumentTrackId idKey(const EngravingItem* item) const;
@@ -127,9 +128,11 @@ private:
     InstrumentTrackId idKey(const ID& partId, const String& instrumentId) const;
 
     void update(const int tickFrom, const int tickTo, const track_idx_t trackFrom, const track_idx_t trackTo,
-                ChangedTrackIdSet* trackChanges = nullptr);
+                ChangedTrackIdSet* trackChanges = nullptr,
+                const std::optional<PlaybackContext::TimestampRanges>& rerenderedRanges = std::nullopt);
     void updateSetupData();
-    void updateContext(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo);
+    void updateContext(const track_idx_t trackFrom, const track_idx_t trackTo, const int tickFrom, const int tickTo,
+                       const std::optional<PlaybackContext::TimestampRanges>& rerenderedRanges);
     void applyContextToTrackData(const InstrumentTrackId& trackId, const PartData& data);
     void updateEvents(const int tickFrom, const int tickTo, const track_idx_t trackFrom, const track_idx_t trackTo,
                       ChangedTrackIdSet* trackChanges = nullptr);
@@ -146,6 +149,7 @@ private:
     bool hasAutomationChange(const ScoreChanges& changes) const;
 
     void clearExpiredTracks();
+    std::optional<PlaybackContext::TimestampRanges> clearedTimestampRanges(const int tickFrom, const int tickTo) const;
     void clearExpiredEvents(const int tickFrom, const int tickTo, const track_idx_t trackFrom, const track_idx_t trackTo,
                             ChangedTrackIdSet* trackChanges = nullptr);
     void collectChangesTracks(const InstrumentTrackId& trackId, ChangedTrackIdSet* result);

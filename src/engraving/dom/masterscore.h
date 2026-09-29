@@ -108,6 +108,7 @@ public:
     AutomationDataConstPtr automationData() const override;
     void setAutomationData(AutomationDataPtr data);
     void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true) override;
+    void setCustomMidiCcs(const std::vector<uint8_t>& controllers) override;
 
     ArticulationMapDataConstPtr articulationMapData() const override;
     void setArticulationMapData(ArticulationMapDataPtr data);

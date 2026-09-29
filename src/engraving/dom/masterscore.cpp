@@ -161,6 +161,15 @@ void MasterScore::editAutomationPoints(const AutomationCurveKey& key, Automation
     }
 }
 
+void MasterScore::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
+{
+    if (m_automationController->customMidiCcs() == controllers) {
+        return;
+    }
+
+    undo(new EditCustomMidiCcs(this, m_automationController, controllers));
+}
+
 ArticulationMapDataConstPtr MasterScore::articulationMapData() const
 {
     return m_articulationMapData;

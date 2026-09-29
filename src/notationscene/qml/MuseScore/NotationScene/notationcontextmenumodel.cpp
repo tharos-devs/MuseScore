@@ -42,6 +42,8 @@
 
 #include "widgets/editstyleutils.h"
 
+#include "midiccautomation.h"
+
 using namespace mu::notation;
 using namespace mu::palette;
 using namespace mu::instrumentsscene;
@@ -59,6 +61,11 @@ void NotationContextMenuModel::loadItems(int elementType)
     if (automation && automation->isAutomationModeEnabled()) {
         items << makeSeparator()
               << makeMenu(TranslatableString::untranslatable("Automation type"), makeAutomationTypeItems());
+    }
+
+    if (isVstInstrumentStaff()) {
+        items << makeSeparator()
+              << makeMenu(TranslatableString::untranslatable("MIDI CC"), makeMidiCcItems(), "midi-cc");
     }
 
     const INotationNoteOffsetsPtr noteOffsets = this->noteOffsets();
@@ -491,6 +498,20 @@ bool NotationContextMenuModel::canSelectSimilar() const
 bool NotationContextMenuModel::canSelectSimilarInRange() const
 {
     return canSelectSimilar() && selection()->isRange();
+}
+
+bool NotationContextMenuModel::isVstInstrumentStaff() const
+{
+    const INotationInteraction::HitElementContext& ctx = hitElementContext();
+    return ctx.staff && midicc::isVstInstrument(globalContext()->currentProject(), ctx.staff->part());
+}
+
+MenuItemList NotationContextMenuModel::makeMidiCcItems()
+{
+    return midicc::makeMenuItems(
+        [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
+        [this]() { return makeSeparator(); },
+        notationConfiguration().get(), automation());
 }
 
 bool NotationContextMenuModel::isDrumsetStaff() const

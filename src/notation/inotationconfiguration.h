@@ -126,6 +126,11 @@ public:
     virtual void setCurrentAutomationType(mu::engraving::AutomationType type) = 0;
     virtual muse::async::Notification currentAutomationTypeChanged() const = 0;
 
+    //! NOTE: the MIDI CC shown when the current automation type is MidiCC
+    virtual int currentAutomationMidiCc() const = 0;
+    //! NOTE: makes MidiCC the current automation type, showing this controller - a single currentAutomationTypeChanged
+    virtual void setCurrentAutomationToMidiCc(int controller) = 0;
+
     virtual int mouseZoomPrecision() const = 0;
     virtual void setMouseZoomPrecision(int precision) = 0;
     virtual muse::async::Notification mouseZoomPrecisionChanged() const = 0;

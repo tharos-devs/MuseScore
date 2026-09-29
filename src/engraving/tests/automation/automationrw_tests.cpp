@@ -142,3 +142,64 @@ TEST_F(AutomationRW_Tests, RoundTrip_GlobalScope)
     EXPECT_FALSE(loadedKeyIt->first.trackId().has_value());
     EXPECT_FALSE(loadedKeyIt->first.staffId().has_value());
 }
+
+TEST_F(AutomationRW_Tests, RoundTrip_MidiCcScope)
+{
+    // [GIVEN] Two MIDI CC curves on the same instrument, differing only by controller number
+    AutomationData data;
+
+    InstrumentTrackId trackId;
+    trackId.partId = muse::ID(4);
+    trackId.instrumentId = u"instrument1";
+    const AutomationCurveKey modKey = AutomationCurveKey::midiCc(trackId, 1);
+    const AutomationCurveKey expressionKey = AutomationCurveKey::midiCc(trackId, 11);
+    EXPECT_NE(modKey, expressionKey);
+
+    AutomationCurveMap curves;
+    curves[modKey] = { { 0, customPoint(0.2, 0.2) }, { 480, customPoint(0.9, 0.9) } };
+    curves[expressionKey] = { { 240, customPoint(0.5, 0.5) } };
+    data.setCurves(curves);
+
+    // [WHEN] Serialized and deserialized
+    AutomationData loaded;
+    AutomationRW::read(loaded, AutomationRW::write(data, true /*writeGenerated*/));
+
+    // [THEN] Each controller keeps its own curve
+    ASSERT_EQ(loaded.curves().size(), 2u);
+    checkCurvesMatch(loaded.curve(modKey), data.curve(modKey));
+    checkCurvesMatch(loaded.curve(expressionKey), data.curve(expressionKey));
+
+    const auto loadedKeyIt = loaded.curves().find(expressionKey);
+    ASSERT_NE(loadedKeyIt, loaded.curves().end());
+    EXPECT_EQ(loadedKeyIt->first.type, AutomationType::MidiCC);
+    EXPECT_EQ(loadedKeyIt->first.controller, 11);
+}
+
+TEST_F(AutomationRW_Tests, RoundTrip_CustomMidiCcs)
+{
+    // [GIVEN] A custom MIDI CC list, with no curve at all
+    AutomationData data;
+    data.setCustomMidiCcs({ 21, 2, 74 });
+
+    // [WHEN] Serialized and deserialized
+    AutomationData loaded;
+    AutomationRW::read(loaded, AutomationRW::write(data, true /*writeGenerated*/));
+
+    // [THEN] The list keeps its order, and isn't read as a curve
+    EXPECT_EQ(loaded.customMidiCcs(), std::vector<uint8_t>({ 21, 2, 74 }));
+    EXPECT_TRUE(loaded.curves().empty());
+}
+
+TEST_F(AutomationRW_Tests, Read_InvalidMidiCcIsSkipped)
+{
+    // [GIVEN] A MIDI CC curve with an out-of-range controller number
+    const std::string json = R"([{"type":"MidiCC","partId":"4","instrumentId":"instrument1","controller":200,)"
+                             R"("points":[{"tick":0,"inValue":0.5,"outValue":0.5}]}])";
+
+    // [WHEN] Deserialized
+    AutomationData loaded;
+    AutomationRW::read(loaded, muse::ByteArray(json.c_str()));
+
+    // [THEN] The curve is dropped
+    EXPECT_TRUE(loaded.curves().empty());
+}

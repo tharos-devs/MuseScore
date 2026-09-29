@@ -22,7 +22,9 @@
 
 #include "playbackcontext.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "dom/chord.h"
 #include "dom/lyrics.h"
@@ -263,23 +265,166 @@ DynamicAutomationLayers PlaybackContext::dynamicLevelLayers(const track_idx_t tr
         if (curve != lastCurve) {
             lastLevelMap.clear();
             lastCurve = curve;
-            auto hint = lastLevelMap.end();
 
-            // AutomationCurve ticks are always in expanded utick space, regardless of the Play Repeats setting
-            const TempoTimeline& expandedTimeline = m_score->tempoTimeline(/*expandRepeats*/ true);
+            lastLevelMap = automationTimeCurve(*curve);
 
             if (curve->cbegin()->first > 0) {
                 AutomationPoint naturalPoint;
                 naturalPoint.value.outValue = real_t(NATURAL_DYNAMIC_LEVEL) / real_t(MAX_DYNAMIC_LEVEL);
-                hint = lastLevelMap.insert(hint, { expandedTimeline.utick2utime(0) * 1000000, naturalPoint.value });
-            }
-
-            for (const auto& [tick, point] : *curve) {
-                hint = lastLevelMap.insert(hint, { expandedTimeline.utick2utime(tick) * 1000000, point.value });
+                lastLevelMap.try_emplace(0, naturalPoint.value);
             }
         }
 
         result[static_cast<layer_idx_t>(trackIdx)] = lastLevelMap;
+    }
+
+    return result;
+}
+
+//! NOTE: with Play Repeats on, notes are timed on the expanded timeline, like the curve's own uticks. With it off,
+//! they're timed on the flattened one, each tick played once: a point then plays at its tick on the first pass
+//! through it (automation edits are mirrored to every pass, so later passes hold the same points)
+muse::mpe::AutomationCurve<timestamp_t> PlaybackContext::automationTimeCurve(const AutomationCurve& curve) const
+{
+    muse::mpe::AutomationCurve<timestamp_t> result;
+    if (!m_score || curve.empty()) {
+        return result;
+    }
+
+    if (m_score->masterScore()->expandRepeats()) {
+        const TempoTimeline& timeline = m_score->tempoTimeline(/*expandRepeats*/ true);
+        auto hint = result.end();
+        for (const auto& [utick, point] : curve) {
+            hint = result.insert(hint, { timeline.utick2utime(utick) * 1000000, point.value });
+        }
+        return result;
+    }
+
+    const RepeatList& repeatList = m_score->expandedRepeatList();
+    const TempoTimeline& flattenedTimeline = m_score->tempoTimeline(/*expandRepeats*/ false);
+
+    for (const auto& [utick, point] : curve) {
+        auto segmentIt = repeatList.findRepeatSegmentFromUTick(utick);
+        if (segmentIt == repeatList.cend()) {
+            if (repeatList.empty()) {
+                continue;
+            }
+            segmentIt = std::prev(repeatList.cend()); // e.g. a point right at the end of the score
+        }
+
+        const RepeatSegment* segment = *segmentIt;
+        const int tick = utick - (segment->utick - segment->tick);
+
+        const auto firstPassIt = std::find_if(repeatList.cbegin(), repeatList.cend(), [tick](const RepeatSegment* s) {
+            return tick >= s->tick && tick < s->endTick();
+        });
+        if (firstPassIt != repeatList.cend() && *firstPassIt != segment) {
+            continue;
+        }
+
+        result.insert_or_assign(flattenedTimeline.utick2utime(tick) * 1000000, point.value);
+    }
+
+    return result;
+}
+
+//! NOTE: a controller change is only emitted when the 0..127 MIDI value actually changes,
+//! sampling ramps every MIDI_CC_SAMPLE_INTERVAL_US at most (same sampling as muse::mpe::resampleCurve)
+std::map<timestamp_t, ControllerChangeEventList> PlaybackContext::midiControllerEvents(const InstrumentTrackId& trackId,
+                                                                                       const layer_idx_t layerIdx,
+                                                                                       const std::optional<TimestampRanges>& ranges) const
+{
+    TRACEFUNC;
+
+    constexpr timestamp_t MIDI_CC_SAMPLE_INTERVAL_US = 10000;
+
+    std::map<timestamp_t, ControllerChangeEventList> result;
+
+    const AutomationDataConstPtr automation = m_score ? m_score->automationData() : nullptr;
+    if (!automation) {
+        return result;
+    }
+
+    const auto overlapsRanges = [&ranges](timestamp_t from, timestamp_t to) {
+        if (!ranges) {
+            return true;
+        }
+        return std::any_of(ranges->cbegin(), ranges->cend(), [from, to](const auto& range) {
+            return from <= range.second && to >= range.first;
+        });
+    };
+
+    for (const auto& [key, curve] : automation->curves()) {
+        if (key.type != AutomationType::MidiCC || curve.empty()) {
+            continue;
+        }
+
+        const std::optional<InstrumentTrackId> keyTrackId = key.trackId();
+        if (!keyTrackId || !(*keyTrackId == trackId)) {
+            continue;
+        }
+
+        const muse::mpe::AutomationCurve<timestamp_t> timeCurve = automationTimeCurve(curve);
+        if (timeCurve.empty()) {
+            continue;
+        }
+
+        // Samples outside the ranges still update lastMidiValue on purpose: events there are kept from the previous
+        // render (not cleared), so their values really were sent - this renders exactly what a full render would
+        std::optional<int> lastMidiValue;
+        const auto addSample = [&](timestamp_t t, real_t normalized) {
+            const int midiValue = std::clamp(static_cast<int>(std::lround(normalized * 127.0)), 0, 127);
+            if (lastMidiValue == midiValue) {
+                return;
+            }
+            lastMidiValue = midiValue;
+
+            // The value held before the first point applies from the very start
+            const timestamp_t timestamp = t == timeCurve.cbegin()->first ? 0 : t;
+            if (!overlapsRanges(timestamp, timestamp)) {
+                return;
+            }
+
+            ControllerChangeEvent event;
+            event.type = ControllerChangeEvent::ControlChange;
+            event.controller = key.controller;
+            event.val = static_cast<float>(midiValue) / 127.f;
+            event.layerIdx = layerIdx;
+            result[timestamp].push_back(event);
+        };
+
+        for (auto it = timeCurve.cbegin(); it != timeCurve.cend(); ++it) {
+            const auto next = std::next(it);
+            const timestamp_t segmentFrom = it == timeCurve.cbegin() ? 0 : it->first;
+            const timestamp_t segmentTo = next != timeCurve.cend() ? next->first : std::numeric_limits<timestamp_t>::max();
+
+            if (!overlapsRanges(segmentFrom, segmentTo)) {
+                // Not sampled at all: the next sample can't be compared with what was sent before
+                lastMidiValue.reset();
+                continue;
+            }
+
+            addSample(it->first, it->second.outValue);
+
+            if (next == timeCurve.cend()) {
+                continue;
+            }
+
+            const real_t nextArrival = muse::mpe::resolveInValue(next->second, it->second.outValue);
+            const std::optional<muse::mpe::AutomationPoint::Ease> nextEase = muse::mpe::ease(next->second);
+            const bool isFlat = (!nextEase || nextEase->isNone()) && muse::RealIsEqual(nextArrival, it->second.outValue);
+            if (isFlat) {
+                continue;
+            }
+
+            const timestamp_t intervalDuration = next->first - it->first;
+            const size_t steps = std::max(size_t((intervalDuration + MIDI_CC_SAMPLE_INTERVAL_US - 1) / MIDI_CC_SAMPLE_INTERVAL_US),
+                                          size_t(1));
+            for (size_t j = 1; j < steps; ++j) {
+                const timestamp_t t = it->first + intervalDuration * static_cast<timestamp_t>(j) / static_cast<timestamp_t>(steps);
+                addSample(t, muse::mpe::evaluateAt(next->second, it->second.outValue, real_t(j) / real_t(steps)));
+            }
+        }
     }
 
     return result;
