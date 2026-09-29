@@ -35,8 +35,7 @@
 #include "async/asyncable.h"
 #include "audio/main/iplayback.h"
 #include "context/iglobalcontext.h"
-#include "global/iglobalconfiguration.h"
-#include "global/io/ifilesystem.h"
+#include "rcommand/icommanddispatcher.h"
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
@@ -69,8 +68,7 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
     muse::ContextInject<IPlaybackController> controller = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
-    muse::GlobalInject<muse::io::IFileSystem> fileSystem;
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 
 public:
     explicit MixerPanelModel(QObject* parent = nullptr);
@@ -245,7 +243,7 @@ private:
     project::AudioOutputParams effectiveMasterOutputParams() const;
 
     project::INotationProjectPtr currentProject() const;
-    void loadArticulationMapFile(MixerChannelItem* channelItem, const muse::io::path_t& path, bool isReload);
+    void dispatchArticulationMapCommand(const std::string& command, MixerChannelItem* channelItem);
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectVideoSettingsPtr videoSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;

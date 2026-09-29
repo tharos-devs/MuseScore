@@ -422,6 +422,11 @@ inline static const muse::rcommand::Command OPEN_TRANSPOSE_COMMAND("command://no
 inline static const muse::rcommand::Command OPEN_PARTS_COMMAND("command://notation/open-parts");
 inline static const muse::rcommand::Command OPEN_EDITGRIDSIZE_COMMAND("command://notation/open-editgridsize");
 inline static const muse::rcommand::Command OPEN_ARTICULATION_MAP_EDITOR_COMMAND("command://notation/open-articulation-map-editor");
+// an instrument's articulation map, params: partId, instrumentId (shared by the Mixer and the staff context menu)
+inline static const muse::rcommand::Command LOAD_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-load");
+inline static const muse::rcommand::Command EDIT_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-edit");
+inline static const muse::rcommand::Command RELOAD_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-reload");
+inline static const muse::rcommand::Command REMOVE_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-remove");
 inline static const muse::rcommand::Command OPEN_REALIZECHORDSYMBOLS_COMMAND("command://notation/open-realizechordsymbols");
 
 // style commands

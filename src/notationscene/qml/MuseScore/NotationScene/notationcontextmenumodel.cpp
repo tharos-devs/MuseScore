@@ -33,6 +33,10 @@
 #include "engraving/dom/staff.h"
 
 #include "notation/imasternotation.h"
+#include "notation/inotationarticulationmaps.h"
+#include "engraving/articulationmap/articulationmapdata.h"
+#include "engraving/dom/part.h"
+#include "engraving/dom/instrument.h"
 #include "notation/inotation.h"
 #include "notation/inotationselection.h"
 
@@ -65,9 +69,16 @@ void NotationContextMenuModel::loadItems(int elementType)
     }
 
     // In automation mode, MIDI CC is already right below "Automation type" above
-    if (isVstInstrumentStaff() && !(automation && automation->isAutomationModeEnabled())) {
+    const bool isVstStaff = isVstInstrumentStaff();
+    if (isVstStaff && !(automation && automation->isAutomationModeEnabled())) {
         items << makeSeparator()
               << makeMenu(TranslatableString::untranslatable("MIDI CC"), makeMidiCcItems(), "midi-cc");
+    }
+
+    // The articulation map of the staff's instrument at the clicked position, as in the Mixer (only VST instruments
+    // play it - checked on that very instrument: after an instrument change, it may not be the part's first one)
+    if (MenuItem* articulationMapMenu = makeArticulationMapMenu()) {
+        items << articulationMapMenu;
     }
 
     const INotationNoteOffsetsPtr noteOffsets = this->noteOffsets();
@@ -514,6 +525,64 @@ MenuItemList NotationContextMenuModel::makeMidiCcItems()
         [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
         notationConfiguration().get(), automation());
+}
+
+//! NOTE: same items as the Mixer's instrument channel menu, running the same commands for the instrument of the
+//! clicked staff at the clicked position (an instrument change makes it another track)
+MenuItem* NotationContextMenuModel::makeArticulationMapMenu()
+{
+    const INotationInteraction::HitElementContext& ctx = hitElementContext();
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    if (!ctx.staff || !ctx.staff->part() || !masterNotation) {
+        return nullptr;
+    }
+
+    const Fraction tick = ctx.element ? ctx.element->tick() : Fraction(0, 1);
+    const mu::engraving::Part* part = ctx.staff->part();
+    const mu::engraving::Instrument* instrument = part->instrument(tick);
+    const mu::engraving::InstrumentTrackId trackId { part->id(), instrument ? instrument->id() : part->instrumentId() };
+    if (!midicc::isVstTrack(globalContext()->currentProject(), trackId)) {
+        return nullptr;
+    }
+
+    const INotationArticulationMapsPtr maps = masterNotation->articulationMaps();
+    const ExpressionMap* map = maps && maps->data() ? maps->data()->map(trackId) : nullptr;
+    const bool hasMap = map != nullptr;
+
+    MenuItem* nameItem = new MenuItem(this);
+    nameItem->setId("articulation-map-name");
+    if (!hasMap) {
+        nameItem->setTitle(TranslatableString("playback", "No articulation map"));
+    } else if (map->name.empty()) {
+        nameItem->setTitle(TranslatableString("playback", "Untitled articulation map"));
+    } else {
+        nameItem->setTitle(TranslatableString::untranslatable(map->name));
+    }
+    nameItem->setEnabled(false);
+
+    const auto makeTrackItem = [this, &trackId](const rcommand::Command& command, bool enabled) {
+        rcommand::CommandQuery query(command);
+        query.addParam("partId", Val(std::to_string(trackId.partId.toUint64())));
+        query.addParam("instrumentId", Val(trackId.instrumentId.toStdString()));
+        MenuItem* item = makeMenuItem(query);
+        if (item) {
+            item->setEnabled(enabled);
+        }
+        return item;
+    };
+
+    MenuItemList items {
+        nameItem,
+        makeSeparator(),
+        makeTrackItem(LOAD_ARTICULATION_MAP_COMMAND, true),
+        makeTrackItem(EDIT_ARTICULATION_MAP_COMMAND, hasMap),
+        makeTrackItem(RELOAD_ARTICULATION_MAP_COMMAND, hasMap),
+        makeSeparator(),
+        makeTrackItem(REMOVE_ARTICULATION_MAP_COMMAND, hasMap),
+    };
+    items.removeAll(nullptr);
+
+    return makeMenu(TranslatableString("playback", "Articulation map"), items, "articulation-map");
 }
 
 bool NotationContextMenuModel::isDrumsetStaff() const
