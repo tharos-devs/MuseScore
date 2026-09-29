@@ -136,20 +136,26 @@ MixerPanelSection {
                 })
 
                 items.push({})
-                items.push({ id: "loadArticulationMap", title: qsTrc("playback", "Load articulation map…") })
-                if (root.model.hasArticulationMap(content.channelItem)) {
-                    let mapName = root.model.articulationMapName(content.channelItem)
-                    items.push({
-                        id: "reloadArticulationMap",
-                        title: mapName.length > 0 ? qsTrc("playback", "Reload articulation map (%1)").arg(mapName)
-                                                  : qsTrc("playback", "Reload articulation map")
-                    })
-                    items.push({
-                        id: "removeArticulationMap",
-                        title: mapName.length > 0 ? qsTrc("playback", "Remove articulation map (%1)").arg(mapName)
-                                                  : qsTrc("playback", "Remove articulation map")
-                    })
-                }
+                let hasMap = root.model.hasArticulationMap(content.channelItem)
+                let mapName = hasMap ? root.model.articulationMapName(content.channelItem) : ""
+                items.push({
+                    id: "articulationMapMenu",
+                    title: qsTrc("playback", "Articulation map"),
+                    subitems: [
+                        {
+                            id: "articulationMapName",
+                            title: hasMap ? (mapName.length > 0 ? mapName : qsTrc("playback", "Untitled articulation map"))
+                                          : qsTrc("playback", "No articulation map"),
+                            enabled: false
+                        },
+                        {},
+                        { id: "loadArticulationMap", title: qsTrc("playback", "Load…") },
+                        { id: "editArticulationMap", title: qsTrc("playback", "Edit…"), enabled: hasMap },
+                        { id: "reloadArticulationMap", title: qsTrc("playback", "Reload"), enabled: hasMap },
+                        {},
+                        { id: "removeArticulationMap", title: qsTrc("playback", "Remove"), enabled: hasMap }
+                    ]
+                })
             }
 
             return items
@@ -487,6 +493,8 @@ MixerPanelSection {
                     root.model.addGroupChannelForSelectedTracks()
                 } else if (itemId === "loadArticulationMap") {
                     root.model.loadArticulationMap(content.channelItem)
+                } else if (itemId === "editArticulationMap") {
+                    root.model.editArticulationMap(content.channelItem)
                 } else if (itemId === "reloadArticulationMap") {
                     root.model.reloadArticulationMap(content.channelItem)
                 } else if (itemId === "removeArticulationMap") {

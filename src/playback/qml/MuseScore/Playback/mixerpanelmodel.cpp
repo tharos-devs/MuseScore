@@ -2239,6 +2239,35 @@ void MixerPanelModel::loadArticulationMapFile(MixerChannelItem* channelItem, con
                : muse::TranslatableString("undoableAction", "Load articulation map"));
 }
 
+void MixerPanelModel::editArticulationMap(MixerChannelItem* channelItem)
+{
+    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
+    if (!channelItem || !maps || !maps->data()) {
+        return;
+    }
+
+    const notation::ExpressionMap* map = maps->data()->map(channelItem->instrumentTrackId());
+    if (!map) {
+        return;
+    }
+
+    //! NOTE: edit the file the map was loaded from; without it (e.g. a score from another
+    //! computer), start from the copy stored in the score
+    muse::UriQuery uri("musescore://notation/articulationmapeditor");
+    if (!map->sourcePath.empty() && fileSystem()->exists(map->sourcePath)) {
+        uri.addParam("mapFilePath", muse::Val(map->sourcePath.toStdString()));
+    } else {
+        uri.addParam("mapText", muse::Val(map->sourceText.toStdString()));
+    }
+
+    // lets the editor reload the map into this track
+    const engraving::InstrumentTrackId& trackId = channelItem->instrumentTrackId();
+    uri.addParam("partId", muse::Val(std::to_string(trackId.partId.toUint64())));
+    uri.addParam("instrumentId", muse::Val(trackId.instrumentId.toStdString()));
+
+    interactive()->open(uri);
+}
+
 void MixerPanelModel::removeArticulationMap(MixerChannelItem* channelItem)
 {
     const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());

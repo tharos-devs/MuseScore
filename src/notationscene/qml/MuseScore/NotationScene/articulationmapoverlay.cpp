@@ -42,6 +42,8 @@ constexpr static qreal ARTMAP_MIN_FONT_PX = 9.0;
 constexpr static qreal ARTMAP_MAX_FONT_PX = 13.0;
 constexpr static qreal ARTMAP_LINE_WIDTH_PX = 2.0;
 constexpr static int ARTMAP_HOVERED_CHIP_ALPHA = 60;
+constexpr static qreal ARTMAP_TARGET_MARKER_SIZE_PX = 5.0;
+static const QColor ARTMAP_TARGET_MARKER_COLOR(90, 90, 90);
 
 static QColor artMapTextColorFor(const QColor& fill)
 {
@@ -63,6 +65,55 @@ void ArticulationMapOverlay::setContent(const QVector<ChipData>& chips, const QV
     m_lines = lines;
     m_hoveredChip = -1;
     update();
+}
+
+void ArticulationMapOverlay::setChordPositions(const QVector<qreal>& chordXNs)
+{
+    m_chordXNs = chordXNs;
+    m_hoverTargetXN = -1.0;
+    update();
+}
+
+void ArticulationMapOverlay::setPinnedTargetX(qreal xN)
+{
+    if (m_pinnedTargetXN == xN) {
+        return;
+    }
+
+    m_pinnedTargetXN = xN;
+    update();
+}
+
+//! NOTE: the same choice as the controller's click handling: a chip's own chord, else the nearest one
+qreal ArticulationMapOverlay::targetChordXN(const QPointF& posPx, int hitChip) const
+{
+    if (hitChip >= 0 && hitChip < m_chips.size()) {
+        return m_chips.at(hitChip).chordXN;
+    }
+
+    const qreal posXN = posPx.x() / std::max(1.0, width());
+    qreal best = -1.0;
+    for (const qreal xN : m_chordXNs) {
+        if (best < 0.0 || std::abs(xN - posXN) < std::abs(best - posXN)) {
+            best = xN;
+        }
+    }
+
+    return best;
+}
+
+void ArticulationMapOverlay::drawTargetMarker(QPainter* painter, qreal xN) const
+{
+    const qreal x = xN * width();
+
+    painter->setPen(QPen(ARTMAP_TARGET_MARKER_COLOR, 1.0, Qt::DashLine));
+    painter->drawLine(QPointF(x, 0), QPointF(x, height()));
+
+    const qreal s = ARTMAP_TARGET_MARKER_SIZE_PX;
+    const QPointF triangle[3] = { QPointF(x - s, 0), QPointF(x + s, 0), QPointF(x, s) };
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(ARTMAP_TARGET_MARKER_COLOR);
+    painter->drawPolygon(triangle, 3);
 }
 
 const QVector<ArticulationMapOverlay::ChipData>& ArticulationMapOverlay::chips() const
@@ -190,6 +241,12 @@ void ArticulationMapOverlay::paint(QPainter* painter)
     if (m_hoveredChip >= 0 && m_hoveredChip < m_chips.size()) {
         drawChip(m_hoveredChip);
     }
+
+    // Where a click would place the articulation (hidden while dragging a chip)
+    const qreal targetXN = m_pinnedTargetXN >= 0.0 ? m_pinnedTargetXN : m_hoverTargetXN;
+    if (targetXN >= 0.0 && !isDragging()) {
+        drawTargetMarker(painter, targetXN);
+    }
 }
 
 int ArticulationMapOverlay::hitTestPx(const QPointF& posPx) const
@@ -210,8 +267,10 @@ int ArticulationMapOverlay::hitTestPx(const QPointF& posPx) const
 void ArticulationMapOverlay::hoverMoveEvent(QHoverEvent* e)
 {
     const int hit = hitTestPx(e->position());
-    if (hit != m_hoveredChip) {
+    const qreal targetXN = targetChordXN(e->position(), hit);
+    if (hit != m_hoveredChip || targetXN != m_hoverTargetXN) {
         m_hoveredChip = hit;
+        m_hoverTargetXN = targetXN;
         update();
     }
 
@@ -225,8 +284,9 @@ void ArticulationMapOverlay::hoverMoveEvent(QHoverEvent* e)
 void ArticulationMapOverlay::hoverLeaveEvent(QHoverEvent*)
 {
     m_hoveringChip = false;
-    if (m_hoveredChip != -1) {
+    if (m_hoveredChip != -1 || m_hoverTargetXN >= 0.0) {
         m_hoveredChip = -1;
+        m_hoverTargetXN = -1.0;
         update();
     }
     unsetCursor();

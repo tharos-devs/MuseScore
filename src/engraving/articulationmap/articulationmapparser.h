@@ -37,6 +37,8 @@ namespace mu::engraving {
 //!     cc32=10   Pizzicato = pizzicato  ks=-30ms delay=-60ms color=#D03B3B
 //!     C0D1cc3=64 Legato > Fast     chained messages; '>' nests submenus
 //!     C#0       Staccatissimo      without '=', a name matching a score articulation is its own alias
+//!     -E0       Tremolo            '-' disables an articulation: kept, but never offered nor sent
+//!     @folder   Legato > Slow      a (sub)folder with no articulation yet
 //!
 //! Messages: note names (C0, F#-1, Bb2, optional velocity: C0v80), raw notes (n24),
 //! controllers (cc32=10) and program changes (pc3)
@@ -48,12 +50,27 @@ public:
         muse::String message;
     };
 
+    //! NOTE: an "@folder" line, only needed for a folder with no articulation (the others are
+    //! implied by the articulation labels)
+    struct Folder {
+        muse::String path; // e.g. "Legato > Fast"
+        size_t entryIndex = 0; // how many entries precede it in the file
+    };
+
     struct Result {
         ExpressionMap map;
+        int middleCOctave = DEFAULT_MIDDLE_C_OCTAVE;
+        std::vector<Folder> folders;
         std::vector<Error> errors;
     };
 
+    static constexpr int DEFAULT_MIDDLE_C_OCTAVE = 3; // C3 = 60, as in Kontakt, Cubase, Synchron Player...
+    static constexpr uint8_t DEFAULT_KEYSWITCH_VELOCITY = 100;
+
     static Result parse(const muse::String& text);
+
+    //! NOTE: the score articulations an entry is selected by when its line has no "= ..." list
+    static std::vector<muse::mpe::ArticulationType> implicitAliases(const muse::String& label);
 
     //! NOTE: exposed for testing
     static bool parseMessages(const muse::String& code, int middleCOctave, std::vector<muse::mpe::MidiMessage>& messages);

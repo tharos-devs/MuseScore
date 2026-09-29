@@ -22,6 +22,7 @@
 
 #include "notationarticulationmapcontroller.h"
 
+#include "articulationmapcolors.h"
 #include "articulationmapoverlay.h"
 
 #include <algorithm>
@@ -30,6 +31,7 @@
 
 #include <QActionGroup>
 #include <QMenu>
+#include <QPointer>
 
 #include "async/async.h"
 #include "global/containers.h"
@@ -60,20 +62,8 @@ constexpr static double ARTMAP_LANE_TOP_GAP_SP = 1.2; // below the staff's bound
 constexpr static double ARTMAP_LANE_HEIGHT_SP = 2.4;
 constexpr static double ARTMAP_SNAP_DISTANCE_PX = 5.0;
 
-//! NOTE: saturated, dark enough for white text on top and colored text on a light lane
 static QColor artMapEntryColor(const ExpressionMap& map, const muse::String& entryId)
 {
-    static const std::vector<QColor> PALETTE {
-        QColor(0x1F, 0x6F, 0xC5), // blue
-        QColor(0xD0, 0x3B, 0x3B), // red
-        QColor(0x2E, 0x8B, 0x3E), // green
-        QColor(0x8A, 0x4F, 0xC7), // purple
-        QColor(0xD9, 0x6C, 0x06), // orange
-        QColor(0x0E, 0x8C, 0x96), // teal
-        QColor(0xB0, 0x3A, 0x8E), // magenta
-        QColor(0x7A, 0x5A, 0x2E), // brown
-    };
-
     size_t index = 0;
     for (; index < map.entries.size(); ++index) {
         if (map.entries[index].id == entryId) {
@@ -86,7 +76,7 @@ static QColor artMapEntryColor(const ExpressionMap& map, const muse::String& ent
         return QColor::fromRgb(*map.entries[index].color);
     }
 
-    return PALETTE[index % PALETTE.size()];
+    return artMapPaletteColor(index);
 }
 
 static QString artMapLeafName(const muse::String& entryId)
@@ -365,6 +355,13 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     }
 
     overlay->setContent(chips, lines);
+
+    QVector<qreal> chordXNs;
+    for (const ChordEntry& chordEntry : data.chords) {
+        chordXNs << toN(chordEntry.canvasX);
+    }
+    overlay->setChordPositions(chordXNs);
+
     data.overlay = overlay;
     newOverlays[key] = std::move(data);
 }
@@ -458,6 +455,10 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
     std::map<QString, QMenu*> submenus;
 
     for (const ExpressionMapEntry& mapEntry : map->entries) {
+        if (mapEntry.disabled) {
+            continue;
+        }
+
         QMenu* parentMenu = &menu;
         const QStringList path = mapEntry.id.toQString().split('>');
         QString pathSoFar;
@@ -516,7 +517,17 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
         hint->setEnabled(false);
     }
 
+    // Keep showing which note the choice applies to while the menu is open (the choice may rebuild the lane)
+    QPointer<ArticulationMapOverlay> overlay = data.overlay;
+    if (overlay) {
+        overlay->setPinnedTargetX((entry.canvasX - data.bandRect.x()) / std::max(1.0, data.bandRect.width()));
+    }
+
     menu.exec(globalPos.toPoint());
+
+    if (overlay) {
+        overlay->setPinnedTargetX(-1.0);
+    }
 }
 
 std::vector<Chord*> NotationArticulationMapController::targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const

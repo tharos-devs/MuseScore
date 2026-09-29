@@ -33,9 +33,6 @@
 using namespace mu::engraving;
 using namespace muse;
 
-static constexpr int DEFAULT_MIDDLE_C_OCTAVE = 3; // C3 = 60, as in Kontakt, Cubase, Synchron Player...
-static constexpr uint8_t DEFAULT_KEYSWITCH_VELOCITY = 100;
-
 static std::string trimmed(const std::string& str)
 {
     const size_t first = str.find_first_not_of(" \t\r");
@@ -159,7 +156,7 @@ static bool isMidiValue(int value)
 
 static bool readOptionalVelocity(const std::string& code, size_t& pos, uint8_t& velocity)
 {
-    velocity = DEFAULT_KEYSWITCH_VELOCITY;
+    velocity = ArticulationMapParser::DEFAULT_KEYSWITCH_VELOCITY;
 
     if (pos >= code.size() || code[pos] != 'v') {
         return true;
@@ -173,6 +170,38 @@ static bool readOptionalVelocity(const std::string& code, size_t& pos, uint8_t& 
 
     velocity = static_cast<uint8_t>(value);
     return true;
+}
+
+//! NOTE: "a >b>  c" -> "a > b > c", empty segments dropped
+static String joinedLabel(const std::string& str)
+{
+    std::string label;
+    for (const std::string& segment : split(str, '>')) {
+        const std::string s = trimmed(segment);
+        if (s.empty()) {
+            continue;
+        }
+        label += (label.empty() ? "" : " > ") + s;
+    }
+
+    return String::fromStdString(label);
+}
+
+std::vector<mpe::ArticulationType> ArticulationMapParser::implicitAliases(const String& labelStr)
+{
+    //! NOTE: an articulation named like a score articulation (e.g. "Staccatissimo",
+    //! "Strings > Pizzicato") is selected by it automatically
+    const std::string label = labelStr.toStdString();
+    const size_t leafPos = label.rfind('>');
+    std::string leaf = trimmed(leafPos == std::string::npos ? label : label.substr(leafPos + 1));
+    leaf.erase(std::remove(leaf.begin(), leaf.end(), ' '), leaf.end());
+
+    const std::optional<mpe::ArticulationType> type = articulationTypeFromName(leaf);
+    if (type && *type != mpe::ArticulationType::Standard && *type != mpe::ArticulationType::Undefined) {
+        return { *type };
+    }
+
+    return {};
 }
 
 bool ArticulationMapParser::parseMessages(const String& codeStr, int middleCOctave, std::vector<mpe::MidiMessage>& messages)
@@ -263,7 +292,7 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
     ExpressionMap& map = result.map;
     map.sourceText = text;
 
-    int middleCOctave = DEFAULT_MIDDLE_C_OCTAVE;
+    int& middleCOctave = result.middleCOctave;
     const std::vector<std::string> lines = split(text.toStdString(), '\n');
 
     auto addError = [&result](size_t lineIdx, const std::string& message) {
@@ -301,6 +330,13 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
                 } else {
                     middleCOctave = octave;
                 }
+            } else if (directive == "folder") {
+                const String path = joinedLabel(rest);
+                if (path.empty()) {
+                    addError(lineIdx, "@folder expects a folder name, e.g. Legato > Fast");
+                } else {
+                    result.folders.push_back({ path, map.entries.size() });
+                }
             } else if (directive == "offset") {
                 if (!parseMs(rest, map.keyswitchOffsetMs)) {
                     addError(lineIdx, "@offset expects a duration in ms, e.g. -15ms");
@@ -312,12 +348,15 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
             continue;
         }
 
-        const bool isDefault = first.front() == '*';
-        if (isDefault) {
+        bool isDefault = false;
+        bool isDisabled = false;
+        while (!first.empty() && (first.front() == '*' || first.front() == '-')) {
+            (first.front() == '*' ? isDefault : isDisabled) = true;
             first.erase(0, 1);
         }
 
         ExpressionMapEntry entry;
+        entry.disabled = isDisabled;
 
         if (!parseMessages(String::fromStdString(first), middleCOctave, entry.messages)) {
             addError(lineIdx, "invalid MIDI code \"" + first + "\"");
@@ -359,14 +398,7 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
         const size_t aliasPos = remaining.find('=');
         const std::string labelPart = aliasPos == std::string::npos ? remaining : remaining.substr(0, aliasPos);
 
-        std::string label;
-        for (const std::string& segment : split(labelPart, '>')) {
-            const std::string s = trimmed(segment);
-            if (s.empty()) {
-                continue;
-            }
-            label += (label.empty() ? "" : " > ") + s;
-        }
+        const std::string label = joinedLabel(labelPart).toStdString();
 
         if (label.empty()) {
             addError(lineIdx, "missing articulation name after \"" + first + "\"");
@@ -375,22 +407,16 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
 
         entry.id = String::fromStdString(label);
 
-        if (map.entry(entry.id)) {
+        const bool isDuplicate = std::any_of(map.entries.cbegin(), map.entries.cend(), [&entry](const ExpressionMapEntry& e) {
+            return e.id == entry.id;
+        });
+        if (isDuplicate) {
             addError(lineIdx, "duplicate articulation \"" + label + "\"");
             continue;
         }
 
         if (aliasPos == std::string::npos) {
-            //! NOTE: without an explicit alias list, an articulation named like a score articulation
-            //! (e.g. "Staccatissimo", "Strings > Pizzicato") is selected by it automatically
-            const size_t leafPos = label.rfind('>');
-            std::string leaf = trimmed(leafPos == std::string::npos ? label : label.substr(leafPos + 1));
-            leaf.erase(std::remove(leaf.begin(), leaf.end(), ' '), leaf.end());
-
-            const std::optional<mpe::ArticulationType> type = articulationTypeFromName(leaf);
-            if (type && *type != mpe::ArticulationType::Standard && *type != mpe::ArticulationType::Undefined) {
-                entry.aliases.push_back(*type);
-            }
+            entry.aliases = implicitAliases(entry.id);
         } else {
             for (const std::string& aliasName : split(remaining.substr(aliasPos + 1), ',')) {
                 const std::string alias = trimmed(aliasName);

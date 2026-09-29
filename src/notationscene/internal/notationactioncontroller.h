@@ -220,6 +220,7 @@ private:
     void openBreaksDialog();
     void openTransposeDialog();
     void openPartsDialog();
+    void openArticulationMapEditor();
     void openTupletOtherDialog();
     void openStaffTextPropertiesDialog();
     void openMeasurePropertiesDialog();

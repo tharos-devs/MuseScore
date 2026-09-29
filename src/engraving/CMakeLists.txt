@@ -384,6 +384,8 @@ target_sources(engraving PRIVATE
     articulationmap/articulationmaptypes_fwd.h
     articulationmap/articulationmapparser.cpp
     articulationmap/articulationmapparser.h
+    articulationmap/articulationmapwriter.cpp
+    articulationmap/articulationmapwriter.h
     articulationmap/articulationmapdata.cpp
     articulationmap/articulationmapdata.h
     articulationmap/internal/articulationmaprw.cpp

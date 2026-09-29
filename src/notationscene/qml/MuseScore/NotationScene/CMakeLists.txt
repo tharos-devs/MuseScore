@@ -102,6 +102,9 @@ qt_add_qml_module(notationscene_qml
         notevelocitygeometry.h
         notevelocityoverlay.cpp
         notevelocityoverlay.h
+        articulationmapcolors.h
+        articulationmapeditormodel.cpp
+        articulationmapeditormodel.h
         articulationmapoverlay.cpp
         articulationmapoverlay.h
         notationarticulationmapcontroller.cpp
@@ -186,6 +189,7 @@ qt_add_qml_module(notationscene_qml
 
     QML_FILES
         AbstractElementPopup.qml
+        ArticulationMapEditorDialog.qml
         ConcertPitchControl.qml
         EditGridSizeDialog.qml
         EditPercussionShortcutDialog.qml

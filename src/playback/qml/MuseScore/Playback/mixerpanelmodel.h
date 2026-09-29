@@ -146,6 +146,7 @@ public:
     Q_INVOKABLE void loadArticulationMap(mu::playback::MixerChannelItem* channelItem);
     Q_INVOKABLE void reloadArticulationMap(mu::playback::MixerChannelItem* channelItem);
     Q_INVOKABLE void removeArticulationMap(mu::playback::MixerChannelItem* channelItem);
+    Q_INVOKABLE void editArticulationMap(mu::playback::MixerChannelItem* channelItem);
 
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;

@@ -525,6 +525,7 @@ void NotationActionController::init()
     registerCommand(OPEN_TRANSPOSE_COMMAND, &Controller::openTransposeDialog);
     registerCommand(OPEN_PARTS_COMMAND, &Controller::openPartsDialog);
     registerCommand(OPEN_EDITGRIDSIZE_COMMAND, &Controller::openEditGridSizeDialog);
+    registerCommand(OPEN_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::openArticulationMapEditor);
     registerCommand(OPEN_REALIZECHORDSYMBOLS_COMMAND, &Controller::openRealizeChordSymbolsDialog);
 
     // style commands
@@ -2816,6 +2817,11 @@ void NotationActionController::openTransposeDialog()
 void NotationActionController::openPartsDialog()
 {
     interactive()->open("musescore://notation/parts");
+}
+
+void NotationActionController::openArticulationMapEditor()
+{
+    interactive()->open("musescore://notation/articulationmapeditor");
 }
 
 muse::io::path_t NotationActionController::selectStyleFile(bool forLoad)
