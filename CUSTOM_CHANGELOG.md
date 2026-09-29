@@ -59,6 +59,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed MuseScore hanging on quit (the score closed, leaving an empty frozen window that had to be force-quit) after a VST3 plugin's editor had been opened, even once closed — e.g. Kontakt: plugins are now unloaded properly at shutdown (2026-09-29).
+- Fixed removed audio tracks (deleted instruments, changed sounds, closed projects) never releasing their VST instrument, effects and loaded samples until MuseScore quit (2026-09-29).
 - Fixed automation curves with a repeat: points drawn after the repeat actually went into its second pass (so nothing was played after the repeat), and editing a repeated bar moved a point shown in another bar (2026-09-29).
 - Fixed automation curves (dynamics, and MIDI CC) playing at the wrong time after a repeat when Play Repeats is off (2026-09-29).
 - Fixed automation curves in Page view drawing a point near a line break on the neighboring line too, where it could be dragged by mistake (2026-09-29).
