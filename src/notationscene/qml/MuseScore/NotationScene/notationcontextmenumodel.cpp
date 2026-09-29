@@ -60,10 +60,12 @@ void NotationContextMenuModel::loadItems(int elementType)
     const INotationAutomationPtr automation = this->automation();
     if (automation && automation->isAutomationModeEnabled()) {
         items << makeSeparator()
-              << makeMenu(TranslatableString::untranslatable("Automation type"), makeAutomationTypeItems());
+              << makeMenu(TranslatableString::untranslatable("Automation type"), makeAutomationTypeItems())
+              << makeMidiCcMenu();
     }
 
-    if (isVstInstrumentStaff()) {
+    // In automation mode, MIDI CC is already right below "Automation type" above
+    if (isVstInstrumentStaff() && !(automation && automation->isAutomationModeEnabled())) {
         items << makeSeparator()
               << makeMenu(TranslatableString::untranslatable("MIDI CC"), makeMidiCcItems(), "midi-cc");
     }
@@ -533,6 +535,19 @@ MenuItemList NotationContextMenuModel::makeAutomationTypeItems()
         makeAutomationTypeItem(AutomationType::Volume, "volume", TranslatableString::untranslatable("Volume")),
         makeAutomationTypeItem(AutomationType::Pan, "pan", TranslatableString::untranslatable("Pan")),
     };
+}
+
+//! NOTE: same as the toolbar's Automation dropdown: MIDI CCs only reach VST instruments
+MenuItem* NotationContextMenuModel::makeMidiCcMenu()
+{
+    return midicc::makeMenu(
+        [this](const TranslatableString& title, const MenuItemList& items, const QString& id, bool enabled) {
+        return makeMenu(title, items, id, enabled);
+    },
+        [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
+        [this]() { return makeSeparator(); },
+        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(),
+        "automation-midi-cc");
 }
 
 MenuItem* NotationContextMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,

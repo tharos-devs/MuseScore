@@ -79,6 +79,7 @@ private:
     bool canSelectSimilar() const;
     bool isVstInstrumentStaff() const;
     muse::uicomponents::MenuItemList makeMidiCcItems();
+    muse::uicomponents::MenuItem* makeMidiCcMenu();
     bool isDrumsetStaff() const;
 
     INotationInteractionPtr interaction() const;

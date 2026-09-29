@@ -33,6 +33,7 @@
 
 #include "notation/inotationautomation.h"
 #include "notation/inotationconfiguration.h"
+#include "notation/imasternotation.h"
 #include "notationscene/notationcommands.h"
 
 #include "engraving/dom/part.h"
@@ -194,5 +195,26 @@ inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& make
     }
 
     return items;
+}
+
+using MakeMenuFn = std::function<muse::uicomponents::MenuItem* (const muse::TranslatableString&, const muse::uicomponents::MenuItemList&,
+                                                                const QString& /*menuId*/, bool /*enabled*/)>;
+
+//! NOTE: the "MIDI CC" submenu itself (see makeMenuItems()): greyed out without any VST instrument in the score,
+//! checked while a MIDI CC curve is shown
+inline muse::uicomponents::MenuItem* makeMenu(const MakeMenuFn& makeMenu, const MakeMenuItemFn& makeMenuItem,
+                                              const MakeSeparatorFn& makeSeparator, const INotationConfiguration* configuration,
+                                              const IMasterNotationPtr& masterNotation, const project::INotationProjectPtr& project,
+                                              const QString& menuId)
+{
+    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
+    const muse::uicomponents::MenuItemList items = makeMenuItems(makeMenuItem, makeSeparator, configuration, automation);
+
+    const bool enabled = masterNotation && hasVstInstrument(project, masterNotation->masterScore());
+    muse::uicomponents::MenuItem* menu = makeMenu(muse::TranslatableString::untranslatable("MIDI CC"), items, menuId, enabled);
+    if (menu) {
+        menu->setChecked(configuration->currentAutomationType() == AutomationType::MidiCC);
+    }
+    return menu;
 }
 }

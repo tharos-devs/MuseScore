@@ -353,6 +353,24 @@ static bool isStructuralChange(const mu::engraving::ScoreChanges& changes)
     return false;
 }
 
+//! NOTE: the curves whose segments can be bent - their playback honors the bend (Volume/Pan: the engine evaluates
+//! the envelope, Tempo: TempoTimeline resamples ramps with it). Not Dynamics yet
+static bool isBendable(AutomationType type)
+{
+    switch (type) {
+    case AutomationType::MidiCC:
+    case AutomationType::Volume:
+    case AutomationType::Pan:
+    case AutomationType::Tempo:
+        return true;
+    case AutomationType::Dynamics:
+    case AutomationType::Unknown:
+        break;
+    }
+
+    return false;
+}
+
 // Also the reference the area under the line is filled from - MIDI CCs keep 0, so it's always filled from the bottom
 static qreal defaultValueFor(AutomationType type)
 {
@@ -484,7 +502,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         pointsForPolyline.emplace_back(pointData.qPointF);
     }
     polyline->setPoints(pointsForPolyline);
-    applyLockedPoints(polyline, key);
+    applyPointFlags(polyline, key);
     applyPolylineStyle(polyline, key);
     polyline->setVisible(false);
 
@@ -572,6 +590,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         QVector<QPointF> points = polyline->points();
         points.insert(insertIdx, { x, y });
         polyline->setPoints(points);
+        applyPointFlags(polyline, key);
         applyPolylineColorsUnderLine(polyline, key);
     });
 
@@ -585,6 +604,14 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
             return;
         }
         requestRemovePoint(pointsDataIt->second.at(pointIdx), key);
+    });
+
+    // Previewed by PolylinePlot itself while dragging, committed on release
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::segmentBendMoved,
+                     [this, key](int segmentIdx, qreal value, bool completed) {
+        if (completed) {
+            requestSegmentBend(key, segmentIdx, value);
+        }
     });
 
     return polyline;
@@ -609,8 +636,8 @@ const
 
     // Neighbors outside the system can't be placed via their own segment: it belongs to another system
     // (in Page view, typically the next line, back on the left of the page). They're only needed for the
-    // line to enter/leave the system with the right slope, so they're laid out by extrapolating this system's
-    // tick-to-x ratio past its edges...
+    // line to enter/leave the system with the right slope (or bend), so they're laid out by extrapolating this
+    // system's tick-to-x ratio past its edges...
     const Measure* firstMeasure = system->firstMeasure();
     const Segment* firstSeg = firstMeasure ? firstMeasure->first(mu::engraving::SegmentType::Duration) : nullptr;
     const Segment* lastSeg = lastSegmentOfSystem(system);
@@ -688,31 +715,13 @@ const
         }
     }
 
-    // ...and then moved along that same straight line, far enough past the edges that PolylinePlot neither
-    // shows nor lets anyone drag them (it still shows points slightly past its edges, clamped onto them)
-    constexpr double OUTSIDE_POINT_OFFSET = 0.5;
-
-    const auto yOnLine = [](const QPointF& from, const QPointF& to, double x) {
-        if (muse::RealIsEqual(from.x(), to.x())) {
-            return from.y();
-        }
-        return from.y() + (to.y() - from.y()) * (x - from.x()) / (to.x() - from.x());
-    };
-
+    // ...and marked outside, for PolylinePlot to hide them
     if (leftOutside) {
-        const std::optional<QPointF> next = !points.isEmpty() ? std::optional(points.front().qPointF)
-                                            : rightOutside ? std::optional(rightOutside->point) : std::nullopt;
-        const double x = -OUTSIDE_POINT_OFFSET;
-        const double y = next ? yOnLine(leftOutside->point, *next, x) : leftOutside->point.y();
-        points.prepend(PointData(-1, leftOutside->tick, QPointF(x, y), PointData::PointType::BOTH));
+        points.prepend(PointData(-1, leftOutside->tick, leftOutside->point, PointData::PointType::BOTH, true));
     }
 
     if (rightOutside) {
-        // With no point inside the system, the left neighbor (already moved along the same line) is the previous one
-        const std::optional<QPointF> prev = !points.isEmpty() ? std::optional(points.back().qPointF) : std::nullopt;
-        const double x = 1.0 + OUTSIDE_POINT_OFFSET;
-        const double y = prev ? yOnLine(*prev, rightOutside->point, x) : rightOutside->point.y();
-        points.append(PointData(-1, rightOutside->tick, QPointF(x, y), PointData::PointType::BOTH));
+        points.append(PointData(-1, rightOutside->tick, rightOutside->point, PointData::PointType::BOTH, true));
     }
 
     for (int i = 0; i < points.size(); ++i) {
@@ -732,6 +741,17 @@ void NotationAutomationController::applyPolylineStyle(PolylinePlot* polyline, co
     polyline->setDrawBackground(false);
 
     polyline->setBaselineN(defaultValueFor(currentAutomationType()));
+
+    // Bends apply to the values as played: shown through the same scale as the points (a point's y is
+    // 1 - its display value, see pointsDataInStaff), which isn't linear for Volume (fader curve) and Tempo
+    const AutomationType type = currentAutomationType();
+    if (type == AutomationType::Volume || type == AutomationType::Tempo) {
+        polyline->setValueMapping(
+            [type](qreal y) { return static_cast<qreal>(automationValueFromDisplay(type, 1.0 - y)); },
+            [type](qreal value) { return 1.0 - automationValueToDisplay(type, muse::real_t(value)); });
+    } else {
+        polyline->setValueMapping({}, {});
+    }
 
     polyline->setGhostPointsEnabled(false);
     polyline->setSelectedPointsEnabled(true);
@@ -1095,7 +1115,16 @@ void NotationAutomationController::rebuildAllPolylines()
     }
 
     for (const System* system : score()->systems()) {
-        m_stavesToLinesMap.merge(createPolylinesForSystem(system));
+        SysStaffToPolylinesMap systemPolylines = createPolylinesForSystem(system);
+        m_stavesToLinesMap.merge(systemPolylines);
+
+        // merge() leaves an element whose key is already there behind: such a polyline would never be positioned nor
+        // deleted - stuck on screen. Keys are unique per system, so this is only a safety net
+        for (const auto& [_, polylines] : systemPolylines) {
+            for (PolylinePlot* polyline : polylines) {
+                delete polyline;
+            }
+        }
     }
 
     updatePolylinesGeometry();
@@ -1127,31 +1156,70 @@ void NotationAutomationController::updateStaffPoints(const SysStaffKey& key)
         points.push_back(pointData.qPointF);
     }
     polyline->setPoints(points);
-    applyLockedPoints(polyline, key);
+    applyPointFlags(polyline, key);
     applyPolylineColorsUnderLine(polyline, key);
     polyline->update();
 }
 
-//! NOTE: points generated from the score (e.g. a tempo marking's) can't be removed or moved in time, so where
-//! one overlaps a point of the user's own, a click must pick the user's
-void NotationAutomationController::applyLockedPoints(PolylinePlot* polyline, const SysStaffKey& key) const
+//! NOTE: per point: locked - generated from the score (e.g. a tempo marking's), so it can't be removed or moved in
+//! time: where one overlaps a point of the user's own, a click must pick the user's; hidden - outside of the system.
+//! Per segment: its bend, for the bendable curves
+void NotationAutomationController::applyPointFlags(PolylinePlot* polyline, const SysStaffKey& key) const
 {
     const auto pointsDataIt = m_pointsDataByStaff.find(key);
     if (pointsDataIt == m_pointsDataByStaff.end()) {
         return;
     }
 
-    QVector<bool> locked;
-    locked.reserve(pointsDataIt->second.size());
-    for (const PointData& pointData : pointsDataIt->second) {
-        // A pending point (being added right now) isn't in the curve yet, but belongs to the user
-        if (pointData.polylinePointIndex < 0) {
-            locked.push_back(false);
-            continue;
-        }
+    const QVector<PointData>& pointsData = pointsDataIt->second;
 
-        const mu::engraving::AutomationPoint* point = automationPointAt(key, pointData.tick);
-        locked.push_back(isScoreDrivenPoint(point));
+    QVector<bool> hidden;
+    hidden.reserve(pointsData.size());
+    for (const PointData& pointData : pointsData) {
+        hidden.push_back(pointData.outside);
+    }
+    polyline->setHiddenPoints(hidden);
+
+    // One lookup per point, shared by the bends and the locked flags. A pending point (being added right now) isn't
+    // in the curve yet, but belongs to the user
+    std::vector<const mu::engraving::AutomationPoint*> automationPoints;
+    automationPoints.reserve(pointsData.size());
+    for (const PointData& pointData : pointsData) {
+        automationPoints.push_back(pointData.polylinePointIndex < 0 ? nullptr : automationPointAt(key, pointData.tick));
+    }
+
+    const AutomationType type = currentAutomationType();
+    QVector<muse::uicomponents::SegmentBend> bends;
+    if (isBendable(type) && pointsData.size() > 1) {
+        bends.reserve(pointsData.size() - 1);
+        for (int i = 1; i < pointsData.size(); ++i) {
+            // The bend of a segment belongs to the point it arrives at (its in value's ease)
+            muse::uicomponents::SegmentBend bend;
+            const PointData& arrival = pointsData.at(i);
+            const mu::engraving::AutomationPoint* point = arrival.pointType == PointData::PointType::OUT
+                                                          ? nullptr // the jump of a point with different in/out values
+                                                          : automationPoints.at(i);
+            if (point) {
+                if (const std::optional<mu::engraving::AutomationPoint::Ease> ease = mu::engraving::ease(*point)) {
+                    bend.t = ease->t.raw();
+                    bend.value = ease->value.raw();
+
+                    // A tempo past the top of the display range is shown clamped there: its bend would be drawn and
+                    // dragged over another value range than the one played
+                    const bool isPastDisplayRange = type == AutomationType::Tempo
+                                                    && (pointsData.at(i - 1).qPointF.y() <= 0.0 || arrival.qPointF.y() <= 0.0);
+                    bend.editable = !isScoreDrivenPoint(point) && !isPastDisplayRange;
+                }
+            }
+            bends.push_back(bend);
+        }
+    }
+    polyline->setSegmentBends(bends);
+
+    QVector<bool> locked;
+    locked.reserve(pointsData.size());
+    for (int i = 0; i < pointsData.size(); ++i) {
+        locked.push_back(pointsData.at(i).polylinePointIndex >= 0 && isScoreDrivenPoint(automationPoints.at(i)));
     }
     polyline->setLockedPoints(locked);
 }
@@ -1364,6 +1432,44 @@ bool NotationAutomationController::requestAddPoint(const SysStaffKey& key, qreal
     };
 
     editAutomationPoints(curveKey, edits);
+
+    return true;
+}
+
+bool NotationAutomationController::requestSegmentBend(const SysStaffKey& key, int segmentIndex, qreal value)
+{
+    const auto pointsDataIt = m_pointsDataByStaff.find(key);
+    const Staff* staff = score() ? score()->staff(key.staffIdx) : nullptr;
+    IF_ASSERT_FAILED(pointsDataIt != m_pointsDataByStaff.end() && staff && segmentIndex >= 0
+                     && segmentIndex + 1 < pointsDataIt->second.size()) {
+        return false;
+    }
+
+    const PointData& arrival = pointsDataIt->second.at(segmentIndex + 1);
+    const mu::engraving::AutomationPoint* point = automationPointAt(key, arrival.tick);
+    if (!point || isScoreDrivenPoint(point)) {
+        return false;
+    }
+
+    const auto* explicitArrival = std::get_if<mu::engraving::AutomationPoint::ExplicitArrival>(&point->value.inValue);
+    if (!explicitArrival) {
+        return false;
+    }
+
+    mu::engraving::AutomationPoint bentPoint = *point;
+    mu::engraving::AutomationPoint::Ease ease = explicitArrival->ease;
+    ease.value = muse::real_t(std::clamp(static_cast<double>(value), 0.0, 1.0));
+    if (ease.isNone()) {
+        ease = mu::engraving::AutomationPoint::Ease::none(); // straight again
+    }
+    bentPoint.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { explicitArrival->value, ease };
+    bentPoint.generated = false;
+
+    mu::engraving::AutomationPointEdits edits {
+        { utickForTick(arrival.tick), SetPoint { bentPoint } }
+    };
+
+    editAutomationPoints(currentCurveKeyFor(staff), edits);
 
     return true;
 }
