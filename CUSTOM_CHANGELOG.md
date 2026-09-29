@@ -4,6 +4,10 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-09-29
+- Added an articulation map editor (View menu, or a Mixer track's new "Articulation map" submenu) to build a sample library's articulations without writing the text file by hand: folders become the picker's submenus, drag and drop sets the order, each articulation gets its activation sequence (Note On + Off / MIDI CC / Program Change), color, delays and default flag, and can be disabled without deleting it. Opened from a track, it can save and reload the map into it in one click.
+- The articulation lane now marks which note a click would give an articulation to, and keeps marking it while the articulation menu is open.
+
 ### 2026-09-28
 - Added articulation maps for third-party VST3 instruments (Kontakt, VSL Synchron Player, EastWest Opus, Musio...): a text file per sample library describes each articulation's keyswitches/CC/program change, loaded per instrument from the Mixer, and score articulations (staccato, pizz., tremolo...) switch it automatically.
 - Added an "Articulations" toolbar toggle showing a lane under each staff with the articulation each passage plays, where clicking a note picks another articulation (e.g. play a notated staccato as staccatissimo) and dragging a chip adjusts when the change is sent. The lane is see-through, and a hovered chip too, so the notes under it stay visible.
