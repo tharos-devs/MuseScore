@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-09-29
+- Right-clicking a staff played by a VST3 instrument now offers the same "Articulation map" submenu as the Mixer (Load, Edit, Reload, Remove), for the instrument at the clicked position.
 - In automation mode, the curve points inside the score's range selection are selected together: dragging one moves them all up or down at once (across lines and instruments), undone in one step.
 - Added curved (Bezier) segments to the MIDI CC, Volume, Pan and Tempo automation curves: hovering a segment reveals a small diamond handle in its middle, dragged up or down to bend the segment (double-click to straighten it again), played exactly as drawn.
 - In automation mode, the score's right-click menu now shows "MIDI CC" right below "Automation type".
