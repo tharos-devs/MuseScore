@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-09-29
+- Added curved (Bezier) segments to the MIDI CC, Volume, Pan and Tempo automation curves: hovering a segment reveals a small diamond handle in its middle, dragged up or down to bend the segment (double-click to straighten it again), played exactly as drawn.
+- In automation mode, the score's right-click menu now shows "MIDI CC" right below "Automation type".
 - Added MIDI CC automation for VST3 instruments: a "MIDI CC" submenu in the toolbar's Automation dropdown and in a VST3 staff's context menu shows a Modulation (CC1), Volume (CC7) or Expression (CC11) curve over the staff, drawn and edited like the Tempo curve (add/move points, double-click to remove, value tooltip while dragging), and sent to the plugin during playback. "Other MIDI CC…" picks any of the 128 controllers from a searchable list; the ones picked are kept with the score.
 - The toolbar's Automation button now shows the name of the curve being edited (Dynamics, Tempo, Modulation...).
 - Added an articulation map editor (View menu, or a Mixer track's new "Articulation map" submenu) to build a sample library's articulations without writing the text file by hand: folders become the picker's submenus, drag and drop sets the order, each articulation gets its activation sequence (Note On + Off / MIDI CC / Program Change), color, delays and default flag, and can be disabled without deleting it. Opened from a track, it can save and reload the map into it in one click.
@@ -59,6 +61,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed an automation curve that could stay frozen on screen while the score was scrolled, when two lines started with measures of the same index (e.g. multimeasure rests) (2026-09-29).
 - Fixed MuseScore hanging on quit (the score closed, leaving an empty frozen window that had to be force-quit) after a VST3 plugin's editor had been opened, even once closed — e.g. Kontakt: plugins are now unloaded properly at shutdown (2026-09-29).
 - Fixed removed audio tracks (deleted instruments, changed sounds, closed projects) never releasing their VST instrument, effects and loaded samples until MuseScore quit (2026-09-29).
 - Fixed automation curves with a repeat: points drawn after the repeat actually went into its second pass (so nothing was played after the repeat), and editing a repeated bar moved a point shown in another bar (2026-09-29).
