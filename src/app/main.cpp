@@ -21,6 +21,7 @@
  */
 
 #include <csignal>
+#include <cstdlib>
 
 #include <QApplication>
 #include <QStyleHints>
@@ -59,7 +60,10 @@ static void crashCallback(int signum)
         break;
     }
     LOGE() << "Oops! Application crashed with signal: [" << signum << "] " << signame << "-" << sigdescript;
-    exit(EXIT_FAILURE);
+
+    //! NOTE: not exit(): it runs atexit handlers and static destructors, which isn't safe from a signal handler - and
+    //! when the crash happens during exit() itself (e.g. in a plugin's static teardown), re-entering it can hang forever
+    std::_Exit(EXIT_FAILURE);
 }
 
 #endif
