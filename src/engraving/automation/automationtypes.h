@@ -31,6 +31,7 @@
 #include "engraving/types/types.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -76,7 +77,10 @@ enum class AutomationType : unsigned char {
     Tempo,
     Volume,
     Pan,
+    MidiCC,
 };
+
+constexpr uint8_t MAX_MIDI_CC = 127;
 
 struct AutomationCurveKey {
     //! NOTE: applies to a whole instrument (e.g. Volume, Pan)
@@ -103,6 +107,7 @@ struct AutomationCurveKey {
 
     AutomationType type = AutomationType::Unknown;
     Scope scope;
+    uint8_t controller = 0; // MIDI CC number, only meaningful for AutomationType::MidiCC
 
     static AutomationCurveKey global(AutomationType type)
     {
@@ -119,6 +124,14 @@ struct AutomationCurveKey {
         return key;
     }
 
+    //! NOTE: a MIDI CC curve applies to a whole instrument, like Volume and Pan
+    static AutomationCurveKey midiCc(const InstrumentTrackId& trackId, uint8_t controller)
+    {
+        AutomationCurveKey key = instrument(AutomationType::MidiCC, trackId);
+        key.controller = controller;
+        return key;
+    }
+
     static AutomationCurveKey staff(AutomationType type, const muse::ID& staffId, std::optional<size_t> voiceIdx = std::nullopt)
     {
         AutomationCurveKey key;
@@ -130,6 +143,10 @@ struct AutomationCurveKey {
     bool isValid() const
     {
         if (type == AutomationType::Unknown) {
+            return false;
+        }
+
+        if (type == AutomationType::MidiCC && (controller > MAX_MIDI_CC || !trackId())) {
             return false;
         }
 
@@ -178,12 +195,12 @@ struct AutomationCurveKey {
 
     bool operator==(const AutomationCurveKey& k) const
     {
-        return type == k.type && scope == k.scope;
+        return type == k.type && scope == k.scope && controller == k.controller;
     }
 
     bool operator<(const AutomationCurveKey& k) const
     {
-        return std::tie(type, scope) < std::tie(k.type, k.scope);
+        return std::tie(type, scope, controller) < std::tie(k.type, k.scope, k.controller);
     }
 };
 

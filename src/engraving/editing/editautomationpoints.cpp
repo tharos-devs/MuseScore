@@ -157,3 +157,20 @@ void EditAutomationPoints::flip()
 
     m_pointStates = std::move(previousStates);
 }
+
+EditCustomMidiCcs::EditCustomMidiCcs(Score* score, ScoreAutomationController* controller, std::vector<uint8_t> controllers)
+    : m_score(score), m_controller(controller), m_controllers(std::move(controllers))
+{
+    assert(score && controller);
+}
+
+void EditCustomMidiCcs::flip()
+{
+    IF_ASSERT_FAILED(m_controller) {
+        return;
+    }
+
+    std::vector<uint8_t> previous = m_controller->customMidiCcs();
+    m_controller->setCustomMidiCcs(m_controllers);
+    m_controllers = std::move(previous);
+}

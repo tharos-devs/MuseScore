@@ -282,6 +282,16 @@ muse::async::Channel<AutomationChanges> AutomationData::changed() const
     return m_changesChannel;
 }
 
+const std::vector<uint8_t>& AutomationData::customMidiCcs() const
+{
+    return m_customMidiCcs;
+}
+
+void AutomationData::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
+{
+    m_customMidiCcs = controllers;
+}
+
 std::string AutomationData::dump() const
 {
     auto typeName = [](AutomationType type) -> const char* {
@@ -290,6 +300,7 @@ std::string AutomationData::dump() const
         case AutomationType::Tempo: return "Tempo";
         case AutomationType::Volume: return "Volume";
         case AutomationType::Pan: return "Pan";
+        case AutomationType::MidiCC: return "MidiCC";
         case AutomationType::Unknown: break;
         }
         return "Unknown";
@@ -297,7 +308,11 @@ std::string AutomationData::dump() const
 
     auto scopeStr = [](const AutomationCurveKey& key) -> std::string {
         if (const std::optional<InstrumentTrackId> trackId = key.trackId()) {
-            return "instrument = " + trackId->partId.toStdString() + "/" + trackId->instrumentId.toStdString();
+            std::string scope = "instrument = " + trackId->partId.toStdString() + "/" + trackId->instrumentId.toStdString();
+            if (key.type == AutomationType::MidiCC) {
+                scope += ", cc = " + std::to_string(key.controller);
+            }
+            return scope;
         }
 
         if (const std::optional<muse::ID> staffId = key.staffId()) {

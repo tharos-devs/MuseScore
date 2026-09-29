@@ -863,6 +863,7 @@ public:
 
     virtual AutomationDataConstPtr automationData() const;
     virtual void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true);
+    virtual void setCustomMidiCcs(const std::vector<uint8_t>& controllers);
 
     virtual ArticulationMapDataConstPtr articulationMapData() const;
     virtual void editArticulationMap(const EditArticulationMapChanges& changes);

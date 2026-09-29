@@ -68,6 +68,16 @@ public:
 
     muse::mpe::DynamicAutomationLayers dynamicLevelLayers(const track_idx_t trackFrom, const track_idx_t trackTo) const;
 
+    //! NOTE: [from; to] timestamp ranges
+    using TimestampRanges = std::vector<std::pair<muse::mpe::timestamp_t, muse::mpe::timestamp_t> >;
+
+    //! NOTE: the MIDI CC automation curves of the instrument, sampled into discrete controller changes,
+    //! only within the given ranges (the ones whose events are being re-rendered; nullopt for the whole score)
+    std::map<muse::mpe::timestamp_t, muse::mpe::ControllerChangeEventList> midiControllerEvents(const InstrumentTrackId& trackId,
+                                                                                                const muse::mpe::layer_idx_t layerIdx,
+                                                                                                const std::optional<TimestampRanges>& ranges)
+    const;
+
     bool hasSoundFlags(const track_idx_t trackFrom, const track_idx_t trackTo) const;
 
     const ExpressionMap* expressionMap(const InstrumentTrackId& trackId) const;
@@ -110,6 +120,10 @@ private:
     void handleMeasureRepeats(const std::vector<const MeasureRepeat*>& measureRepeats, const int tickPositionOffset);
 
     const AutomationCurve* dynamicsCurve(const track_idx_t trackIdx) const;
+
+    //! NOTE: an automation curve's points (stored in expanded utick space, whatever the Play Repeats setting)
+    //! timed the same way as the notes they apply to
+    muse::mpe::AutomationCurve<muse::mpe::timestamp_t> automationTimeCurve(const AutomationCurve& curve) const;
 
     void updateLatchedArticulationMarks();
 

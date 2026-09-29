@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace mu::engraving {
 class AutomationData
@@ -48,12 +49,17 @@ public:
 
     muse::async::Channel<AutomationChanges> changed() const;
 
+    //! NOTE: MIDI CC numbers the user picked for this score (besides the predefined ones), in the order they were added
+    const std::vector<uint8_t>& customMidiCcs() const;
+    void setCustomMidiCcs(const std::vector<uint8_t>& controllers);
+
     std::string dump() const;
 
 private:
     void notifyChanged(const AutomationChanges& changes);
 
     AutomationCurveMap m_curveMap;
+    std::vector<uint8_t> m_customMidiCcs;
     muse::async::Channel<AutomationChanges> m_changesChannel;
 };
 
