@@ -665,8 +665,8 @@ DockPage {
                 }
 
                 //! NOTE: hitPointsPanelBelowTimeline is still at its pre-load
-                //! default here (VideoPanel.qml loads asynchronously -- see
-                //! VideoPanelLoader.qml), so the first read of the real value
+                //! default here (VideoPanel.qml only loads once the panel has a
+                //! size -- see VideoPanelLoader.qml), so the first read of the real value
                 //! happens on panelReady below instead, once it's guaranteed
                 //! settled. This handler covers the value changing again later,
                 //! e.g. the user live-toggling it via the panel's own "..." menu.

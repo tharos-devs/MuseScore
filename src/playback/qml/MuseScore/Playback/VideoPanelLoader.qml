@@ -61,7 +61,7 @@ Item {
     property bool isFullScreen: false
 
     // NOTE: this model -- unlike VideoPanel.qml itself -- is NOT behind the
-    // asynchronous Loader below, so it's already loaded by the time the
+    // lazy Loader below, so it's already loaded by the time the
     // enclosing DockPanel's own content actually needs it (pushed up via
     // Component.onCompleted on this component's own instantiation in
     // NotationPage.qml, the same pattern Mixer/Piano keyboard already use --
@@ -81,7 +81,7 @@ Item {
 
     readonly property bool shouldLoadPanel: width > 0 && height > 0
 
-    // NOTE: fired once the asynchronous Loader below has actually finished
+    // NOTE: fired once the lazy Loader below has actually finished
     // instantiating VideoPanel.qml (after that item's own Component.onCompleted
     // has already run, per Loader's own semantics -- see NotationPage.qml's use
     // of this for hitPointsPanelBelowTimeline). Reading hitPointsPanelBelowTimeline
@@ -204,7 +204,9 @@ Item {
 
         anchors.fill: parent
         active: root.shouldLoadPanel
-        asynchronous: true
+        //! NOTE: synchronous: an asynchronous load could stay stuck in Loader.Loading for good when
+        //! the panel was restored open along with a score, leaving it empty until hidden and shown
+        //! again. It stays lazy: QtMultimedia is only loaded once the panel is actually shown
         source: root.shouldLoadPanel ? "VideoPanel.qml" : ""
 
         onLoaded: {
