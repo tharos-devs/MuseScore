@@ -84,15 +84,15 @@ private:
             return system == k.system && staffIdx == k.staffIdx;
         }
 
+        //! NOTE: systems are told apart by address, never dereferenced: two systems can start with measures of the same
+        //! index (e.g. multimeasure rests), which made them collide as one key; and keys can outlive their system
+        //! across a relayout (see NotationNoteOffsetController's identical fix)
         bool operator<(const SysStaffKey& k) const
         {
-            IF_ASSERT_FAILED(isValid() && k.isValid()) {
-                return false;
-            }
             if (system == k.system) {
                 return staffIdx < k.staffIdx;
             }
-            return system->first()->index() < k.system->first()->index();
+            return std::less<const System*>()(system, k.system);
         }
     };
 
@@ -110,6 +110,7 @@ private:
         int tick = -1;
         QPointF qPointF;
         PointType pointType = PointType::UNKNOWN;
+        bool outside = false; // a neighbor outside of the system: not shown, only shapes the line up to its edges
     };
 
     using PointsDataMap = std::map<SysStaffKey, QVector<PointData> >;
@@ -140,7 +141,8 @@ private:
     void applyPolylineColors(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     // TODO: apply within a range? (for efficiency)
     void applyPolylineColorsUnderLine(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
-    void applyLockedPoints(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    void applyPointFlags(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    bool requestSegmentBend(const SysStaffKey& key, int segmentIndex, qreal value);
     bool isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const;
     int utickForTick(int tick) const;
     std::optional<int> firstPassTickForUtick(int utick) const;

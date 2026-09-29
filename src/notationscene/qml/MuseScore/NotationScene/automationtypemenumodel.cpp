@@ -88,19 +88,13 @@ void AutomationTypeMenuModel::updateItems()
 
 MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
-
-    const MenuItemList items = midicc::makeMenuItems(
+    return midicc::makeMenu(
+        [this](const TranslatableString& title, const MenuItemList& items, const QString& id, bool enabled) {
+        return makeMenu(title, items, id, enabled);
+    },
         [this](const muse::rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
-        notationConfiguration().get(), automation);
-
-    // MIDI CCs only reach VST instruments
-    const bool enabled = masterNotation && midicc::hasVstInstrument(globalContext()->currentProject(), masterNotation->masterScore());
-    MenuItem* menu = makeMenu(TranslatableString::untranslatable("MIDI CC"), items, "midi-cc", enabled);
-    menu->setChecked(notationConfiguration()->currentAutomationType() == AutomationType::MidiCC);
-    return menu;
+        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(), "midi-cc");
 }
 
 MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,
