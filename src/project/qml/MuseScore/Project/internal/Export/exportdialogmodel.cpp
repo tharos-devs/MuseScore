@@ -30,6 +30,8 @@
 #include "notation/iexcerptnotation.h" // IWYU pragma: keep
 #include "notation/imasternotation.h"
 #include "notation/inotation.h"
+#include "project/inotationproject.h"
+#include "project/iprojectvideosettings.h"
 
 #include "translation.h"
 #include "log.h"
@@ -670,6 +672,32 @@ void ExportDialogModel::setFFmpegDir(const QString& dir)
 #else
     Q_UNUSED(dir);
 #endif
+}
+
+bool ExportDialogModel::hasAttachedVideo() const
+{
+    INotationProjectPtr project = context()->currentProject();
+    return project && project->videoSettings() && project->videoSettings()->attachment().isValid();
+}
+
+bool ExportDialogModel::includeVideoAudio() const
+{
+    return hasAttachedVideo() && context()->currentProject()->videoSettings()->attachment().includeAudioInExport;
+}
+
+void ExportDialogModel::setIncludeVideoAudio(bool include)
+{
+    if (!hasAttachedVideo() || includeVideoAudio() == include) {
+        return;
+    }
+
+    //! NOTE Stored in the project (like the other video settings), so the choice is kept for the next export;
+    //! the video's sound track reads it when rendering offline (see PlaybackController::videoSourceParams())
+    updateVideoAttachment(context()->currentProject()->videoSettings(), [include](VideoAttachmentSettings& attachment) {
+        attachment.includeAudioInExport = include;
+    });
+
+    emit includeVideoAudioChanged();
 }
 
 QList<int> ExportDialogModel::availableSampleRates() const

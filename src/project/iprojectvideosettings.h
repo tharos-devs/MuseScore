@@ -73,6 +73,8 @@ struct VideoAttachmentSettings
 {
     muse::io::path_t path;
     int offsetMs = 0;
+    //! NOTE Legacy: only read to seed the video sound track's output params the first time
+    //! (see IProjectAudioSettings::videoOutputParams(), the source of truth since then)
     float volume = 1.f;
     float balance = 0.f;
     bool muted = false;
@@ -80,6 +82,9 @@ struct VideoAttachmentSettings
     double frameRate = 24.0;
     VideoTimecodeDisplayMode timecodeDisplayMode = VideoTimecodeDisplayMode::Off;
     bool showHitPoints = true;
+    //! NOTE Whether the video's own audio is mixed into audio/video exports (off by default,
+    //! so exports stay score-only unless explicitly asked for)
+    bool includeAudioInExport = false;
     std::vector<VideoHitPointSettings> hitPoints;
 
     bool isValid() const
@@ -98,6 +103,7 @@ struct VideoAttachmentSettings
                && frameRate == other.frameRate
                && timecodeDisplayMode == other.timecodeDisplayMode
                && showHitPoints == other.showHitPoints
+               && includeAudioInExport == other.includeAudioInExport
                && hitPoints == other.hitPoints;
     }
 

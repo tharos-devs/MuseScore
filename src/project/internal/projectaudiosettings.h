@@ -23,6 +23,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "modularity/ioc.h"
@@ -41,6 +42,10 @@ class ProjectAudioSettings : public IProjectAudioSettings, public muse::Contexta
 public:
     const AudioOutputParams& masterAudioOutputParams() const override;
     void setMasterAudioOutputParams(const AudioOutputParams& params) override;
+
+    bool containsVideoOutputParams() const override;
+    const AudioOutputParams& videoOutputParams() const override;
+    void setVideoOutputParams(const AudioOutputParams& params) override;
 
     bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
@@ -125,6 +130,7 @@ private:
     QJsonObject buildTrackObject(notation::INotationSoloMuteStatePtr masterSoloMuteStatePtr, const engraving::InstrumentTrackId& id) const;
 
     AudioOutputParams m_masterOutputParams;
+    std::optional<AudioOutputParams> m_videoOutputParams;
 
     std::map<muse::audio::aux_channel_idx_t, AudioOutputParams> m_auxOutputParams;
     std::unordered_map<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStatesMap;

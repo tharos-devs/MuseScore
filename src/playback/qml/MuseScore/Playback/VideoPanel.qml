@@ -167,6 +167,16 @@ Item {
     readonly property int minResyncIntervalMs: 500
     property real lastResyncTime: 0
 
+    // NOTE: below syncToleranceMs, the picture is pulled back in sync by slightly
+    // speeding up / slowing down the player instead of seeking (a seek is visible
+    // and hits the decoder): now that the video's audio is played by the audio
+    // engine on the score's own clock, the picture is the only thing that can
+    // drift. Hysteresis (start above softSyncStartMs, stop below softSyncStopMs)
+    // keeps the rate from flapping around its target on position-update noise.
+    readonly property int softSyncStartMs: 40
+    readonly property int softSyncStopMs: 10
+    readonly property real maxSoftSyncRateDelta: 0.08
+
     // NOTE: `videoSettingsChanged` fires on ANY attachment mutation, including
     // ones with nothing to do with playback position (add/rename/retime a hit
     // point, mute, volume...). Its handler below forces an unconditional
@@ -251,6 +261,16 @@ Item {
     function seekToVideoPositionMs(videoPositionMs) {
         video.seek(videoPositionMs)
         lastResyncTime = Date.now()
+
+        // The score can't reach a video position before its start or after its end: show that frame
+        // anyway (until the score moves), from the score position the seek below will lead to
+        if (video.exact) {
+            var scoreEndMs = videoModel.scoreEndVideoPositionMs > 0 ? videoModel.scoreEndVideoPositionMs - videoModel.offsetMs
+                                                                     : Number.MAX_VALUE
+            var expectedScoreMs = Math.max(0, Math.min(scoreEndMs, videoPositionMs - videoModel.offsetMs))
+            framePlayer.previewVideoPosition(videoPositionMs, Math.max(0, expectedScoreMs + videoModel.offsetMs))
+        }
+
         videoModel.seekScoreToVideoPositionMs(videoPositionMs)
         scrollTimelineToPositionMs(videoPositionMs)
     }
@@ -279,6 +299,11 @@ Item {
     }
 
     function detectedFrameRate() {
+        // The FFmpeg decoder reads the stream itself: always available once the exact picture is
+        if (video.exact && framePlayer.frameRate > 0) {
+            return Math.round(framePlayer.frameRate * 1000) / 1000
+        }
+
         try {
             if (!video.metaData) {
                 return 0
@@ -504,7 +529,8 @@ Item {
     }
 
     function syncVideoToScore(forceSeek) {
-        if (!videoModel.hasVideo || video.duration <= 0) {
+        // The frame-accurate picture follows the score by itself (see VideoFramePlayer)
+        if (!videoModel.hasVideo || video.duration <= 0 || video.exact) {
             return
         }
 
@@ -534,11 +560,22 @@ Item {
                     pendingForceSeekTimer.restart()
                 }
             }
-        } else if (Math.abs(video.position - targetPosition) > syncToleranceMs) {
-            var now = Date.now()
-            if (now - lastResyncTime >= minResyncIntervalMs) {
-                video.seek(targetPosition)
-                lastResyncTime = now
+            video.playbackRate = 1.0
+        } else {
+            var drift = video.position - targetPosition // > 0: picture ahead of the score
+            if (Math.abs(drift) > syncToleranceMs) {
+                var now = Date.now()
+                if (now - lastResyncTime >= minResyncIntervalMs) {
+                    video.seek(targetPosition)
+                    lastResyncTime = now
+                }
+                video.playbackRate = 1.0
+            } else if (videoModel.scorePlaying && Math.abs(drift) > softSyncStartMs) {
+                // Catch up the drift in about half a second
+                var delta = Math.max(-maxSoftSyncRateDelta, Math.min(maxSoftSyncRateDelta, drift / 500))
+                video.playbackRate = 1.0 - delta
+            } else if (Math.abs(drift) < softSyncStopMs) {
+                video.playbackRate = 1.0
             }
         }
 
@@ -546,8 +583,12 @@ Item {
             if (targetPosition < video.duration && video.playbackState !== MediaPlayer.PlayingState) {
                 video.play()
             }
-        } else if (video.playbackState === MediaPlayer.PlayingState) {
-            video.pause()
+        } else {
+            video.playbackRate = 1.0
+
+            if (video.playbackState === MediaPlayer.PlayingState) {
+                video.pause()
+            }
         }
     }
 
@@ -581,22 +622,6 @@ Item {
         function onPositionChanged() {
             root.pageTimelineToKeepPlayheadVisible()
         }
-
-        function onPlaybackStateChanged() {
-            root.updateVideoElementPlaying()
-        }
-
-        function onHasAudioChanged() {
-            root.updateVideoElementPlaying()
-        }
-    }
-
-    Component.onDestruction: videoModel.setVideoElementPlaying(false)
-
-    // A video with no audio track reports "not playing" so the Mixer's Video
-    // channel meter stays dark instead of showing its simulated level.
-    function updateVideoElementPlaying() {
-        videoModel.setVideoElementPlaying(video.playbackState === MediaPlayer.PlayingState && video.hasAudio)
     }
 
     function pageTimelineToKeepPlayheadVisible() {
@@ -825,15 +850,103 @@ Item {
                     width: Math.round(limitedByHeight ? availableHeight * aspectRatio : availableWidth)
                     height: Math.round(limitedByHeight ? availableHeight : availableWidth / aspectRatio)
 
-                    Video {
+                    //! NOTE: hand-rolled equivalent of QtMultimedia's Video type (same property/
+                    //! function names the rest of this file uses), whose player deliberately has
+                    //! no audioOutput: the video's audio is decoded separately and played by the
+                    //! audio engine as a real track, on the score's own clock (see
+                    //! PlaybackController::videoTrackId()). This player only renders the picture.
+                    Item {
                         id: video
+
+                        //! NOTE: with the frame-accurate picture, the Qt player is only kept for the
+                        //! file's metadata and never plays: position/state then come from the frame
+                        //! actually shown and from the score's transport
+                        readonly property bool exact: framePlayer.available && framePlayer.loaded
+
+                        // The Qt player may already be playing (fallback) when the exact picture takes over
+                        onExactChanged: {
+                            if (exact && player.playbackState === MediaPlayer.PlayingState) {
+                                player.pause()
+                            }
+                        }
+
+                        property alias source: player.source
+                        readonly property real duration: exact ? framePlayer.durationMs : player.duration
+                        readonly property real position: exact ? Math.max(0, framePlayer.shownFramePtsMs) : player.position
+                        readonly property int playbackState: exact ? (videoModel.scorePlaying ? MediaPlayer.PlayingState : MediaPlayer.PausedState)
+                                                                   : player.playbackState
+                        readonly property bool seekable: exact || player.seekable
+                        readonly property alias metaData: player.metaData
+                        readonly property alias hasAudio: player.hasAudio
+                        property alias playbackRate: player.playbackRate
+
+                        function play() {
+                            if (!exact) {
+                                player.play()
+                            }
+                        }
+
+                        function pause() {
+                            if (!exact) {
+                                player.pause()
+                            }
+                        }
+
+                        function stop() {
+                            player.stop()
+                        }
+
+                        function seek(offset) {
+                            if (!exact) {
+                                player.position = offset
+                            }
+                        }
 
                         anchors.fill: parent
                         source: videoModel.videoUrl
-                        muted: videoModel.muted
-                        volume: videoModel.volumePercent / 100
-                        fillMode: VideoOutput.PreserveAspectFit
                         visible: videoModel.hasVideo
+
+                        VideoOutput {
+                            id: videoOut
+
+                            anchors.fill: parent
+                            fillMode: VideoOutput.PreserveAspectFit
+                        }
+
+                        MediaPlayer {
+                            id: player
+
+                            videoOutput: videoOut
+
+                            // Hand the picture over to the exact player as soon as it's ready
+                            onPlaybackStateChanged: {
+                                if (video.exact && playbackState === MediaPlayer.PlayingState) {
+                                    pause()
+                                }
+                            }
+                        }
+
+                        //! NOTE: frame-accurate picture (FFmpeg decoding, see VideoFramePlayer): always
+                        //! shows the frame at the score's position (compensated for the audio/display
+                        //! latencies while playing), so the same position always shows the same frame.
+                        //! The Qt player above only renders when it's unavailable.
+                        VideoOutput {
+                            id: exactVideoOut
+
+                            anchors.fill: parent
+                            fillMode: VideoOutput.PreserveAspectFit
+                            visible: video.exact && framePlayer.shownFramePtsMs >= 0
+                        }
+
+                        VideoFramePlayer {
+                            id: framePlayer
+
+                            source: videoModel.videoUrl
+                            videoSink: exactVideoOut.videoSink
+                            positionMs: Math.max(0, videoModel.scorePlaybackPositionMs + videoModel.offsetMs)
+                            playing: videoModel.scorePlaying && videoModel.scorePlaybackPositionMs + videoModel.offsetMs >= 0
+                            loopStartMs: videoModel.loopEnabled ? videoModel.loopStartMs : -1
+                        }
 
                         onSourceChanged: {
                             // NOTE: was stop() -- stopping a freshly-set source (instead of

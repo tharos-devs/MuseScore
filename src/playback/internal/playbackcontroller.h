@@ -38,10 +38,12 @@
 #include "project/iprojectaudiosettings.h"
 #include "audio/main/iplayer.h"
 #include "audio/main/iplayback.h"
+#include "audio/main/iaudioconfiguration.h"
 #include "audio/common/audiotypes.h"
 #include "tours/itoursservice.h"
 
 #include "drumsetloader.h"
+#include "videoaudiodecoder.h"
 
 #include "../iplaybackcontroller.h"
 #include "../iplaybackconfiguration.h"
@@ -54,6 +56,7 @@ class PlaybackController : public IPlaybackController, public muse::async::Async
 {
     muse::GlobalInject<IPlaybackConfiguration> configuration;
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
+    muse::GlobalInject<muse::audio::IAudioConfiguration> audioConfiguration;
     muse::ContextInject<ISoundProfilesRepository> profilesRepo = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
@@ -127,12 +130,11 @@ public:
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
 
-    bool isMasterOutputForceMuted() const override;
-    muse::async::Notification masterOutputForceMuteChanged() const override;
-
-    bool isVideoPlaying() const override;
-    void setIsVideoPlaying(bool playing) override;
-    muse::async::Notification isVideoPlayingChanged() const override;
+    muse::audio::TrackId videoTrackId() const override;
+    project::AudioOutputParams videoOutputParams() const override;
+    void setVideoOutputParams(const project::AudioOutputParams& params) override;
+    bool isVideoForceMuted() const override;
+    muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
 
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;
@@ -228,6 +230,14 @@ private:
     project::IProjectVideoSettingsPtr videoSettings() const;
     void updateMasterControlParams();
 
+    void onVideoAttachmentChanged();
+    void addVideoTrack();
+    void removeVideoTrack();
+    void startVideoAudioDecoding(const muse::io::path_t& videoPath);
+    muse::audio::AudioSourceParams videoSourceParams() const;
+    void applyVideoSourceParams();
+    void updateVideoMuteState(bool hasSolo, const std::vector<muse::audio::aux_channel_idx_t>& directlySoloedGroupBuses);
+
     void resetPlayback();
     void setupPlaybackIfNeed();
     void setupPlayback();
@@ -281,11 +291,15 @@ private:
     muse::async::Channel<bool> m_loopEnabledChanged;
     muse::async::Notification m_totalPlayTimeChanged;
     muse::async::Notification m_currentTempoChanged;
-    muse::async::Notification m_masterOutputForceMuteChanged;
-    bool m_isMasterOutputForceMuted = false;
-
-    muse::async::Notification m_isVideoPlayingChanged;
-    bool m_isVideoPlaying = false;
+    muse::audio::TrackId m_videoTrackId = muse::audio::INVALID_TRACK_ID;
+    bool m_isVideoTrackBeingAdded = false;
+    std::unique_ptr<VideoAudioDecoder> m_videoAudioDecoder;
+    muse::io::path_t m_videoAudioSourcePath; //! the video whose audio m_videoAudioWavPath is (being) decoded from
+    muse::io::path_t m_videoAudioWavPath;
+    muse::audio::AudioSourceParams m_lastAppliedVideoSourceParams;
+    std::optional<std::pair<bool, bool> > m_lastAppliedVideoMuteState; //! (muted, forceMute)
+    bool m_isVideoForceMuted = false;
+    muse::async::Channel<bool, bool> m_videoMuteStateChanged;
 
     muse::midi::tick_t m_currentTick = 0;
     notation::Tempo m_currentTempo;

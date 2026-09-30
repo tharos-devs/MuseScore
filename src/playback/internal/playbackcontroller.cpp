@@ -1171,37 +1171,6 @@ mu::project::IProjectVideoSettingsPtr PlaybackController::videoSettings() const
     return globalContext()->currentProject()->videoSettings();
 }
 
-bool PlaybackController::isMasterOutputForceMuted() const
-{
-    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
-    return videoSettingsPtr && videoSettingsPtr->attachment().isValid() && videoSettingsPtr->attachment().solo;
-}
-
-muse::async::Notification PlaybackController::masterOutputForceMuteChanged() const
-{
-    return m_masterOutputForceMuteChanged;
-}
-
-bool PlaybackController::isVideoPlaying() const
-{
-    return m_isVideoPlaying;
-}
-
-void PlaybackController::setIsVideoPlaying(bool playing)
-{
-    if (m_isVideoPlaying == playing) {
-        return;
-    }
-
-    m_isVideoPlaying = playing;
-    m_isVideoPlayingChanged.notify();
-}
-
-muse::async::Notification PlaybackController::isVideoPlayingChanged() const
-{
-    return m_isVideoPlayingChanged;
-}
-
 void PlaybackController::updateMasterControlParams()
 {
     if (!globalContext()->currentProject() || !playback()) {
@@ -1213,20 +1182,266 @@ void PlaybackController::updateMasterControlParams()
         return;
     }
 
-    bool forceMute = isMasterOutputForceMuted();
+    playback()->setMasterControlParams(audioSettingsPtr->masterAudioOutputParams().control());
+}
 
-    AudioOutputParams params = audioSettingsPtr->masterAudioOutputParams();
-    params.forceMute = forceMute;
-    if (forceMute) {
-        params.muted = true;
+TrackId PlaybackController::videoTrackId() const
+{
+    return m_videoTrackId;
+}
+
+AudioOutputParams PlaybackController::videoOutputParams() const
+{
+    IProjectAudioSettingsPtr audioSettingsPtr = audioSettings();
+    if (audioSettingsPtr && audioSettingsPtr->containsVideoOutputParams()) {
+        return audioSettingsPtr->videoOutputParams();
     }
 
-    playback()->setMasterControlParams(params.control());
-
-    if (m_isMasterOutputForceMuted != forceMute) {
-        m_isMasterOutputForceMuted = forceMute;
-        m_masterOutputForceMuteChanged.notify();
+    //! NOTE Projects saved before the video's audio became an engine track only have the Qt Multimedia
+    //! player's linear volume/balance: seed from them, without persisting (which would mark a project
+    //! that was only opened as modified) - the first real change persists the full params
+    AudioOutputParams params;
+    if (IProjectVideoSettingsPtr videoSettingsPtr = videoSettings()) {
+        const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
+        const float volume = std::clamp(attachment.volume, 0.f, 1.f);
+        params.volume = volume <= 0.f ? volume_db_t::make(-60.f) : muse::linear_to_db(muse::ratio_t::make(volume));
+        params.balance = attachment.balance;
     }
+
+    return params;
+}
+
+void PlaybackController::setVideoOutputParams(const AudioOutputParams& params)
+{
+    IProjectAudioSettingsPtr audioSettingsPtr = audioSettings();
+    if (!audioSettingsPtr) {
+        return;
+    }
+
+    //! NOTE Solo/mute live in VideoAttachmentSettings, not here
+    auto stripped = [](AudioOutputParams p) {
+        p.solo = false;
+        p.muted = false;
+        p.forceMute = false;
+        return p;
+    };
+
+    AudioOutputParams persisted = stripped(params);
+
+    //! NOTE Don't persist the legacy-seeded params unchanged (e.g. echoed back by the engine),
+    //! which would mark a project that was only opened as modified
+    if (!audioSettingsPtr->containsVideoOutputParams() && persisted == stripped(videoOutputParams())) {
+        return;
+    }
+
+    audioSettingsPtr->setVideoOutputParams(persisted);
+}
+
+bool PlaybackController::isVideoForceMuted() const
+{
+    return m_isVideoForceMuted;
+}
+
+muse::async::Channel<bool, bool> PlaybackController::videoMuteStateChanged() const
+{
+    return m_videoMuteStateChanged;
+}
+
+void PlaybackController::onVideoAttachmentChanged()
+{
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    if (!videoSettingsPtr || !videoSettingsPtr->attachment().isValid()) {
+        removeVideoTrack();
+        return;
+    }
+
+    const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
+
+    if (attachment.path != m_videoAudioSourcePath) {
+        startVideoAudioDecoding(attachment.path);
+    }
+
+    if (m_videoTrackId == INVALID_TRACK_ID) {
+        addVideoTrack();
+        return;
+    }
+
+    //! NOTE settingsChanged fires on ANY attachment edit (hit points...): both calls below
+    //! only reach the engine when their own params actually changed
+    applyVideoSourceParams();
+    updateSoloMuteStates();
+}
+
+void PlaybackController::startVideoAudioDecoding(const muse::io::path_t& videoPath)
+{
+    m_videoAudioSourcePath = videoPath;
+    m_videoAudioWavPath = muse::io::path_t();
+
+    //! NOTE Silent until decoded, rather than keep playing the previous video's audio
+    applyVideoSourceParams();
+
+    if (!m_videoAudioDecoder) {
+        m_videoAudioDecoder = std::make_unique<VideoAudioDecoder>();
+    }
+
+    m_videoAudioDecoder->decode(videoPath, audioConfiguration()->sampleRate(), [this, videoPath](const muse::io::path_t& wavPath) {
+        if (videoPath != m_videoAudioSourcePath) {
+            return;
+        }
+
+        m_videoAudioWavPath = wavPath;
+        applyVideoSourceParams();
+    });
+}
+
+AudioSourceParams PlaybackController::videoSourceParams() const
+{
+    AudioSourceParams params;
+    params.configuration[SOUND_TRACK_FILE_PATH_KEY] = m_videoAudioWavPath.toStdString();
+
+    if (IProjectVideoSettingsPtr videoSettingsPtr = videoSettings()) {
+        const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
+
+        //! NOTE Same mapping as the video picture: video position = score position + offset
+        params.configuration[SOUND_TRACK_OFFSET_MS_KEY] = std::to_string(attachment.offsetMs);
+        params.configuration[SOUND_TRACK_INCLUDE_IN_EXPORT_KEY] = attachment.includeAudioInExport ? "1" : "0";
+    }
+
+    return params;
+}
+
+void PlaybackController::applyVideoSourceParams()
+{
+    if (m_videoTrackId == INVALID_TRACK_ID) {
+        return;
+    }
+
+    AudioSourceParams params = videoSourceParams();
+    if (params == m_lastAppliedVideoSourceParams) {
+        return;
+    }
+
+    playback()->setSourceParams(m_videoTrackId, params);
+    m_lastAppliedVideoSourceParams = params;
+}
+
+void PlaybackController::addVideoTrack()
+{
+    if (m_isVideoTrackBeingAdded || m_videoTrackId != INVALID_TRACK_ID) {
+        return;
+    }
+
+    m_isVideoTrackBeingAdded = true;
+
+    const AudioOutputParams outParams = videoOutputParams();
+
+    TrackParams params;
+    params.source = videoSourceParams();
+    params.fxChain = outParams.fxChain;
+    params.auxSends = outParams.auxSends;
+    params.control = outParams.control();
+
+    //! NOTE Start muted: updateSoloMuteStates() below applies the real mute/solo state as soon as
+    //! the track exists, which avoids a blip of audio a soloed instrument should have silenced
+    params.control.muted = true;
+
+    std::string title = muse::trc("playback", "Video");
+    uint64_t playbackKey = notationPlaybackKey();
+
+    playback()->addSoundTrack(title, params)
+    .onResolve(this, [this, params, playbackKey](const TrackId trackId, const TrackParams&) {
+        //! NOTE Same as addTrack(): the notation may have been closed (or another opened) meanwhile. The
+        //! track may then have been added after that notation's removeAllTracks(): remove it explicitly,
+        //! or it (and its whole audio file in memory) would stay in the engine
+        if (notationPlaybackKey() != playbackKey) {
+            playback()->removeTrack(trackId);
+            return;
+        }
+
+        m_isVideoTrackBeingAdded = false;
+        m_videoTrackId = trackId;
+        m_lastAppliedVideoSourceParams = params.source;
+        m_lastAppliedVideoMuteState.reset();
+
+        IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+        if (!videoSettingsPtr || !videoSettingsPtr->attachment().isValid()) {
+            // The video was removed while the track was being added
+            removeVideoTrack();
+            return;
+        }
+
+        // Catch up with what changed in the meantime (e.g. decoding finished)
+        applyVideoSourceParams();
+        updateSoloMuteStates();
+
+        m_trackAdded.send(trackId);
+    })
+    .onReject(this, [this](int code, const std::string& msg) {
+        m_isVideoTrackBeingAdded = false;
+        LOGE() << "unable to add the video sound track, error code: " << code << ", " << msg;
+    });
+}
+
+void PlaybackController::removeVideoTrack()
+{
+    if (m_videoAudioDecoder) {
+        m_videoAudioDecoder->cancel();
+    }
+
+    m_videoAudioSourcePath = muse::io::path_t();
+    m_videoAudioWavPath = muse::io::path_t();
+
+    if (m_videoTrackId == INVALID_TRACK_ID) {
+        return;
+    }
+
+    TrackId trackId = m_videoTrackId;
+    m_videoTrackId = INVALID_TRACK_ID;
+    m_lastAppliedVideoSourceParams = AudioSourceParams();
+    m_lastAppliedVideoMuteState.reset();
+    m_isVideoForceMuted = false;
+
+    //! NOTE Same as removeAuxBus(): clearing the fx chain first is what actually destroys its plugins
+    playback()->setFxChainParams(trackId, AudioFxChain());
+    playback()->removeTrack(trackId);
+
+    m_trackRemoved.send(trackId);
+
+    updateSoloMuteStates();
+}
+
+void PlaybackController::updateVideoMuteState(bool hasSolo, const std::vector<aux_channel_idx_t>& directlySoloedGroupBuses)
+{
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    if (m_videoTrackId == INVALID_TRACK_ID || !videoSettingsPtr) {
+        return;
+    }
+
+    const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
+    AudioOutputParams params = videoOutputParams();
+
+    //! NOTE Same rules as an instrument track (see updateSoloMuteStates())
+    bool feedsDirectlySoloedGroupBus = false;
+    for (size_t i = 0; i < params.auxSends.size() && !feedsDirectlySoloedGroupBus; ++i) {
+        feedsDirectlySoloedGroupBus = params.auxSends[i].active && !muse::is_zero(params.auxSends[i].signalAmount)
+                                      && muse::contains(directlySoloedGroupBuses, static_cast<aux_channel_idx_t>(i));
+    }
+
+    const bool forceMute = hasSolo && !attachment.solo && !feedsDirectlySoloedGroupBus;
+    const bool muted = (attachment.muted && !attachment.solo) || forceMute;
+
+    m_isVideoForceMuted = forceMute;
+
+    const std::pair<bool, bool> state { muted, forceMute };
+    if (m_lastAppliedVideoMuteState == state) {
+        return;
+    }
+
+    params.muted = muted;
+    playback()->setControlParams(m_videoTrackId, params.control());
+    m_lastAppliedVideoMuteState = state;
+
+    m_videoMuteStateChanged.send(muted, forceMute);
 }
 
 void PlaybackController::resetPlayback()
@@ -1262,7 +1477,17 @@ void PlaybackController::resetPlayback()
     m_isPlaybackInited = false;
     m_playbackInited.send(m_isPlaybackInited);
 
-    setIsVideoPlaying(false);
+    //! NOTE The engine tracks themselves are removed by setupPlayback()'s removeAllTracks()
+    if (m_videoAudioDecoder) {
+        m_videoAudioDecoder->cancel();
+    }
+    m_videoTrackId = INVALID_TRACK_ID;
+    m_isVideoTrackBeingAdded = false;
+    m_videoAudioSourcePath = muse::io::path_t();
+    m_videoAudioWavPath = muse::io::path_t();
+    m_lastAppliedVideoSourceParams = AudioSourceParams();
+    m_lastAppliedVideoMuteState.reset();
+    m_isVideoForceMuted = false;
 
     m_player = nullptr;
     globalContext()->setCurrentPlayer(nullptr);
@@ -1882,6 +2107,13 @@ void PlaybackController::subscribeOnAudioParamsChanges()
     });
 
     playback()->fxChainParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioFxChain& params) {
+        if (trackId != INVALID_TRACK_ID && trackId == m_videoTrackId) {
+            AudioOutputParams outParams = videoOutputParams();
+            outParams.fxChain = params;
+            setVideoOutputParams(outParams);
+            return;
+        }
+
         auto instrumentIt = std::find_if(m_instrumentTrackIdMap.begin(), m_instrumentTrackIdMap.end(), [trackId](const auto& pair) {
             return pair.second == trackId;
         });
@@ -1915,6 +2147,13 @@ void PlaybackController::subscribeOnAudioParamsChanges()
     });
 
     playback()->controlParamsChanged().onReceive(this, [this](const TrackId trackId, const ControlParams& params) {
+        if (trackId != INVALID_TRACK_ID && trackId == m_videoTrackId) {
+            AudioOutputParams outParams = videoOutputParams();
+            outParams.setControl(params);
+            setVideoOutputParams(outParams);
+            return;
+        }
+
         auto instrumentIt = std::find_if(m_instrumentTrackIdMap.begin(), m_instrumentTrackIdMap.end(), [trackId](const auto& pair) {
             return pair.second == trackId;
         });
@@ -1941,6 +2180,13 @@ void PlaybackController::subscribeOnAudioParamsChanges()
     //! NOTE: without this, aux-send routing changes are only ever pushed to the live
     //! engine and never persisted, so they don't mark the project as needing a save
     playback()->auxSendsParamsChanged().onReceive(this, [this](const TrackId trackId, const AuxSendsParams& params) {
+        if (trackId != INVALID_TRACK_ID && trackId == m_videoTrackId) {
+            AudioOutputParams outParams = videoOutputParams();
+            outParams.auxSends = params;
+            setVideoOutputParams(outParams);
+            return;
+        }
+
         auto instrumentIt = std::find_if(m_instrumentTrackIdMap.begin(), m_instrumentTrackIdMap.end(), [trackId](const auto& pair) {
             return pair.second == trackId;
         });
@@ -2049,19 +2295,11 @@ void PlaybackController::setupTracks()
 
     if (videoSettings()) {
         videoSettings()->settingsChanged().onNotify(this, [this]() {
-            // NOTE: settingsChanged fires on ANY video-attachment mutation
-            // (renaming/retiming a hit point, volume, offset...), not just a
-            // solo toggle. updateMasterControlParams() unconditionally
-            // reapplies the *persisted* masterAudioOutputParams() to the
-            // engine, which would silently clobber a live (unsaved) Mixer
-            // master-volume/pan/mute change on every unrelated video edit.
-            // Only call it when the force-mute state this listener actually
-            // cares about has changed.
-            if (isMasterOutputForceMuted() != m_isMasterOutputForceMuted) {
-                updateMasterControlParams();
-            }
+            onVideoAttachmentChanged();
         }, Asyncable::Mode::SetReplace);
     }
+
+    onVideoAttachmentChanged();
 
     m_isPlayAllowedChanged.send(isPlayAllowed());
 }
@@ -2121,6 +2359,12 @@ void PlaybackController::updateSoloMuteStates()
         }
     }
 
+    //! NOTE The video's sound track takes part in solo like an instrument track
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    const bool isVideoSoloed = m_videoTrackId != INVALID_TRACK_ID && videoSettingsPtr
+                               && videoSettingsPtr->attachment().isValid() && videoSettingsPtr->attachment().solo;
+    hasSolo = hasSolo || isVideoSoloed;
+
     //! NOTE: a group bus is a soloed track's ONLY path to master (see Mixer::process()'s
     //! skip-direct-mix logic) - if solo force-muted it like any other non-soloed channel,
     //! soloing a track that only reaches master through a group bus would produce silence
@@ -2146,12 +2390,7 @@ void PlaybackController::updateSoloMuteStates()
 
         directlySoloedGroupBuses = audibleGroupBuses;
 
-        for (const InstrumentTrackId& instrumentTrackId : existingTrackIdSet) {
-            if (!m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId).solo) {
-                continue;
-            }
-
-            const AuxSendsParams& auxSends = trackOutputParams(instrumentTrackId).auxSends;
+        auto addAudibleGroupBuses = [this, &audibleGroupBuses](const AuxSendsParams& auxSends) {
             for (size_t i = 0; i < auxSends.size(); ++i) {
                 aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
                 if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount)
@@ -2159,6 +2398,18 @@ void PlaybackController::updateSoloMuteStates()
                     audibleGroupBuses.push_back(auxIdx);
                 }
             }
+        };
+
+        for (const InstrumentTrackId& instrumentTrackId : existingTrackIdSet) {
+            if (!m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId).solo) {
+                continue;
+            }
+
+            addAudibleGroupBuses(trackOutputParams(instrumentTrackId).auxSends);
+        }
+
+        if (isVideoSoloed) {
+            addAudibleGroupBuses(videoOutputParams().auxSends);
         }
     }
 
@@ -2230,6 +2481,7 @@ void PlaybackController::updateSoloMuteStates()
     }
 
     updateAuxMuteStates(hasSolo, audibleGroupBuses);
+    updateVideoMuteState(hasSolo, directlySoloedGroupBuses);
 }
 
 void PlaybackController::updateAuxMuteStates(bool hasSolo, const std::vector<aux_channel_idx_t>& audibleGroupBuses)

@@ -108,6 +108,9 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
                WRITE setShouldDestinationFolderBeOpenedOnExport NOTIFY shouldDestinationFolderBeOpenedOnExportChanged)
 
     Q_PROPERTY(bool isFFmpegAvailable READ isFFmpegAvailable NOTIFY isFFmpegAvailableChanged)
+
+    Q_PROPERTY(bool hasAttachedVideo READ hasAttachedVideo NOTIFY includeVideoAudioChanged)
+    Q_PROPERTY(bool includeVideoAudio READ includeVideoAudio WRITE setIncludeVideoAudio NOTIFY includeVideoAudioChanged)
     Q_PROPERTY(QString ffmpegDir READ ffmpegDir WRITE setFFmpegDir NOTIFY ffmpegDirChanged)
 
     QML_ELEMENT
@@ -239,6 +242,10 @@ public:
     QString ffmpegDir() const;
     void setFFmpegDir(const QString& dir);
 
+    bool hasAttachedVideo() const;
+    bool includeVideoAudio() const;
+    void setIncludeVideoAudio(bool include);
+
     Q_INVOKABLE void updateExportInfo();
 
 signals:
@@ -286,6 +293,8 @@ signals:
 
     void isFFmpegAvailableChanged();
     void ffmpegDirChanged();
+
+    void includeVideoAudioChanged();
 
 private:
     void classBegin() override;

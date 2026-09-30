@@ -224,30 +224,29 @@ void PlaybackControllerStub::setTrackSoloMuteState(const engraving::InstrumentTr
 {
 }
 
-bool PlaybackControllerStub::isMasterOutputForceMuted() const
+muse::audio::TrackId PlaybackControllerStub::videoTrackId() const
+{
+    return muse::audio::INVALID_TRACK_ID;
+}
+
+mu::project::AudioOutputParams PlaybackControllerStub::videoOutputParams() const
+{
+    return {};
+}
+
+void PlaybackControllerStub::setVideoOutputParams(const mu::project::AudioOutputParams&)
+{
+}
+
+bool PlaybackControllerStub::isVideoForceMuted() const
 {
     return false;
 }
 
-muse::async::Notification PlaybackControllerStub::masterOutputForceMuteChanged() const
+muse::async::Channel<bool, bool> PlaybackControllerStub::videoMuteStateChanged() const
 {
-    static muse::async::Notification notification;
-    return notification;
-}
-
-bool PlaybackControllerStub::isVideoPlaying() const
-{
-    return false;
-}
-
-void PlaybackControllerStub::setIsVideoPlaying(bool)
-{
-}
-
-muse::async::Notification PlaybackControllerStub::isVideoPlayingChanged() const
-{
-    static muse::async::Notification notification;
-    return notification;
+    static muse::async::Channel<bool, bool> channel;
+    return channel;
 }
 
 bool PlaybackControllerStub::isTrackForceMuted(const engraving::InstrumentTrackId&) const

@@ -26,13 +26,13 @@ import Muse.UiComponents
 import Muse.Ui
 import MuseScore.Project
 
-Row {
+Column {
     id: root
 
     property ExportDialogModel model
     property NavigationPanel navigationPanel: null
     property int navigationOrderStart: 0
-    property alias navigationOrderEnd: sampleFormatsDropdown.navigation.row
+    property alias navigationOrderEnd: includeVideoAudioCheckBox.navigation.row
 
     property bool showBitRateControl: false
     property bool showSampleRateControl: true
@@ -41,78 +41,102 @@ Row {
 
     spacing: 12
 
-    ExportOptionItem {
-        id: sampleRateLabel
-        visible: root.showSampleRateControl
-        text: qsTrc("project/export", "Sample rate:")
+    Row {
+        width: parent.width
 
-        StyledDropdown {
-            Layout.preferredWidth: 126
+        spacing: 12
 
-            navigation.name: "SampleRatesDropdown"
-            navigation.panel: root.navigationPanel
-            navigation.row: root.navigationOrderStart + 1
-            navigation.accessible.name: sampleRateLabel.text + " " + currentText
+        ExportOptionItem {
+            id: sampleRateLabel
+            visible: root.showSampleRateControl
+            text: qsTrc("project/export", "Sample rate:")
 
-            model: root.model ? root.model.availableSampleRates().map(function(sampleRate) {
-                return { text: qsTrc("project/export", "%1 Hz").arg(sampleRate), value: sampleRate }
-            }) : []
+            StyledDropdown {
+                Layout.preferredWidth: 126
 
-            currentIndex: root.model ? indexOfValue(root.model.sampleRate) : -1
+                navigation.name: "SampleRatesDropdown"
+                navigation.panel: root.navigationPanel
+                navigation.row: root.navigationOrderStart + 1
+                navigation.accessible.name: sampleRateLabel.text + " " + currentText
 
-            onActivated: function(index, value) {
-                root.model.sampleRate = value
+                model: root.model ? root.model.availableSampleRates().map(function(sampleRate) {
+                    return { text: qsTrc("project/export", "%1 Hz").arg(sampleRate), value: sampleRate }
+                }) : []
+
+                currentIndex: root.model ? indexOfValue(root.model.sampleRate) : -1
+
+                onActivated: function(index, value) {
+                    root.model.sampleRate = value
+                }
+            }
+        }
+
+        ExportOptionItem {
+            id: bitrateLabel
+            visible: root.showBitRateControl
+            text: qsTrc("project/export", "Bit rate:")
+
+            StyledDropdown {
+                Layout.preferredWidth: 126
+
+                navigation.name: "BitratesDropdown"
+                navigation.panel: root.navigationPanel
+                navigation.row: root.navigationOrderStart + 2
+                navigation.accessible.name: bitrateLabel.text + " " + currentText
+
+                model: root.model ? root.model.availableBitRates().map(function(bitRate) {
+                    return { text: qsTrc("project/export", "%1 kBit/s").arg(bitRate), value: bitRate }
+                }) : []
+
+                currentIndex: root.model ? indexOfValue(root.model.bitRate) : -1
+
+                onActivated: function(index, value) {
+                    root.model.bitRate = value
+                }
+            }
+        }
+
+        ExportOptionItem {
+            id: sampleFormatLabel
+            visible: root.model ? root.model.availableSampleFormats.length > 0 : false
+            text: qsTrc("project/export", "Sample format:")
+
+            StyledDropdown {
+                id: sampleFormatsDropdown
+
+                Layout.preferredWidth: 126
+
+                navigation.name: "SampleFormatsDropdown"
+                navigation.panel: root.navigationPanel
+                navigation.row: root.navigationOrderStart + 3
+                navigation.accessible.name: sampleFormatLabel.text + " " + currentText
+
+                model: root.model ? root.model.availableSampleFormats : []
+
+                currentIndex: root.model ? indexOfValue(root.model.selectedSampleFormat) : -1
+
+                onActivated: function(index, value) {
+                    root.model.selectedSampleFormat = value
+                }
             }
         }
     }
 
-    ExportOptionItem {
-        id: bitrateLabel
-        visible: root.showBitRateControl
-        text: qsTrc("project/export", "Bit rate:")
+    CheckBox {
+        id: includeVideoAudioCheckBox
 
-        StyledDropdown {
-            Layout.preferredWidth: 126
+        width: parent.width
+        visible: root.model ? root.model.hasAttachedVideo : false
+        text: qsTrc("project/export", "Include the attached video's audio")
 
-            navigation.name: "BitratesDropdown"
-            navigation.panel: root.navigationPanel
-            navigation.row: root.navigationOrderStart + 2
-            navigation.accessible.name: bitrateLabel.text + " " + currentText
+        navigation.name: "IncludeVideoAudioCheckbox"
+        navigation.panel: root.navigationPanel
+        navigation.row: root.navigationOrderStart + 4
 
-            model: root.model ? root.model.availableBitRates().map(function(bitRate) {
-                return { text: qsTrc("project/export", "%1 kBit/s").arg(bitRate), value: bitRate }
-            }) : []
+        checked: root.model ? root.model.includeVideoAudio : false
 
-            currentIndex: root.model ? indexOfValue(root.model.bitRate) : -1
-
-            onActivated: function(index, value) {
-                root.model.bitRate = value
-            }
-        }
-    }
-
-    ExportOptionItem {
-        id: sampleFormatLabel
-        visible: root.model ? root.model.availableSampleFormats.length > 0 : false
-        text: qsTrc("project/export", "Sample format:")
-
-        StyledDropdown {
-            id: sampleFormatsDropdown
-
-            Layout.preferredWidth: 126
-
-            navigation.name: "SampleFormatsDropdown"
-            navigation.panel: root.navigationPanel
-            navigation.row: root.navigationOrderStart + 3
-            navigation.accessible.name: sampleFormatLabel.text + " " + currentText
-
-            model: root.model ? root.model.availableSampleFormats : []
-
-            currentIndex: root.model ? indexOfValue(root.model.selectedSampleFormat) : -1
-
-            onActivated: function(index, value) {
-                root.model.selectedSampleFormat = value
-            }
+        onClicked: {
+            root.model.includeVideoAudio = !checked
         }
     }
 }
