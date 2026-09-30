@@ -884,6 +884,27 @@ Item {
                             videoOutput: videoOut
                         }
 
+                        //! NOTE: frame-accurate picture (FFmpeg decoding, see VideoFramePlayer): shows
+                        //! exactly the frame at the score's position, the same one every time. For now
+                        //! only while the score is stopped/paused; the Qt player above still renders
+                        //! during playback
+                        VideoOutput {
+                            id: exactVideoOut
+
+                            anchors.fill: parent
+                            fillMode: VideoOutput.PreserveAspectFit
+                            visible: framePlayer.available && framePlayer.loaded && framePlayer.shownFramePtsMs >= 0
+                                     && !videoModel.scorePlaying
+                        }
+
+                        VideoFramePlayer {
+                            id: framePlayer
+
+                            source: videoModel.videoUrl
+                            videoSink: exactVideoOut.videoSink
+                            positionMs: Math.max(0, videoModel.scorePlaybackPositionMs + videoModel.offsetMs)
+                        }
+
                         onSourceChanged: {
                             // NOTE: was stop() -- stopping a freshly-set source (instead of
                             // pausing it) left some backends never reporting duration/

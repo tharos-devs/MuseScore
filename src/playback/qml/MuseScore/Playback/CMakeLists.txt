@@ -105,6 +105,10 @@ qt_add_qml_module(playback_qml
 )
 
 if (TARGET Qt6::Multimedia)
+    target_sources(playback_qml PRIVATE
+        videoframeplayer.cpp
+        videoframeplayer.h
+    )
     target_link_libraries(playback_qml PRIVATE Qt6::Multimedia)
 endif()
 
