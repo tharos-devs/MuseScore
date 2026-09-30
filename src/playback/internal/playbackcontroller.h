@@ -133,6 +133,7 @@ public:
     muse::audio::TrackId videoTrackId() const override;
     project::AudioOutputParams videoOutputParams() const override;
     void setVideoOutputParams(const project::AudioOutputParams& params) override;
+    bool isVideoTrackReady() const override;
     bool isVideoForceMuted() const override;
     muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
 
@@ -293,6 +294,7 @@ private:
     muse::async::Notification m_currentTempoChanged;
     muse::audio::TrackId m_videoTrackId = muse::audio::INVALID_TRACK_ID;
     bool m_isVideoTrackBeingAdded = false;
+    bool m_isVideoAudioDecodePending = false;
     std::unique_ptr<VideoAudioDecoder> m_videoAudioDecoder;
     muse::io::path_t m_videoAudioSourcePath; //! the video whose audio m_videoAudioWavPath is (being) decoded from
     muse::io::path_t m_videoAudioWavPath;

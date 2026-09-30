@@ -37,6 +37,7 @@
 #include "media/ivideoencoderresolver.h"
 #include "media/ivideodecoderfactory.h"
 #include "../ivideoexportconfiguration.h"
+#include "importexport/audioexport/iaudioexportconfiguration.h"
 #include "context/iglobalcontext.h"
 
 #include "project/inotationwriter.h"
@@ -52,6 +53,7 @@ namespace mu::iex::videoexport {
 class VideoWriter : public project::INotationWriter, public muse::Contextable, public muse::async::Asyncable
 {
     muse::GlobalInject<IVideoExportConfiguration> configuration;
+    muse::GlobalInject<audioexport::IAudioExportConfiguration> audioExportConfiguration;
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
     muse::GlobalInject<muse::IApplication> application;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncodeResolver;

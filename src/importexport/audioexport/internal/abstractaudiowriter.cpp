@@ -22,6 +22,8 @@
 
 #include "abstractaudiowriter.h"
 
+#include <chrono>
+
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -111,6 +113,15 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     //! NOTE Playback (tracks and duration) loads asynchronously; rendering before it is
     //! ready yields 0 tracks and 0 duration ("No audio to export"). Wait for it first.
     while (!playbackController()->isPlaybackInited()) {
+        application()->processEvents();
+        QThread::yieldCurrentThread();
+    }
+
+    //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too);
+    //! bounded, in case its audio can't be decoded
+    const auto videoWaitStart = std::chrono::steady_clock::now();
+    while (!playbackController()->isVideoTrackReady()
+           && std::chrono::steady_clock::now() - videoWaitStart < std::chrono::seconds(60)) {
         application()->processEvents();
         QThread::yieldCurrentThread();
     }

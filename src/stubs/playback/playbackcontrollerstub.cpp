@@ -238,6 +238,11 @@ void PlaybackControllerStub::setVideoOutputParams(const mu::project::AudioOutput
 {
 }
 
+bool PlaybackControllerStub::isVideoTrackReady() const
+{
+    return true;
+}
+
 bool PlaybackControllerStub::isVideoForceMuted() const
 {
     return false;

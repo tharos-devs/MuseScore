@@ -23,6 +23,7 @@
 
 #include <cmath>
 
+#include <QFile>
 #include <QPainter>
 #include <QThread>
 
@@ -287,25 +288,19 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
 
     const muse::io::path_t videoPath(attachment.path);
 
-    //! NOTE Both only need FFmpeg's demuxers/muxers (the picture is copied, the audio is encoded by our own
+    //! NOTE Only FFmpeg's demuxers/muxers are needed (the picture is copied, the audio is encoded by our own
     //! AAC writer): the FFmpeg bundled with Qt is enough, unlike for the score's video
     const muse::io::paths_t ffmpegDirs = videoDecoderFactory() ? videoDecoderFactory()->defaultFFmpegLibsDirs() : muse::io::paths_t();
-    muse::media::IVideoDecoderPtr decoder = videoDecoderFactory() ? videoDecoderFactory()->createDecoder(ffmpegDirs) : nullptr;
     muse::media::IVideoRemuxerPtr remuxer = videoDecoderFactory() ? videoDecoderFactory()->createRemuxer(ffmpegDirs) : nullptr;
-    if (!decoder || !remuxer) {
+    if (!remuxer) {
         LOGE() << "no usable FFmpeg libraries";
         return make_ret(muse::Ret::Code::NotSupported);
     }
 
-    if (!decoder->open(videoPath)) {
-        return make_ret(muse::Ret::Code::UnknownError, "unable to read " + attachment.path);
-    }
-
-    const double videoDurationSecs = decoder->streamInfo().durationSecs;
-    decoder->close();
-
-    if (videoDurationSecs <= 0.0) {
-        return make_ret(muse::Ret::Code::UnknownError, "unknown duration of " + attachment.path);
+    //! NOTE The export follows the score's timeline, like the playback: from the score's start to its end
+    const double scoreDurationSecs = notation->masterNotation()->playback()->totalPlayTime();
+    if (scoreDurationSecs <= 0.0) {
+        return make_ret(muse::Ret::Code::UnknownError, std::string("empty score"));
     }
 
     m_isCompleted = true; // no picture to generate
@@ -316,15 +311,11 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
 
     m_progress.start();
 
-    //! NOTE The audio covers the whole video: video position = score position + offset, so the video's 0
-    //! is the score's -offset (negative when the video starts before the score: the instruments are then
-    //! silent until the score starts, while the video's audio already plays)
     const muse::io::path_t tempAudioPath = finalPath + ".tmp_audio.aac";
 
     Options audioOpts;
     audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
-    audioOpts[OptionKey::AUDIO_START_SEC] = muse::Val(-attachment.offsetMs / 1000.0);
-    audioOpts[OptionKey::AUDIO_DURATION_SEC] = muse::Val(videoDurationSecs);
+    audioOpts[OptionKey::AUDIO_DURATION_SEC] = muse::Val(scoreDurationSecs);
     audioOpts[OptionKey::INCLUDE_SOUND_TRACKS] = muse::Val(true);
 
     startAudioExport(notation, tempAudioPath, audioOpts);
@@ -351,17 +342,48 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
         m_audioFile.reset();
     }
 
-    // Release the device's file handle before the remuxer writes the file
-    device.close();
+    //! NOTE Remuxed into a temporary file, then written into the device: the device may be buffered and
+    //! write itself to the destination once closed (e.g. when exporting from the command line), which would
+    //! overwrite a file written directly to the destination
+    const muse::io::path_t tempVideoPath = finalPath + ".tmp_video.mp4";
 
     muse::Ret result = m_audioRet;
     if (result && !m_abort) {
-        result = remuxer->remux(videoPath, tempAudioPath, finalPath);
+        //! NOTE Video position = score position + offset: at the output's start (the score's start), the video
+        //! is at `offset` (a negative one: the video starts that much later, black before)
+        muse::media::IVideoRemuxer::Options remuxOptions;
+        remuxOptions.videoStartSecs = attachment.offsetMs / 1000.0;
+        remuxOptions.durationSecs = scoreDurationSecs;
+
+        //! NOTE Our AAC encoder (fdk-aac, AAC-LC in ADTS) primes 2048 samples, which ADTS can't signal: without
+        //! skipping them (edit list), the audio would be that late (measured: exactly 2048 samples)
+        constexpr int AAC_ENCODER_DELAY_SAMPLES = 2048;
+        remuxOptions.audioPrimingSecs = AAC_ENCODER_DELAY_SAMPLES / static_cast<double>(audioExportConfiguration()->exportSampleRate());
+
+        result = remuxer->remux(videoPath, tempAudioPath, tempVideoPath, remuxOptions);
     } else if (m_abort) {
         result = make_ret(muse::Ret::Code::Cancel);
     }
 
+    if (result) {
+        QFile remuxed(tempVideoPath.toQString());
+        if (remuxed.open(QIODevice::ReadOnly)) {
+            constexpr qint64 CHUNK_SIZE = 4 * 1024 * 1024;
+            while (!remuxed.atEnd()) {
+                const QByteArray chunk = remuxed.read(CHUNK_SIZE);
+                if (device.write(reinterpret_cast<const uint8_t*>(chunk.constData()), static_cast<size_t>(chunk.size()))
+                    != static_cast<size_t>(chunk.size())) {
+                    result = make_ret(muse::Ret::Code::UnknownError, "unable to write " + finalPath.toStdString());
+                    break;
+                }
+            }
+        } else {
+            result = make_ret(muse::Ret::Code::UnknownError, "unable to read " + tempVideoPath.toStdString());
+        }
+    }
+
     fileSystem()->remove(tempAudioPath);
+    fileSystem()->remove(tempVideoPath);
 
     m_progress.finish(result);
 

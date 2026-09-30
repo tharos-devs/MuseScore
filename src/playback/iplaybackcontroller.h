@@ -125,6 +125,9 @@ public:
     //! VideoAttachmentSettings, shared with the Video panel.
     virtual project::AudioOutputParams videoOutputParams() const = 0;
     virtual void setVideoOutputParams(const project::AudioOutputParams& params) = 0;
+    //! NOTE Whether the video track is completely set up in the engine (added, its audio decoded and loaded,
+    //! its mute state applied): an export must wait for it. True if there's no attached video.
+    virtual bool isVideoTrackReady() const = 0;
     //! NOTE Whether the video track is muted only because some other track is soloed
     virtual bool isVideoForceMuted() const = 0;
     //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
