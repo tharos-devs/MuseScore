@@ -40,11 +40,32 @@ namespace {
 //! NOTE Frames decoded in advance of the shown one, so playback never waits for the decoder
 constexpr size_t READ_AHEAD_FRAMES = 8;
 
+//! NOTE Frames kept behind the shown one, so that a target moving back a little is served from memory
+//! instead of seeking (a seek restarts decoding from the previous keyframe: tens of ms)
+constexpr size_t KEPT_BEHIND_FRAMES = 4;
+
 //! NOTE Moving forward by less than this decodes the frames in between instead of seeking, which
 //! is faster (a seek restarts from the previous keyframe, possibly seconds before)
 constexpr double MAX_DECODE_FORWARD_SECS = 2.0;
 
 constexpr double PTS_EPSILON_SECS = 0.001;
+
+//! NOTE How often the picture's target is updated while playing (faster than any screen refresh)
+constexpr int CLOCK_TICK_MS = 4;
+
+//! NOTE Locking the local clock onto the engine's reports: a small error is corrected gradually (which
+//! smooths out their irregular delivery), a large one (seek, loop wrap) immediately
+constexpr double CLOCK_SNAP_THRESHOLD_MS = 60.0;
+constexpr double CLOCK_CORRECTION_RATIO = 0.1;
+
+//! NOTE The local clock never runs further than this ahead of the last report, so that the picture
+//! doesn't run away while the score's position is held still (count-in, end of the score...)
+constexpr double CLOCK_MAX_EXTRAPOLATION_MS = 25.0;
+
+//! NOTE Picture timing compensation: reports arrive late (half an engine cycle on average), and a frame
+//! pushed now is on screen about one refresh later, while the sound is heard one output buffer later
+constexpr double REPORT_DELAY_MS = 8.0;
+constexpr double DISPLAY_LATENCY_MS = 16.7;
 
 QVideoFrame toQVideoFrame(const VideoFrame& frame)
 {
@@ -81,6 +102,12 @@ QVideoFrame toQVideoFrame(const VideoFrame& frame)
 VideoFramePlayer::VideoFramePlayer(QObject* parent)
     : QObject(parent)
 {
+    m_clockTimer.start();
+
+    m_clockTick = new QTimer(this);
+    m_clockTick->setTimerType(Qt::PreciseTimer);
+    m_clockTick->setInterval(CLOCK_TICK_MS);
+    connect(m_clockTick, &QTimer::timeout, this, &VideoFramePlayer::onClockTick);
 }
 
 VideoFramePlayer::~VideoFramePlayer()
@@ -228,21 +255,28 @@ void VideoFramePlayer::workerLoop()
             decodeNext();
         }
 
-        // Drop the frames before the one shown at the target
-        while (buffer.size() >= 2 && buffer[1]->ptsSecs <= target + PTS_EPSILON_SECS) {
-            buffer.pop_front();
+        // The frame shown at the target: the last one whose pts <= target
+        size_t shownIndex = 0;
+        while (shownIndex + 1 < buffer.size() && buffer[shownIndex + 1]->ptsSecs <= target + PTS_EPSILON_SECS) {
+            ++shownIndex;
         }
 
-        if (!buffer.empty() && buffer.front()->ptsSecs != shownPts) {
-            shownPts = buffer.front()->ptsSecs;
-            QVideoFrame frame = toQVideoFrame(*buffer.front());
+        // Drop the older frames, except a few behind the shown one
+        while (shownIndex > KEPT_BEHIND_FRAMES) {
+            buffer.pop_front();
+            --shownIndex;
+        }
+
+        if (!buffer.empty() && buffer[shownIndex]->ptsSecs != shownPts) {
+            shownPts = buffer[shownIndex]->ptsSecs;
+            QVideoFrame frame = toQVideoFrame(*buffer[shownIndex]);
             QMetaObject::invokeMethod(this, [this, frame, pts = shownPts, generation]() {
                 onFrame(frame, pts, generation);
             }, Qt::QueuedConnection);
         }
 
         // Read ahead, unless a new target is already waiting
-        while (!endOfStream && buffer.size() < READ_AHEAD_FRAMES) {
+        while (!endOfStream && buffer.size() < shownIndex + 1 + READ_AHEAD_FRAMES) {
             {
                 std::lock_guard lock(m_mutex);
                 if (m_targetChanged || m_openRequested || m_quit) {
@@ -350,7 +384,89 @@ void VideoFramePlayer::setPositionMs(double positionMs)
     m_positionMs = positionMs;
     emit positionMsChanged();
 
-    m_targetSecs.store(positionMs / 1000.0);
+    if (!m_playing) {
+        setTargetSecs(positionMs / 1000.0);
+        return;
+    }
+
+    const double now = static_cast<double>(m_clockTimer.nsecsElapsed()) / 1e6;
+    const double error = positionMs - clockMs();
+
+    if (std::abs(error) > CLOCK_SNAP_THRESHOLD_MS) {
+        m_anchorMs = positionMs;
+    } else {
+        m_anchorMs = clockMs() + error * CLOCK_CORRECTION_RATIO;
+    }
+    m_anchorTimeMs = now;
+
+    onClockTick();
+}
+
+bool VideoFramePlayer::playing() const
+{
+    return m_playing;
+}
+
+void VideoFramePlayer::setPlaying(bool playing)
+{
+    if (m_playing == playing) {
+        return;
+    }
+
+    m_playing = playing;
+    emit playingChanged();
+
+    if (playing) {
+        m_anchorMs = m_positionMs;
+        m_anchorTimeMs = static_cast<double>(m_clockTimer.nsecsElapsed()) / 1e6;
+        m_clockTick->start();
+        onClockTick();
+    } else {
+        m_clockTick->stop();
+
+        //! NOTE Stopped: exactly the frame at the score's position, no timing compensation
+        setTargetSecs(m_positionMs / 1000.0);
+    }
+}
+
+double VideoFramePlayer::clockMs() const
+{
+    const double now = static_cast<double>(m_clockTimer.nsecsElapsed()) / 1e6;
+    const double clock = m_anchorMs + (now - m_anchorTimeMs);
+    return std::min(clock, m_positionMs + CLOCK_MAX_EXTRAPOLATION_MS);
+}
+
+double VideoFramePlayer::pictureLeadMs() const
+{
+    double audioLatencyMs = 0.0;
+    if (audioConfiguration() && audioConfiguration()->sampleRate() > 0) {
+        audioLatencyMs = 1000.0 * audioConfiguration()->driverBufferSize() / audioConfiguration()->sampleRate();
+    }
+
+    return REPORT_DELAY_MS + DISPLAY_LATENCY_MS - audioLatencyMs;
+}
+
+void VideoFramePlayer::onClockTick()
+{
+    if (!m_playing) {
+        return;
+    }
+
+    double targetMs = std::max(0.0, clockMs() + pictureLeadMs());
+
+    //! NOTE Playing: the picture never goes back, except for a real jump (seek, loop wrap) - the clock's
+    //! small corrections are absorbed by holding the current frame a little longer instead
+    const double lastTargetMs = m_targetSecs.load() * 1000.0;
+    if (targetMs < lastTargetMs && lastTargetMs - targetMs < CLOCK_SNAP_THRESHOLD_MS) {
+        targetMs = lastTargetMs;
+    }
+
+    setTargetSecs(targetMs / 1000.0);
+}
+
+void VideoFramePlayer::setTargetSecs(double secs)
+{
+    m_targetSecs.store(secs);
     {
         std::lock_guard lock(m_mutex);
         m_targetChanged = true;

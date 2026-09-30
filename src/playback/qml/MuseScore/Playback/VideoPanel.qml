@@ -514,7 +514,8 @@ Item {
     }
 
     function syncVideoToScore(forceSeek) {
-        if (!videoModel.hasVideo || video.duration <= 0) {
+        // The frame-accurate picture follows the score by itself (see VideoFramePlayer)
+        if (!videoModel.hasVideo || video.duration <= 0 || video.exact) {
             return
         }
 
@@ -842,21 +843,31 @@ Item {
                     Item {
                         id: video
 
+                        //! NOTE: with the frame-accurate picture, the Qt player is only kept for the
+                        //! file's metadata and never plays: position/state then come from the frame
+                        //! actually shown and from the score's transport
+                        readonly property bool exact: framePlayer.available && framePlayer.loaded
+
                         property alias source: player.source
-                        readonly property alias duration: player.duration
-                        readonly property alias position: player.position
-                        readonly property alias playbackState: player.playbackState
-                        readonly property alias seekable: player.seekable
+                        readonly property real duration: exact ? framePlayer.durationMs : player.duration
+                        readonly property real position: exact ? Math.max(0, framePlayer.shownFramePtsMs) : player.position
+                        readonly property int playbackState: exact ? (videoModel.scorePlaying ? MediaPlayer.PlayingState : MediaPlayer.PausedState)
+                                                                   : player.playbackState
+                        readonly property bool seekable: exact || player.seekable
                         readonly property alias metaData: player.metaData
                         readonly property alias hasAudio: player.hasAudio
                         property alias playbackRate: player.playbackRate
 
                         function play() {
-                            player.play()
+                            if (!exact) {
+                                player.play()
+                            }
                         }
 
                         function pause() {
-                            player.pause()
+                            if (!exact) {
+                                player.pause()
+                            }
                         }
 
                         function stop() {
@@ -864,7 +875,9 @@ Item {
                         }
 
                         function seek(offset) {
-                            player.position = offset
+                            if (!exact) {
+                                player.position = offset
+                            }
                         }
 
                         anchors.fill: parent
@@ -882,19 +895,25 @@ Item {
                             id: player
 
                             videoOutput: videoOut
+
+                            // Hand the picture over to the exact player as soon as it's ready
+                            onPlaybackStateChanged: {
+                                if (video.exact && playbackState === MediaPlayer.PlayingState) {
+                                    pause()
+                                }
+                            }
                         }
 
-                        //! NOTE: frame-accurate picture (FFmpeg decoding, see VideoFramePlayer): shows
-                        //! exactly the frame at the score's position, the same one every time. For now
-                        //! only while the score is stopped/paused; the Qt player above still renders
-                        //! during playback
+                        //! NOTE: frame-accurate picture (FFmpeg decoding, see VideoFramePlayer): always
+                        //! shows the frame at the score's position (compensated for the audio/display
+                        //! latencies while playing), so the same position always shows the same frame.
+                        //! The Qt player above only renders when it's unavailable.
                         VideoOutput {
                             id: exactVideoOut
 
                             anchors.fill: parent
                             fillMode: VideoOutput.PreserveAspectFit
-                            visible: framePlayer.available && framePlayer.loaded && framePlayer.shownFramePtsMs >= 0
-                                     && !videoModel.scorePlaying
+                            visible: video.exact && framePlayer.shownFramePtsMs >= 0
                         }
 
                         VideoFramePlayer {
@@ -903,6 +922,7 @@ Item {
                             source: videoModel.videoUrl
                             videoSink: exactVideoOut.videoSink
                             positionMs: Math.max(0, videoModel.scorePlaybackPositionMs + videoModel.offsetMs)
+                            playing: videoModel.scorePlaying && videoModel.scorePlaybackPositionMs + videoModel.offsetMs >= 0
                         }
 
                         onSourceChanged: {

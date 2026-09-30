@@ -30,6 +30,8 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QElapsedTimer>
+#include <QTimer>
 #include <QUrl>
 #include <QVideoFrame>
 #include <qqmlintegration.h>
@@ -37,6 +39,7 @@
 #include "modularity/ioc.h"
 #include "media/ivideodecoderfactory.h"
 #include "media/ivideoencoderresolver.h"
+#include "audio/main/iaudioconfiguration.h"
 
 #include <QVideoSink>
 
@@ -53,7 +56,11 @@ class VideoFramePlayer : public QObject
 
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged FINAL)
     Q_PROPERTY(QVideoSink * videoSink READ videoSink WRITE setVideoSink NOTIFY videoSinkChanged FINAL)
+    //! NOTE The position to show, in the video's timeline. While `playing`, it's the score position as
+    //! reported by the audio engine: between two reports (and to smooth their delivery jitter), the
+    //! picture follows a local clock locked onto them, so it moves on every screen refresh
     Q_PROPERTY(double positionMs READ positionMs WRITE setPositionMs NOTIFY positionMsChanged FINAL)
+    Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY playingChanged FINAL)
 
     Q_PROPERTY(bool available READ available NOTIFY availableChanged FINAL)
     Q_PROPERTY(bool loaded READ loaded NOTIFY streamInfoChanged FINAL)
@@ -71,6 +78,7 @@ class VideoFramePlayer : public QObject
 
     muse::GlobalInject<muse::media::IVideoDecoderFactory> decoderFactory;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncoderResolver;
+    muse::GlobalInject<muse::audio::IAudioConfiguration> audioConfiguration;
 
 public:
     explicit VideoFramePlayer(QObject* parent = nullptr);
@@ -84,6 +92,9 @@ public:
 
     double positionMs() const;
     void setPositionMs(double positionMs);
+
+    bool playing() const;
+    void setPlaying(bool playing);
 
     bool available() const;
     bool loaded() const;
@@ -99,6 +110,7 @@ signals:
     void sourceChanged();
     void videoSinkChanged();
     void positionMsChanged();
+    void playingChanged();
     void availableChanged();
     void streamInfoChanged();
     void shownFrameChanged();
@@ -111,11 +123,22 @@ private:
     muse::io::paths_t ffmpegLibsDirs() const;
 
     void onStreamInfo(const muse::media::VideoStreamInfo& info, quint64 generation);
+
+    void setTargetSecs(double secs);
+    double clockMs() const; // the local clock, while playing
+    void onClockTick();
+    double pictureLeadMs() const;
     void onFrame(const QVideoFrame& frame, double ptsSecs, quint64 generation);
 
     QUrl m_source;
     QPointer<QVideoSink> m_sink;
     double m_positionMs = 0.0;
+
+    bool m_playing = false;
+    QElapsedTimer m_clockTimer;
+    QTimer* m_clockTick = nullptr;
+    double m_anchorMs = 0.0; // local clock = m_anchorMs + time elapsed since m_anchorTimeMs
+    double m_anchorTimeMs = 0.0;
 
     bool m_available = false;
     bool m_availabilityChecked = false;
