@@ -58,6 +58,12 @@ public:
 
     virtual double trailingSec() const = 0;
     virtual void setTrailingSec(std::optional<double> trailingSec) = 0;
+
+    virtual VideoSource source() const = 0;
+    virtual void setSource(std::optional<VideoSource> source) = 0;
+
+    virtual const AttachedVideo& attachedVideo() const = 0;
+    virtual void setAttachedVideo(const AttachedVideo& video) = 0;
 };
 }
 

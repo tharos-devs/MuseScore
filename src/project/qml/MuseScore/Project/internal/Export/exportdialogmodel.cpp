@@ -33,6 +33,10 @@
 #include "project/inotationproject.h"
 #include "project/iprojectvideosettings.h"
 
+#ifdef MUE_BUILD_IMPEXP_VIDEOEXPORT_MODULE
+static const QString ATTACHED_VIDEO_EXPORT_TYPE_ID("mp4-attached-video");
+#endif
+
 #include "translation.h"
 #include "log.h"
 
@@ -102,7 +106,7 @@ ExportDialogModel::ExportDialogModel(QObject* parent)
                                      "AacSettingsPage.qml"),
 #ifdef MUE_BUILD_IMPEXP_VIDEOEXPORT_MODULE
         ExportType::makeWithSuffixes({ "mp4" },
-                                     muse::qtrc("project/export", "MP4 video"),
+                                     muse::qtrc("project/export", "MP4 video (score)"),
                                      muse::qtrc("project/export", "MP4 video"),
                                      "Mp4SettingsPage.qml"),
 #endif
@@ -152,6 +156,22 @@ void ExportDialogModel::classBegin()
 void ExportDialogModel::init()
 {
     TRACEFUNC;
+
+#ifdef MUE_BUILD_IMPEXP_VIDEOEXPORT_MODULE
+    //! NOTE Only offered when a video is attached: its own picture, with the score's and the video's audio
+    if (hasAttachedVideo()) {
+        ExportType attachedVideoType = ExportType::makeWithSuffixes({ "mp4" },
+                                                                    muse::qtrc("project/export", "MP4 video (attached video)"),
+                                                                    muse::qtrc("project/export", "MP4 video"),
+                                                                    "Mp4AttachedVideoSettingsPage.qml");
+        attachedVideoType.id = ATTACHED_VIDEO_EXPORT_TYPE_ID;
+
+        auto it = std::find_if(m_exportTypeList.begin(), m_exportTypeList.end(), [](const ExportType& type) {
+            return type.id == "mp4";
+        });
+        m_exportTypeList.insert(it != m_exportTypeList.end() ? it + 1 : m_exportTypeList.end(), attachedVideoType);
+    }
+#endif
 
     const ExportInfo& info = exportProjectScenario()->exportInfo();
     if (info.id.isEmpty()) {
@@ -680,6 +700,21 @@ bool ExportDialogModel::hasAttachedVideo() const
     return project && project->videoSettings() && project->videoSettings()->attachment().isValid();
 }
 
+bool ExportDialogModel::isAttachedVideoExportAvailable() const
+{
+#ifdef MUE_BUILD_IMPEXP_VIDEOEXPORT_MODULE
+    //! NOTE Loading FFmpeg is the actual test: done once
+    if (!m_isAttachedVideoExportAvailable.has_value()) {
+        const muse::io::paths_t dirs = videoDecoderFactory() ? videoDecoderFactory()->defaultFFmpegLibsDirs() : muse::io::paths_t();
+        m_isAttachedVideoExportAvailable = videoDecoderFactory() && videoDecoderFactory()->createRemuxer(dirs) != nullptr;
+    }
+
+    return m_isAttachedVideoExportAvailable.value();
+#else
+    return false;
+#endif
+}
+
 bool ExportDialogModel::includeVideoAudio() const
 {
     return hasAttachedVideo() && context()->currentProject()->videoSettings()->attachment().includeAudioInExport;
@@ -1013,12 +1048,31 @@ void ExportDialogModel::setSelectedSampleFormat(int format)
 #ifdef MUE_BUILD_IMPEXP_VIDEOEXPORT_MODULE
 void ExportDialogModel::updateVideoExportSettingMode()
 {
-    videoEncoderResolver()->setIsSettingMode(isFormatSelected("mp4"));
+    const bool isAttachedVideo = m_selectedExportType.id == ATTACHED_VIDEO_EXPORT_TYPE_ID;
+
+    //! NOTE The FFmpeg libraries search only concerns the score's video (the attached video uses the
+    //! FFmpeg bundled with Qt, see VideoWriter::writeAttachedVideo())
+    videoEncoderResolver()->setIsSettingMode(isFormatSelected("mp4") && !isAttachedVideo);
+
+    videoExportConfiguration()->setSource(isAttachedVideo ? iex::videoexport::VideoSource::AttachedVideo
+                                          : iex::videoexport::VideoSource::Score);
+
+    iex::videoexport::AttachedVideo attachedVideo;
+    if (isAttachedVideo && hasAttachedVideo()) {
+        const VideoAttachmentSettings& attachment = context()->currentProject()->videoSettings()->attachment();
+        attachedVideo.path = attachment.path.toStdString();
+        attachedVideo.offsetMs = attachment.offsetMs;
+    }
+    videoExportConfiguration()->setAttachedVideo(attachedVideo);
 }
 
 void ExportDialogModel::disableVideoExportSettingMode()
 {
     videoEncoderResolver()->setIsSettingMode(false);
+
+    //! NOTE Back to the default, e.g. for command line exports
+    videoExportConfiguration()->setSource(std::nullopt);
+    videoExportConfiguration()->setAttachedVideo({});
 }
 
 #endif

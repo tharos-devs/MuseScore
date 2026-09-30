@@ -131,6 +131,14 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     actualFormat.trailingSilenceDuration = std::isfinite(trailingSilenceSec)
                                            ? static_cast<msecs_t>(trailingSilenceSec) : msecs_t(0);
 
+    const double startSec = muse::value(options, OptionKey::AUDIO_START_SEC, Val(0.0)).toDouble();
+    actualFormat.startTime = std::isfinite(startSec) ? startSec : 0.0;
+
+    const double durationSec = muse::value(options, OptionKey::AUDIO_DURATION_SEC, Val(0.0)).toDouble();
+    actualFormat.duration = std::isfinite(durationSec) && durationSec > 0.0 ? durationSec : 0.0;
+
+    actualFormat.includeSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
+
     doWrite(dstDevice, actualFormat);
 
     const bool waitForCompletion = muse::value(options, OptionKey::WAIT_FOR_COMPLETION, Val(true)).toBool();

@@ -35,6 +35,7 @@
 #include "io/ifilesystem.h"
 #include "global/iapplication.h"
 #include "media/ivideoencoderresolver.h"
+#include "media/ivideodecoderfactory.h"
 #include "../ivideoexportconfiguration.h"
 #include "context/iglobalcontext.h"
 
@@ -54,6 +55,7 @@ class VideoWriter : public project::INotationWriter, public muse::Contextable, p
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
     muse::GlobalInject<muse::IApplication> application;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncodeResolver;
+    muse::GlobalInject<muse::media::IVideoDecoderFactory> videoDecoderFactory;
     muse::GlobalInject<project::INotationWritersRegister> writers;
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
@@ -88,7 +90,11 @@ private:
     Config makeConfig() const;
 
     void startVideoExport(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& cfg);
-    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Config& cfg);
+    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions);
+
+    //! NOTE VideoSource::AttachedVideo: the attached video's picture as is, with the score's and the
+    //! video's audio (the engine's rendering, as mixed in the Mixer) over the whole video
+    muse::Ret writeAttachedVideo(notation::INotationPtr notation, muse::io::IODevice& device, const muse::io::path_t& finalPath);
 
     void doGenerate(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& config);
 

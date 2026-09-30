@@ -75,6 +75,7 @@ qt_add_qml_module(project_qml
         internal/Export/WavSettingsPage.qml
         internal/Export/AacSettingsPage.qml
         internal/Export/Mp4SettingsPage.qml
+        internal/Export/Mp4AttachedVideoSettingsPage.qml
         internal/Export/MusicXmlSettingsPage.qml
         internal/Export/PdfSettingsPage.qml
         internal/Export/PngSettingsPage.qml

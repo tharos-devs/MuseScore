@@ -54,6 +54,12 @@ public:
 
         LEADING_SILENCE_SEC,
         TRAILING_SILENCE_SEC,
+
+        //! NOTE Audio: the rendered part of the playback timeline (see muse::audio::SoundTrackFormat::startTime,
+        //! duration), and whether the sound tracks (e.g. the attached video's audio) are always included
+        AUDIO_START_SEC,
+        AUDIO_DURATION_SEC,
+        INCLUDE_SOUND_TRACKS,
     };
 
     using Options = std::map<OptionKey, muse::Val>;

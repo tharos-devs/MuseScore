@@ -36,6 +36,7 @@ Column {
 
     property bool showBitRateControl: false
     property bool showSampleRateControl: true
+    property bool showIncludeVideoAudioControl: true
 
     width: parent ? parent.width : implicitWidth
 
@@ -126,7 +127,7 @@ Column {
         id: includeVideoAudioCheckBox
 
         width: parent.width
-        visible: root.model ? root.model.hasAttachedVideo : false
+        visible: root.showIncludeVideoAudioControl && (root.model ? root.model.hasAttachedVideo : false)
         text: qsTrc("project/export", "Include the attached video's audio")
 
         navigation.name: "IncludeVideoAudioCheckbox"

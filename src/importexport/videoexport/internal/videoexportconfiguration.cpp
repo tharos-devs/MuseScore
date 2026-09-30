@@ -107,3 +107,23 @@ void VideoExportConfiguration::setTrailingSec(std::optional<double> trailingSec)
 {
     m_trailingSec = trailingSec;
 }
+
+VideoSource VideoExportConfiguration::source() const
+{
+    return m_source ? m_source.value() : VideoSource::Score;
+}
+
+void VideoExportConfiguration::setSource(std::optional<VideoSource> source)
+{
+    m_source = source;
+}
+
+const AttachedVideo& VideoExportConfiguration::attachedVideo() const
+{
+    return m_attachedVideo;
+}
+
+void VideoExportConfiguration::setAttachedVideo(const AttachedVideo& video)
+{
+    m_attachedVideo = video;
+}

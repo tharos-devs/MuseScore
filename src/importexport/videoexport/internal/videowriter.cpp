@@ -105,6 +105,10 @@ muse::Ret VideoWriter::write(INotationPtr notation, muse::io::IODevice& device, 
         return make_ret(muse::Ret::Code::InternalError);
     }
 
+    if (configuration()->source() == VideoSource::AttachedVideo) {
+        return writeAttachedVideo(notation, device, muse::io::path_t(filePath));
+    }
+
     bool withAudio = muse::value(options, OptionKey::WITH_AUDIO, muse::Val(true)).toBool();
 
     Config cfg = makeConfig();
@@ -136,7 +140,11 @@ muse::Ret VideoWriter::write(INotationPtr notation, muse::io::IODevice& device, 
     startVideoExport(encoder, notation, cfg);
 
     if (withAudio) {
-        startAudioExport(notation, tempAudioPath, cfg);
+        Options audioOpts;
+        audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
+        audioOpts[OptionKey::LEADING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.leadingSec));
+        audioOpts[OptionKey::TRAILING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.trailingSec));
+        startAudioExport(notation, tempAudioPath, audioOpts);
     } else {
         m_audioCompleted = true;
         m_audioRet = muse::make_ok();
@@ -246,7 +254,7 @@ void VideoWriter::startVideoExport(muse::media::IVideoEncoderPtr encoder, INotat
     });
 }
 
-void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t& audioPath, const Config& cfg)
+void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions)
 {
     m_audioWriter = writers()->writer("aac");
     if (!m_audioWriter) {
@@ -261,16 +269,103 @@ void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t
         m_audioCompleted = true;
     });
 
-    Options audioOpts;
-    audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
-    audioOpts[OptionKey::LEADING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.leadingSec));
-    audioOpts[OptionKey::TRAILING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.trailingSec));
-
     m_audioFile = std::make_unique<muse::io::FileStream>(audioPath);
     m_audioFile->setMeta("file_path", audioPath.toStdString());
     m_audioFile->open(muse::io::IODevice::WriteOnly);
 
-    m_audioWriter->write(notation, *m_audioFile, audioOpts);
+    m_audioWriter->write(notation, *m_audioFile, audioOptions);
+}
+
+muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODevice& device, const muse::io::path_t& finalPath)
+{
+    //! NOTE Set by the export dialog (this writer lives in the global context, it can't see the project)
+    const AttachedVideo attachment = configuration()->attachedVideo();
+    if (attachment.path.empty()) {
+        LOGE() << "no attached video";
+        return make_ret(muse::Ret::Code::InternalError);
+    }
+
+    const muse::io::path_t videoPath(attachment.path);
+
+    //! NOTE Both only need FFmpeg's demuxers/muxers (the picture is copied, the audio is encoded by our own
+    //! AAC writer): the FFmpeg bundled with Qt is enough, unlike for the score's video
+    const muse::io::paths_t ffmpegDirs = videoDecoderFactory() ? videoDecoderFactory()->defaultFFmpegLibsDirs() : muse::io::paths_t();
+    muse::media::IVideoDecoderPtr decoder = videoDecoderFactory() ? videoDecoderFactory()->createDecoder(ffmpegDirs) : nullptr;
+    muse::media::IVideoRemuxerPtr remuxer = videoDecoderFactory() ? videoDecoderFactory()->createRemuxer(ffmpegDirs) : nullptr;
+    if (!decoder || !remuxer) {
+        LOGE() << "no usable FFmpeg libraries";
+        return make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    if (!decoder->open(videoPath)) {
+        return make_ret(muse::Ret::Code::UnknownError, "unable to read " + attachment.path);
+    }
+
+    const double videoDurationSecs = decoder->streamInfo().durationSecs;
+    decoder->close();
+
+    if (videoDurationSecs <= 0.0) {
+        return make_ret(muse::Ret::Code::UnknownError, "unknown duration of " + attachment.path);
+    }
+
+    m_isCompleted = true; // no picture to generate
+    m_audioCompleted = false;
+    m_abort = false;
+    m_writeRet = muse::make_ok();
+    m_audioRet = muse::Ret();
+
+    m_progress.start();
+
+    //! NOTE The audio covers the whole video: video position = score position + offset, so the video's 0
+    //! is the score's -offset (negative when the video starts before the score: the instruments are then
+    //! silent until the score starts, while the video's audio already plays)
+    const muse::io::path_t tempAudioPath = finalPath + ".tmp_audio.aac";
+
+    Options audioOpts;
+    audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
+    audioOpts[OptionKey::AUDIO_START_SEC] = muse::Val(-attachment.offsetMs / 1000.0);
+    audioOpts[OptionKey::AUDIO_DURATION_SEC] = muse::Val(videoDurationSecs);
+    audioOpts[OptionKey::INCLUDE_SOUND_TRACKS] = muse::Val(true);
+
+    startAudioExport(notation, tempAudioPath, audioOpts);
+
+    if (m_audioWriter) {
+        m_audioWriter->progress()->progressChanged().onReceive(this, [this](int64_t current, int64_t total, const std::string& msg) {
+            m_progress.progress(current, total, msg);
+        });
+    }
+
+    while (!m_audioCompleted) {
+        application()->processEvents();
+        QThread::yieldCurrentThread();
+    }
+
+    if (m_audioWriter) {
+        m_audioWriter->progress()->finished().disconnect(this);
+        m_audioWriter->progress()->progressChanged().disconnect(this);
+        m_audioWriter = nullptr;
+    }
+
+    if (m_audioFile) {
+        m_audioFile->close();
+        m_audioFile.reset();
+    }
+
+    // Release the device's file handle before the remuxer writes the file
+    device.close();
+
+    muse::Ret result = m_audioRet;
+    if (result && !m_abort) {
+        result = remuxer->remux(videoPath, tempAudioPath, finalPath);
+    } else if (m_abort) {
+        result = make_ret(muse::Ret::Code::Cancel);
+    }
+
+    fileSystem()->remove(tempAudioPath);
+
+    m_progress.finish(result);
+
+    return result;
 }
 
 muse::Ret VideoWriter::writeList(const INotationPtrList&, muse::io::IODevice&, const Options&)
