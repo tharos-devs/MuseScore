@@ -51,6 +51,8 @@ public:
                 (const TrackName& name, const mpe::PlaybackData& data, const TrackParams& params), (override));
     MOCK_METHOD((async::Promise<TrackId, TrackParams>), addAuxTrack,
                 (const TrackName& trackName, const TrackParams& params), (override));
+    MOCK_METHOD((async::Promise<TrackId, TrackParams>), addSoundTrack,
+                (const TrackName& trackName, const TrackParams& params), (override));
 
     MOCK_METHOD(void, removeTrack, (const TrackId trackId), (override));
     MOCK_METHOD(void, removeAllTracks, (), (override));

@@ -50,7 +50,14 @@ target_sources(playback PRIVATE
     internal/drumsetloader.h
     internal/knownaudiopluginsconfigurator.cpp
     internal/knownaudiopluginsconfigurator.h
+    internal/videoaudiodecoder.cpp
+    internal/videoaudiodecoder.h
 )
+
+if (TARGET Qt6::Multimedia)
+    target_link_libraries(playback PRIVATE Qt6::Multimedia)
+    target_compile_definitions(playback PRIVATE MUE_PLAYBACK_HAS_QT_MULTIMEDIA)
+endif()
 
 if (MUE_BUILD_PLAYBACK_TESTS)
     add_subdirectory(tests)

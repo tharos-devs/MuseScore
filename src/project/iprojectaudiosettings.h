@@ -96,6 +96,12 @@ public:
     virtual const AudioOutputParams& masterAudioOutputParams() const = 0;
     virtual void setMasterAudioOutputParams(const AudioOutputParams& params) = 0;
 
+    //! NOTE Output params of the attached video's sound track (see IPlaybackController::videoTrackId()).
+    //! Its solo/mute state is not stored here but in VideoAttachmentSettings, shared with the Video panel.
+    virtual bool containsVideoOutputParams() const = 0;
+    virtual const AudioOutputParams& videoOutputParams() const = 0;
+    virtual void setVideoOutputParams(const AudioOutputParams& params) = 0;
+
     virtual bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) = 0;

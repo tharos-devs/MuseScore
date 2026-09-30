@@ -27,8 +27,6 @@
 #include <QObject>
 #include <qqmlintegration.h>
 
-class QTimer;
-
 #include "async/asyncable.h"
 
 #include "modularity/ioc.h"
@@ -361,12 +359,6 @@ protected:
 
     bool askAboutChangingSound();
 
-    //! NOTE The Video channel isn't a real track in the audio engine (see VIDEO_TRACK_ID
-    //!      in MixerPanelModel), so there is no real signal to meter -- this fakes a
-    //!      plausible-looking level from the configured volume while video plays.
-    void setupVideoMeterAnimation();
-    void updateFakeVideoMeter();
-
     void setDisplayedVolumeLevel(float volumeLevel);
     void setDisplayedBalance(int balance);
     void setDisplayedGain(int gain);
@@ -401,8 +393,6 @@ protected:
 
     float m_leftChannelPressure = 0.0;
     float m_rightChannelPressure = 0.0;
-
-    QTimer* m_videoMeterTimer = nullptr;
 
     muse::ui::NavigationPanel* m_panel = nullptr;
 

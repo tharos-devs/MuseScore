@@ -34,6 +34,7 @@
 #include "notation/inotation_fwd.h"
 #include "notation/inotationsolomutestate.h"
 #include "notation/types/tempo.h"
+#include "project/iprojectaudiosettings.h"
 
 #include "playbacktypes.h"
 
@@ -114,20 +115,20 @@ public:
     virtual const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const = 0;
     virtual void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) = 0;
 
-    //! NOTE Whether the master output is currently force-muted because the attached video is soloed.
-    //! This is the single source of truth for that rule; it must not be re-derived elsewhere.
-    virtual bool isMasterOutputForceMuted() const = 0;
-    virtual muse::async::Notification masterOutputForceMuteChanged() const = 0;
-
-    //! NOTE Whether the video panel's own video element is actually playing right now.
-    //! Distinct from isPlaying() (the score's transport state): the video can start a
-    //! sync cycle later than the score, or stop on its own before the score does (e.g. once
-    //! it reaches its own end while the score keeps playing). Pushed by the Video panel as
-    //! the real Qt Multimedia playback state changes; read by the Mixer's Video channel meter.
-    //! Always false for a video without an audio track, so that meter stays dark.
-    virtual bool isVideoPlaying() const = 0;
-    virtual void setIsVideoPlaying(bool playing) = 0;
-    virtual muse::async::Notification isVideoPlayingChanged() const = 0;
+    //! NOTE The attached video's audio is a real engine track (a sound track, see
+    //! IPlayback::addSoundTrack()), positioned by the same clock as the score. It exists as long as
+    //! a video is attached (silent while its audio is being decoded, or if it has none), and is
+    //! announced through trackAdded()/trackRemoved() like any other track.
+    //! INVALID_TRACK_ID if there's no attached video.
+    virtual muse::audio::TrackId videoTrackId() const = 0;
+    //! NOTE Its persisted output params (fader, pan, gain, FX, sends, color). Solo/mute are stored in
+    //! VideoAttachmentSettings, shared with the Video panel.
+    virtual project::AudioOutputParams videoOutputParams() const = 0;
+    virtual void setVideoOutputParams(const project::AudioOutputParams& params) = 0;
+    //! NOTE Whether the video track is muted only because some other track is soloed
+    virtual bool isVideoForceMuted() const = 0;
+    //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
+    virtual muse::async::Channel<bool, bool> videoMuteStateChanged() const = 0;
 
     //! NOTE: whether this track is CURRENTLY muted only because some other track/group bus
     //! is soloed (as opposed to the user's own manual mute, see trackSoloMuteState() above) -

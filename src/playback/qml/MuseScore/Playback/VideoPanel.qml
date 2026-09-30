@@ -167,6 +167,16 @@ Item {
     readonly property int minResyncIntervalMs: 500
     property real lastResyncTime: 0
 
+    // NOTE: below syncToleranceMs, the picture is pulled back in sync by slightly
+    // speeding up / slowing down the player instead of seeking (a seek is visible
+    // and hits the decoder): now that the video's audio is played by the audio
+    // engine on the score's own clock, the picture is the only thing that can
+    // drift. Hysteresis (start above softSyncStartMs, stop below softSyncStopMs)
+    // keeps the rate from flapping around its target on position-update noise.
+    readonly property int softSyncStartMs: 40
+    readonly property int softSyncStopMs: 10
+    readonly property real maxSoftSyncRateDelta: 0.08
+
     // NOTE: `videoSettingsChanged` fires on ANY attachment mutation, including
     // ones with nothing to do with playback position (add/rename/retime a hit
     // point, mute, volume...). Its handler below forces an unconditional
@@ -534,11 +544,22 @@ Item {
                     pendingForceSeekTimer.restart()
                 }
             }
-        } else if (Math.abs(video.position - targetPosition) > syncToleranceMs) {
-            var now = Date.now()
-            if (now - lastResyncTime >= minResyncIntervalMs) {
-                video.seek(targetPosition)
-                lastResyncTime = now
+            video.playbackRate = 1.0
+        } else {
+            var drift = video.position - targetPosition // > 0: picture ahead of the score
+            if (Math.abs(drift) > syncToleranceMs) {
+                var now = Date.now()
+                if (now - lastResyncTime >= minResyncIntervalMs) {
+                    video.seek(targetPosition)
+                    lastResyncTime = now
+                }
+                video.playbackRate = 1.0
+            } else if (videoModel.scorePlaying && Math.abs(drift) > softSyncStartMs) {
+                // Catch up the drift in about half a second
+                var delta = Math.max(-maxSoftSyncRateDelta, Math.min(maxSoftSyncRateDelta, drift / 500))
+                video.playbackRate = 1.0 - delta
+            } else if (Math.abs(drift) < softSyncStopMs) {
+                video.playbackRate = 1.0
             }
         }
 
@@ -546,8 +567,12 @@ Item {
             if (targetPosition < video.duration && video.playbackState !== MediaPlayer.PlayingState) {
                 video.play()
             }
-        } else if (video.playbackState === MediaPlayer.PlayingState) {
-            video.pause()
+        } else {
+            video.playbackRate = 1.0
+
+            if (video.playbackState === MediaPlayer.PlayingState) {
+                video.pause()
+            }
         }
     }
 
@@ -581,22 +606,6 @@ Item {
         function onPositionChanged() {
             root.pageTimelineToKeepPlayheadVisible()
         }
-
-        function onPlaybackStateChanged() {
-            root.updateVideoElementPlaying()
-        }
-
-        function onHasAudioChanged() {
-            root.updateVideoElementPlaying()
-        }
-    }
-
-    Component.onDestruction: videoModel.setVideoElementPlaying(false)
-
-    // A video with no audio track reports "not playing" so the Mixer's Video
-    // channel meter stays dark instead of showing its simulated level.
-    function updateVideoElementPlaying() {
-        videoModel.setVideoElementPlaying(video.playbackState === MediaPlayer.PlayingState && video.hasAudio)
     }
 
     function pageTimelineToKeepPlayheadVisible() {
@@ -825,15 +834,55 @@ Item {
                     width: Math.round(limitedByHeight ? availableHeight * aspectRatio : availableWidth)
                     height: Math.round(limitedByHeight ? availableHeight : availableWidth / aspectRatio)
 
-                    Video {
+                    //! NOTE: hand-rolled equivalent of QtMultimedia's Video type (same property/
+                    //! function names the rest of this file uses), whose player deliberately has
+                    //! no audioOutput: the video's audio is decoded separately and played by the
+                    //! audio engine as a real track, on the score's own clock (see
+                    //! PlaybackController::videoTrackId()). This player only renders the picture.
+                    Item {
                         id: video
+
+                        property alias source: player.source
+                        readonly property alias duration: player.duration
+                        readonly property alias position: player.position
+                        readonly property alias playbackState: player.playbackState
+                        readonly property alias seekable: player.seekable
+                        readonly property alias metaData: player.metaData
+                        readonly property alias hasAudio: player.hasAudio
+                        property alias playbackRate: player.playbackRate
+
+                        function play() {
+                            player.play()
+                        }
+
+                        function pause() {
+                            player.pause()
+                        }
+
+                        function stop() {
+                            player.stop()
+                        }
+
+                        function seek(offset) {
+                            player.position = offset
+                        }
 
                         anchors.fill: parent
                         source: videoModel.videoUrl
-                        muted: videoModel.muted
-                        volume: videoModel.volumePercent / 100
-                        fillMode: VideoOutput.PreserveAspectFit
                         visible: videoModel.hasVideo
+
+                        VideoOutput {
+                            id: videoOut
+
+                            anchors.fill: parent
+                            fillMode: VideoOutput.PreserveAspectFit
+                        }
+
+                        MediaPlayer {
+                            id: player
+
+                            videoOutput: videoOut
+                        }
 
                         onSourceChanged: {
                             // NOTE: was stop() -- stopping a freshly-set source (instead of

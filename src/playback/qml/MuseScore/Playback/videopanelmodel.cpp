@@ -209,13 +209,6 @@ void VideoPanelModel::seekScoreToVideoPositionMs(int videoPositionMs)
     playbackController()->rewind(muse::secs_t(scoreTimeSeconds));
 }
 
-void VideoPanelModel::setVideoElementPlaying(bool playing)
-{
-    if (playbackController()) {
-        playbackController()->setIsVideoPlaying(playing);
-    }
-}
-
 int VideoPanelModel::hitPointsPanelWidth() const
 {
     return configuration()->videoHitPointsPanelWidth();
@@ -386,50 +379,6 @@ void VideoPanelModel::setOffsetMs(int offsetMs)
     //! these offset-derived properties so QML bindings actually recompute.
     emit loopChanged();
     emit scoreContentChanged();
-}
-
-int VideoPanelModel::volumePercent() const
-{
-    return std::clamp(static_cast<int>(attachment().volume * 100.f + 0.5f), 0, 100);
-}
-
-void VideoPanelModel::setVolumePercent(int volumePercent)
-{
-    VideoAttachmentSettings updated = attachment();
-    if (!updated.isValid()) {
-        return;
-    }
-
-    volumePercent = std::clamp(volumePercent, 0, 100);
-    const float volume = static_cast<float>(volumePercent) / 100.f;
-    if (updated.volume == volume) {
-        return;
-    }
-
-    updated.volume = volume;
-    updateAttachment(updated);
-}
-
-int VideoPanelModel::balance() const
-{
-    return std::clamp(static_cast<int>(attachment().balance * 100.f + (attachment().balance >= 0.f ? 0.5f : -0.5f)), -100, 100);
-}
-
-void VideoPanelModel::setBalance(int balance)
-{
-    VideoAttachmentSettings updated = attachment();
-    if (!updated.isValid()) {
-        return;
-    }
-
-    balance = std::clamp(balance, -100, 100);
-    const float scaledBalance = static_cast<float>(balance) / 100.f;
-    if (updated.balance == scaledBalance) {
-        return;
-    }
-
-    updated.balance = scaledBalance;
-    updateAttachment(updated);
 }
 
 bool VideoPanelModel::muted() const

@@ -89,12 +89,11 @@ public:
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
 
-    bool isMasterOutputForceMuted() const override;
-    muse::async::Notification masterOutputForceMuteChanged() const override;
-
-    bool isVideoPlaying() const override;
-    void setIsVideoPlaying(bool playing) override;
-    muse::async::Notification isVideoPlayingChanged() const override;
+    muse::audio::TrackId videoTrackId() const override;
+    project::AudioOutputParams videoOutputParams() const override;
+    void setVideoOutputParams(const project::AudioOutputParams& params) override;
+    bool isVideoForceMuted() const override;
+    muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
 
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;

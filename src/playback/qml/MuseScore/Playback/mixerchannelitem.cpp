@@ -24,9 +24,6 @@
 
 #include <algorithm>
 
-#include <QRandomGenerator>
-#include <QTimer>
-
 #include "defer.h"
 #include "translation.h"
 #include "log.h"
@@ -140,11 +137,7 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
     m_panel->componentComplete();
 
     connect(this, &MixerChannelItem::mutedChanged, this, [this]() {
-        //!NOTE Video channels reset their pressure via updateTimerState() in
-        //!     setupVideoMeterAnimation() instead, since that also covers the
-        //!     non-mute reasons (video not playing) the meter needs to go dark for.
-        //!
-        //!     Reset on BOTH directions, not just when becoming muted: an
+        //!NOTE Reset on BOTH directions, not just when becoming muted: an
         //!     AudioSignalChanges message queued while this channel was still muted (see
         //!     subscribeOnAudioSignalChanges()'s guard) can be delivered right as it
         //!     becomes unmuted again, slipping past that guard and briefly showing a
@@ -152,9 +145,7 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
         //!     visible when many channels are muted/unmuted at once (e.g. the Mixer's
         //!     global Mute/Solo toggle), which floods the RPC channel with enough
         //!     back-to-back state changes for this race to actually land.
-        if (m_type != Type::Video) {
-            resetAudioChannelsVolumePressure();
-        }
+        resetAudioChannelsVolumePressure();
     });
 
     connect(this, &MixerChannelItem::soloChanged, this, [this]() {
@@ -166,14 +157,8 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
         //!      settling to silence. mutedChanged doesn't fire here (this channel's own
         //!      muted/forceMute are untouched by ITS OWN solo ending), so this needs its own
         //!      reset, same idea as the mutedChanged one above.
-        if (m_type != Type::Video) {
-            resetAudioChannelsVolumePressure();
-        }
+        resetAudioChannelsVolumePressure();
     });
-
-    if (m_type == Type::Video) {
-        setupVideoMeterAnimation();
-    }
 }
 
 MixerChannelItem::~MixerChannelItem()
@@ -999,42 +984,6 @@ void MixerChannelItem::resetAudioChannelsVolumePressure()
 {
     setLeftChannelPressure(MIN_DISPLAYED_DBFS);
     setRightChannelPressure(MIN_DISPLAYED_DBFS);
-}
-
-void MixerChannelItem::setupVideoMeterAnimation()
-{
-    constexpr int METER_UPDATE_INTERVAL_MS = 100;
-
-    m_videoMeterTimer = new QTimer(this);
-    m_videoMeterTimer->setInterval(METER_UPDATE_INTERVAL_MS);
-    connect(m_videoMeterTimer, &QTimer::timeout, this, &MixerChannelItem::updateFakeVideoMeter);
-
-    auto updateTimerState = [this]() {
-        if (playbackController()->isVideoPlaying() && !muted()) {
-            m_videoMeterTimer->start();
-        } else {
-            m_videoMeterTimer->stop();
-            resetAudioChannelsVolumePressure();
-        }
-    };
-
-    playbackController()->isVideoPlayingChanged().onNotify(this, updateTimerState);
-    connect(this, &MixerChannelItem::mutedChanged, this, updateTimerState);
-
-    updateTimerState();
-}
-
-void MixerChannelItem::updateFakeVideoMeter()
-{
-    float base = std::clamp(volumeLevel() - 12.f, MIN_DISPLAYED_DBFS.raw(), MAX_DISPLAYED_DBFS.raw());
-
-    auto jitteredPressure = [base]() {
-        float jitter = static_cast<float>(QRandomGenerator::global()->generateDouble()) * 6.f - 3.f;
-        return std::clamp(base + jitter, MIN_DISPLAYED_DBFS.raw(), MAX_DISPLAYED_DBFS.raw());
-    };
-
-    setLeftChannelPressure(jitteredPressure());
-    setRightChannelPressure(jitteredPressure());
 }
 
 InputResourceItem* MixerChannelItem::buildInputResourceItem()

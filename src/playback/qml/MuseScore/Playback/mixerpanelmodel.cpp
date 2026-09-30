@@ -48,19 +48,6 @@ using namespace mu::notation;
 using namespace mu::project;
 
 static constexpr int INVALID_INDEX = -1;
-static constexpr TrackId VIDEO_TRACK_ID = -2;
-
-static volume_db_t videoVolumeToDb(float volume)
-{
-    volume = std::clamp(volume, 0.f, 1.f);
-    return volume <= 0.f ? volume_db_t::make(-60.f) : muse::linear_to_db(muse::ratio_t::make(volume));
-}
-
-static float videoVolumeFromDb(volume_db_t volume)
-{
-    float linear = std::clamp(muse::db_to_linear(volume).raw(), 0.f, 1.f);
-    return linear <= 0.001f ? 0.f : linear;
-}
 
 //! NOTE: an item can read muted() == true purely because some OTHER item's solo force-muted
 //! it (see MixerChannelItem::loadMuteForceMuteState()) - that's not a real per-channel mute
@@ -906,8 +893,8 @@ void MixerPanelModel::reloadItems()
         }
     }
 
-    if (videoSettings() && videoSettings()->attachment().isValid()) {
-        m_mixerChannelList.push_back(buildVideoChannelItem());
+    if (controller()->videoTrackId() != INVALID_TRACK_ID) {
+        m_mixerChannelList.push_back(buildVideoChannelItem(controller()->videoTrackId()));
     }
 
     addInstrumentTrack(notationPlayback()->metronomeTrackId());
@@ -922,6 +909,13 @@ void MixerPanelModel::reloadItems()
 void MixerPanelModel::onTrackAdded(const TrackId& trackId)
 {
     TRACEFUNC;
+
+    if (trackId == controller()->videoTrackId()) {
+        if (indexOf(trackId) == INVALID_INDEX) {
+            addItem(buildVideoChannelItem(trackId), resolveVideoInsertIndex());
+        }
+        return;
+    }
 
     const IPlaybackController::InstrumentTrackIdMap& instrumentTracks = controller()->instrumentTrackIdMap();
     auto instrumentIt = std::find_if(instrumentTracks.cbegin(), instrumentTracks.cend(), [trackId](const auto& pair) {
@@ -1265,6 +1259,11 @@ void MixerPanelModel::setupConnections()
     });
 
     playback()->sourceParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioSourceParams& params) {
+        //! NOTE The video's sound track has no selectable input (its source params are internal)
+        if (trackId == controller()->videoTrackId()) {
+            return;
+        }
+
         if (MixerChannelItem* item = findChannelItem(trackId)) {
             item->loadInputParams(params);
         }
@@ -1304,12 +1303,10 @@ void MixerPanelModel::setupConnections()
         });
     }
 
-    controller()->masterOutputForceMuteChanged().onNotify(this, [this]() {
-        if (!m_masterChannelItem) {
-            return;
+    controller()->videoMuteStateChanged().onReceive(this, [this](bool muted, bool forceMute) {
+        if (MixerChannelItem* item = findChannelItem(controller()->videoTrackId())) {
+            item->loadMuteForceMuteState(muted, forceMute);
         }
-
-        loadOutputParams(m_masterChannelItem, effectiveMasterOutputParams());
     });
 
     configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool visible) {
@@ -1383,34 +1380,15 @@ void MixerPanelModel::onVideoAttachmentChanged()
 {
     TRACEFUNC;
 
-    bool hasVideo = videoSettings() && videoSettings()->attachment().isValid();
-    bool hadVideo = indexOf(VIDEO_TRACK_ID) != INVALID_INDEX;
-
-    if (hasVideo == hadVideo) {
-        //! NOTE The video attachment is still (not) present, but its volume/
-        //! balance/mute/solo may have changed from outside the mixer (e.g. the
-        //! Video panel's own volume slider) -- refresh the existing channel
-        //! item's output params so the mixer stays in sync.
-        if (hasVideo) {
-            if (MixerChannelItem* item = findChannelItem(VIDEO_TRACK_ID)) {
-                const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
-
-                AudioOutputParams outParams;
-                outParams.volume = videoVolumeToDb(attachment.volume);
-                outParams.balance = attachment.balance;
-                outParams.muted = attachment.muted;
-                outParams.solo = attachment.solo;
-                loadOutputParams(item, std::move(outParams));
-            }
-        }
-
+    //! NOTE The channel itself follows the video's sound track (see onTrackAdded()/trackRemoved()),
+    //! only its solo/mute state is shared with the Video panel (its "M" button) and must be refreshed
+    if (!videoSettings() || !videoSettings()->attachment().isValid()) {
         return;
     }
 
-    if (hasVideo) {
-        addItem(buildVideoChannelItem(), resolveVideoInsertIndex());
-    } else {
-        removeItem(VIDEO_TRACK_ID);
+    if (MixerChannelItem* item = findChannelItem(controller()->videoTrackId())) {
+        const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
+        item->loadSoloMuteState({ attachment.muted, attachment.solo });
     }
 }
 
@@ -1896,55 +1874,68 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
     return item;
 }
 
-MixerChannelItem* MixerPanelModel::buildVideoChannelItem()
+MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
 {
-    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, VIDEO_TRACK_ID);
+    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, trackId);
     item->setPanelSection(m_navigationSection);
     item->setTitle(muse::qtrc("playback", "Video"));
 
-    project::VideoAttachmentSettings attachment = videoSettings()->attachment();
+    const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
+    item->loadSoloMuteState({ attachment.muted, attachment.solo });
 
-    AudioOutputParams outParams;
-    outParams.volume = videoVolumeToDb(attachment.volume);
-    outParams.balance = attachment.balance;
-    outParams.muted = attachment.muted;
+    //! NOTE Solo/mute come from the attachment and forceMute is live (see updateSoloMuteStates()),
+    //! neither is part of the persisted output params
+    AudioOutputParams outParams = controller()->videoOutputParams();
+    const bool forceMute = controller()->isVideoForceMuted();
     outParams.solo = attachment.solo;
-    loadOutputParams(item, std::move(outParams));
+    outParams.muted = attachment.muted || forceMute;
+    outParams.forceMute = forceMute;
+    loadOutputParams(item, outParams);
 
-    connect(item, &MixerChannelItem::controlParamsChanged, this, [this](const AudioOutputParams& params) {
-        IProjectVideoSettingsPtr settings = videoSettings();
-        if (!settings) {
-            return;
+    playback()->signalChanges(trackId)
+    .onResolve(this, [this, trackId](AudioSignalChanges signalChanges) {
+        if (MixerChannelItem* item = findChannelItem(trackId)) {
+            item->subscribeOnAudioSignalChanges(signalChanges);
         }
+    })
+    .onReject(this, [](int errCode, std::string text) {
+        LOGE() << "unable to subscribe on audio signal changes from the video channel, error code: " << errCode
+               << ", " << text;
+    });
 
-        VideoAttachmentSettings updated = settings->attachment();
-        if (!updated.isValid()) {
-            return;
-        }
+    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+        playback()->setControlParams(trackId, params.control());
 
-        updated.volume = videoVolumeFromDb(params.volume);
-        updated.balance = params.balance;
-        updated.muted = params.muted;
-        settings->setAttachment(updated);
+        AudioOutputParams outParams = controller()->videoOutputParams();
+        outParams.volume = params.volume;
+        outParams.balance = params.balance;
+        outParams.gain = params.gain;
+        controller()->setVideoOutputParams(outParams);
+    });
+
+    connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+        updateOutputResourceItemCount();
+        playback()->setFxChainParams(trackId, params.fxChain);
+    });
+
+    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+        playback()->setAuxSendsParams(trackId, params.auxSends);
+        updateAuxSendItemCount();
     });
 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this, [this](const notation::INotationSoloMuteState::SoloMuteState& state) {
-        IProjectVideoSettingsPtr settings = videoSettings();
-        if (!settings) {
-            return;
-        }
+        //! NOTE Stored in the attachment, shared with the Video panel's "M" button;
+        //! PlaybackController applies it to the engine (see updateSoloMuteStates())
+        project::updateVideoAttachment(videoSettings(), [&state](VideoAttachmentSettings& attachment) {
+            attachment.muted = state.solo ? false : state.mute;
+            attachment.solo = state.solo;
+        });
+    });
 
-        VideoAttachmentSettings updated = settings->attachment();
-        if (!updated.isValid()) {
-            return;
-        }
-
-        updated.muted = state.mute;
-        updated.solo = state.solo;
-        if (updated.solo) {
-            updated.muted = false;
-        }
-        settings->setAttachment(updated);
+    connect(item, &MixerChannelItem::colorChanged, this, [this, item]() {
+        AudioOutputParams outParams = controller()->videoOutputParams();
+        outParams.color = item->color();
+        controller()->setVideoOutputParams(outParams);
     });
 
     connectGlobalMuteSoloAggregate(item);
@@ -1973,13 +1964,7 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
     });
 
     connect(item, &MixerChannelItem::controlParamsChanged, this, [this](const AudioOutputParams& params) {
-        AudioOutputParams playbackParams = params;
-        playbackParams.forceMute = controller()->isMasterOutputForceMuted();
-        if (playbackParams.forceMute) {
-            playbackParams.muted = true;
-        }
-
-        playback()->setMasterControlParams(playbackParams.control());
+        playback()->setMasterControlParams(params.control());
 
         AudioOutputParams outParams = audioSettings()->masterAudioOutputParams();
         outParams.volume = params.volume;
@@ -2068,13 +2053,7 @@ void MixerPanelModel::updateOutputResourceItemCount()
 
 AudioOutputParams MixerPanelModel::effectiveMasterOutputParams() const
 {
-    AudioOutputParams params = audioSettings()->masterAudioOutputParams();
-    params.forceMute = controller()->isMasterOutputForceMuted();
-    if (params.forceMute) {
-        params.muted = true;
-    }
-
-    return params;
+    return audioSettings()->masterAudioOutputParams();
 }
 
 void MixerPanelModel::updateAuxSendItemCount()

@@ -77,6 +77,27 @@ void ProjectAudioSettings::setMasterAudioOutputParams(const AudioOutputParams& p
     m_settingsChanged.notify();
 }
 
+bool ProjectAudioSettings::containsVideoOutputParams() const
+{
+    return m_videoOutputParams.has_value();
+}
+
+const AudioOutputParams& ProjectAudioSettings::videoOutputParams() const
+{
+    static const AudioOutputParams DEFAULT;
+    return m_videoOutputParams ? *m_videoOutputParams : DEFAULT;
+}
+
+void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params)
+{
+    if (m_videoOutputParams == params) {
+        return;
+    }
+
+    m_videoOutputParams = params;
+    m_settingsChanged.notify();
+}
+
 bool ProjectAudioSettings::containsAuxOutputParams(aux_channel_idx_t index) const
 {
     return muse::contains(m_auxOutputParams, index);
@@ -392,6 +413,10 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
     QJsonObject masterObj = rootObj.value("master").toObject();
     m_masterOutputParams = outputParamsFromJson(masterObj);
 
+    if (rootObj.contains("video")) {
+        m_videoOutputParams = outputParamsFromJson(rootObj.value("video").toObject().value("out").toObject());
+    }
+
     QJsonArray auxArray = rootObj.value("aux").toArray();
     for (aux_channel_idx_t i = 0; i < static_cast<aux_channel_idx_t>(auxArray.size()); ++i) {
         QJsonObject auxObject = auxArray[i].toObject();
@@ -475,6 +500,12 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
 {
     QJsonObject rootObj;
     rootObj["master"] = outputParamsToJson(m_masterOutputParams);
+
+    if (m_videoOutputParams) {
+        QJsonObject videoObj;
+        videoObj["out"] = outputParamsToJson(*m_videoOutputParams);
+        rootObj["video"] = videoObj;
+    }
 
     QJsonArray auxArray;
     for (const auto& pair : m_auxOutputParams) {
