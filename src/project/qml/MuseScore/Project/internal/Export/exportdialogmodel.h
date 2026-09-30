@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QAbstractListModel>
 #include <qqmlintegration.h>
 #include <QQmlParserStatus>
@@ -34,6 +36,7 @@
 
 #include "interactive/iinteractive.h"
 #include "media/ivideoencoderresolver.h"
+#include "media/ivideodecoderfactory.h"
 #include "context/iglobalcontext.h"
 #include "importexport/imagesexport/iimagesexportconfiguration.h"
 #include "importexport/musicxml/imusicxmlconfiguration.h"
@@ -110,6 +113,7 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     Q_PROPERTY(bool isFFmpegAvailable READ isFFmpegAvailable NOTIFY isFFmpegAvailableChanged)
 
     Q_PROPERTY(bool hasAttachedVideo READ hasAttachedVideo NOTIFY includeVideoAudioChanged)
+    Q_PROPERTY(bool isAttachedVideoExportAvailable READ isAttachedVideoExportAvailable CONSTANT)
     Q_PROPERTY(bool includeVideoAudio READ includeVideoAudio WRITE setIncludeVideoAudio NOTIFY includeVideoAudioChanged)
     Q_PROPERTY(QString ffmpegDir READ ffmpegDir WRITE setFFmpegDir NOTIFY ffmpegDirChanged)
 
@@ -123,6 +127,7 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     muse::GlobalInject<iex::mnxio::IMnxConfiguration> mnxConfiguration;
     muse::GlobalInject<IProjectConfiguration> configuration;
     muse::GlobalInject<iex::videoexport::IVideoExportConfiguration> videoExportConfiguration;
+    muse::GlobalInject<muse::media::IVideoDecoderFactory> videoDecoderFactory;
     muse::GlobalInject<iex::imagesexport::IImagesExportConfiguration> imageExportConfiguration;
     muse::GlobalInject<INotationWritersRegister> writers;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncoderResolver;
@@ -243,6 +248,7 @@ public:
     void setFFmpegDir(const QString& dir);
 
     bool hasAttachedVideo() const;
+    bool isAttachedVideoExportAvailable() const;
     bool includeVideoAudio() const;
     void setIncludeVideoAudio(bool include);
 
@@ -325,6 +331,7 @@ private:
     QItemSelectionModel* m_selectionModel = nullptr;
 
     ExportTypeList m_exportTypeList {};
+    mutable std::optional<bool> m_isAttachedVideoExportAvailable;
     ExportType m_selectedExportType = ExportType();
     muse::io::path_t m_exportDirPath;
     project::INotationWriter::UnitType m_selectedUnitType = project::INotationWriter::UnitType::PER_PART;

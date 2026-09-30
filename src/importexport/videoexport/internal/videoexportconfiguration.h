@@ -53,6 +53,12 @@ public:
     double trailingSec() const override;
     void setTrailingSec(std::optional<double> trailingSec) override;
 
+    VideoSource source() const override;
+    void setSource(std::optional<VideoSource> source) override;
+
+    const AttachedVideo& attachedVideo() const override;
+    void setAttachedVideo(const AttachedVideo& video) override;
+
 private:
     std::optional<ViewMode> m_viewMode = std::nullopt;
     std::optional<bool> m_showPiano = std::nullopt;
@@ -61,6 +67,8 @@ private:
     std::optional<int> m_fps = std::nullopt;
     std::optional<double> m_leadingSec = std::nullopt;
     std::optional<double> m_trailingSec = std::nullopt;
+    std::optional<VideoSource> m_source = std::nullopt;
+    AttachedVideo m_attachedVideo;
 };
 }
 

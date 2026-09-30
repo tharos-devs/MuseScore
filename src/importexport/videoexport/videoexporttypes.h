@@ -22,6 +22,8 @@
 #ifndef MU_IMPORTEXPORT_VIDEOEXPORTTYPES_H
 #define MU_IMPORTEXPORT_VIDEOEXPORTTYPES_H
 
+#include <string>
+
 namespace mu::iex::videoexport {
 enum ViewMode {
     PageFull,
@@ -31,6 +33,19 @@ enum ViewMode {
 enum PianoPosition {
     Bottom,
     Top
+};
+
+//! NOTE What the MP4 export's picture is: the score scrolling (with the score's audio), or the video
+//! attached to the project (with the score's audio and the video's own audio, as mixed in the Mixer)
+enum class VideoSource {
+    Score,
+    AttachedVideo
+};
+
+//! NOTE The video to export for VideoSource::AttachedVideo (video position = score position + offset)
+struct AttachedVideo {
+    std::string path; // UTF-8
+    int offsetMs = 0;
 };
 }
 

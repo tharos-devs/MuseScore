@@ -1237,6 +1237,31 @@ void PlaybackController::setVideoOutputParams(const AudioOutputParams& params)
     audioSettingsPtr->setVideoOutputParams(persisted);
 }
 
+bool PlaybackController::isVideoTrackReady() const
+{
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    if (!videoSettingsPtr || !videoSettingsPtr->attachment().isValid()) {
+        return true;
+    }
+
+    if (m_videoTrackFailed) {
+        return true;
+    }
+
+    //! NOTE The engine applies the RPCs in order: once they're all sent, an export sent after them sees them
+    return m_videoTrackId != INVALID_TRACK_ID
+           && !m_isVideoTrackBeingAdded
+           && !m_isVideoAudioDecodePending
+           && m_videoAudioSourcePath == videoSettingsPtr->attachment().path
+           && m_lastAppliedVideoMuteState.has_value();
+}
+
+bool PlaybackController::isVideoAudioIncludedInExport() const
+{
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    return videoSettingsPtr && videoSettingsPtr->attachment().isValid() && videoSettingsPtr->attachment().includeAudioInExport;
+}
+
 bool PlaybackController::isVideoForceMuted() const
 {
     return m_isVideoForceMuted;
@@ -1284,11 +1309,13 @@ void PlaybackController::startVideoAudioDecoding(const muse::io::path_t& videoPa
         m_videoAudioDecoder = std::make_unique<VideoAudioDecoder>();
     }
 
+    m_isVideoAudioDecodePending = true;
     m_videoAudioDecoder->decode(videoPath, audioConfiguration()->sampleRate(), [this, videoPath](const muse::io::path_t& wavPath) {
         if (videoPath != m_videoAudioSourcePath) {
             return;
         }
 
+        m_isVideoAudioDecodePending = false;
         m_videoAudioWavPath = wavPath;
         applyVideoSourceParams();
     });
@@ -1332,6 +1359,7 @@ void PlaybackController::addVideoTrack()
     }
 
     m_isVideoTrackBeingAdded = true;
+    m_videoTrackFailed = false;
 
     const AudioOutputParams outParams = videoOutputParams();
 
@@ -1378,6 +1406,7 @@ void PlaybackController::addVideoTrack()
     })
     .onReject(this, [this](int code, const std::string& msg) {
         m_isVideoTrackBeingAdded = false;
+        m_videoTrackFailed = true;
         LOGE() << "unable to add the video sound track, error code: " << code << ", " << msg;
     });
 }
@@ -1388,6 +1417,7 @@ void PlaybackController::removeVideoTrack()
         m_videoAudioDecoder->cancel();
     }
 
+    m_isVideoAudioDecodePending = false;
     m_videoAudioSourcePath = muse::io::path_t();
     m_videoAudioWavPath = muse::io::path_t();
 
@@ -1483,6 +1513,8 @@ void PlaybackController::resetPlayback()
     }
     m_videoTrackId = INVALID_TRACK_ID;
     m_isVideoTrackBeingAdded = false;
+    m_isVideoAudioDecodePending = false;
+    m_videoTrackFailed = false;
     m_videoAudioSourcePath = muse::io::path_t();
     m_videoAudioWavPath = muse::io::path_t();
     m_lastAppliedVideoSourceParams = AudioSourceParams();

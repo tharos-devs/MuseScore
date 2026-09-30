@@ -35,7 +35,9 @@
 #include "io/ifilesystem.h"
 #include "global/iapplication.h"
 #include "media/ivideoencoderresolver.h"
+#include "media/ivideodecoderfactory.h"
 #include "../ivideoexportconfiguration.h"
+#include "importexport/audioexport/iaudioexportconfiguration.h"
 #include "context/iglobalcontext.h"
 
 #include "project/inotationwriter.h"
@@ -51,15 +53,18 @@ namespace mu::iex::videoexport {
 class VideoWriter : public project::INotationWriter, public muse::Contextable, public muse::async::Asyncable
 {
     muse::GlobalInject<IVideoExportConfiguration> configuration;
+    muse::GlobalInject<audioexport::IAudioExportConfiguration> audioExportConfiguration;
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
     muse::GlobalInject<muse::IApplication> application;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncodeResolver;
+    muse::GlobalInject<muse::media::IVideoDecoderFactory> videoDecoderFactory;
     muse::GlobalInject<project::INotationWritersRegister> writers;
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
 public:
     VideoWriter(const muse::modularity::ContextPtr& iocCtx)
         : muse::Contextable(iocCtx) {}
+    ~VideoWriter() override;
 
     std::vector<UnitType> supportedUnitTypes() const override;
     bool supportsUnitType(UnitType unitType) const override;
@@ -88,7 +93,19 @@ private:
     Config makeConfig() const;
 
     void startVideoExport(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& cfg);
-    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Config& cfg);
+    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions);
+
+    //! NOTE VideoSource::AttachedVideo: the attached video's picture as is, with the score's and the
+    //! video's audio (the engine's rendering, as mixed in the Mixer) over the whole video
+    muse::Ret writeAttachedVideo(notation::INotationPtr notation, muse::io::IODevice& device, const muse::io::path_t& finalPath);
+
+    //! NOTE The re-encoded picture with its black lead-in (negative offset), kept for the next part of the same export
+    struct LeadInCache {
+        std::string key;
+        muse::io::path_t path;
+    };
+    LeadInCache m_leadInCache;
+    void clearLeadInCache();
 
     void doGenerate(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& config);
 

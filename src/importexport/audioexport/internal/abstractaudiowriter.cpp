@@ -22,6 +22,8 @@
 
 #include "abstractaudiowriter.h"
 
+#include <chrono>
+
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -81,6 +83,9 @@ Ret AbstractAudioWriter::writeList(const INotationPtrList&, io::IODevice&, const
 
 void AbstractAudioWriter::abort()
 {
+    //! NOTE Also stops the waits before the rendering starts (see doWriteAndWait())
+    m_abortRequested = true;
+
     muse::ContextInject<muse::audio::IPlayback> playback = { m_iocContext };
     playback()->abortSavingAllSoundTracks();
     m_writeRet = make_ret(Ret::Code::Cancel);
@@ -99,11 +104,23 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
 {
     //! NOTE Temporary fix for the context injection
     m_iocContext = notation->iocContext();
+    m_abortRequested = false;
 
     muse::ContextInject<playback::IPlaybackController> playbackController = { m_iocContext };
 
+    //! NOTE Canceled while waiting below: the rendering never starts
+    auto canceled = [this]() {
+        m_writeRet = make_ret(Ret::Code::Cancel);
+        m_isCompleted = true;
+        m_progress.finish(m_writeRet);
+        return m_writeRet;
+    };
+
     //! NOTE Waiting for the audio system to start if it is not already running
     while (!startAudioController()->isAudioStarted()) {
+        if (m_abortRequested) {
+            return canceled();
+        }
         application()->processEvents();
         QThread::yieldCurrentThread();
     }
@@ -111,8 +128,38 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     //! NOTE Playback (tracks and duration) loads asynchronously; rendering before it is
     //! ready yields 0 tracks and 0 duration ("No audio to export"). Wait for it first.
     while (!playbackController()->isPlaybackInited()) {
+        if (m_abortRequested) {
+            return canceled();
+        }
         application()->processEvents();
         QThread::yieldCurrentThread();
+    }
+
+    //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too), only when
+    //! it's part of this export. When it's what the export is about, it must never be silently missing: a long
+    //! wait (a long video's audio being decoded), then an explicit failure; otherwise a shorter one, then without it
+    const bool forceSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
+    if (forceSoundTracks || playbackController()->isVideoAudioIncludedInExport()) {
+        const auto maxWait = forceSoundTracks ? std::chrono::seconds(300) : std::chrono::seconds(60);
+        const auto videoWaitStart = std::chrono::steady_clock::now();
+        while (!playbackController()->isVideoTrackReady()) {
+            if (m_abortRequested) {
+                return canceled();
+            }
+            if (std::chrono::steady_clock::now() - videoWaitStart > maxWait) {
+                if (forceSoundTracks) {
+                    LOGE() << "the attached video's audio isn't ready";
+                    m_writeRet = make_ret(Ret::Code::UnknownError, std::string("the attached video's audio isn't ready"));
+                    m_isCompleted = true;
+                    m_progress.finish(m_writeRet);
+                    return m_writeRet;
+                }
+                LOGW() << "the attached video's audio isn't ready, exported without it";
+                break;
+            }
+            application()->processEvents();
+            QThread::yieldCurrentThread();
+        }
     }
 
     m_isCompleted = false;
@@ -130,6 +177,11 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     double trailingSilenceSec = muse::value(options, OptionKey::TRAILING_SILENCE_SEC, Val(0.0)).toDouble();
     actualFormat.trailingSilenceDuration = std::isfinite(trailingSilenceSec)
                                            ? static_cast<msecs_t>(trailingSilenceSec) : msecs_t(0);
+
+    const double durationSec = muse::value(options, OptionKey::AUDIO_DURATION_SEC, Val(0.0)).toDouble();
+    actualFormat.duration = std::isfinite(durationSec) && durationSec > 0.0 ? durationSec : 0.0;
+
+    actualFormat.includeSoundTracks = forceSoundTracks;
 
     doWrite(dstDevice, actualFormat);
 

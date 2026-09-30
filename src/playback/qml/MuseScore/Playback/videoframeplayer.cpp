@@ -27,8 +27,6 @@
 #include <cmath>
 #include <cstring>
 
-#include <QCoreApplication>
-#include <QLibraryInfo>
 #include <QVideoFrameFormat>
 #include <QVideoSink>
 
@@ -139,31 +137,6 @@ VideoFramePlayer::~VideoFramePlayer()
     stopWorker();
 }
 
-io::paths_t VideoFramePlayer::ffmpegLibsDirs() const
-{
-    io::paths_t dirs;
-
-    const QString appDir = QCoreApplication::applicationDirPath();
-
-    //! NOTE Where the deployment tools put the FFmpeg libraries of Qt Multimedia's FFmpeg backend:
-    //! next to the executable on Windows (windeployqt), in the bundle's Frameworks on macOS (macdeployqt)
-#if defined(Q_OS_MAC)
-    dirs.push_back(io::path_t(appDir + "/../Frameworks"));
-#endif
-    dirs.push_back(io::path_t(appDir));
-
-    //! NOTE Development builds use Qt's own installation directly
-    dirs.push_back(io::path_t(QLibraryInfo::path(QLibraryInfo::LibrariesPath)));
-    dirs.push_back(io::path_t(QLibraryInfo::path(QLibraryInfo::BinariesPath)));
-
-    //! NOTE Last resort: the FFmpeg the user configured for video export
-    if (videoEncoderResolver()) {
-        dirs.push_back(videoEncoderResolver()->loadedFFmpegDir());
-    }
-
-    return dirs;
-}
-
 void VideoFramePlayer::ensureWorker()
 {
     if (m_availabilityChecked) {
@@ -173,7 +146,7 @@ void VideoFramePlayer::ensureWorker()
     m_availabilityChecked = true;
 
     if (decoderFactory()) {
-        const io::paths_t dirs = ffmpegLibsDirs();
+        const io::paths_t dirs = decoderFactory()->defaultFFmpegLibsDirs();
         m_decoder = decoderFactory()->createDecoder(dirs);
         if (m_decoder) {
             m_loopDecoder = decoderFactory()->createDecoder(dirs);

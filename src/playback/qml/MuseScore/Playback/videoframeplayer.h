@@ -39,7 +39,6 @@
 #include "modularity/ioc.h"
 #include "async/asyncable.h"
 #include "media/ivideodecoderfactory.h"
-#include "media/ivideoencoderresolver.h"
 #include "audio/main/iaudioconfiguration.h"
 
 #include <QVideoSink>
@@ -50,7 +49,8 @@ namespace mu::playback {
 //! timestamp is <= it). Unlike a free-running media player, what's shown only depends on the position,
 //! so the same position always shows the same frame.
 //! Uses the FFmpeg libraries bundled with Qt Multimedia (so no user setup is needed), falling back to
-//! the FFmpeg configured for video export. `available` is false if none could be loaded.
+//! the FFmpeg configured for video export (see IVideoDecoderFactory::defaultFFmpegLibsDirs()).
+//! `available` is false if none could be loaded.
 class VideoFramePlayer : public QObject, public muse::async::Asyncable
 {
     Q_OBJECT
@@ -83,7 +83,6 @@ class VideoFramePlayer : public QObject, public muse::async::Asyncable
     QML_ELEMENT
 
     muse::GlobalInject<muse::media::IVideoDecoderFactory> decoderFactory;
-    muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncoderResolver;
     muse::GlobalInject<muse::audio::IAudioConfiguration> audioConfiguration;
 
 public:
@@ -134,8 +133,6 @@ private:
     void ensureWorker();
     void stopWorker();
     void workerLoop();
-
-    muse::io::paths_t ffmpegLibsDirs() const;
 
     void onStreamInfo(const muse::media::VideoStreamInfo& info, quint64 generation);
 
