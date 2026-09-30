@@ -211,6 +211,7 @@ private:
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
                                                  bool isPrimary = true);
     MixerChannelItem* buildVideoChannelItem(const muse::audio::TrackId trackId);
+    void loadVideoMuteState(MixerChannelItem* item);
     MixerChannelItem* buildAuxChannelItem(muse::audio::aux_channel_idx_t index, const muse::audio::TrackId trackId);
     MixerChannelItem* buildMasterChannelItem();
 

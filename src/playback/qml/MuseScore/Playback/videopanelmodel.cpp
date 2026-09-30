@@ -394,6 +394,12 @@ void VideoPanelModel::setMuted(bool muted)
     }
 
     updated.muted = muted;
+
+    //! NOTE Same as a Mixer channel: muting cancels its solo (see MixerChannelItem::setMuted())
+    if (muted) {
+        updated.solo = false;
+    }
+
     updateAttachment(updated);
 }
 

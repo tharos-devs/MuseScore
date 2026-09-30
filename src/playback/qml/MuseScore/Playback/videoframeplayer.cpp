@@ -22,7 +22,9 @@
 
 #include "videoframeplayer.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 
 #include <QCoreApplication>
@@ -71,8 +73,20 @@ QVideoFrame toQVideoFrame(const VideoFrame& frame)
 {
     QVideoFrameFormat format(QSize(frame.width, frame.height), QVideoFrameFormat::Format_YUV420P);
 
-    //! NOTE Same heuristic as most players when the stream doesn't say: HD and above is BT.709
-    format.setColorSpace(frame.height >= 720 ? QVideoFrameFormat::ColorSpace_BT709 : QVideoFrameFormat::ColorSpace_BT601);
+    switch (frame.colorSpace) {
+    case VideoFrame::ColorSpace::BT601: format.setColorSpace(QVideoFrameFormat::ColorSpace_BT601);
+        break;
+    case VideoFrame::ColorSpace::BT709: format.setColorSpace(QVideoFrameFormat::ColorSpace_BT709);
+        break;
+    case VideoFrame::ColorSpace::BT2020: format.setColorSpace(QVideoFrameFormat::ColorSpace_BT2020);
+        break;
+    case VideoFrame::ColorSpace::Unknown:
+        //! NOTE Same heuristic as most players when the stream doesn't say: HD and above is BT.709
+        format.setColorSpace(frame.height >= 720 ? QVideoFrameFormat::ColorSpace_BT709 : QVideoFrameFormat::ColorSpace_BT601);
+        break;
+    }
+
+    format.setColorRange(frame.fullRange ? QVideoFrameFormat::ColorRange_Full : QVideoFrameFormat::ColorRange_Video);
 
     QVideoFrame result(format);
     if (!result.map(QVideoFrame::WriteOnly)) {
@@ -108,6 +122,16 @@ VideoFramePlayer::VideoFramePlayer(QObject* parent)
     m_clockTick->setTimerType(Qt::PreciseTimer);
     m_clockTick->setInterval(CLOCK_TICK_MS);
     connect(m_clockTick, &QTimer::timeout, this, &VideoFramePlayer::onClockTick);
+
+    updatePictureLead();
+    if (audioConfiguration()) {
+        audioConfiguration()->driverBufferSizeChanged().onNotify(this, [this]() {
+            updatePictureLead();
+        });
+        audioConfiguration()->sampleRateChanged().onNotify(this, [this]() {
+            updatePictureLead();
+        });
+    }
 }
 
 VideoFramePlayer::~VideoFramePlayer()
@@ -149,7 +173,11 @@ void VideoFramePlayer::ensureWorker()
     m_availabilityChecked = true;
 
     if (decoderFactory()) {
-        m_decoder = decoderFactory()->createDecoder(ffmpegLibsDirs());
+        const io::paths_t dirs = ffmpegLibsDirs();
+        m_decoder = decoderFactory()->createDecoder(dirs);
+        if (m_decoder) {
+            m_loopDecoder = decoderFactory()->createDecoder(dirs);
+        }
     }
 
     m_available = m_decoder != nullptr;
@@ -183,6 +211,13 @@ void VideoFramePlayer::workerLoop()
 {
     std::deque<VideoFramePtr> buffer;
     bool isOpen = false;
+    double streamDurationSecs = 0.0;
+    double fruitlessSeekTarget = -1.0;
+
+    // The first frames at the loop start, from m_loopDecoder
+    std::deque<VideoFramePtr> loopBuffer;
+    bool isLoopDecoderOpen = false;
+    double loopBufferStart = -1.0;
     bool endOfStream = false;
     double shownPts = -1.0;
     quint64 generation = 0;
@@ -203,7 +238,8 @@ void VideoFramePlayer::workerLoop()
 
         {
             std::unique_lock lock(m_mutex);
-            m_wake.wait_for(lock, std::chrono::milliseconds(10), [this]() {
+            //! NOTE Every change notifies: nothing to do (and no wake-up) until then
+            m_wake.wait(lock, [this]() {
                 return m_quit || m_openRequested || m_targetChanged;
             });
 
@@ -229,7 +265,16 @@ void VideoFramePlayer::workerLoop()
             m_decoder->close();
             isOpen = !path.empty() && m_decoder->open(path);
 
+            loopBuffer.clear();
+            loopBufferStart = -1.0;
+            if (m_loopDecoder) {
+                m_loopDecoder->close();
+                isLoopDecoderOpen = isOpen && m_loopDecoder->open(path);
+            }
+
             const VideoStreamInfo info = isOpen ? m_decoder->streamInfo() : VideoStreamInfo();
+            streamDurationSecs = info.durationSecs;
+            fruitlessSeekTarget = -1.0;
             QMetaObject::invokeMethod(this, [this, info, generation]() {
                 onStreamInfo(info, generation);
             }, Qt::QueuedConnection);
@@ -239,20 +284,46 @@ void VideoFramePlayer::workerLoop()
             continue;
         }
 
-        const double target = m_targetSecs.load();
+        //! NOTE Past the end, the last frame is shown (the score can be longer than the video)
+        double target = m_targetSecs.load();
+        if (streamDurationSecs > 0.0) {
+            target = std::min(target, streamDurationSecs);
+        }
 
         // Does the buffer already contain, or lead soon to, the frame shown at the target?
         const bool behindBuffer = buffer.empty() || target + PTS_EPSILON_SECS < buffer.front()->ptsSecs;
         const bool farAhead = !buffer.empty() && target > buffer.back()->ptsSecs + MAX_DECODE_FORWARD_SECS;
-        if (behindBuffer || farAhead) {
-            buffer.clear();
+
+        //! NOTE A seek that gave no frame at all isn't retried for the same target (it would just fail again)
+        const bool sameFruitlessSeek = buffer.empty() && target == fruitlessSeekTarget;
+
+        if ((behindBuffer || farAhead) && !sameFruitlessSeek) {
+            const bool inLoopBuffer = !loopBuffer.empty() && target + PTS_EPSILON_SECS >= loopBuffer.front()->ptsSecs
+                                      && target <= loopBuffer.back()->ptsSecs + PTS_EPSILON_SECS;
+
+            if (inLoopBuffer) {
+                //! NOTE Loop wrap: continue from the decoder prepared there, and prepare the other one next
+                std::swap(m_decoder, m_loopDecoder);
+                buffer.swap(loopBuffer);
+                loopBuffer.clear();
+                loopBufferStart = -1.0;
+            } else {
+                buffer.clear();
+                m_decoder->seek(target);
+            }
+
             endOfStream = false;
-            m_decoder->seek(target);
+            fruitlessSeekTarget = -1.0;
         }
 
         // Decode up to the first frame after the target
         while (!endOfStream && (buffer.empty() || buffer.back()->ptsSecs <= target + PTS_EPSILON_SECS)) {
             decodeNext();
+        }
+
+        if (buffer.empty()) {
+            fruitlessSeekTarget = target;
+            continue;
         }
 
         // The frame shown at the target: the last one whose pts <= target
@@ -275,19 +346,43 @@ void VideoFramePlayer::workerLoop()
             }, Qt::QueuedConnection);
         }
 
+        auto isInterrupted = [this]() {
+            std::lock_guard lock(m_mutex);
+            return m_targetChanged || m_openRequested || m_quit;
+        };
+
         // Read ahead, unless a new target is already waiting
         while (!endOfStream && buffer.size() < shownIndex + 1 + READ_AHEAD_FRAMES) {
-            {
-                std::lock_guard lock(m_mutex);
-                if (m_targetChanged || m_openRequested || m_quit) {
-                    break;
-                }
+            if (isInterrupted()) {
+                break;
             }
             decodeNext();
+        }
+
+        //! NOTE Prepare the loop start only once the read-ahead is complete: that margin (several frames)
+        //! covers the time this takes, so the frames being shown are never late because of it
+        const double loopStart = m_loopStartSecs.load();
+        const bool readAheadComplete = endOfStream || buffer.size() >= shownIndex + 1 + READ_AHEAD_FRAMES;
+        if (isLoopDecoderOpen && loopStart >= 0.0 && loopStart != loopBufferStart && readAheadComplete && !isInterrupted()) {
+            loopBuffer.clear();
+            loopBufferStart = loopStart;
+
+            if (m_loopDecoder->seek(loopStart)) {
+                while (loopBuffer.size() < READ_AHEAD_FRAMES) {
+                    VideoFramePtr frame = m_loopDecoder->decodeNextFrame();
+                    if (!frame) {
+                        break;
+                    }
+                    loopBuffer.push_back(std::move(frame));
+                }
+            }
         }
     }
 
     m_decoder->close();
+    if (m_loopDecoder) {
+        m_loopDecoder->close();
+    }
 }
 
 void VideoFramePlayer::onStreamInfo(const VideoStreamInfo& info, quint64 generation)
@@ -385,7 +480,10 @@ void VideoFramePlayer::setPositionMs(double positionMs)
     emit positionMsChanged();
 
     if (!m_playing) {
-        setTargetSecs(positionMs / 1000.0);
+        if (m_previewPositionMs >= 0.0 && std::abs(positionMs - m_previewExpectedPositionMs) > 1.0) {
+            m_previewPositionMs = -1.0; // the score was moved elsewhere
+        }
+        applyStoppedTarget();
         return;
     }
 
@@ -400,6 +498,32 @@ void VideoFramePlayer::setPositionMs(double positionMs)
     m_anchorTimeMs = now;
 
     onClockTick();
+}
+
+double VideoFramePlayer::loopStartMs() const
+{
+    return m_loopStartMs;
+}
+
+void VideoFramePlayer::setLoopStartMs(double loopStartMs)
+{
+    if (loopStartMs < 0.0) {
+        loopStartMs = -1.0;
+    }
+
+    if (qFuzzyCompare(m_loopStartMs + 2.0, loopStartMs + 2.0)) {
+        return;
+    }
+
+    m_loopStartMs = loopStartMs;
+    m_loopStartSecs.store(loopStartMs < 0.0 ? -1.0 : loopStartMs / 1000.0);
+    emit loopStartMsChanged();
+
+    {
+        std::lock_guard lock(m_mutex);
+        m_targetChanged = true; // wake the worker
+    }
+    m_wake.notify_all();
 }
 
 bool VideoFramePlayer::playing() const
@@ -417,15 +541,14 @@ void VideoFramePlayer::setPlaying(bool playing)
     emit playingChanged();
 
     if (playing) {
+        m_previewPositionMs = -1.0;
         m_anchorMs = m_positionMs;
         m_anchorTimeMs = static_cast<double>(m_clockTimer.nsecsElapsed()) / 1e6;
         m_clockTick->start();
         onClockTick();
     } else {
         m_clockTick->stop();
-
-        //! NOTE Stopped: exactly the frame at the score's position, no timing compensation
-        setTargetSecs(m_positionMs / 1000.0);
+        applyStoppedTarget();
     }
 }
 
@@ -436,14 +559,31 @@ double VideoFramePlayer::clockMs() const
     return std::min(clock, m_positionMs + CLOCK_MAX_EXTRAPOLATION_MS);
 }
 
-double VideoFramePlayer::pictureLeadMs() const
+void VideoFramePlayer::updatePictureLead()
 {
     double audioLatencyMs = 0.0;
     if (audioConfiguration() && audioConfiguration()->sampleRate() > 0) {
         audioLatencyMs = 1000.0 * audioConfiguration()->driverBufferSize() / audioConfiguration()->sampleRate();
     }
 
-    return REPORT_DELAY_MS + DISPLAY_LATENCY_MS - audioLatencyMs;
+    m_pictureLeadMs = REPORT_DELAY_MS + DISPLAY_LATENCY_MS - audioLatencyMs;
+}
+
+void VideoFramePlayer::applyStoppedTarget()
+{
+    //! NOTE Stopped: exactly the frame at the position, no timing compensation
+    setTargetSecs((m_previewPositionMs >= 0.0 ? m_previewPositionMs : m_positionMs) / 1000.0);
+}
+
+void VideoFramePlayer::previewVideoPosition(double videoPositionMs, double expectedPositionMs)
+{
+    if (m_playing) {
+        return;
+    }
+
+    m_previewPositionMs = std::max(0.0, videoPositionMs);
+    m_previewExpectedPositionMs = std::max(0.0, expectedPositionMs);
+    applyStoppedTarget();
 }
 
 void VideoFramePlayer::onClockTick()
@@ -452,7 +592,7 @@ void VideoFramePlayer::onClockTick()
         return;
     }
 
-    double targetMs = std::max(0.0, clockMs() + pictureLeadMs());
+    double targetMs = std::max(0.0, clockMs() + m_pictureLeadMs);
 
     //! NOTE Playing: the picture never goes back, except for a real jump (seek, loop wrap) - the clock's
     //! small corrections are absorbed by holding the current frame a little longer instead

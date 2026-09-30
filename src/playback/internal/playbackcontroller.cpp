@@ -1303,7 +1303,7 @@ AudioSourceParams PlaybackController::videoSourceParams() const
         const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
 
         //! NOTE Same mapping as the video picture: video position = score position + offset
-        params.configuration[SOUND_TRACK_OFFSET_SECS_KEY] = std::to_string(attachment.offsetMs / 1000.0);
+        params.configuration[SOUND_TRACK_OFFSET_MS_KEY] = std::to_string(attachment.offsetMs);
         params.configuration[SOUND_TRACK_INCLUDE_IN_EXPORT_KEY] = attachment.includeAudioInExport ? "1" : "0";
     }
 
@@ -1350,8 +1350,11 @@ void PlaybackController::addVideoTrack()
 
     playback()->addSoundTrack(title, params)
     .onResolve(this, [this, params, playbackKey](const TrackId trackId, const TrackParams&) {
-        //! NOTE Same as addTrack(): the notation may have been closed (or another opened) meanwhile
+        //! NOTE Same as addTrack(): the notation may have been closed (or another opened) meanwhile. The
+        //! track may then have been added after that notation's removeAllTracks(): remove it explicitly,
+        //! or it (and its whole audio file in memory) would stay in the engine
         if (notationPlaybackKey() != playbackKey) {
+            playback()->removeTrack(trackId);
             return;
         }
 

@@ -27,6 +27,7 @@
 #include <cstring>
 #include <vector>
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -75,8 +76,8 @@ QByteArray wavHeader(quint32 sampleRate, quint32 dataBytes)
     putLE16(p + 20, 1); // PCM
     putLE16(p + 22, OUT_CHANNELS);
     putLE32(p + 24, sampleRate);
-    putLE32(p + 28, sampleRate * OUT_CHANNELS * sizeof(qint16));
-    putLE16(p + 32, OUT_CHANNELS * sizeof(qint16));
+    putLE32(p + 28, static_cast<quint32>(sampleRate * OUT_CHANNELS * sizeof(qint16)));
+    putLE16(p + 32, static_cast<quint16>(OUT_CHANNELS * sizeof(qint16)));
     putLE16(p + 34, 16);
     std::memcpy(p + 36, "data", 4);
     putLE32(p + 40, dataBytes);
@@ -136,13 +137,17 @@ void VideoAudioDecoder::decode(const muse::io::path_t& videoPath, unsigned int s
 
     if (QFileInfo(m_targetPath).size() > WAV_HEADER_SIZE) {
         // Refresh the modification time so pruneCache() keeps recently used files
-        QFile(m_targetPath).setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+        QFile cached(m_targetPath);
+        if (cached.open(QIODevice::ReadWrite)) { // setFileTime() needs an open file
+            cached.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+        }
         finishLater(muse::io::path_t(m_targetPath));
         return;
     }
 
 #ifdef MUE_PLAYBACK_HAS_QT_MULTIMEDIA
-    m_file.setFileName(m_targetPath + ".part");
+    //! NOTE Unique per process, in case two instances decode the same video at the same time
+    m_file.setFileName(m_targetPath + "." + QString::number(QCoreApplication::applicationPid()) + ".part");
     if (!m_file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         LOGE() << "unable to create " << m_file.fileName();
         finishLater(muse::io::path_t());
@@ -232,6 +237,18 @@ bool VideoAudioDecoder::writeBuffer(const QAudioBuffer& buffer)
         m_fileSampleRate = static_cast<quint32>(format.sampleRate());
     }
 
+    //! NOTE The requested format is normally the one delivered (the decoder converts): written as is
+    if (format.sampleFormat() == QAudioFormat::Int16 && channels == OUT_CHANNELS
+        && static_cast<quint32>(format.sampleRate()) == m_fileSampleRate) {
+        const qint64 bytes = static_cast<qint64>(frames) * OUT_CHANNELS * static_cast<qint64>(sizeof(qint16));
+        if (m_file.write(buffer.constData<char>(), bytes) != bytes) {
+            LOGE() << "unable to write " << m_file.fileName();
+            return false;
+        }
+        m_dataBytes += static_cast<quint64>(bytes);
+        return true;
+    }
+
     std::vector<qint16> out(static_cast<size_t>(frames) * OUT_CHANNELS);
 
     // Normalized sample of frame f / channel ch, in [-1; 1]
@@ -290,6 +307,15 @@ void VideoAudioDecoder::onError()
     //! NOTE Also the path for videos without any audio stream
     LOGW() << "unable to decode the video's audio: " << (m_decoder ? m_decoder->errorString() : QString());
 #endif
+
+    //! NOTE An error in the middle of the stream: better play what could be decoded than nothing, but
+    //! don't cache it under the video's key, so the next time it's decoded again
+    if (m_dataBytes > 0) {
+        m_targetPath.replace(".wav", ".incomplete.wav");
+        finish(true);
+        return;
+    }
+
     finish(false);
 }
 
@@ -343,5 +369,13 @@ void VideoAudioDecoder::pruneCache(const QString& keepPath) const
             continue;
         }
         QFile::remove(info.absoluteFilePath());
+    }
+
+    //! NOTE Leftovers of decodings interrupted by a crash (an old one can't still be in progress)
+    const QDateTime oldestInProgress = QDateTime::currentDateTime().addDays(-1);
+    for (const QFileInfo& info : dir.entryInfoList({ "*.part" }, QDir::Files)) {
+        if (info.lastModified() < oldestInProgress) {
+            QFile::remove(info.absoluteFilePath());
+        }
     }
 }

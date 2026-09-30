@@ -261,6 +261,16 @@ Item {
     function seekToVideoPositionMs(videoPositionMs) {
         video.seek(videoPositionMs)
         lastResyncTime = Date.now()
+
+        // The score can't reach a video position before its start or after its end: show that frame
+        // anyway (until the score moves), from the score position the seek below will lead to
+        if (video.exact) {
+            var scoreEndMs = videoModel.scoreEndVideoPositionMs > 0 ? videoModel.scoreEndVideoPositionMs - videoModel.offsetMs
+                                                                     : Number.MAX_VALUE
+            var expectedScoreMs = Math.max(0, Math.min(scoreEndMs, videoPositionMs - videoModel.offsetMs))
+            framePlayer.previewVideoPosition(videoPositionMs, Math.max(0, expectedScoreMs + videoModel.offsetMs))
+        }
+
         videoModel.seekScoreToVideoPositionMs(videoPositionMs)
         scrollTimelineToPositionMs(videoPositionMs)
     }
@@ -289,6 +299,11 @@ Item {
     }
 
     function detectedFrameRate() {
+        // The FFmpeg decoder reads the stream itself: always available once the exact picture is
+        if (video.exact && framePlayer.frameRate > 0) {
+            return Math.round(framePlayer.frameRate * 1000) / 1000
+        }
+
         try {
             if (!video.metaData) {
                 return 0
@@ -848,6 +863,13 @@ Item {
                         //! actually shown and from the score's transport
                         readonly property bool exact: framePlayer.available && framePlayer.loaded
 
+                        // The Qt player may already be playing (fallback) when the exact picture takes over
+                        onExactChanged: {
+                            if (exact && player.playbackState === MediaPlayer.PlayingState) {
+                                player.pause()
+                            }
+                        }
+
                         property alias source: player.source
                         readonly property real duration: exact ? framePlayer.durationMs : player.duration
                         readonly property real position: exact ? Math.max(0, framePlayer.shownFramePtsMs) : player.position
@@ -923,6 +945,7 @@ Item {
                             videoSink: exactVideoOut.videoSink
                             positionMs: Math.max(0, videoModel.scorePlaybackPositionMs + videoModel.offsetMs)
                             playing: videoModel.scorePlaying && videoModel.scorePlaybackPositionMs + videoModel.offsetMs >= 0
+                            loopStartMs: videoModel.loopEnabled ? videoModel.loopStartMs : -1
                         }
 
                         onSourceChanged: {

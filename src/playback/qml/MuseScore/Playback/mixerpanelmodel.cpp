@@ -1271,7 +1271,21 @@ void MixerPanelModel::setupConnections()
 
     playback()->fxChainParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioFxChain& params) {
         if (MixerChannelItem* item = findChannelItem(trackId)) {
-            AudioOutputParams outParams = audioSettings()->trackOutputParams(item->instrumentTrackId());
+            //! NOTE Each channel type keeps its output params in its own place: reloading the others'
+            //! (default ones, for an invalid instrument track id) would reset its fader/pan/gain/color/sends
+            AudioOutputParams outParams;
+            switch (item->type()) {
+                case MixerChannelItem::Type::Video:
+                    outParams = controller()->videoOutputParams();
+                    break;
+                case MixerChannelItem::Type::Aux:
+                    outParams = audioSettings()->auxOutputParams(item->auxBusIndex());
+                    break;
+                default:
+                    outParams = audioSettings()->trackOutputParams(item->instrumentTrackId());
+                    break;
+            }
+
             outParams.fxChain = params;
             loadOutputParams(item, outParams);
         }
@@ -1387,9 +1401,19 @@ void MixerPanelModel::onVideoAttachmentChanged()
     }
 
     if (MixerChannelItem* item = findChannelItem(controller()->videoTrackId())) {
-        const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
-        item->loadSoloMuteState({ attachment.muted, attachment.solo });
+        loadVideoMuteState(item);
     }
+}
+
+void MixerPanelModel::loadVideoMuteState(MixerChannelItem* item)
+{
+    //! NOTE The user's own mute/solo come from the attachment, but the effective mute also includes the
+    //! live force-mute (another track soloed), exactly like PlaybackController::updateVideoMuteState()
+    const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
+    item->loadSoloMuteState({ attachment.muted, attachment.solo });
+
+    const bool forceMute = controller()->isVideoForceMuted();
+    item->loadMuteForceMuteState((attachment.muted && !attachment.solo) || forceMute, forceMute);
 }
 
 int MixerPanelModel::resolveVideoInsertIndex() const
@@ -1880,17 +1904,9 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
     item->setPanelSection(m_navigationSection);
     item->setTitle(muse::qtrc("playback", "Video"));
 
-    const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
-    item->loadSoloMuteState({ attachment.muted, attachment.solo });
-
-    //! NOTE Solo/mute come from the attachment and forceMute is live (see updateSoloMuteStates()),
-    //! neither is part of the persisted output params
-    AudioOutputParams outParams = controller()->videoOutputParams();
-    const bool forceMute = controller()->isVideoForceMuted();
-    outParams.solo = attachment.solo;
-    outParams.muted = attachment.muted || forceMute;
-    outParams.forceMute = forceMute;
-    loadOutputParams(item, outParams);
+    //! NOTE Solo/mute aren't part of the persisted output params (loadOutputParams() ignores them)
+    loadVideoMuteState(item);
+    loadOutputParams(item, controller()->videoOutputParams());
 
     playback()->signalChanges(trackId)
     .onResolve(this, [this, trackId](AudioSignalChanges signalChanges) {
@@ -1904,7 +1920,11 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
     });
 
     connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
-        playback()->setControlParams(trackId, params.control());
+        //! NOTE The engine's mute is always the live effective one (force-mute included), whatever the item shows
+        const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
+        ControlParams control = params.control();
+        control.muted = (attachment.muted && !attachment.solo) || controller()->isVideoForceMuted();
+        playback()->setControlParams(trackId, control);
 
         AudioOutputParams outParams = controller()->videoOutputParams();
         outParams.volume = params.volume;
