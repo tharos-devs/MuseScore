@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-09-30
+- Added an "MP4 video (attached video)" export (the existing one is now "MP4 video (score)"): the attached video over the score's timeline, placed by its offset, with the score's audio and the video's own audio as mixed in the Mixer, sample-accurate. The picture is copied as is (no loss of quality) — only re-encoded (same size, frame rate and bit rate) when the video starts after the score, to add real black frames before it. Uses the FFmpeg bundled with Qt, no setup needed.
 - The attached video's audio is now a real track of the audio engine, played on the same clock as the score (sample-accurate, identical on every playback, loops and repeats included): the Mixer's Video channel gets a real meter, Gain above 0 dB, FX slots, Aux/Group sends and goes through the Master; its solo works like any track's. Audio exports can include it ("Include the attached video's audio", off by default).
 - The video picture is now frame-accurate: the frame shown only depends on the score's position (the same frame at the same place, every time), follows the engine's clock during playback with latency compensation, and loops without freezing. Uses the FFmpeg bundled with Qt, no setup needed; falls back to the previous player otherwise.
 - Clicking a video position the score can't reach (before its start, after its end) still shows that frame.
@@ -96,3 +97,4 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed the Video panel showing up empty (no player) when it was restored open along with a score, until it was hidden and shown again (2026-09-29).
 - Fixed the instruments starting up to one engine cycle late after a count-in, by a different amount on every playback (2026-09-30).
 - Fixed adding an FX to a Mixer Aux channel resetting its displayed fader, pan, gain and color (2026-09-30).
+- Fixed audio exports going ahead while the attached video's audio was still loading right after opening a project, and canceling an export being ignored while it waited for the playback to be ready (2026-09-30).
