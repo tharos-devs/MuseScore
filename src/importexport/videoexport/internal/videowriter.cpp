@@ -348,11 +348,38 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
     const muse::io::path_t tempVideoPath = finalPath + ".tmp_video.mp4";
 
     muse::Ret result = m_audioRet;
+
+    //! NOTE Video position = score position + offset: at the output's start (the score's start), the video is at
+    //! `offset`. A positive one cuts the video's start, done without re-encoding (edit list). A negative one
+    //! means the video only starts that much later: real black frames are then needed before it, which a copied
+    //! stream can't get (all its frames depend on its own encoding parameters), so the video is re-encoded
+    //! (same size, frame rate and bit rate) with a black lead-in. Without an H.264 encoder, the lead-in is left
+    //! empty instead (edit list: most players show nothing there).
+    muse::io::path_t pictureSource = videoPath;
+    double videoStartSecs = attachment.offsetMs / 1000.0;
+    const muse::io::path_t tempLeadInPath = finalPath + ".tmp_leadin.mp4";
+
+    if (result && !m_abort && videoStartSecs < 0.0) {
+        if (muse::media::IVideoTranscoderPtr transcoder = videoDecoderFactory()->createTranscoder(ffmpegDirs)) {
+            muse::media::IVideoTranscoder::Options transcodeOptions;
+            transcodeOptions.leadInSecs = -videoStartSecs;
+            transcodeOptions.durationSecs = scoreDurationSecs;
+            transcodeOptions.onProgress = [this](double progress) {
+                m_progress.progress(static_cast<int64_t>(progress * 100), 100);
+                application()->processEvents();
+            };
+
+            result = transcoder->transcodeWithLeadIn(videoPath, tempLeadInPath, transcodeOptions);
+            pictureSource = tempLeadInPath;
+            videoStartSecs = 0.0;
+        } else {
+            LOGW() << "no H.264 encoder: the video's lead-in is left empty instead of black";
+        }
+    }
+
     if (result && !m_abort) {
-        //! NOTE Video position = score position + offset: at the output's start (the score's start), the video
-        //! is at `offset` (a negative one: the video starts that much later, black before)
         muse::media::IVideoRemuxer::Options remuxOptions;
-        remuxOptions.videoStartSecs = attachment.offsetMs / 1000.0;
+        remuxOptions.videoStartSecs = videoStartSecs;
         remuxOptions.durationSecs = scoreDurationSecs;
 
         //! NOTE Our AAC encoder (fdk-aac, AAC-LC in ADTS) primes 2048 samples, which ADTS can't signal: without
@@ -360,7 +387,7 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
         constexpr int AAC_ENCODER_DELAY_SAMPLES = 2048;
         remuxOptions.audioPrimingSecs = AAC_ENCODER_DELAY_SAMPLES / static_cast<double>(audioExportConfiguration()->exportSampleRate());
 
-        result = remuxer->remux(videoPath, tempAudioPath, tempVideoPath, remuxOptions);
+        result = remuxer->remux(pictureSource, tempAudioPath, tempVideoPath, remuxOptions);
     } else if (m_abort) {
         result = make_ret(muse::Ret::Code::Cancel);
     }
@@ -384,6 +411,7 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
 
     fileSystem()->remove(tempAudioPath);
     fileSystem()->remove(tempVideoPath);
+    fileSystem()->remove(tempLeadInPath);
 
     m_progress.finish(result);
 
