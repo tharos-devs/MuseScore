@@ -4,6 +4,11 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-09-30
+- The attached video's audio is now a real track of the audio engine, played on the same clock as the score (sample-accurate, identical on every playback, loops and repeats included): the Mixer's Video channel gets a real meter, Gain above 0 dB, FX slots, Aux/Group sends and goes through the Master; its solo works like any track's. Audio exports can include it ("Include the attached video's audio", off by default).
+- The video picture is now frame-accurate: the frame shown only depends on the score's position (the same frame at the same place, every time), follows the engine's clock during playback with latency compensation, and loops without freezing. Uses the FFmpeg bundled with Qt, no setup needed; falls back to the previous player otherwise.
+- Clicking a video position the score can't reach (before its start, after its end) still shows that frame.
+
 ### 2026-09-29
 - Right-clicking a staff played by a VST3 instrument now offers the same "Articulation map" submenu as the Mixer (Load, Edit, Reload, Remove), for the instrument at the clicked position.
 - In automation mode, the curve points inside the score's range selection are selected together: dragging one moves them all up or down at once (across lines and instruments), undone in one step.
@@ -89,3 +94,5 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed muting a Mixer Group bus not silencing its member tracks' sends to an unrelated, shared Aux FX bus (e.g. a reverb), which kept leaking their audio through that bus instead of going fully silent (2026-09-21).
 - Fixed the Mixer's Video channel meter lighting up during playback of a video that has no audio track (2026-09-27).
 - Fixed the Video panel showing up empty (no player) when it was restored open along with a score, until it was hidden and shown again (2026-09-29).
+- Fixed the instruments starting up to one engine cycle late after a count-in, by a different amount on every playback (2026-09-30).
+- Fixed adding an FX to a Mixer Aux channel resetting its displayed fader, pan, gain and color (2026-09-30).
