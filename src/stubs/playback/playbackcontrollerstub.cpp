@@ -243,6 +243,11 @@ bool PlaybackControllerStub::isVideoTrackReady() const
     return true;
 }
 
+bool PlaybackControllerStub::isVideoAudioIncludedInExport() const
+{
+    return false;
+}
+
 bool PlaybackControllerStub::isVideoForceMuted() const
 {
     return false;

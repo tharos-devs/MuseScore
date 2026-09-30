@@ -64,6 +64,7 @@ class VideoWriter : public project::INotationWriter, public muse::Contextable, p
 public:
     VideoWriter(const muse::modularity::ContextPtr& iocCtx)
         : muse::Contextable(iocCtx) {}
+    ~VideoWriter() override;
 
     std::vector<UnitType> supportedUnitTypes() const override;
     bool supportsUnitType(UnitType unitType) const override;
@@ -97,6 +98,14 @@ private:
     //! NOTE VideoSource::AttachedVideo: the attached video's picture as is, with the score's and the
     //! video's audio (the engine's rendering, as mixed in the Mixer) over the whole video
     muse::Ret writeAttachedVideo(notation::INotationPtr notation, muse::io::IODevice& device, const muse::io::path_t& finalPath);
+
+    //! NOTE The re-encoded picture with its black lead-in (negative offset), kept for the next part of the same export
+    struct LeadInCache {
+        std::string key;
+        muse::io::path_t path;
+    };
+    LeadInCache m_leadInCache;
+    void clearLeadInCache();
 
     void doGenerate(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& config);
 

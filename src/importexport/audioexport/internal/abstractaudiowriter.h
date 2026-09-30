@@ -68,6 +68,7 @@ private:
     muse::Progress m_progress;
     bool m_isCompleted = false;
     muse::Ret m_writeRet;
+    std::atomic<bool> m_abortRequested = false;
 
     notation::INotationPtr m_notationForRestore;
 };

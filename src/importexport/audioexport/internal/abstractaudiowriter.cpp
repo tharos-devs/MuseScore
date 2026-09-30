@@ -83,6 +83,9 @@ Ret AbstractAudioWriter::writeList(const INotationPtrList&, io::IODevice&, const
 
 void AbstractAudioWriter::abort()
 {
+    //! NOTE Also stops the waits before the rendering starts (see doWriteAndWait())
+    m_abortRequested = true;
+
     muse::ContextInject<muse::audio::IPlayback> playback = { m_iocContext };
     playback()->abortSavingAllSoundTracks();
     m_writeRet = make_ret(Ret::Code::Cancel);
@@ -101,11 +104,23 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
 {
     //! NOTE Temporary fix for the context injection
     m_iocContext = notation->iocContext();
+    m_abortRequested = false;
 
     muse::ContextInject<playback::IPlaybackController> playbackController = { m_iocContext };
 
+    //! NOTE Canceled while waiting below: the rendering never starts
+    auto canceled = [this]() {
+        m_writeRet = make_ret(Ret::Code::Cancel);
+        m_isCompleted = true;
+        m_progress.finish(m_writeRet);
+        return m_writeRet;
+    };
+
     //! NOTE Waiting for the audio system to start if it is not already running
     while (!startAudioController()->isAudioStarted()) {
+        if (m_abortRequested) {
+            return canceled();
+        }
         application()->processEvents();
         QThread::yieldCurrentThread();
     }
@@ -113,17 +128,30 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     //! NOTE Playback (tracks and duration) loads asynchronously; rendering before it is
     //! ready yields 0 tracks and 0 duration ("No audio to export"). Wait for it first.
     while (!playbackController()->isPlaybackInited()) {
+        if (m_abortRequested) {
+            return canceled();
+        }
         application()->processEvents();
         QThread::yieldCurrentThread();
     }
 
-    //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too);
-    //! bounded, in case its audio can't be decoded
-    const auto videoWaitStart = std::chrono::steady_clock::now();
-    while (!playbackController()->isVideoTrackReady()
-           && std::chrono::steady_clock::now() - videoWaitStart < std::chrono::seconds(60)) {
-        application()->processEvents();
-        QThread::yieldCurrentThread();
+    //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too), only when
+    //! it's part of this export. Unbounded when it's what the export is about (it must not be silently missing),
+    //! bounded otherwise
+    const bool forceSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
+    if (forceSoundTracks || playbackController()->isVideoAudioIncludedInExport()) {
+        const auto videoWaitStart = std::chrono::steady_clock::now();
+        while (!playbackController()->isVideoTrackReady()) {
+            if (m_abortRequested) {
+                return canceled();
+            }
+            if (!forceSoundTracks && std::chrono::steady_clock::now() - videoWaitStart > std::chrono::seconds(60)) {
+                LOGW() << "the attached video's audio isn't ready, exported without it";
+                break;
+            }
+            application()->processEvents();
+            QThread::yieldCurrentThread();
+        }
     }
 
     m_isCompleted = false;
@@ -142,13 +170,10 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     actualFormat.trailingSilenceDuration = std::isfinite(trailingSilenceSec)
                                            ? static_cast<msecs_t>(trailingSilenceSec) : msecs_t(0);
 
-    const double startSec = muse::value(options, OptionKey::AUDIO_START_SEC, Val(0.0)).toDouble();
-    actualFormat.startTime = std::isfinite(startSec) ? startSec : 0.0;
-
     const double durationSec = muse::value(options, OptionKey::AUDIO_DURATION_SEC, Val(0.0)).toDouble();
     actualFormat.duration = std::isfinite(durationSec) && durationSec > 0.0 ? durationSec : 0.0;
 
-    actualFormat.includeSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
+    actualFormat.includeSoundTracks = forceSoundTracks;
 
     doWrite(dstDevice, actualFormat);
 

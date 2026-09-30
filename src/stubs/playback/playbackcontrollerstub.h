@@ -93,6 +93,7 @@ public:
     project::AudioOutputParams videoOutputParams() const override;
     void setVideoOutputParams(const project::AudioOutputParams& params) override;
     bool isVideoTrackReady() const override;
+    bool isVideoAudioIncludedInExport() const override;
     bool isVideoForceMuted() const override;
     muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
 

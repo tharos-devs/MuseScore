@@ -98,6 +98,7 @@ public:
     MOCK_METHOD(project::AudioOutputParams, videoOutputParams, (), (const, override));
     MOCK_METHOD(void, setVideoOutputParams, (const project::AudioOutputParams&), (override));
     MOCK_METHOD(bool, isVideoTrackReady, (), (const, override));
+    MOCK_METHOD(bool, isVideoAudioIncludedInExport, (), (const, override));
     MOCK_METHOD(bool, isVideoForceMuted, (), (const, override));
     MOCK_METHOD((muse::async::Channel<bool, bool>), videoMuteStateChanged, (), (const, override));
 

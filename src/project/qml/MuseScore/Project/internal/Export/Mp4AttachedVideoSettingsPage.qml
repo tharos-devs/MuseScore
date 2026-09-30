@@ -20,10 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import QtQuick
-import QtQuick.Layouts
 
 import Muse.UiComponents
-import Muse.Ui
 import MuseScore.Project
 
 ExportSettingsPage {
@@ -34,8 +32,6 @@ ExportSettingsPage {
     isExportAvailable: root.isAvailable
 
     AudioSettings {
-        id: audioSection
-
         visible: root.isAvailable
 
         model: root.model
@@ -50,7 +46,7 @@ ExportSettingsPage {
     StyledTextLabel {
         width: parent.width
         text: root.isAvailable
-              ? qsTrc("project/export", "The attached video is exported as is (no loss of quality), in full, with the score's audio and the video's own audio, as mixed in the Mixer.")
+              ? qsTrc("project/export", "The attached video is exported over the score's duration, placed by its offset, with the score's audio and the video's own audio as mixed in the Mixer. Its picture is kept as is, except when it starts after the score: it's then re-encoded, to add black frames before it.")
               : qsTrc("project/export", "The FFmpeg libraries needed to read and write the video could not be found.")
         horizontalAlignment: Text.AlignLeft
         wrapMode: Text.WordWrap

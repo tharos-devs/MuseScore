@@ -24,6 +24,8 @@
 #include <cmath>
 
 #include <QFile>
+#include <QDir>
+#include <QCoreApplication>
 #include <QPainter>
 #include <QThread>
 
@@ -44,6 +46,8 @@
 #include "notation/inotationpainting.h"
 #include "notation/inotationplayback.h"
 #include "notation/notationtypes.h"
+#include "playback/iplaybackcontroller.h"
+#include "translation.h"
 
 #include "notationscene/qml/MuseScore/NotationScene/playbackcursor.h"
 
@@ -279,7 +283,7 @@ void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t
 
 muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODevice& device, const muse::io::path_t& finalPath)
 {
-    //! NOTE Set by the export dialog (this writer lives in the global context, it can't see the project)
+    //! NOTE Set by the export dialog for this export (this writer lives in the global context, it can't see the project)
     const AttachedVideo attachment = configuration()->attachedVideo();
     if (attachment.path.empty()) {
         LOGE() << "no attached video";
@@ -292,15 +296,9 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
     //! AAC writer): the FFmpeg bundled with Qt is enough, unlike for the score's video
     const muse::io::paths_t ffmpegDirs = videoDecoderFactory() ? videoDecoderFactory()->defaultFFmpegLibsDirs() : muse::io::paths_t();
     muse::media::IVideoRemuxerPtr remuxer = videoDecoderFactory() ? videoDecoderFactory()->createRemuxer(ffmpegDirs) : nullptr;
-    if (!remuxer) {
+    if (!remuxer || !audioExportConfiguration()) {
         LOGE() << "no usable FFmpeg libraries";
         return make_ret(muse::Ret::Code::NotSupported);
-    }
-
-    //! NOTE The export follows the score's timeline, like the playback: from the score's start to its end
-    const double scoreDurationSecs = notation->masterNotation()->playback()->totalPlayTime();
-    if (scoreDurationSecs <= 0.0) {
-        return make_ret(muse::Ret::Code::UnknownError, std::string("empty score"));
     }
 
     m_isCompleted = true; // no picture to generate
@@ -311,6 +309,33 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
 
     m_progress.start();
 
+    //! NOTE The progress of the whole export, over its phases
+    constexpr int64_t AUDIO_END = 60;
+    constexpr int64_t VIDEO_END = 95;
+    constexpr int64_t TOTAL = 100;
+    auto progress = [this](int64_t current, const std::string& msg) {
+        m_progress.progress(current, TOTAL, msg);
+        application()->processEvents();
+    };
+
+    //! NOTE The score's duration is only known once its playback is set up
+    muse::ContextInject<playback::IPlaybackController> playbackController = { notation->iocContext() };
+    while (playbackController() && !playbackController()->isPlaybackInited() && !m_abort) {
+        application()->processEvents();
+        QThread::yieldCurrentThread();
+    }
+
+    //! NOTE The export follows the score's timeline, like the playback: from the score's start to its end
+    const double scoreDurationSecs = notation->masterNotation()->playback()->totalPlayTime();
+    if (m_abort) {
+        m_progress.finish(make_ret(muse::Ret::Code::Cancel));
+        return make_ret(muse::Ret::Code::Cancel);
+    }
+    if (scoreDurationSecs <= 0.0) {
+        m_progress.finish(make_ret(muse::Ret::Code::UnknownError));
+        return make_ret(muse::Ret::Code::UnknownError, std::string("empty score"));
+    }
+
     const muse::io::path_t tempAudioPath = finalPath + ".tmp_audio.aac";
 
     Options audioOpts;
@@ -318,11 +343,13 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
     audioOpts[OptionKey::AUDIO_DURATION_SEC] = muse::Val(scoreDurationSecs);
     audioOpts[OptionKey::INCLUDE_SOUND_TRACKS] = muse::Val(true);
 
+    const std::string audioMsg = muse::trc("iex_videoexport", "Rendering audio…");
     startAudioExport(notation, tempAudioPath, audioOpts);
 
     if (m_audioWriter) {
-        m_audioWriter->progress()->progressChanged().onReceive(this, [this](int64_t current, int64_t total, const std::string& msg) {
-            m_progress.progress(current, total, msg);
+        m_audioWriter->progress()->progressChanged().onReceive(this, [this, audioMsg](int64_t current, int64_t total,
+                                                                                      const std::string&) {
+            m_progress.progress(total > 0 ? current * AUDIO_END / total : 0, TOTAL, audioMsg);
         });
     }
 
@@ -353,31 +380,53 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
     //! `offset`. A positive one cuts the video's start, done without re-encoding (edit list). A negative one
     //! means the video only starts that much later: real black frames are then needed before it, which a copied
     //! stream can't get (all its frames depend on its own encoding parameters), so the video is re-encoded
-    //! (same size, frame rate and bit rate) with a black lead-in. Without an H.264 encoder, the lead-in is left
-    //! empty instead (edit list: most players show nothing there).
+    //! (same size, frame rate and bit rate) with a black lead-in. Without a usable H.264 encoder, the lead-in is
+    //! left empty instead (edit list: most players show nothing there).
     muse::io::path_t pictureSource = videoPath;
     double videoStartSecs = attachment.offsetMs / 1000.0;
-    const muse::io::path_t tempLeadInPath = finalPath + ".tmp_leadin.mp4";
 
     if (result && !m_abort && videoStartSecs < 0.0) {
-        if (muse::media::IVideoTranscoderPtr transcoder = videoDecoderFactory()->createTranscoder(ffmpegDirs)) {
+        //! NOTE The picture doesn't depend on the part: several parts exported in a row share one transcoding
+        const std::string leadInKey = attachment.path + "|" + std::to_string(attachment.offsetMs) + "|"
+                                      + std::to_string(scoreDurationSecs);
+        if (m_leadInCache.key == leadInKey && fileSystem()->exists(m_leadInCache.path)) {
+            pictureSource = m_leadInCache.path;
+            videoStartSecs = 0.0;
+        } else if (muse::media::IVideoTranscoderPtr transcoder = videoDecoderFactory()->createTranscoder(ffmpegDirs)) {
+            clearLeadInCache();
+
+            const muse::io::path_t leadInPath(QDir::temp().filePath(QString("musescore_leadin_%1.mp4")
+                                                                    .arg(QCoreApplication::applicationPid())));
+            const std::string videoMsg = muse::trc("iex_videoexport", "Encoding video…");
+
             muse::media::IVideoTranscoder::Options transcodeOptions;
             transcodeOptions.leadInSecs = -videoStartSecs;
             transcodeOptions.durationSecs = scoreDurationSecs;
-            transcodeOptions.onProgress = [this](double progress) {
-                m_progress.progress(static_cast<int64_t>(progress * 100), 100);
-                application()->processEvents();
+            transcodeOptions.onProgress = [&progress, videoMsg](double p) {
+                progress(AUDIO_END + static_cast<int64_t>(p * (VIDEO_END - AUDIO_END)), videoMsg);
+            };
+            transcodeOptions.isCanceled = [this]() {
+                return m_abort;
             };
 
-            result = transcoder->transcodeWithLeadIn(videoPath, tempLeadInPath, transcodeOptions);
-            pictureSource = tempLeadInPath;
-            videoStartSecs = 0.0;
+            result = transcoder->transcodeWithLeadIn(videoPath, leadInPath, transcodeOptions);
+            if (result) {
+                m_leadInCache = { leadInKey, leadInPath };
+                pictureSource = leadInPath;
+                videoStartSecs = 0.0;
+            } else {
+                fileSystem()->remove(leadInPath);
+            }
         } else {
-            LOGW() << "no H.264 encoder: the video's lead-in is left empty instead of black";
+            LOGW() << "no usable H.264 encoder: the video's lead-in is left empty instead of black";
         }
     }
 
+    const std::string finishingMsg = muse::trc("iex_videoexport", "Finishing video…");
+
     if (result && !m_abort) {
+        progress(VIDEO_END, finishingMsg);
+
         muse::media::IVideoRemuxer::Options remuxOptions;
         remuxOptions.videoStartSecs = videoStartSecs;
         remuxOptions.durationSecs = scoreDurationSecs;
@@ -388,21 +437,27 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
         remuxOptions.audioPrimingSecs = AAC_ENCODER_DELAY_SAMPLES / static_cast<double>(audioExportConfiguration()->exportSampleRate());
 
         result = remuxer->remux(pictureSource, tempAudioPath, tempVideoPath, remuxOptions);
-    } else if (m_abort) {
+    }
+
+    if (m_abort) {
         result = make_ret(muse::Ret::Code::Cancel);
     }
 
     if (result) {
         QFile remuxed(tempVideoPath.toQString());
         if (remuxed.open(QIODevice::ReadOnly)) {
+            const qint64 totalSize = std::max<qint64>(1, remuxed.size());
             constexpr qint64 CHUNK_SIZE = 4 * 1024 * 1024;
             while (!remuxed.atEnd()) {
                 const QByteArray chunk = remuxed.read(CHUNK_SIZE);
-                if (device.write(reinterpret_cast<const uint8_t*>(chunk.constData()), static_cast<size_t>(chunk.size()))
+                //! NOTE A failed read returns nothing without reaching the end
+                if (chunk.isEmpty()
+                    || device.write(reinterpret_cast<const uint8_t*>(chunk.constData()), static_cast<size_t>(chunk.size()))
                     != static_cast<size_t>(chunk.size())) {
                     result = make_ret(muse::Ret::Code::UnknownError, "unable to write " + finalPath.toStdString());
                     break;
                 }
+                progress(VIDEO_END + remuxed.pos() * (TOTAL - VIDEO_END) / totalSize, finishingMsg);
             }
         } else {
             result = make_ret(muse::Ret::Code::UnknownError, "unable to read " + tempVideoPath.toStdString());
@@ -411,11 +466,24 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
 
     fileSystem()->remove(tempAudioPath);
     fileSystem()->remove(tempVideoPath);
-    fileSystem()->remove(tempLeadInPath);
 
     m_progress.finish(result);
 
     return result;
+}
+
+void VideoWriter::clearLeadInCache()
+{
+    //! NOTE Not through fileSystem(): also called from the destructor, at shutdown, when the IoC services may be gone
+    if (!m_leadInCache.path.empty()) {
+        QFile::remove(m_leadInCache.path.toQString());
+    }
+    m_leadInCache = {};
+}
+
+VideoWriter::~VideoWriter()
+{
+    clearLeadInCache();
 }
 
 muse::Ret VideoWriter::writeList(const INotationPtrList&, muse::io::IODevice&, const Options&)
