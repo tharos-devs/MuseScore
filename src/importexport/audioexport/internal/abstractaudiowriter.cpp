@@ -136,16 +136,24 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     }
 
     //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too), only when
-    //! it's part of this export. Unbounded when it's what the export is about (it must not be silently missing),
-    //! bounded otherwise
+    //! it's part of this export. When it's what the export is about, it must never be silently missing: a long
+    //! wait (a long video's audio being decoded), then an explicit failure; otherwise a shorter one, then without it
     const bool forceSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
     if (forceSoundTracks || playbackController()->isVideoAudioIncludedInExport()) {
+        const auto maxWait = forceSoundTracks ? std::chrono::seconds(300) : std::chrono::seconds(60);
         const auto videoWaitStart = std::chrono::steady_clock::now();
         while (!playbackController()->isVideoTrackReady()) {
             if (m_abortRequested) {
                 return canceled();
             }
-            if (!forceSoundTracks && std::chrono::steady_clock::now() - videoWaitStart > std::chrono::seconds(60)) {
+            if (std::chrono::steady_clock::now() - videoWaitStart > maxWait) {
+                if (forceSoundTracks) {
+                    LOGE() << "the attached video's audio isn't ready";
+                    m_writeRet = make_ret(Ret::Code::UnknownError, std::string("the attached video's audio isn't ready"));
+                    m_isCompleted = true;
+                    m_progress.finish(m_writeRet);
+                    return m_writeRet;
+                }
                 LOGW() << "the attached video's audio isn't ready, exported without it";
                 break;
             }
