@@ -397,12 +397,11 @@ Item {
                     height: menuButton.height
 
                     StyledIconLabel {
-                        //! NOTE: centered when this button is the ONLY thing in the control
-                        //! (compact mode, or a blank slot with no title) -- pinned to the
-                        //! right, sized to a small square, when it sits beside a visible
-                        //! title button instead.
-                        anchors.right: titleLoader.visible ? parent.right : undefined
-                        anchors.centerIn: titleLoader.visible ? undefined : parent
+                        //! NOTE: centered only in compact mode, where this button is the
+                        //! whole control -- otherwise pinned to the right (a blank slot's
+                        //! full-width button included), as it always was.
+                        anchors.right: root.compact ? undefined : parent.right
+                        anchors.centerIn: root.compact ? parent : undefined
                         width: titleLoader.visible ? parent.width : parent.height
                         height: parent.height
                         iconCode: IconCode.SMALL_ARROW_DOWN

@@ -149,6 +149,7 @@ MixerPanelSection {
                             enabled: false
                         },
                         {},
+                        { id: "newArticulationMap", title: qsTrc("playback", "New…") },
                         { id: "loadArticulationMap", title: qsTrc("playback", "Load…") },
                         { id: "editArticulationMap", title: qsTrc("playback", "Edit…"), enabled: hasMap },
                         { id: "reloadArticulationMap", title: qsTrc("playback", "Reload"), enabled: hasMap },
@@ -491,6 +492,8 @@ MixerPanelSection {
                     root.model.addFxChannelForSelectedTracks()
                 } else if (itemId === "addGroupChannelForSelectedTracks") {
                     root.model.addGroupChannelForSelectedTracks()
+                } else if (itemId === "newArticulationMap") {
+                    root.model.newArticulationMap(content.channelItem)
                 } else if (itemId === "loadArticulationMap") {
                     root.model.loadArticulationMap(content.channelItem)
                 } else if (itemId === "editArticulationMap") {

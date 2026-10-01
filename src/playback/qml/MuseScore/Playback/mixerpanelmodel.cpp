@@ -2170,6 +2170,11 @@ void MixerPanelModel::dispatchArticulationMapCommand(const std::string& command,
     commandDispatcher()->dispatch(query);
 }
 
+void MixerPanelModel::newArticulationMap(MixerChannelItem* channelItem)
+{
+    dispatchArticulationMapCommand("command://notation/articulation-map-new", channelItem);
+}
+
 void MixerPanelModel::loadArticulationMap(MixerChannelItem* channelItem)
 {
     dispatchArticulationMapCommand("command://notation/articulation-map-load", channelItem);
