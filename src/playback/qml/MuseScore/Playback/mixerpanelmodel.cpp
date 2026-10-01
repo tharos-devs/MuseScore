@@ -75,9 +75,8 @@ MixerPanelModel::~MixerPanelModel()
 //! later by the views (or right away, when their whole tree is destroyed)
 void MixerPanelModel::deleteItemsLater(const QList<MixerChannelItem*>& items)
 {
+    //! NOTE: no need to disconnect them: clear() already did, and a destroyed model loses its connections anyway
     for (MixerChannelItem* item : items) {
-        //! NOTE: same as in clear(), so a not-yet-destroyed item can't fire stale signals
-        item->disconnect();
         item->setParent(nullptr);
         item->deleteLater();
     }
@@ -1219,9 +1218,11 @@ QList<MixerChannelItem*> MixerPanelModel::clear()
     m_mixerChannelList.clear();
 
     //! NOTE Disconnect immediately so a not-yet-destroyed item can't fire stale
-    //! controlParamsChanged/soloMuteStateChanged signals (they are only deleted later)
+    //! controlParamsChanged/soloMuteStateChanged signals (they are only deleted later).
+    //! Only from this model, which holds all their C++ connections: a full disconnect()
+    //! would also cut their destroyed() signal (Qt warns about it)
     for (MixerChannelItem* item : items) {
-        item->disconnect();
+        item->disconnect(this);
     }
 
     //! NOTE The channel list is being fully rebuilt, so any stored index would point at the wrong
