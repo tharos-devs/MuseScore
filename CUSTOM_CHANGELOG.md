@@ -11,6 +11,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - In the articulation map editor, a new articulation's keyswitch continues from the previous articulation's (one semitone up).
 - Added MIDI CC recording: a "Record MIDI CC" button in the playback toolbar (red when armed) records, during playback, the MIDI CCs received from the MIDI input device into the selected VST3 staff's MIDI CC curves (each CC into its own curve, heard live). "Touch" mode: the existing curve is only replaced where the controller moved (seeks and loops included), written on Stop as one undoable step, simplified, and drawn live while recording.
 - The MIDI CC menus now start with "Delete selected points": erases the shown MIDI CC curve's points within the range selection, as one undoable step.
+- Added a secondary window (View > Secondary window) to build a DAW-like second workspace, e.g. full screen on another monitor: the Timeline, Mixer, Video and Piano keyboard panels can be docked into it (along its edges, next to each other or as tabs, with a preview of the drop), other panels like the palettes stay out of it. It's shown with the score (hidden on the Home page), has its own keyboard shortcuts, and is restored with its panels at startup; the layouts it's saved in stay readable by builds without it.
 
 ### 2026-09-30
 - Added an "MP4 video (attached video)" export (the existing one is now "MP4 video (score)"): the attached video over the score's timeline, placed by its offset, with the score's audio and the video's own audio as mixed in the Mixer, sample-accurate. The picture is copied as is (no loss of quality) — only re-encoded (same size, frame rate and bit rate) when the video starts after the score, to add real black frames before it. Uses the FFmpeg bundled with Qt, no setup needed.
@@ -107,6 +108,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed adding an FX to a Mixer Aux channel resetting its displayed fader, pan, gain and color (2026-09-30).
 - Fixed audio exports going ahead while the attached video's audio was still loading right after opening a project, and canceling an export being ignored while it waited for the playback to be ready (2026-09-30).
 - Fixed a floating panel (e.g. the Mixer, full screen or not) restored at startup keeping its old, smaller content size inside its window (2026-10-01).
+- Fixed thousands of "Cannot read property ... of null" warnings logged by the Mixer when quitting or closing a score with the Mixer open (2026-10-01).
+- Fixed a crash when dragging a panel to an edge of the main window, and "Dock" doing nothing, once the saved layout had lost the panel's (or the docking zones') docked location (2026-10-01).
 - Fixed opening a score saved without the custom Mixer bus data (e.g. by stock MuseScore) marking it as modified (2026-10-01).
 - Fixed the docked Video panel not narrowing below the sidebar's width once its right-side sidebar was hidden (2026-10-01).
 - Fixed the Audio FX slot's menu arrow being centered on a blank slot instead of on its right (2026-10-01).
