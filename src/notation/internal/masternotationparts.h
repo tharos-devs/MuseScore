@@ -61,5 +61,8 @@ private:
     mu::engraving::Excerpt* findExcerpt(const muse::ID& initialPartId) const;
 
     ExcerptNotationList m_excerpts;
+
+    int m_globalEditDepth = 0;
+    bool m_globalEditLockedUndoStack = false;
 };
 }
