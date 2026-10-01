@@ -661,7 +661,7 @@ const
 
     const AutomationType type = currentAutomationType();
     const mu::engraving::AutomationCurveKey key = currentCurveKeyFor(staff);
-    const mu::engraving::AutomationCurve curve = displayedCurve(key);
+    const mu::engraving::AutomationCurve& curve = displayedCurve(key);
 
     const int systemStartTick = system->first()->tick().ticks();
     const int systemEndTick = system->last()->endTick().ticks();
@@ -1576,6 +1576,10 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
 
 bool NotationAutomationController::requestEditPoint(const PointData& oldPointData, const SysStaffKey& key, qreal x, qreal y)
 {
+    if (isRecordingPreviewShown()) {
+        return false;
+    }
+
     // STEP 1 - Check that all of our parameters are valid...
     const PointData::PointType pointType = oldPointData.pointType;
     IF_ASSERT_FAILED(key.isValid() && pointType != PointData::PointType::UNKNOWN) {
@@ -1682,6 +1686,10 @@ void NotationAutomationController::setEditedValue(mu::engraving::AutomationPoint
 
 bool NotationAutomationController::requestAddPoint(const SysStaffKey& key, qreal x, qreal y)
 {
+    if (isRecordingPreviewShown()) {
+        return false;
+    }
+
     IF_ASSERT_FAILED(key.isValid()) {
         return false;
     }
@@ -1718,6 +1726,10 @@ bool NotationAutomationController::requestAddPoint(const SysStaffKey& key, qreal
 
 bool NotationAutomationController::requestSegmentBend(const SysStaffKey& key, int segmentIndex, qreal value)
 {
+    if (isRecordingPreviewShown()) {
+        return false;
+    }
+
     const auto pointsDataIt = m_pointsDataByStaff.find(key);
     const Staff* staff = score() ? score()->staff(key.staffIdx) : nullptr;
     IF_ASSERT_FAILED(pointsDataIt != m_pointsDataByStaff.end() && staff && segmentIndex >= 0
@@ -1756,6 +1768,10 @@ bool NotationAutomationController::requestSegmentBend(const SysStaffKey& key, in
 
 bool NotationAutomationController::requestRemovePoint(const PointData& pointData, const SysStaffKey& key)
 {
+    if (isRecordingPreviewShown()) {
+        return false;
+    }
+
     IF_ASSERT_FAILED(key.isValid()) {
         return false;
     }
@@ -1875,29 +1891,24 @@ INotationPtr NotationAutomationController::currentNotation() const
     return globalContext()->currentNotation();
 }
 
-//! NOTE: the stored curve, with a MIDI CC take being recorded drawn over it: the take replaces the curve's points
-//! within its own range, like it will once written
-mu::engraving::AutomationCurve NotationAutomationController::displayedCurve(const mu::engraving::AutomationCurveKey& key) const
+//! NOTE: while a MIDI CC take is being recorded, its curves show a preview, not the stored points: not editable
+bool NotationAutomationController::isRecordingPreviewShown() const
 {
-    const mu::engraving::AutomationCurve& curve = automationData()->curve(key);
-
     const INotationAutomationPtr notationAutomation = automation();
-    if (!notationAutomation) {
-        return curve;
+    return notationAutomation && !notationAutomation->recordingPreviews().empty();
+}
+
+//! NOTE: the stored curve, or, while a MIDI CC take is being recorded into it, the curve as it will be once written
+const mu::engraving::AutomationCurve& NotationAutomationController::displayedCurve(const mu::engraving::AutomationCurveKey& key) const
+{
+    if (const INotationAutomationPtr notationAutomation = automation()) {
+        const auto previewIt = notationAutomation->recordingPreviews().find(key);
+        if (previewIt != notationAutomation->recordingPreviews().cend()) {
+            return previewIt->second;
+        }
     }
 
-    const auto previewIt = notationAutomation->recordingPreviews().find(key);
-    if (previewIt == notationAutomation->recordingPreviews().cend() || previewIt->second.empty()) {
-        return curve;
-    }
-
-    const mu::engraving::AutomationCurve& preview = previewIt->second;
-
-    mu::engraving::AutomationCurve result = curve;
-    result.erase(result.lower_bound(preview.cbegin()->first), result.upper_bound(std::prev(preview.cend())->first));
-    result.insert(preview.cbegin(), preview.cend());
-
-    return result;
+    return automationData()->curve(key);
 }
 
 mu::engraving::AutomationDataConstPtr NotationAutomationController::automationData() const

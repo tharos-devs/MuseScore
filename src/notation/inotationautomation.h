@@ -68,8 +68,8 @@ public:
     virtual void recordMidiCcTake(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
                                   const std::vector<uint8_t>& newCustomMidiCcs) = 0;
 
-    //! NOTE: a take being recorded, shown over its curve before it's written (the curve's points within the
-    //! preview's own range are replaced by it, like the take will). Never saved nor played, nor undoable
+    //! NOTE: a take being recorded, shown before it's written: the whole curve as it will be once the take is
+    //! applied, shown instead of the stored one. Never saved nor played, nor undoable
     virtual const std::map<AutomationCurveKey, AutomationCurve>& recordingPreviews() const = 0;
     virtual void setRecordingPreview(const AutomationCurveKey& key, const AutomationCurve& preview, int changedFromUtick,
                                      int changedToUtick) = 0;

@@ -54,6 +54,9 @@ static constexpr qint64 MAX_POSITION_REFINEMENT_MS = 250;
 
 static constexpr int PREVIEW_REFRESH_INTERVAL_MS = 40;
 
+//! NOTE: a reported position this far past the previous one (they come every few tens of milliseconds) is a jump
+static constexpr double POSITION_JUMP_SECS = 0.5;
+
 static AutomationPoint takePoint(double value)
 {
     AutomationPoint point;
@@ -61,6 +64,27 @@ static AutomationPoint takePoint(double value)
     point.value.inValue = AutomationPoint::ExplicitArrival { point.value.outValue, AutomationPoint::Ease::none() };
     point.generated = false;
     return point;
+}
+
+//! NOTE: the value a curve plays at a utick (the first point's value applies before it)
+static double curveValueAt(const AutomationCurve& curve, int utick)
+{
+    if (curve.empty()) {
+        return 0.;
+    }
+
+    auto next = curve.upper_bound(utick);
+    if (next == curve.cbegin()) {
+        return next->second.value.outValue;
+    }
+
+    const auto it = std::prev(next);
+    if (next == curve.cend() || it->first == utick) {
+        return it->second.value.outValue;
+    }
+
+    const real_t t = real_t(utick - it->first) / real_t(next->first - it->first);
+    return mpe::evaluateAt(next->second.value, it->second.value.outValue, t);
 }
 
 namespace {
@@ -99,14 +123,20 @@ void thinPoints(const std::vector<TakePoint>& points, size_t from, size_t to, st
     thinPoints(points, farthest, to, keep);
 }
 
-//! NOTE: Ramer-Douglas-Peucker on the values: drops the points a straight line already plays
-std::vector<TakePoint> thinned(const std::map<int, double>& values)
+std::vector<TakePoint> takePoints(const std::map<int, double>& values)
 {
     std::vector<TakePoint> points;
     points.reserve(values.size());
     for (const auto& [utick, value] : values) {
         points.push_back({ utick, value });
     }
+    return points;
+}
+
+//! NOTE: Ramer-Douglas-Peucker on the values: drops the points a straight line already plays
+std::vector<TakePoint> thinned(const std::map<int, double>& values)
+{
+    std::vector<TakePoint> points = takePoints(values);
 
     if (points.size() <= 2) {
         return points;
@@ -146,20 +176,24 @@ void MidiCcRecorder::init()
     });
 
     playbackController()->isPlayingChanged().onReceive(this, [this](bool isPlaying) {
+        // Each start (and resume) begins a new segment, from the first position reported after it
+        m_lastReportedPosition.reset();
+        m_sinceLastReportedPosition.invalidate();
+        ++m_segmentGeneration;
+
         if (!isPlaying) {
             commitTake();
         }
     });
 
     globalContext()->playbackState()->playbackPositionChanged().onReceive(this, [this](secs_t position) {
-        m_lastReportedPosition = position;
-        m_sinceLastReportedPosition.restart();
+        onPlaybackPositionChanged(position);
     });
 
     globalContext()->currentMasterNotationChanged().onNotify(this, [this]() {
-        m_take.clear();
-        m_previewChangedRanges.clear();
-        m_previewTimer.stop();
+        // The previous score is gone: its take can't be written anymore
+        clearPreviews();
+        clearTake();
         setArmed(false);
     });
 }
@@ -209,8 +243,9 @@ void MidiCcRecorder::setArmed(bool armed)
 std::optional<MidiCcRecorder::Target> MidiCcRecorder::resolveTarget() const
 {
     const notation::INotationPtr notation = globalContext()->currentNotation();
+    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const project::INotationProjectPtr project = globalContext()->currentProject();
-    if (!notation || !project || !project->audioSettings()) {
+    if (!notation || !masterNotation || !project || !project->audioSettings()) {
         return std::nullopt;
     }
 
@@ -226,8 +261,10 @@ std::optional<MidiCcRecorder::Target> MidiCcRecorder::resolveTarget() const
         staffIdx = selection->elements().front()->staffIdx();
     }
 
+    // The selection may be in a part: its staves share their ids with the master score's ones
     const Staff* staff = staffIdx ? notation->elements()->msScore()->staff(*staffIdx) : nullptr;
-    const Part* part = staff ? staff->part() : nullptr;
+    const Staff* masterStaff = staff ? masterNotation->masterScore()->staffById(staff->id()) : nullptr;
+    const Part* part = masterStaff ? masterStaff->part() : nullptr;
     if (!part) {
         return std::nullopt;
     }
@@ -238,7 +275,20 @@ std::optional<MidiCcRecorder::Target> MidiCcRecorder::resolveTarget() const
         return std::nullopt;
     }
 
-    return Target { trackId, *staffIdx };
+    return Target { trackId, masterStaff->idx() };
+}
+
+void MidiCcRecorder::onPlaybackPositionChanged(secs_t position)
+{
+    if (m_lastReportedPosition) {
+        const double delta = double(position - *m_lastReportedPosition);
+        if (delta < 0. || delta > POSITION_JUMP_SECS) {
+            ++m_segmentGeneration;
+        }
+    }
+
+    m_lastReportedPosition = position;
+    m_sinceLastReportedPosition.restart();
 }
 
 void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
@@ -268,25 +318,34 @@ void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
     controllerEvent.type = mpe::ControllerChangeEvent::ControlChange;
     controllerEvent.controller = controller;
     controllerEvent.val = static_cast<float>(value);
-    masterNotation->playback()->triggerControllers({ controllerEvent }, m_target->staffIdx, 0);
+    masterNotation->playback()->triggerControllers({ controllerEvent }, m_target->masterStaffIdx, 0);
 
     if (!playbackController()->isPlaying()) {
         return;
     }
 
-    if (const std::optional<int> utick = currentUtick()) {
-        std::map<int, double>& values = m_take[controller];
-        values[*utick] = value;
+    const std::optional<int> utick = currentUtick();
+    if (!utick) {
+        return;
+    }
 
-        // The take's range grows (and a loop can bring it back earlier): everything between the last drawn
-        // position and this one must be redrawn, the existing points it now covers included
-        auto [rangeIt, inserted] = m_previewChangedRanges.try_emplace(controller, *utick, *utick);
-        rangeIt->second.first = std::min({ rangeIt->second.first, *utick, values.cbegin()->first });
-        rangeIt->second.second = std::max({ rangeIt->second.second, *utick, values.crbegin()->first });
+    std::vector<TakeSegment>& segments = m_take[controller];
+    auto generationIt = m_controllerSegmentGeneration.find(controller);
+    const bool isNewSegment = segments.empty() || generationIt == m_controllerSegmentGeneration.end()
+                              || generationIt->second != m_segmentGeneration || *utick < segments.back().crbegin()->first;
+    if (isNewSegment) {
+        segments.emplace_back();
+        m_controllerSegmentGeneration.insert_or_assign(controller, m_segmentGeneration);
+    }
 
-        if (!m_previewTimer.isActive()) {
-            m_previewTimer.start();
-        }
+    segments.back()[*utick] = value;
+
+    auto [rangeIt, inserted] = m_previewChangedRanges.try_emplace(controller, *utick, *utick);
+    rangeIt->second.first = std::min({ rangeIt->second.first, *utick, segments.back().cbegin()->first });
+    rangeIt->second.second = std::max({ rangeIt->second.second, *utick, segments.back().crbegin()->first });
+
+    if (!m_previewTimer.isActive()) {
+        m_previewTimer.start();
     }
 }
 
@@ -294,11 +353,11 @@ std::optional<int> MidiCcRecorder::currentUtick() const
 {
     const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const MasterScore* score = masterNotation ? masterNotation->masterScore() : nullptr;
-    if (!score) {
+    if (!score || !m_lastReportedPosition) {
         return std::nullopt;
     }
 
-    secs_t position = m_lastReportedPosition;
+    secs_t position = *m_lastReportedPosition;
     if (m_sinceLastReportedPosition.isValid()) {
         const qint64 elapsedMs = std::min(m_sinceLastReportedPosition.elapsed(), MAX_POSITION_REFINEMENT_MS);
         position += secs_t(double(elapsedMs) / 1000.0);
@@ -318,11 +377,57 @@ std::optional<int> MidiCcRecorder::currentUtick() const
     return repeatList.empty() ? tick : tick + (repeatList.back()->utick - repeatList.back()->tick);
 }
 
+AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, const std::vector<TakeSegment>& segments, bool thin,
+                                              std::vector<std::pair<int, int> >* ranges) const
+{
+    AutomationCurve result = existing;
+
+    for (const TakeSegment& segment : segments) {
+        if (segment.empty()) {
+            continue;
+        }
+
+        const int fromUtick = segment.cbegin()->first;
+        const int toUtick = segment.crbegin()->first;
+        if (ranges) {
+            ranges->emplace_back(fromUtick, toUtick);
+        }
+
+        // "Touch": the curve is only replaced within the segment, and joins it with a step on each side, so
+        // that it keeps its own shape outside of it
+        const bool hasCurve = !result.empty();
+        const double valueBefore = curveValueAt(result, fromUtick);
+        const double valueAfter = curveValueAt(result, toUtick);
+
+        result.erase(result.lower_bound(fromUtick), result.upper_bound(toUtick));
+
+        const std::vector<TakePoint> points = thin ? thinned(segment) : takePoints(segment);
+
+        for (size_t i = 0; i < points.size(); ++i) {
+            AutomationPoint point = takePoint(points[i].value);
+
+            if (hasCurve && i == 0) {
+                point.value.inValue = AutomationPoint::ExplicitArrival { valueBefore, AutomationPoint::Ease::none() };
+            }
+
+            // A single-point segment keeps its value afterwards: there's no movement to end
+            if (hasCurve && i == points.size() - 1 && points.size() > 1) {
+                point.value.outValue = valueAfter;
+            }
+
+            result.insert({ points[i].utick, point });
+        }
+    }
+
+    return result;
+}
+
 void MidiCcRecorder::publishPreviews()
 {
     const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
-    if (!automation || !m_target) {
+    const notation::AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
+    if (!data || !m_target) {
         m_previewChangedRanges.clear();
         return;
     }
@@ -333,12 +438,9 @@ void MidiCcRecorder::publishPreviews()
             continue;
         }
 
-        AutomationCurve preview;
-        for (const auto& [utick, value] : takeIt->second) {
-            preview.insert({ utick, takePoint(value) });
-        }
-
-        automation->setRecordingPreview(AutomationCurveKey::midiCc(m_target->trackId, controller), preview, range.first, range.second);
+        const AutomationCurveKey key = AutomationCurveKey::midiCc(m_target->trackId, controller);
+        const AutomationCurve preview = curveWithTake(data->curve(key), takeIt->second, false /*thin*/, nullptr);
+        automation->setRecordingPreview(key, preview, range.first, range.second);
     }
 
     m_previewChangedRanges.clear();
@@ -355,19 +457,20 @@ void MidiCcRecorder::clearPreviews()
     }
 }
 
+void MidiCcRecorder::clearTake()
+{
+    m_take.clear();
+    m_controllerSegmentGeneration.clear();
+}
+
 void MidiCcRecorder::commitTake()
 {
-    if (m_take.empty() || !m_target) {
-        m_take.clear();
-        clearPreviews();
-        return;
-    }
-
     const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     const notation::AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
-    if (!data) {
-        m_take.clear();
+    if (m_take.empty() || !m_target || !data) {
+        clearTake();
+        clearPreviews();
         return;
     }
 
@@ -376,25 +479,33 @@ void MidiCcRecorder::commitTake()
     std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve;
     std::vector<uint8_t> newCustomControllers;
 
-    for (const auto& [controller, values] : m_take) {
-        if (values.empty()) {
+    for (const auto& [controller, segments] : m_take) {
+        const AutomationCurveKey key = AutomationCurveKey::midiCc(m_target->trackId, controller);
+        const AutomationCurve& existing = data->curve(key);
+
+        std::vector<std::pair<int, int> > ranges;
+        const AutomationCurve result = curveWithTake(existing, segments, true /*thin*/, &ranges);
+        if (ranges.empty()) {
             continue;
         }
 
-        const AutomationCurveKey key = AutomationCurveKey::midiCc(m_target->trackId, controller);
-        const int fromUtick = values.cbegin()->first;
-        const int toUtick = values.crbegin()->first;
+        const auto isInRanges = [&ranges](int utick) {
+            return std::any_of(ranges.cbegin(), ranges.cend(), [utick](const auto& range) {
+                return utick >= range.first && utick <= range.second;
+            });
+        };
 
+        // Only the ranges the take covers change: whatever the curve had there goes, the take's points come
         AutomationPointEdits edits;
-
-        // "Touch": the existing curve is replaced only where the controller was moved
-        const AutomationCurve& existing = data->curve(key);
-        for (auto it = existing.lower_bound(fromUtick); it != existing.end() && it->first <= toUtick; ++it) {
-            edits.push_back({ it->first, AutomationPointEdit::ErasePoint {} });
+        for (const auto& [utick, point] : existing) {
+            if (isInRanges(utick) && result.find(utick) == result.cend()) {
+                edits.push_back({ utick, AutomationPointEdit::ErasePoint {} });
+            }
         }
-
-        for (const TakePoint& recorded : thinned(values)) {
-            edits.push_back({ recorded.utick, AutomationPointEdit::SetPoint { takePoint(recorded.value) } });
+        for (const auto& [utick, point] : result) {
+            if (isInRanges(utick)) {
+                edits.push_back({ utick, AutomationPointEdit::SetPoint { point } });
+            }
         }
 
         editsByCurve.emplace_back(key, std::move(edits));
@@ -404,7 +515,7 @@ void MidiCcRecorder::commitTake()
         }
     }
 
-    m_take.clear();
+    clearTake();
 
     if (!editsByCurve.empty()) {
         automation->recordMidiCcTake(editsByCurve, newCustomControllers);

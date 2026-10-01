@@ -191,4 +191,7 @@ muse::async::Channel<mu::engraving::AutomationChanges> NotationAutomation::recor
 void NotationAutomation::setMasterScore(engraving::MasterScore* masterScore)
 {
     m_masterScore = masterScore;
+
+    // A preview belongs to the take of the score it was recorded in
+    clearRecordingPreviews();
 }

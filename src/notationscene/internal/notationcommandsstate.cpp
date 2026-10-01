@@ -312,6 +312,10 @@ void NotationCommandsState::init()
         updateCommandStates({ DELETE_MIDI_CC_POINTS_COMMAND });
     });
 
+    notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
+        updateCommandStates({ DELETE_MIDI_CC_POINTS_COMMAND });
+    });
+
     controller()->stackChanged().onNotify(this, [this]() {
         updateCommandStates(UNDO_REDO_COMMANDS);
     });

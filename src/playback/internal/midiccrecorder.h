@@ -23,6 +23,7 @@
 
 #include <map>
 #include <optional>
+#include <vector>
 
 #include <QElapsedTimer>
 #include <QTimer>
@@ -33,6 +34,7 @@
 #include "interactive/iinteractive.h"
 #include "midi/imidiinport.h"
 #include "engraving/types/types.h"
+#include "engraving/automation/automationtypes.h"
 
 #include "../imidiccrecorder.h"
 #include "../iplaybackcontroller.h"
@@ -57,27 +59,43 @@ public:
 private:
     struct Target {
         engraving::InstrumentTrackId trackId;
-        engraving::staff_idx_t staffIdx = 0;
+        engraving::staff_idx_t masterStaffIdx = 0; // in the master score, whatever the current notation (e.g. a part)
     };
+
+    //! NOTE: a continuous stretch of a take: its values (the latest one wins at a given utick). A take gets a
+    //! new segment whenever the playback position jumps (seek, loop, repeat jump, pause and resume) - each
+    //! segment replaces the curve only within its own range, a later one over an earlier one
+    using TakeSegment = std::map<int, double>;
 
     std::optional<Target> resolveTarget() const;
     void setArmed(bool armed);
 
     void onMidiEventReceived(const muse::midi::Event& event);
+    void onPlaybackPositionChanged(muse::secs_t position);
     std::optional<int> currentUtick() const;
+
+    //! NOTE: the curve as it is once a controller's take is applied to it, and the utick ranges the take covers
+    engraving::AutomationCurve curveWithTake(const engraving::AutomationCurve& existing, const std::vector<TakeSegment>& segments,
+                                             bool thin, std::vector<std::pair<int, int> >* ranges) const;
+
     void commitTake();
     void publishPreviews();
     void clearPreviews();
+    void clearTake();
 
     std::optional<Target> m_target;
     muse::async::Notification m_armedChanged;
 
-    //! NOTE: per controller, the values received at each utick (the latest one wins)
-    std::map<uint8_t, std::map<int, double> > m_take;
+    std::map<uint8_t, std::vector<TakeSegment> > m_take;
+    //! NOTE: incremented on every playback position jump, see TakeSegment
+    int m_segmentGeneration = 0;
+    std::map<uint8_t, int> m_controllerSegmentGeneration;
 
     //! NOTE: the engine only reports the playback position every few tens of milliseconds - the time
-    //! elapsed since the last report refines it, so that a fast controller movement isn't flattened
-    muse::secs_t m_lastReportedPosition = 0.;
+    //! elapsed since the last report refines it, so that a fast controller movement isn't flattened.
+    //! Nothing is recorded before the first report since playback started (e.g. during a count-in, the
+    //! position doesn't move yet)
+    std::optional<muse::secs_t> m_lastReportedPosition;
     QElapsedTimer m_sinceLastReportedPosition;
 
     //! NOTE: the take is drawn live (see INotationAutomation::recordingPreviews), refreshed at most this often

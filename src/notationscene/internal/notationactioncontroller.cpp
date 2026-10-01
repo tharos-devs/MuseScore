@@ -3664,8 +3664,10 @@ void NotationActionController::deleteMidiCcPointsInSelection()
     std::set<mu::engraving::InstrumentTrackId> trackIds;
     for (mu::engraving::staff_idx_t staffIdx = range->startStaffIndex(); staffIdx < range->endStaffIndex(); ++staffIdx) {
         const mu::engraving::Staff* staff = score->staff(staffIdx);
-        if (const mu::engraving::Part* part = staff ? staff->part() : nullptr) {
-            trackIds.insert({ part->id(), part->instrumentId() }); // MIDI CC curves belong to the part's first instrument
+        const mu::engraving::Part* part = staff ? staff->part() : nullptr;
+        // Only VST instruments show (and play) MIDI CC curves; they belong to the part's first instrument
+        if (part && midicc::isVstInstrument(globalContext()->currentProject(), part)) {
+            trackIds.insert({ part->id(), part->instrumentId() });
         }
     }
 
