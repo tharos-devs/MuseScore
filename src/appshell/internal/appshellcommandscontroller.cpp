@@ -41,6 +41,8 @@
 
 #include "../appshellcommands.h"
 
+#include "dockwindow/idockwindow.h"
+
 #include "log.h"
 #include "rcommand/commandtypes.h"
 
@@ -95,6 +97,13 @@ void AppshellCommandsController::init()
         });
     }
 
+    cd->onRequest(this, DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND, [this]() {
+        if (dock::IDockWindow* window = dockWindowProvider()->window()) {
+            window->setSecondaryWindowOpen(!window->isSecondaryWindowOpen());
+        }
+        return muse::make_ok();
+    });
+
     // compat
     {
         using namespace muse::rcommand;
@@ -126,6 +135,7 @@ void AppshellCommandsController::init()
             { "toggle-percussion-panel", DOCK_TOGGLE_PERCUSSION_COMMAND, {} },
             { "toggle-statusbar", DOCK_TOGGLE_STATUSBAR_COMMAND, {} },
             { "toggle-video-panel", DOCK_TOGGLE_VIDEO_PANEL_COMMAND, {} },
+            { "toggle-secondary-window", DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND, {} },
         };
 
         rcommand::registerActionToCommand(this, actionToCommands, commandDispatcher(), dispatcher());

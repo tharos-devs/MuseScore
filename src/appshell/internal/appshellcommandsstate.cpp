@@ -53,6 +53,7 @@ static const std::vector<Command> PROJECT_PAGE_COMMANDS = {
     DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND,
     DOCK_TOGGLE_PERCUSSION_COMMAND,
     DOCK_TOGGLE_STATUSBAR_COMMAND,
+    DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND,
 };
 
 std::string AppshellCommandsState::moduleName() const
@@ -84,6 +85,10 @@ void AppshellCommandsState::init()
         if (!window) {
             return;
         }
+
+        window->secondaryWindowOpenChanged().onNotify(this, [this]() {
+            updateCommandStates({ DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND });
+        });
 
         window->docksOpenStatusChanged().onReceive(this, [this](const QStringList& dockNames) {
             std::vector<Command> commands;
@@ -146,6 +151,11 @@ CommandState AppshellCommandsState::commandState(const Command& command) const
 
     if (command == DOCK_TOGGLE_BRAILLE_COMMAND) {
         return CommandState(true, brailleConfiguration()->braillePanelEnabled());
+    }
+
+    if (command == DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND) {
+        const IDockWindow* window = dockWindowProvider()->window();
+        return CommandState(true, window && window->isSecondaryWindowOpen());
     }
 
     const DockName dockName = commandsController()->commandDockName(command);

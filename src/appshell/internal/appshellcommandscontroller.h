@@ -49,6 +49,7 @@
 #include "extensions/iextensioninstaller.h"
 #include "context/iglobalcontext.h"
 #include "context/iuicontextresolver.h"
+#include "dockwindow/idockwindowprovider.h"
 
 #include "iappshellcommandscontroller.h"
 
@@ -70,6 +71,7 @@ class AppshellCommandsController : public QObject, public IAppshellCommandsContr
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
     muse::ContextInject<muse::ui::IMainWindow> mainWindow = { this };
+    muse::ContextInject<muse::dock::IDockWindowProvider> dockWindowProvider = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<project::IOpenProjectScenario> openProjectScenario = { this };
     muse::ContextInject<project::ICloseProjectScenario> closeProjectScenario = { this };

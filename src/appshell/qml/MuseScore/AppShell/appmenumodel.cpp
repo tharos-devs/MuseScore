@@ -315,6 +315,8 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
         makeMenuItem(OPEN_ARTICULATION_MAP_EDITOR_COMMAND),
         makeSeparator(),
+        makeMenuItem(DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND),
+        makeSeparator(),
         makeMenu(TranslatableString("appshell/menu/view", "&Toolbars"), {
             makeMenuItem(DOCK_TOGGLE_PLAYBACK_COMMAND),
             makeMenuItem(DOCK_TOGGLE_NOTEINPUT_COMMAND),
