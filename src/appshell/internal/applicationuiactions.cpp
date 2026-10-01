@@ -224,12 +224,12 @@ const UiActionList ApplicationUiActions::m_actions = {
              IconCode::Code::VIDEO,
              ui::Checkable::Yes
              ),
+    //! NOTE: not checkable here: the View menu shows the command's checked state
     UiAction("toggle-secondary-window",
              mu::context::UiCtxProjectOpened,
              mu::context::CTX_ANY,
              TranslatableString("action", "Secondary &window"),
-             TranslatableString("action", "Show/hide secondary window"),
-             ui::Checkable::Yes
+             TranslatableString("action", "Show/hide secondary window")
              ),
     UiAction(VIDEO_TIMECODE_OFF_CODE,
              mu::context::UiCtxProjectOpened,
