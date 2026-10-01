@@ -34,6 +34,7 @@
 #include "async/asyncable.h"
 #include "actions/iactionsdispatcher.h"
 #include "playback/iplaybackcontroller.h"
+#include "notationscene/inotationsceneconfiguration.h"
 
 namespace mu::engraving {
 class Measure;
@@ -115,6 +116,7 @@ class Timeline : public QGraphicsView, public muse::Contextable, public muse::as
     Q_OBJECT
 
     muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
+    muse::GlobalInject<INotationSceneConfiguration> configuration;
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
 
@@ -270,6 +272,17 @@ private:
     std::vector<std::pair<QString, bool> > getLabels();
 
     unsigned nmetas() const;
+
+    //! NOTE: whether the last meta row is the Measures row -- most of the meta row
+    //! layout (collapse arrow, reorder range, measure box clicks) assumes it is, which
+    //! no longer holds once it's hidden from the View menu.
+    bool measuresRowVisible() const;
+    //! NOTE: number of meta rows that can be reordered (every visible meta row but Measures)
+    int nswappableMetas() const;
+
+    static const std::string& metaRowId(void (Timeline::* func)(engraving::Segment*, int*, int));
+    void initMetas();
+    void applyMetaRowsVisibility();
 
     bool collapsed() const { return _collapsedMeta; }
     void setCollapsed(bool st) { _collapsedMeta = st; }

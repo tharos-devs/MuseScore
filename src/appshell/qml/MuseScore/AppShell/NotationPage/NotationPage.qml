@@ -538,6 +538,10 @@ DockPage {
             Timeline {
                 navigationSection: timelinePanel.navigationSection
                 contentNavigationPanelOrderStart: timelinePanel.contentNavigationPanelOrderStart
+
+                Component.onCompleted: {
+                    timelinePanel.contextMenuModel = contextMenuModel
+                }
             }
         },
 

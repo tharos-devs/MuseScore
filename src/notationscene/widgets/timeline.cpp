@@ -343,6 +343,8 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
     }
 
     unsigned numMetas = _timeline->nmetas();
+    const bool measuresVisible = _timeline->measuresRowVisible();
+    const int numSwappable = _timeline->nswappableMetas();
     int maxWidth = -1;
     int measureWidth = 0;
     for (unsigned row = 0; row < labels.size(); row++) {
@@ -375,19 +377,20 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
         graphicsTextItem->setData(0, QVariant::fromValue<bool>(false));
 
         MouseOverValue mouseOverArrow = MouseOverValue::NONE;
-        if (numMetas - 1 == row && (numMetas > 2 || _timeline->collapsed())) {
+        const int metaRow = static_cast<int>(row);
+        if (measuresVisible && numMetas - 1 == row && (numMetas > 2 || _timeline->collapsed())) {
             // Measures meta
             if (_timeline->collapsed()) {
                 mouseOverArrow = MouseOverValue::COLLAPSE_DOWN_ARROW;
             } else {
                 mouseOverArrow = MouseOverValue::COLLAPSE_UP_ARROW;
             }
-        } else if (row < numMetas - 1) {
-            if (row != 0 && row + 1 <= numMetas - 2) {
+        } else if (metaRow < numSwappable) {
+            if (metaRow != 0 && metaRow + 1 <= numSwappable - 1) {
                 mouseOverArrow = MouseOverValue::MOVE_UP_DOWN_ARROW;
-            } else if (row == 0 && row + 1 < numMetas - 1) {
+            } else if (metaRow == 0 && metaRow + 1 < numSwappable) {
                 mouseOverArrow = MouseOverValue::MOVE_DOWN_ARROW;
-            } else if (row == numMetas - 2 && row != 0) {
+            } else if (metaRow == numSwappable - 1 && metaRow != 0) {
                 mouseOverArrow = MouseOverValue::MOVE_UP_ARROW;
             }
         } else if (numMetas <= row) {
@@ -463,9 +466,10 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
     unsigned numMetas = _timeline->nmetas();
 
     // Check if mouse position in scene is on the last meta
-    QPointF measureMetaTl = QPointF(0, (numMetas - 1) * 20 + verticalScrollBar()->value());
+    QPointF measureMetaTl = QPointF(0, (static_cast<int>(numMetas) - 1) * 20 + verticalScrollBar()->value());
     QPointF measureMetaBr = QPointF(width(), numMetas * 20 + verticalScrollBar()->value());
-    if (QRectF(measureMetaTl, measureMetaBr).contains(scenePt) && (numMetas > 2 || _timeline->collapsed())) {
+    if (_timeline->measuresRowVisible() && QRectF(measureMetaTl, measureMetaBr).contains(scenePt)
+        && (numMetas > 2 || _timeline->collapsed())) {
         if (std::get<0>(_oldItemInfo)) {
             std::pair<QGraphicsItem*, int> p = std::make_pair(std::get<0>(_oldItemInfo), std::get<2>(_oldItemInfo));
             std::vector<std::pair<QGraphicsItem*, int> >::iterator it = std::find(_metaLabels.begin(), _metaLabels.end(), p);
@@ -486,9 +490,7 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
             QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
             if (graphicsPixmapItem) {
                 unsigned row = graphicsPixmapItem->data(2).value<unsigned>();
-                if (row == numMetas - 1) {
-                    return;
-                } else if (row < numMetas - 1) {
+                if (static_cast<int>(row) < _timeline->nswappableMetas()) {
                     // Find mid point between up and down arrow
                     qreal midPoint = graphicsPixmapItem->boundingRect().height() / 2 + graphicsPixmapItem->scenePos().y();
                     if (scenePt.y() > midPoint) {
@@ -773,15 +775,7 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
     connect(_rowNames, &TRowLabels::swapMeta, this, &Timeline::swapMeta);
     connect(this, &Timeline::moved, _rowNames, &TRowLabels::mouseOver);
 
-    _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+    initMetas();
 
     std::tuple<QGraphicsItem*, int, QColor> ohi(nullptr, -1, QColor());
     _oldHoverInfo = ohi;
@@ -947,6 +941,85 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
     uiConfiguration()->currentThemeChanged().onNotify(this, [this]() {
         updateTimelineTheme();
     });
+
+    configuration()->timelineRowsVisibilityChanged().onNotify(this, [this]() {
+        applyMetaRowsVisibility();
+        updateGrid();
+    });
+}
+
+//! NOTE: the stable id each meta row's visibility is persisted under, see notationscenetypes.h
+const std::string& Timeline::metaRowId(void (Timeline::* func)(Segment*, int*, int))
+{
+    static const std::vector<std::pair<void (Timeline::*)(Segment*, int*, int), std::string> > ids {
+        { &Timeline::tempoMeta, TIMELINE_ROW_TEMPO },
+        { &Timeline::timeMeta, TIMELINE_ROW_TIME_SIGNATURE },
+        { &Timeline::timecodeMeta, TIMELINE_ROW_TIMECODE },
+        { &Timeline::hitPointMeta, TIMELINE_ROW_HIT_POINTS },
+        { &Timeline::rehearsalMeta, TIMELINE_ROW_REHEARSAL_MARK },
+        { &Timeline::keyMeta, TIMELINE_ROW_KEY_SIGNATURE },
+        { &Timeline::barlineMeta, TIMELINE_ROW_BARLINES },
+        { &Timeline::jumpMarkerMeta, TIMELINE_ROW_JUMPS_AND_MARKERS },
+        { &Timeline::measureMeta, TIMELINE_ROW_MEASURES },
+    };
+
+    for (const auto& [metaFunc, id] : ids) {
+        if (metaFunc == func) {
+            return id;
+        }
+    }
+
+    static const std::string empty;
+    return empty;
+}
+
+void Timeline::initMetas()
+{
+    _metas.clear();
+    _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+
+    applyMetaRowsVisibility();
+}
+
+void Timeline::applyMetaRowsVisibility()
+{
+    for (auto& meta : _metas) {
+        std::get<2>(meta) = configuration()->isTimelineRowVisible(metaRowId(std::get<1>(meta)));
+    }
+
+    //! NOTE: the collapsed view is anchored on the Measures row (it's where the
+    //! expand arrow lives), so it can't stay collapsed without it
+    if (_collapsedMeta && !measuresRowVisible()) {
+        _collapsedMeta = false;
+    }
+}
+
+bool Timeline::measuresRowVisible() const
+{
+    if (_collapsedMeta) {
+        return true;
+    }
+
+    for (const auto& meta : _metas) {
+        if (std::get<1>(meta) == &Timeline::measureMeta) {
+            return std::get<2>(meta);
+        }
+    }
+
+    return false;
+}
+
+int Timeline::nswappableMetas() const
+{
+    return static_cast<int>(nmetas()) - (measuresRowVisible() ? 1 : 0);
 }
 
 bool Timeline::handleEvent(QEvent* e)
@@ -2250,7 +2323,8 @@ void Timeline::mousePressEvent(QMouseEvent* event)
             int bottomOfMeta = nmeta * _gridHeight + verticalScrollBar()->value();
 
             // Handle measure box clicks
-            if (scenePt.y() > (nmeta - 1) * _gridHeight + verticalScrollBar()->value()
+            if (measuresRowVisible()
+                && scenePt.y() > (nmeta - 1) * _gridHeight + verticalScrollBar()->value()
                 && scenePt.y() < bottomOfMeta) {
                 QRectF tmp(scenePt.x(), 0, 3, nmeta * _gridHeight + nstaves() * _gridHeight);
                 QList<QGraphicsItem*> gl = scene()->items(tmp);
@@ -2634,16 +2708,7 @@ void Timeline::changeEvent(QEvent* event)
 {
     QGraphicsView::changeEvent(event);
     if (event->type() == QEvent::LanguageChange) {
-        _metas.clear();
-        _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+        initMetas();
 
         updateGridFull();
     }
@@ -3095,7 +3160,7 @@ void Timeline::swapMeta(unsigned row, bool switchUp)
             swap--;
         }
         iter_swap(_metas.begin() + correctMetaRow(row), swap);
-    } else if (!switchUp && row != nmetas() - 2) {
+    } else if (!switchUp && static_cast<int>(row) != nswappableMetas() - 1) {
         // traverse forwards until visible one is found
         auto swap = _metas.begin() + correctMetaRow(row) + 1;
         while (!std::get<2>(*swap)) {
@@ -3170,14 +3235,11 @@ void Timeline::contextMenuEvent(QContextMenuEvent* event)
     } else if (_rowNames->cursorIsOn() == "meta" || cursorIsOn(event->pos()) == "meta") {
         for (auto it = _metas.begin(); it != _metas.end(); ++it) {
             std::tuple<QString, void (Timeline::*)(Segment*, int*, int), bool> meta = *it;
-            QString row_name = std::get<0>(meta);
-            if (row_name != muse::qtrc("notation/timeline", "Measures")) {
-                QAction* action = new QAction(row_name, this);
-                action->setCheckable(true);
-                action->setChecked(std::get<2>(meta));
-                connect(action, &QAction::triggered, this, &Timeline::toggleMetaRow);
-                contextMenu->addAction(action);
-            }
+            QAction* action = new QAction(std::get<0>(meta), this);
+            action->setCheckable(true);
+            action->setChecked(std::get<2>(meta));
+            connect(action, &QAction::triggered, this, &Timeline::toggleMetaRow);
+            contextMenu->addAction(action);
         }
         contextMenu->addSeparator();
         QAction* hide_all = new QAction(muse::qtrc("notation/timeline", "Hide all"), this);
@@ -3203,30 +3265,28 @@ void Timeline::toggleMetaRow()
 
     QString targetText = action->text();
 
+    //! NOTE: copied, since each setTimelineRowVisible() call below re-applies the
+    //! settings to _metas through timelineRowsVisibilityChanged()
+    const auto metas = _metas;
+
     if (targetText == muse::qtrc("notation/timeline", "Hide all")) {
-        for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-            QString metaText = std::get<0>(*it);
-            if (metaText != muse::qtrc("notation/timeline", "Measures")) {
-                std::get<2>(*it) = false;
+        for (const auto& meta : metas) {
+            if (std::get<1>(meta) != &Timeline::measureMeta) {
+                configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), false);
             }
         }
-        updateGrid();
         return;
     } else if (targetText == muse::qtrc("notation/timeline", "Show all")) {
-        for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-            std::get<2>(*it) = true;
+        for (const auto& meta : metas) {
+            configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), true);
         }
-        updateGrid();
         return;
     }
 
-    bool checked = action->isChecked();
     // Find target text in metas and toggle visibility to the checked status of action
-    for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-        QString metaText = std::get<0>(*it);
-        if (metaText == targetText) {
-            std::get<2>(*it) = checked;
-            updateGrid();
+    for (const auto& meta : metas) {
+        if (std::get<0>(meta) == targetText) {
+            configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), action->isChecked());
             break;
         }
     }

@@ -28,6 +28,8 @@ import MuseScore.NotationScene
 Item {
     id: root
 
+    property alias contextMenuModel: contextMenuModel
+
     property alias navigationSection: navPanel.section
     property alias contentNavigationPanelOrderStart: navPanel.order
 
@@ -36,6 +38,14 @@ Item {
         name: "TimelineSection"
         direction: NavigationPanel.Vertical
         enabled: root.enabled && root.visible
+    }
+
+    TimelinePanelContextMenuModel {
+        id: contextMenuModel
+    }
+
+    Component.onCompleted: {
+        contextMenuModel.load()
     }
 
     TimelineView {

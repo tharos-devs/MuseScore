@@ -66,5 +66,10 @@ public:
     virtual bool percussionPanelMoveMidiNotesAndShortcuts() const = 0;
     virtual void setPercussionPanelMoveMidiNotesAndShortcuts(bool move) = 0;
     virtual muse::async::Notification percussionPanelMoveMidiNotesAndShortcutsChanged() const = 0;
+
+    //! NOTE: rowId is one of TIMELINE_ROW_IDS (see notationscenetypes.h)
+    virtual bool isTimelineRowVisible(const std::string& rowId) const = 0;
+    virtual void setTimelineRowVisible(const std::string& rowId, bool visible) = 0;
+    virtual muse::async::Notification timelineRowsVisibilityChanged() const = 0;
 };
 }
