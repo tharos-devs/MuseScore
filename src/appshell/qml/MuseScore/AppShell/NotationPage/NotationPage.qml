@@ -670,12 +670,13 @@ DockPage {
                 //! happens on panelReady below instead, once it's guaranteed
                 //! settled. This handler covers the value changing again later,
                 //! e.g. the user live-toggling it via the panel's own "..." menu.
-                onHitPointsPanelBelowTimelineChanged: {
-                    videoPanel.minimumWidth = hitPointsPanelBelowTimeline ? 340 : 640
+                //! NOTE: a hidden sidebar takes no width either, so it gets the narrow floor too
+                onNeedsWideMinimumWidthChanged: {
+                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
                 }
 
                 onPanelReady: {
-                    videoPanel.minimumWidth = hitPointsPanelBelowTimeline ? 340 : 640
+                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
                 }
 
                 Component.onDestruction: {

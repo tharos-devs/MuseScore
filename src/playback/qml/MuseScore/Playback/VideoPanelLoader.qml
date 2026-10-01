@@ -78,6 +78,9 @@ Item {
     // videoPanelLoader.item directly (rather than only via the contextMenuModel
     // copy above) since this needs to be usable even before that model exists.
     readonly property bool hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
+    // NOTE: same reason - a hidden sidebar doesn't take any width either, wherever it's placed
+    readonly property bool hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
+    readonly property bool needsWideMinimumWidth: hitPointsPanelVisible && !hitPointsPanelBelowTimeline
 
     readonly property bool shouldLoadPanel: width > 0 && height > 0
 
