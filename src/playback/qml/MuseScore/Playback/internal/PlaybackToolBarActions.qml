@@ -82,7 +82,12 @@ Item {
 
             iconFont: ui.theme.toolbarIconsFont
 
-            accentButton: (Boolean(item) && item.checked) || menuLoader.isMenuOpened
+            //! NOTE: armed MIDI CC recording shows a red record icon, like a DAW's, instead of the accent background
+            readonly property bool isArmedRecordItem: Boolean(item) && item.checked && item.id === "command://playback/midi-cc-record-toggle"
+
+            iconColor: isArmedRecordItem ? "#E5403A" : ui.theme.fontPrimaryColor
+
+            accentButton: (Boolean(item) && item.checked && !isArmedRecordItem) || menuLoader.isMenuOpened
             transparent: !accentButton
 
             navigation.panel: root.navPanel

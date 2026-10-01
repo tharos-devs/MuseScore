@@ -22,7 +22,11 @@
 
 #pragma once
 
+#include <map>
+
+#include "async/channel.h"
 #include "async/notification.h"
+#include "global/types/translatablestring.h"
 
 #include "engraving/automation/automationdata.h"
 #include "engraving/automation/automationtypes.h"
@@ -52,10 +56,26 @@ public:
     virtual void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) = 0;
     //! NOTE: edits to several curves at once, as a single undoable step
     virtual void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve) = 0;
+    virtual void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                            const muse::TranslatableString& actionName) = 0;
 
     //! NOTE: MIDI CCs the user picked for this score, besides the predefined ones (undoable, saved with the score)
     virtual std::vector<uint8_t> customMidiCcs() const = 0;
     virtual void addCustomMidiCc(uint8_t controller) = 0;
+
+    //! NOTE: a MIDI CC recording take: its point edits plus the controllers it adds to the score's custom
+    //! MIDI CCs, as a single undoable step
+    virtual void recordMidiCcTake(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                                  const std::vector<uint8_t>& newCustomMidiCcs) = 0;
+
+    //! NOTE: a take being recorded, shown over its curve before it's written (the curve's points within the
+    //! preview's own range are replaced by it, like the take will). Never saved nor played, nor undoable
+    virtual const std::map<AutomationCurveKey, AutomationCurve>& recordingPreviews() const = 0;
+    virtual void setRecordingPreview(const AutomationCurveKey& key, const AutomationCurve& preview, int changedFromUtick,
+                                     int changedToUtick) = 0;
+    virtual void clearRecordingPreviews() = 0;
+    //! NOTE: same shape as AutomationData::changed(), so a view can refresh just what the preview changed
+    virtual muse::async::Channel<engraving::AutomationChanges> recordingPreviewChanged() const = 0;
 };
 
 using INotationAutomationPtr = std::shared_ptr<INotationAutomation>;

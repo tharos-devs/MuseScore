@@ -661,7 +661,7 @@ const
 
     const AutomationType type = currentAutomationType();
     const mu::engraving::AutomationCurveKey key = currentCurveKeyFor(staff);
-    const mu::engraving::AutomationCurve& curve = automationData()->curve(key);
+    const mu::engraving::AutomationCurve curve = displayedCurve(key);
 
     const int systemStartTick = system->first()->tick().ticks();
     const int systemEndTick = system->last()->endTick().ticks();
@@ -999,6 +999,14 @@ void NotationAutomationController::onCurrentNotationChanged()
     if (score()) {
         score()->changesChannel().onReceive(this, [this](const mu::engraving::ScoreChanges& changes) {
             mergePendingScoreChanges(changes);
+            scheduleUpdate();
+        }, Asyncable::Mode::SetReplace /* FIXME */);
+    }
+
+    // A MIDI CC take being recorded is drawn live over its curve (see displayedCurve)
+    if (automation()) {
+        automation()->recordingPreviewChanged().onReceive(this, [this](const mu::engraving::AutomationChanges& changes) {
+            mergePendingChanges(changes);
             scheduleUpdate();
         }, Asyncable::Mode::SetReplace /* FIXME */);
     }
@@ -1865,6 +1873,31 @@ INotationAutomationPtr NotationAutomationController::automation() const
 INotationPtr NotationAutomationController::currentNotation() const
 {
     return globalContext()->currentNotation();
+}
+
+//! NOTE: the stored curve, with a MIDI CC take being recorded drawn over it: the take replaces the curve's points
+//! within its own range, like it will once written
+mu::engraving::AutomationCurve NotationAutomationController::displayedCurve(const mu::engraving::AutomationCurveKey& key) const
+{
+    const mu::engraving::AutomationCurve& curve = automationData()->curve(key);
+
+    const INotationAutomationPtr notationAutomation = automation();
+    if (!notationAutomation) {
+        return curve;
+    }
+
+    const auto previewIt = notationAutomation->recordingPreviews().find(key);
+    if (previewIt == notationAutomation->recordingPreviews().cend() || previewIt->second.empty()) {
+        return curve;
+    }
+
+    const mu::engraving::AutomationCurve& preview = previewIt->second;
+
+    mu::engraving::AutomationCurve result = curve;
+    result.erase(result.lower_bound(preview.cbegin()->first), result.upper_bound(std::prev(preview.cend())->first));
+    result.insert(preview.cbegin(), preview.cend());
+
+    return result;
 }
 
 mu::engraving::AutomationDataConstPtr NotationAutomationController::automationData() const

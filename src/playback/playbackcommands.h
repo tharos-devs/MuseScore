@@ -45,6 +45,7 @@ inline static const muse::rcommand::Command CHORDSYMBOLS_TOGGLE_COMMAND("command
 inline static const muse::rcommand::Command HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND("command://playback/hear-playback-when-editing-toggle");
 inline static const muse::rcommand::Command PAN_TOGGLE_COMMAND("command://playback/pan-toggle");
 inline static const muse::rcommand::Command COUNTIN_TOGGLE_COMMAND("command://playback/countin-toggle");
+inline static const muse::rcommand::Command MIDI_CC_RECORD_TOGGLE_COMMAND("command://playback/midi-cc-record-toggle");
 inline static const muse::rcommand::Command CLEAR_ONLINESOUNDS_CACHE_COMMAND("command://playback/clear-onlinesounds-cache");
 inline static const muse::rcommand::Command PROCESS_ONLINESOUNDS_COMMAND("command://playback/process-onlinesounds");
 inline static const muse::rcommand::Command RELOAD_PLAYBACK_CACHE_COMMAND("command://playback/reload-playback-cache");

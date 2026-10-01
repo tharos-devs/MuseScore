@@ -43,9 +43,20 @@ public:
     AutomationDataConstPtr automationData() const override;
     void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits) override;
     void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve) override;
+    void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                    const muse::TranslatableString& actionName) override;
 
     std::vector<uint8_t> customMidiCcs() const override;
     void addCustomMidiCc(uint8_t controller) override;
+
+    void recordMidiCcTake(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                          const std::vector<uint8_t>& newCustomMidiCcs) override;
+
+    const std::map<AutomationCurveKey, AutomationCurve>& recordingPreviews() const override;
+    void setRecordingPreview(const AutomationCurveKey& key, const AutomationCurve& preview, int changedFromUtick,
+                             int changedToUtick) override;
+    void clearRecordingPreviews() override;
+    muse::async::Channel<engraving::AutomationChanges> recordingPreviewChanged() const override;
 
     //! NOTE: called by MasterNotation whenever the underlying score changes
     void setMasterScore(engraving::MasterScore* masterScore);
@@ -53,6 +64,9 @@ public:
 private:
     bool m_isAutomationModeEnabled = false;
     muse::async::Notification m_automationModeEnabledChanged;
+
+    std::map<AutomationCurveKey, AutomationCurve> m_recordingPreviews;
+    muse::async::Channel<engraving::AutomationChanges> m_recordingPreviewChanged;
 
     engraving::MasterScore* m_masterScore = nullptr;
     const INotationUndoStackPtr m_undoStack;

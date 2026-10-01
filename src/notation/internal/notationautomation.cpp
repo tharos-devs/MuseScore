@@ -75,12 +75,17 @@ void NotationAutomation::editPoints(const AutomationCurveKey& key, AutomationPoi
 
 void NotationAutomation::editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve)
 {
+    editPoints(editsByCurve, muse::TranslatableString("undoableAction", "Edit automation points"));
+}
+
+void NotationAutomation::editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                                    const muse::TranslatableString& actionName)
+{
     IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
         return;
     }
 
-    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Edit automation points"),
-                             [&](engraving::Transaction&) {
+    m_undoStack->transaction(actionName, [&](engraving::Transaction&) {
         for (auto& [key, edits] : editsByCurve) {
             if (!edits.empty()) {
                 m_masterScore->editAutomationPoints(key, edits);
@@ -111,6 +116,76 @@ void NotationAutomation::addCustomMidiCc(uint8_t controller)
                              [&](engraving::Transaction&) {
         m_masterScore->setCustomMidiCcs(controllers);
     });
+}
+
+void NotationAutomation::recordMidiCcTake(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
+                                          const std::vector<uint8_t>& newCustomMidiCcs)
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    std::vector<uint8_t> controllers = customMidiCcs();
+    bool controllersChanged = false;
+    for (const uint8_t controller : newCustomMidiCcs) {
+        if (!muse::contains(controllers, controller)) {
+            controllers.push_back(controller);
+            controllersChanged = true;
+        }
+    }
+
+    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Record MIDI CC"), [&](engraving::Transaction&) {
+        if (controllersChanged) {
+            m_masterScore->setCustomMidiCcs(controllers);
+        }
+
+        for (auto& [key, edits] : editsByCurve) {
+            if (!edits.empty()) {
+                m_masterScore->editAutomationPoints(key, edits);
+            }
+        }
+    });
+}
+
+const std::map<AutomationCurveKey, AutomationCurve>& NotationAutomation::recordingPreviews() const
+{
+    return m_recordingPreviews;
+}
+
+void NotationAutomation::setRecordingPreview(const AutomationCurveKey& key, const AutomationCurve& preview, int changedFromUtick,
+                                             int changedToUtick)
+{
+    m_recordingPreviews.insert_or_assign(key, preview);
+
+    mu::engraving::AutomationChanges changes;
+    changes.affectedKeys.insert(key);
+    changes.tickFrom = changedFromUtick;
+    changes.tickTo = changedToUtick;
+    m_recordingPreviewChanged.send(changes);
+}
+
+void NotationAutomation::clearRecordingPreviews()
+{
+    if (m_recordingPreviews.empty()) {
+        return;
+    }
+
+    mu::engraving::AutomationChanges changes;
+    for (const auto& [key, preview] : m_recordingPreviews) {
+        changes.affectedKeys.insert(key);
+        if (!preview.empty()) {
+            changes.tickFrom = changes.tickFrom < 0 ? preview.cbegin()->first : std::min(changes.tickFrom, preview.cbegin()->first);
+            changes.tickTo = std::max(changes.tickTo, std::prev(preview.cend())->first);
+        }
+    }
+
+    m_recordingPreviews.clear();
+    m_recordingPreviewChanged.send(changes);
+}
+
+muse::async::Channel<mu::engraving::AutomationChanges> NotationAutomation::recordingPreviewChanged() const
+{
+    return m_recordingPreviewChanged;
 }
 
 void NotationAutomation::setMasterScore(engraving::MasterScore* masterScore)

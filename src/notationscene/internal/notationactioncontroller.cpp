@@ -29,6 +29,9 @@
 #include "rcommand/actiontocommand.h"
 
 #include "engraving/dom/harmony.h"
+#include "engraving/dom/repeatlist.h"
+#include "engraving/dom/staff.h"
+#include "engraving/dom/part.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/note.h"
 #include "engraving/dom/property.h"
@@ -608,6 +611,7 @@ void NotationActionController::init()
 
     registerCommand(TOGGLE_AUTOMATION_COMMAND, &Controller::toggleAutomation);
     registerCommandWithParams(SELECT_AUTOMATION_TYPE_COMMAND, &Controller::selectAutomationType);
+    registerCommand(DELETE_MIDI_CC_POINTS_COMMAND, &Controller::deleteMidiCcPointsInSelection);
     registerCommand(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, &Controller::toggleNoteOffsetEditor);
     registerCommand(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, &Controller::toggleNoteVelocityEditor);
     registerCommand(TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::toggleArticulationMapEditor);
@@ -3632,6 +3636,73 @@ void NotationActionController::resetNoteVelocities()
         note->undoChangeProperty(Pid::USER_VELOCITY, 0, mu::engraving::PropertyFlags::NOSTYLE);
     }
     undoStack->commitChanges();
+}
+
+//! NOTE: erases the points of the MIDI CC curve shown (on each selected staff's instrument) within the range
+//! selection - on every pass through it, since the curve is stored with repeats unrolled - as one undoable step
+void NotationActionController::deleteMidiCcPointsInSelection()
+{
+    const INotationPtr notation = currentNotation();
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
+    const AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
+    if (!notation || !data || configuration()->currentAutomationType() != mu::engraving::AutomationType::MidiCC) {
+        return;
+    }
+
+    const INotationSelectionPtr selection = notation->interaction()->selection();
+    if (!selection->isRange()) {
+        return;
+    }
+
+    const INotationSelectionRangePtr range = selection->range();
+    const int fromTick = range->startTick().ticks();
+    const int toTick = range->endTick().ticks();
+    const uint8_t controller = static_cast<uint8_t>(configuration()->currentAutomationMidiCc());
+
+    const mu::engraving::Score* score = notation->elements()->msScore();
+    std::set<mu::engraving::InstrumentTrackId> trackIds;
+    for (mu::engraving::staff_idx_t staffIdx = range->startStaffIndex(); staffIdx < range->endStaffIndex(); ++staffIdx) {
+        const mu::engraving::Staff* staff = score->staff(staffIdx);
+        if (const mu::engraving::Part* part = staff ? staff->part() : nullptr) {
+            trackIds.insert({ part->id(), part->instrumentId() }); // MIDI CC curves belong to the part's first instrument
+        }
+    }
+
+    // The selected ticks on each pass through them
+    std::vector<std::pair<int, int> > utickRanges;
+    const mu::engraving::RepeatList& repeatList = masterNotation->masterScore()->expandedRepeatList();
+    for (const mu::engraving::RepeatSegment* segment : repeatList) {
+        const int from = std::max(fromTick, segment->tick);
+        const int to = std::min(toTick, segment->endTick());
+        if (from < to) {
+            utickRanges.emplace_back(from + (segment->utick - segment->tick), to + (segment->utick - segment->tick));
+        }
+    }
+    if (repeatList.empty()) {
+        utickRanges.emplace_back(fromTick, toTick);
+    }
+
+    std::vector<std::pair<mu::engraving::AutomationCurveKey, mu::engraving::AutomationPointEdits> > editsByCurve;
+    for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
+        const mu::engraving::AutomationCurveKey key = mu::engraving::AutomationCurveKey::midiCc(trackId, controller);
+        const mu::engraving::AutomationCurve& curve = data->curve(key);
+
+        mu::engraving::AutomationPointEdits edits;
+        for (const auto& [from, to] : utickRanges) {
+            for (auto it = curve.lower_bound(from); it != curve.end() && it->first < to; ++it) {
+                edits.push_back({ it->first, mu::engraving::AutomationPointEdit::ErasePoint {} });
+            }
+        }
+
+        if (!edits.empty()) {
+            editsByCurve.emplace_back(key, std::move(edits));
+        }
+    }
+
+    if (!editsByCurve.empty()) {
+        automation->editPoints(editsByCurve, muse::TranslatableString("undoableAction", "Delete automation points"));
+    }
 }
 
 muse::Ret NotationActionController::selectAutomationType(const muse::rcommand::Params& params)

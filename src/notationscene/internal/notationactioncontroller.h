@@ -289,6 +289,7 @@ private:
 
     void toggleAutomation();
     muse::Ret selectAutomationType(const muse::rcommand::Params& params);
+    void deleteMidiCcPointsInSelection();
     void selectAutomationMidiCc(int controller);
     void enableAutomationMode();
     void toggleNoteOffsetEditor();

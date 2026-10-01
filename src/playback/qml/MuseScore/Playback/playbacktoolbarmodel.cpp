@@ -53,6 +53,7 @@ static const ToolConfig& defaultPlaybackToolConfig()
             { LOOP_IN_COMMAND, true },
             { LOOP_OUT_COMMAND, true },
             { METRONOME_TOGGLE_COMMAND, true },
+            { MIDI_CC_RECORD_TOGGLE_COMMAND, true },
         };
     }
     return config;

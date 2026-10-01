@@ -172,6 +172,14 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::COUNT_IN, rcommand::Checkable::Yes)
     },
     CommandInfo{
+        MIDI_CC_RECORD_TOGGLE_COMMAND,
+        TranslatableString("playback", "Record MIDI CC"),
+        TranslatableString("playback",
+                           "Record the MIDI CCs received from the MIDI input device into the selected staff's curves during playback"),
+        InputSchema(),
+        Decoration(IconCode::Code::RECORD_FILL, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
         CLEAR_ONLINESOUNDS_CACHE_COMMAND,
         TranslatableString("playback", "Clear online sounds cache"),
         TranslatableString("playback", "Clear online sounds cache"),
