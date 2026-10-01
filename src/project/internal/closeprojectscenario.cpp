@@ -23,17 +23,13 @@
 #include "closeprojectscenario.h"
 
 #include "translation.h"
+#include "types/projecturis.h"
 
 #include "log.h"
 
 using namespace mu::project;
 using namespace muse;
 using muse::async::Promise;
-
-//! NOTE: named distinctly from projectactionscontroller.cpp's own file-local HOME_PAGE_URI -
-//! both are "static" (internal linkage), but a Unity build still merges every .cpp in a batch
-//! into one translation unit, where two identically-named file-scope statics collide outright.
-static const muse::Uri CLOSE_SCENARIO_HOME_PAGE_URI("musescore://home");
 
 Promise<Ret> CloseProjectScenario::resolvedPromise(const Ret& ret)
 {
@@ -153,9 +149,6 @@ Promise<IInteractive::Result> CloseProjectScenario::askAboutSavingScore(const IN
 Promise<Ret> CloseProjectScenario::doCloseProject(bool goToHome)
 {
     return interactive()->closeAllDialogs().then<Ret>(this, [this, goToHome](const Ret&, auto resolve) {
-        /// NOTE: Hold the project until it is fully disconnected from receivers
-        INotationProjectPtr project = currentNotationProject();
-
         globalContext()->setCurrentProject(nullptr);
 
         if (goToHome) {
@@ -168,9 +161,9 @@ Promise<Ret> CloseProjectScenario::doCloseProject(bool goToHome)
 
 void CloseProjectScenario::openHomePageIfNeed()
 {
-    if (interactive()->isOpened(CLOSE_SCENARIO_HOME_PAGE_URI).val) {
+    if (interactive()->isOpened(HOME_PAGE_URI).val) {
         return;
     }
 
-    interactive()->open(CLOSE_SCENARIO_HOME_PAGE_URI);
+    interactive()->open(HOME_PAGE_URI);
 }

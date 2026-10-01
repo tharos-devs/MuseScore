@@ -49,6 +49,7 @@
 #include "audio/main/audiocommands.h"
 #include "multiwindows/multiwindowscommands.h"
 #include "extensions/extensionscommands.h"
+#include "testflow/testflowcommands.h"
 
 using namespace muse;
 using namespace mu::appshell;
@@ -68,6 +69,7 @@ using namespace muse::musesampler;
 using namespace muse::vst;
 using namespace muse::audio;
 using namespace muse::mi;
+using namespace muse::testflow;
 
 static const ActionCode APP_MENU_VIDEO_TIMECODE_OFF_CODE = "video-timecode-off";
 static const ActionCode APP_MENU_VIDEO_TIMECODE_ABOVE_CODE = "video-timecode-above-bars";
@@ -226,11 +228,10 @@ MenuItem* AppMenuModel::makeFileMenu()
         }),
         makeMenu(TranslatableString("appshell/menu/file", "Pu&blish online"), {
             makeMenuItem(PROJECT_PUBLISH_COMMAND),
-            makeMenuItem(PROJECT_SHARED_AUDIO_COMMAND),
+            makeMenuItem(PROJECT_SHARE_AUDIO_COMMAND),
         }),
         makeSeparator(),
-        makeMenuItem(PROJECT_IMPORT_PDF_COMMAND),
-        makeMenuItem(PROJECT_IMPORT_AUDIO_TO_SCORE_COMMAND),
+        makeMenuItem(PROJECT_CONVERT_TO_SCORE_COMMAND),
         makeMenuItem(PROJECT_EXPORT_COMMAND),
         makeSeparator(),
         makeMenuItem(PROJECT_PROPERTIES_COMMAND),
@@ -309,7 +310,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(DOCK_TOGGLE_TIMELINE_COMMAND),
         makeMenuItem(DOCK_TOGGLE_MIXER_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND),
-        makeMenuItem("toggle-video-panel"),
+        makeMenuItem(DOCK_TOGGLE_VIDEO_PANEL_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PERCUSSION_COMMAND),
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
         makeMenuItem(OPEN_ARTICULATION_MAP_EDITOR_COMMAND),
@@ -540,11 +541,11 @@ MenuItem* AppMenuModel::makeDiagnosticsMenu()
         };
 
         MenuItemList extensionsItems {
-            makeMenuItem("command://extensions/open-apidump"),
+            makeMenuItem(OPEN_APIDUMP_COMMAND),
         };
 
         MenuItemList testflowItems {
-            makeMenuItem("testflow-show-scripts"),
+            makeMenuItem(TESTFLOW_OPEN_SCRIPTS_COMMAND),
         };
 
 #ifdef MUSE_MODULE_VST

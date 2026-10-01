@@ -93,6 +93,8 @@ public:
 
     virtual ~IProjectAudioSettings() = default;
 
+    virtual bool hasAnyAudioSettings() const = 0;
+
     virtual const AudioOutputParams& masterAudioOutputParams() const = 0;
     virtual void setMasterAudioOutputParams(const AudioOutputParams& params) = 0;
 
@@ -104,7 +106,8 @@ public:
 
     virtual bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) = 0;
+    virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params,
+                                    bool notifySettingsChanged = true) = 0;
     virtual std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const = 0;
     //! NOTE: erases every persisted setting for this aux index (output params, solo/mute
     //! state, group-bus flag, custom name) - the counterpart to bootstrapping a new bus
@@ -112,13 +115,15 @@ public:
 
     virtual const TrackInputParamsMap& allTrackInputParams() const = 0;
     virtual const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& trackId) const = 0;
-    virtual void setTrackInputParams(const engraving::InstrumentTrackId& trackId, const AudioInputParams& params) = 0;
+    virtual void setTrackInputParams(const engraving::InstrumentTrackId& trackId, const AudioInputParams& params,
+                                     bool notifySettingsChanged = true) = 0;
     virtual void clearTrackInputParams() = 0;
     virtual muse::async::Channel<engraving::InstrumentTrackId> trackInputParamsChanged() const = 0;
 
     virtual bool trackHasExistingOutputParams(const engraving::InstrumentTrackId& trackId) const = 0;
     virtual const AudioOutputParams& trackOutputParams(const engraving::InstrumentTrackId& trackId) const = 0;
-    virtual void setTrackOutputParams(const engraving::InstrumentTrackId& trackId, const AudioOutputParams& params) = 0;
+    virtual void setTrackOutputParams(const engraving::InstrumentTrackId& trackId, const AudioOutputParams& params,
+                                      bool notifySettingsChanged = true) = 0;
 
     virtual const SoloMuteState& auxSoloMuteState(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxSoloMuteState(muse::audio::aux_channel_idx_t index, const SoloMuteState& state) = 0;
@@ -128,7 +133,7 @@ public:
     //! regular send/return bus, where a track's direct-to-master signal is untouched) -
     //! see TrackParams::isGroupBus. Defaults to false (regular send/return) when never set.
     virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) = 0;
+    virtual void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup, bool notifySettingsChanged = true) = 0;
 
     //! NOTE: empty means no custom name was set - callers should fall back to a positional default
     virtual muse::String auxName(muse::audio::aux_channel_idx_t index) const = 0;
@@ -143,8 +148,9 @@ public:
     //! the next number for a type (FX vs Group) from a monotonic counter that is never
     //! decremented, so a number is never reused even after the bus that had it is deleted.
     virtual muse::audio::aux_channel_idx_t auxDisplayNumber(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) = 0;
-    virtual muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) = 0;
+    virtual void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number,
+                                     bool notifySettingsChanged = true) = 0;
+    virtual muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus, bool notifySettingsChanged = true) = 0;
 
     //! NOTE: a bus's positional SORT order within its type (FX vs Group) - unlike
     //! auxDisplayNumber above (permanent "FX N"/"Group N" naming, never recomputed),
@@ -154,8 +160,8 @@ public:
     //! involved in a reorder falls back to insertion order via takeNextAuxSortOrder(),
     //! same monotonic-counter-per-type shape as takeNextAuxDisplayNumber() above.
     virtual int auxSortOrder(muse::audio::aux_channel_idx_t index) const = 0;
-    virtual void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order) = 0;
-    virtual int takeNextAuxSortOrder(bool isGroupBus) = 0;
+    virtual void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order, bool notifySettingsChanged = true) = 0;
+    virtual int takeNextAuxSortOrder(bool isGroupBus, bool notifySettingsChanged = true) = 0;
 
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
 

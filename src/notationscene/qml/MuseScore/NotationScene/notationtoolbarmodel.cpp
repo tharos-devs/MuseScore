@@ -24,6 +24,10 @@
 
 #include "uicomponents/qml/Muse/UiComponents/toolbaritem.h"
 
+#include "notationcommands.h"
+#include "appshell/appshellcommands.h"
+
+using namespace muse;
 using namespace mu::notation;
 using namespace muse::uicomponents;
 using namespace muse::actions;
@@ -36,19 +40,21 @@ void NotationToolBarModel::load()
         return;
     }
 
-    muse::actions::ActionCodeList itemsCodes = {
-        "parts",
-        "toggle-mixer",
-        "toggle-video-panel",
-        "toggle-automation",
-        "toggle-note-offset-editor",
-        "toggle-note-velocity-editor",
-        "toggle-articulation-map-editor"
+    AbstractToolBarModel::load();
+
+    std::vector<rcommand::Command> commands = {
+        OPEN_PARTS_COMMAND,
+        appshell::DOCK_TOGGLE_MIXER_COMMAND,
+        appshell::DOCK_TOGGLE_VIDEO_PANEL_COMMAND,
+        TOGGLE_AUTOMATION_COMMAND,
+        TOGGLE_NOTE_OFFSET_EDITOR_COMMAND,
+        TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND,
+        TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND
     };
 
     ToolBarItemList items;
-    for (const ActionCode& code : itemsCodes) {
-        ToolBarItem* item = makeItem(code);
+    for (const rcommand::Command& command : commands) {
+        ToolBarItem* item = makeItem(command);
         if (!item) {
             continue;
         }
@@ -61,13 +67,13 @@ void NotationToolBarModel::load()
         // directly, alongside its usual toggle behavior. USER_TYPE keeps it a normal tracked
         // item (state/compact-mode updates apply to it exactly like every other item) while
         // letting the view pick a different delegate component for it.
-        if (code == "toggle-automation") {
+        if (command == TOGGLE_AUTOMATION_COMMAND) {
             item->setType(ToolBarItemType::USER_TYPE);
         }
 
         // Its glyph is drawn larger than the others by the icon font - a delegate of its own
         // (see NotationToolBar.qml) scales it down, without changing the shared toolbar item
-        if (code == "toggle-articulation-map-editor") {
+        if (command == TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND) {
             item->setType(static_cast<ToolBarItemType::Type>(ARTICULATION_MAP_ITEM_TYPE));
         }
 
@@ -79,8 +85,6 @@ void NotationToolBarModel::load()
     context()->currentMasterNotationChanged().onNotify(this, [this]() {
         load();
     });
-
-    AbstractToolBarModel::load();
 
     m_loaded = true;
 }

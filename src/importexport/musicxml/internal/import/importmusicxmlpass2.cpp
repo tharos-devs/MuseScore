@@ -6945,8 +6945,10 @@ void MusicXmlParserPass2::xmlSetDrumsetPitch(Note* note, const Chord* chord, con
             ds->drum(newPitch) = DrumInstrument();
 
             newPitch = instr.pitch;
-            ds->drum(newPitch) = ds->drum(newPitch) = DrumInstrument(
-                instr.name, headGroup, line, stemDir, static_cast<int>(chord->voice()));
+            if (stemDir == DirectionV::AUTO) {
+                stemDir = chord->voice() & 1 ? DirectionV::DOWN : DirectionV::UP;
+            }
+            ds->drum(newPitch) = DrumInstrument(instr.name, headGroup, line, stemDir, static_cast<int>(chord->voice()));
         }
     }
 
@@ -6963,7 +6965,11 @@ void MusicXmlParserPass2::xmlSetDrumsetPitch(Note* note, const Chord* chord, con
 
         ds->drum(newPitch) = DrumInstrument(u"drum", headGroup, line, stemDir, static_cast<int>(chord->voice()));
     } else if (stemDir == DirectionV::AUTO) {
-        stemDir = ds->stemDirection(newPitch);
+        if (ds->voice(newPitch) != static_cast<int>(chord->voice())) {
+            stemDir = chord->voice() & 1 ? DirectionV::DOWN : DirectionV::UP;
+        } else {
+            stemDir = ds->stemDirection(newPitch);
+        }
     }
 
     note->setPitch(newPitch);
@@ -7019,7 +7025,11 @@ Note* MusicXmlParserPass2::note(const String& partId,
     Color beamColor;
     bool noteheadParentheses = false;
     String noteheadFilled;
-    int velocity = round(m_e.doubleAttribute("dynamics") * 0.9);
+    // velocity as a percentage of the MIDI 1.0 default forte value of 90;
+    // an explicit dynamics="0" means a silent note, which the score model can
+    // only represent as velocity 1 (velocity 0 means "unset")
+    const bool hasDynamics = m_e.hasAttribute("dynamics");
+    const int velocity = std::clamp(int(round(m_e.doubleAttribute("dynamics") * 0.9)), 1, 127);
     bool graceSlash = false;
     double graceStealFollowing = -1.0;
     double graceStealPrevious  = -1.0;
@@ -7297,7 +7307,7 @@ Note* MusicXmlParserPass2::note(const String& partId,
         handleSmallness(cue || isSmall, note, c);
         note->setPlay(!cue);          // cue notes don't play
         note->setHeadGroup(headGroup);
-        if (headScheme != NoteHeadScheme::HEAD_AUTO) {
+        if (headScheme != NoteHeadScheme::HEAD_AUTO && !mnp.unpitched()) {
             note->setHeadScheme(headScheme);
         }
         colorItem(note, noteColor);
@@ -7354,7 +7364,7 @@ Note* MusicXmlParserPass2::note(const String& partId,
             }
         }
 
-        if (velocity > 0) {
+        if (hasDynamics) {
             note->setUserVelocity(velocity);
         }
 

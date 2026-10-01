@@ -42,6 +42,7 @@
 #include "notation/tests/mocks/masternotationmock.h"
 #include "notation/tests/mocks/notationmock.h"
 
+#include "mocks/convertfiletoscorescenariomock.h"
 #include "mocks/mscmetareadermock.h"
 #include "mocks/notationprojectmock.h"
 #include "mocks/notationreadermock.h"
@@ -82,6 +83,7 @@ protected:
         m_museSounds = std::make_shared<NiceMock<musesounds::MuseSoundsCheckUpdateScenarioMock> >();
         m_museSampler = std::make_shared<NiceMock<musesounds::MuseSamplerCheckUpdateScenarioMock> >();
         m_mscMetaReader = std::make_shared<NiceMock<notation::MscMetaReaderMock> >();
+        m_convertFileToScoreScenario = std::make_shared<NiceMock<ConvertFileToScoreScenarioMock> >();
 
         m_scenario->configuration.set(m_configuration);
         m_scenario->fileSystem.set(m_fileSystem);
@@ -96,6 +98,7 @@ protected:
         m_scenario->museSoundsCheckUpdateScenario.set(m_museSounds);
         m_scenario->museSamplerCheckUpdateScenario.set(m_museSampler);
         m_scenario->mscMetaReader.set(m_mscMetaReader);
+        m_scenario->convertFileToScoreScenario.set(m_convertFileToScoreScenario);
 
         m_project = std::make_shared<NiceMock<NotationProjectMock> >();
         m_masterNotation = std::make_shared<NiceMock<notation::MasterNotationMock> >();
@@ -135,7 +138,7 @@ protected:
         // (see givenDownloadFinishesWith).
         givenSignedIn();
         ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-        .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(cloud::ScoreInfo())));
+        .WillByDefault([] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(cloud::ScoreInfo())); });
         ON_CALL(*m_authorization, accountInfo()).WillByDefault(ReturnRef(m_accountInfo));
         ON_CALL(*m_museScoreComService, downloadScore(_, _, _, _))
         .WillByDefault([](int, DevicePtr, const QString&, const QString&) {
@@ -252,6 +255,7 @@ protected:
     std::shared_ptr<musesounds::MuseSoundsCheckUpdateScenarioMock> m_museSounds;
     std::shared_ptr<musesounds::MuseSamplerCheckUpdateScenarioMock> m_museSampler;
     std::shared_ptr<notation::MscMetaReaderMock> m_mscMetaReader;
+    std::shared_ptr<ConvertFileToScoreScenarioMock> m_convertFileToScoreScenario;
 
     std::shared_ptr<NotationProjectMock> m_project;
     std::shared_ptr<notation::MasterNotationMock> m_masterNotation;
@@ -423,6 +427,52 @@ TEST_F(OpenProjectScenarioTests, OpenProject_EmptyPath_IsRefused)
     EXPECT_FALSE(ret);
 }
 
+// ─── Which page a score opens on ─────────────────────────────────────────────
+
+TEST_F(OpenProjectScenarioTests, ResolveNotationPageUri_NoCurrentProject_IsTheNotationPage)
+{
+    //! [GIVEN] No project is current...
+    ON_CALL(*m_globalContext, currentProject()).WillByDefault(Return(nullptr));
+
+    //! [WHEN] Resolving which page to show...
+    //! [THEN] It is the ordinary notation page
+    EXPECT_EQ(m_scenario->resolveNotationPageUri(), Uri("musescore://notation"));
+}
+
+TEST_F(OpenProjectScenarioTests, ResolveNotationPageUri_NotACloudScore_IsTheNotationPage)
+{
+    //! [GIVEN] A local score with no cloud info...
+    ON_CALL(*m_globalContext, currentProject()).WillByDefault(Return(m_project));
+
+    //! [WHEN] Resolving which page to show...
+    //! [THEN] It is the ordinary notation page
+    EXPECT_EQ(m_scenario->resolveNotationPageUri(), Uri("musescore://notation"));
+}
+
+TEST_F(OpenProjectScenarioTests, ResolveNotationPageUri_CloudScoreNotAwaitingReview_IsTheNotationPage)
+{
+    //! [GIVEN] A cloud score that is not a conversion awaiting review...
+    ON_CALL(*m_globalContext, currentProject()).WillByDefault(Return(m_project));
+    m_cloudInfo.sourceUrl = QUrl("https://musescore.com/score/42");
+    ON_CALL(*m_convertFileToScoreScenario, isAwaitingReview(42)).WillByDefault(Return(false));
+
+    //! [WHEN] Resolving which page to show...
+    //! [THEN] It is the ordinary notation page
+    EXPECT_EQ(m_scenario->resolveNotationPageUri(), Uri("musescore://notation"));
+}
+
+TEST_F(OpenProjectScenarioTests, ResolveNotationPageUri_CloudScoreAwaitingReview_IsTheReviewPage)
+{
+    //! [GIVEN] A converted cloud score still awaiting a quality review...
+    ON_CALL(*m_globalContext, currentProject()).WillByDefault(Return(m_project));
+    m_cloudInfo.sourceUrl = QUrl("https://musescore.com/score/42");
+    ON_CALL(*m_convertFileToScoreScenario, isAwaitingReview(42)).WillByDefault(Return(true));
+
+    //! [WHEN] Resolving which page to show...
+    //! [THEN] It is the review page
+    EXPECT_EQ(m_scenario->resolveNotationPageUri(), Uri("musescore://notation/review"));
+}
+
 // ─── Cloud scores ────────────────────────────────────────────────────────────
 
 TEST_F(OpenProjectScenarioTests, OpenProject_CloudScoreAndCloudReachable_DownloadsTheLatestVersion)
@@ -431,7 +481,7 @@ TEST_F(OpenProjectScenarioTests, OpenProject_CloudScoreAndCloudReachable_Downloa
     ON_CALL(*m_configuration, isCloudProject(_)).WillByDefault(Return(true));
     ON_CALL(*m_configuration, isLegacyCloudProject(_)).WillByDefault(Return(false));
     ON_CALL(*m_configuration, cloudScoreIdFromPath(_)).WillByDefault(Return(42));
-    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault(Return(make_ok()));
+    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault([] { return resolvedPromise(make_ok()); });
 
     //! [THEN] The freshest version is fetched rather than the local copy being loaded
     EXPECT_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>())).Times(1);
@@ -447,7 +497,7 @@ TEST_F(OpenProjectScenarioTests, OpenProject_CloudScoreOffline_OpensTheLocalCopy
     //! [GIVEN] A cloud score, an unreachable cloud, but the file is on disk...
     ON_CALL(*m_configuration, isCloudProject(_)).WillByDefault(Return(true));
     ON_CALL(*m_configuration, isLegacyCloudProject(_)).WillByDefault(Return(false));
-    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault(Return(make_ret(Ret::Code::InternalError)));
+    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault([] { return resolvedPromise(make_ret(Ret::Code::InternalError)); });
     ON_CALL(*m_fileSystem, exists(_)).WillByDefault(Return(true));
 
     //! [THEN] The local copy is opened so the user can keep working offline
@@ -463,7 +513,7 @@ TEST_F(OpenProjectScenarioTests, OpenProject_CloudScoreOfflineAndNotOnDisk_Repor
     //! [GIVEN] A cloud score, an unreachable cloud, and no local copy...
     ON_CALL(*m_configuration, isCloudProject(_)).WillByDefault(Return(true));
     ON_CALL(*m_configuration, isLegacyCloudProject(_)).WillByDefault(Return(false));
-    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault(Return(make_ret(Ret::Code::InternalError)));
+    ON_CALL(*m_authorization, checkCloudIsAvailable()).WillByDefault([] { return resolvedPromise(make_ret(Ret::Code::InternalError)); });
     ON_CALL(*m_fileSystem, exists(_)).WillByDefault(Return(false));
 
     //! [THEN] There is nothing to open, and the user is told why
@@ -570,7 +620,7 @@ TEST_F(OpenProjectScenarioTests, DownloadCloudScore_ScoreInfoUnavailable_Reports
 {
     //! [GIVEN] A server that will not say anything about the score...
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>(make_ret(Ret::Code::InternalError))));
+    .WillByDefault([] { return resolvedPromise(RetVal<cloud::ScoreInfo>(make_ret(Ret::Code::InternalError))); });
 
     //! [THEN] The user is told, and nothing is fetched
     EXPECT_CALL(*m_interactive, warning(_, _, _, _, _, _)).Times(1);
@@ -587,7 +637,7 @@ TEST_F(OpenProjectScenarioTests, DownloadCloudScore_LocalCopyIsUpToDate_SkipsThe
     remote.revisionId = 7;
     remote.title = "Symphony";
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(remote)));
+    .WillByDefault([remote] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(remote)); });
 
     CloudProjectInfo local;
     local.revisionId = 7;
@@ -608,7 +658,7 @@ TEST_F(OpenProjectScenarioTests, DownloadCloudScore_LocalCopyIsStale_FetchesTheN
     cloud::ScoreInfo remote;
     remote.revisionId = 9;
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(remote)));
+    .WillByDefault([remote] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(remote)); });
 
     CloudProjectInfo local;
     local.revisionId = 7;
@@ -647,7 +697,7 @@ TEST_F(OpenProjectScenarioTests, DownloadCloudScore_DownloadSucceeds_OpensItWith
     remote.revisionId = 9;
     remote.title = "Symphony";
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(remote)));
+    .WillByDefault([remote] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(remote)); });
     ON_CALL(*m_mscMetaReader, readCloudProjectInfo(_))
     .WillByDefault(Return(RetVal<CloudProjectInfo>(make_ret(Ret::Code::InternalError))));
     givenDownloadFinishesWith(make_ok());
@@ -696,7 +746,7 @@ TEST_F(OpenProjectScenarioTests, OpenScoreUrl_OwnScoreAlreadyOpenElsewhere_Raise
     cloud::ScoreInfo remote;
     remote.owner.id = 5;
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(remote)));
+    .WillByDefault([remote] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(remote)); });
     m_accountInfo.id = "5";
     ON_CALL(*m_multiwindows, isProjectAlreadyOpened(_)).WillByDefault(Return(true));
 
@@ -716,7 +766,7 @@ TEST_F(OpenProjectScenarioTests, OpenScoreUrl_WindowIsTaken_OpensANewWindowWithT
     cloud::ScoreInfo remote;
     remote.title = "Cloud title";
     ON_CALL(*m_museScoreComService, downloadScoreInfo(::testing::An<int>()))
-    .WillByDefault(Return(RetVal<cloud::ScoreInfo>::make_ok(remote)));
+    .WillByDefault([remote] { return resolvedPromise(RetVal<cloud::ScoreInfo>::make_ok(remote)); });
     ON_CALL(*m_globalContext, currentProject()).WillByDefault(Return(m_project));
     ON_CALL(*m_project, path()).WillByDefault(Return(io::path_t("other.mscz")));
 

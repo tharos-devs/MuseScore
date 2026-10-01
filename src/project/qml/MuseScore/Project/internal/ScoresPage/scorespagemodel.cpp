@@ -40,6 +40,11 @@ void ScoresPageModel::createNewScore()
     dispatcher()->dispatch("file-new");
 }
 
+void ScoresPageModel::convertFileToScore()
+{
+    dispatcher()->dispatch("file-convert-to-score");
+}
+
 void ScoresPageModel::openOther()
 {
     dispatcher()->dispatch("file-open");
@@ -64,19 +69,21 @@ void ScoresPageModel::viewOnline(int scoreId)
         return;
     }
 
-    muse::RetVal<muse::cloud::ScoreInfo> scoreInfo = museScoreComService()->downloadScoreInfo(scoreId);
-    if (!scoreInfo.ret) {
-        LOGE() << scoreInfo.ret.toString();
-        return;
-    }
+    museScoreComService()->downloadScoreInfo(scoreId)
+    .onResolve(this, [this, scoreId](const muse::RetVal<muse::cloud::ScoreInfo>& scoreInfo) {
+        if (!scoreInfo.ret) {
+            LOGE() << scoreInfo.ret.toString();
+            return;
+        }
 
-    QUrl scoreUrl = QUrl::fromUserInput(scoreInfo.val.url);
-    if (!scoreUrl.isValid() || scoreUrl.isEmpty()) {
-        LOGE() << "Invalid score URL for cloud score" << scoreId << ":" << scoreInfo.val.url;
-        return;
-    }
+        QUrl scoreUrl = QUrl::fromUserInput(scoreInfo.val.url);
+        if (!scoreUrl.isValid() || scoreUrl.isEmpty()) {
+            LOGE() << "Invalid score URL for cloud score" << scoreId << ":" << scoreInfo.val.url;
+            return;
+        }
 
-    platformInteractive()->openUrl(scoreUrl);
+        platformInteractive()->openUrl(scoreUrl);
+    });
 }
 
 void ScoresPageModel::openScoreManager()

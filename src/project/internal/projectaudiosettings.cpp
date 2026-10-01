@@ -62,6 +62,11 @@ static void doCompatibilityConversions(AudioResourceMeta& meta)
     }
 }
 
+bool ProjectAudioSettings::hasAnyAudioSettings() const
+{
+    return !m_trackInputParamsMap.empty() || !m_trackOutputParamsMap.empty() || !m_auxOutputParams.empty();
+}
+
 const AudioOutputParams& ProjectAudioSettings::masterAudioOutputParams() const
 {
     return m_masterOutputParams;
@@ -114,7 +119,7 @@ const AudioOutputParams& ProjectAudioSettings::auxOutputParams(aux_channel_idx_t
     return _dummy;
 }
 
-void ProjectAudioSettings::setAuxOutputParams(aux_channel_idx_t index, const AudioOutputParams& params)
+void ProjectAudioSettings::setAuxOutputParams(aux_channel_idx_t index, const AudioOutputParams& params, bool notifySettingsChanged)
 {
     auto it = m_auxOutputParams.find(index);
     if (it != m_auxOutputParams.end() && it->second == params) {
@@ -122,7 +127,10 @@ void ProjectAudioSettings::setAuxOutputParams(aux_channel_idx_t index, const Aud
     }
 
     m_auxOutputParams.insert_or_assign(index, params);
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 std::vector<aux_channel_idx_t> ProjectAudioSettings::auxOutputParamsIndices() const
@@ -170,7 +178,8 @@ const AudioInputParams& ProjectAudioSettings::trackInputParams(const InstrumentT
     return it->second;
 }
 
-void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, const AudioInputParams& params)
+void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, const AudioInputParams& params,
+                                               bool notifySettingsChanged)
 {
     auto it = m_trackInputParamsMap.find(partId);
     if (it != m_trackInputParamsMap.end() && it->second == params) {
@@ -179,7 +188,10 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
 
     m_trackInputParamsMap.insert_or_assign(partId, params);
     m_trackInputParamsChanged.send(partId);
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 void ProjectAudioSettings::clearTrackInputParams()
@@ -220,7 +232,8 @@ const AudioOutputParams& ProjectAudioSettings::trackOutputParams(const Instrumen
     return search->second;
 }
 
-void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId, const AudioOutputParams& params)
+void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId, const AudioOutputParams& params,
+                                                bool notifySettingsChanged)
 {
     auto it = m_trackOutputParamsMap.find(partId);
     bool paramsChanged = it == m_trackOutputParamsMap.cend();
@@ -235,7 +248,7 @@ void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId,
 
     m_trackOutputParamsMap.insert_or_assign(partId, params);
 
-    if (paramsChanged) {
+    if (paramsChanged && notifySettingsChanged) {
         m_settingsChanged.notify();
     }
 }
@@ -274,7 +287,7 @@ bool ProjectAudioSettings::isAuxBusGroup(aux_channel_idx_t index) const
     return it != m_auxIsGroupBusMap.end() ? it->second : false;
 }
 
-void ProjectAudioSettings::setIsAuxBusGroup(aux_channel_idx_t index, bool isGroup)
+void ProjectAudioSettings::setIsAuxBusGroup(aux_channel_idx_t index, bool isGroup, bool notifySettingsChanged)
 {
     auto it = m_auxIsGroupBusMap.find(index);
     if (it != m_auxIsGroupBusMap.end() && it->second == isGroup) {
@@ -282,7 +295,10 @@ void ProjectAudioSettings::setIsAuxBusGroup(aux_channel_idx_t index, bool isGrou
     }
 
     m_auxIsGroupBusMap.insert_or_assign(index, isGroup);
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 String ProjectAudioSettings::auxName(aux_channel_idx_t index) const
@@ -317,7 +333,7 @@ aux_channel_idx_t ProjectAudioSettings::auxDisplayNumber(aux_channel_idx_t index
     return it != m_auxDisplayNumberMap.end() ? it->second : 0;
 }
 
-void ProjectAudioSettings::setAuxDisplayNumber(aux_channel_idx_t index, aux_channel_idx_t number)
+void ProjectAudioSettings::setAuxDisplayNumber(aux_channel_idx_t index, aux_channel_idx_t number, bool notifySettingsChanged)
 {
     auto it = m_auxDisplayNumberMap.find(index);
     if (it != m_auxDisplayNumberMap.end() && it->second == number) {
@@ -325,15 +341,20 @@ void ProjectAudioSettings::setAuxDisplayNumber(aux_channel_idx_t index, aux_chan
     }
 
     m_auxDisplayNumberMap.insert_or_assign(index, number);
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
-aux_channel_idx_t ProjectAudioSettings::takeNextAuxDisplayNumber(bool isGroupBus)
+aux_channel_idx_t ProjectAudioSettings::takeNextAuxDisplayNumber(bool isGroupBus, bool notifySettingsChanged)
 {
     aux_channel_idx_t& counter = isGroupBus ? m_nextGroupDisplayNumber : m_nextFxDisplayNumber;
     aux_channel_idx_t number = counter++;
 
-    m_settingsChanged.notify();
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 
     return number;
 }
@@ -344,7 +365,7 @@ int ProjectAudioSettings::auxSortOrder(aux_channel_idx_t index) const
     return it != m_auxSortOrderMap.end() ? it->second : -1;
 }
 
-void ProjectAudioSettings::setAuxSortOrder(aux_channel_idx_t index, int order)
+void ProjectAudioSettings::setAuxSortOrder(aux_channel_idx_t index, int order, bool notifySettingsChanged)
 {
     auto it = m_auxSortOrderMap.find(index);
     if (it != m_auxSortOrderMap.end() && it->second == order) {
@@ -352,15 +373,20 @@ void ProjectAudioSettings::setAuxSortOrder(aux_channel_idx_t index, int order)
     }
 
     m_auxSortOrderMap.insert_or_assign(index, order);
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
-int ProjectAudioSettings::takeNextAuxSortOrder(bool isGroupBus)
+int ProjectAudioSettings::takeNextAuxSortOrder(bool isGroupBus, bool notifySettingsChanged)
 {
     int& counter = isGroupBus ? m_nextGroupSortOrder : m_nextFxSortOrder;
     int order = counter++;
 
-    m_settingsChanged.notify();
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 
     return order;
 }

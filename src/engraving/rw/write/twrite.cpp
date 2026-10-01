@@ -21,6 +21,8 @@
  */
 #include "twrite.h"
 
+#include <set>
+
 #include "../../iengravingconfiguration.h" // IWYU pragma: keep
 #include "../../iengravingfont.h"
 #include "../../types/typesconv.h"
@@ -514,13 +516,29 @@ void TWrite::writeScoreSpanners(const Score* score, XmlWriter& xml, WriteContext
     if (score->spannerMap().empty()) {
         return;
     }
-    xml.startElement("SpannerMap");
-    for (auto& i : score->spannerMap().map()) {
+    std::set<Spanner*> pending;
+    for (const auto& i : score->spannerMap().map()) {
         Spanner* s = i.second;
-        if (s->generated() || !ctx.canWrite(s)) {
+        if (!s->generated() && ctx.canWrite(s)) {
+            pending.insert(s);
+        }
+    }
+    xml.startElement("SpannerMap");
+    for (const auto& i : score->spannerMap().map()) {
+        Spanner* s = i.second;
+        if (!pending.count(s)) {
             continue;
         }
-        TWrite::writeItem(s, xml, ctx);
+        if (s->links()) {
+            // The reader resolves linkedTo immediately, so write the eligible main first.
+            Spanner* main = toSpanner(s->links()->mainElement());
+            if (pending.erase(main)) {
+                TWrite::writeItem(main, xml, ctx);
+            }
+        }
+        if (pending.erase(s)) {
+            TWrite::writeItem(s, xml, ctx);
+        }
     }
     xml.endElement();
 }
@@ -1627,19 +1645,6 @@ void TWrite::writeProperties(const SLine* item, XmlWriter& xml, WriteContext& ct
     writeProperty(item, xml, Pid::LINE_STYLE);
     writeProperty(item, xml, Pid::DASH_LINE_LEN);
     writeProperty(item, xml, Pid::DASH_GAP_LEN);
-
-    // TO PREVENT CRASH IN VERSIONS <4.6.5
-    if (item->score()->isPaletteScore()) {
-        const double COMPAT_SCALE = 0.5;
-        // when used as icon
-        if (!item->spannerSegments().empty()) {
-            const LineSegment* s = item->frontSegment();
-            xml.tag("length", s->pos2().x() * COMPAT_SCALE);
-        } else {
-            xml.tag("length", item->spatium() * 4 * COMPAT_SCALE);
-        }
-        return;
-    }
 
     if (!item->isUserModified()) {
         return;

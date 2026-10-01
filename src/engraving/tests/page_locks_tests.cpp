@@ -25,6 +25,7 @@
 #include "engraving/dom/measure.h" // IWYU pragma: keep
 #include "engraving/dom/page.h"
 #include "engraving/editing/editpagelocks.h"
+#include "engraving/editing/editsystemlocks.h"
 #include "engraving/editing/transaction/transaction.h"
 
 #include "utils/scorerw.h"
@@ -209,6 +210,60 @@ TEST_F(Engraving_PageLocksTests, togglePageLock)
     for (Page* page : score->pages()) {
         EXPECT_TRUE(page->isLocked());
     }
+
+    delete score;
+}
+
+TEST_F(Engraving_PageLocksTests, removePageLockOnExpandMMRest)
+{
+    MasterScore* score = ScoreRW::readScore(PAGE_LOCKS_DATA_DIR + u"page_locks-1.mscx");
+    ASSERT_TRUE(score);
+    score->startCmd(TranslatableString::untranslatable("Enable MM rests"));
+    score->undoChangeStyleVal(Sid::createMultiMeasureRests, true);
+    score->endCmd();
+    score->transactionManager()->transaction(TranslatableString::untranslatable("Unlock pages"), [&](auto& tx) {
+        EditPageLocks::undoRemoveAllLocks(tx, score);
+    });
+    score->transactionManager()->transaction(TranslatableString::untranslatable("Lock compressed layout"), [&](auto& tx) {
+        EditPageLocks::toggleScoreLock(tx, score);
+    });
+    ASSERT_FALSE(score->pageLocks()->allLocks().empty());
+    const RangeLock* firstLock = score->pageLocks()->allLocks().front();
+    ASSERT_TRUE(firstLock->endMB()->isMeasure());
+    ASSERT_TRUE(toMeasure(firstLock->endMB())->isMMRest());
+    score->startCmd(TranslatableString::untranslatable("Expand MM rests"));
+    score->undoChangeStyleVal(Sid::createMultiMeasureRests, false);
+    score->endCmd();
+    bool retained = false;
+    for (const RangeLock* lock : score->pageLocks()->allLocks()) {
+        retained = retained || lock == firstLock;
+    }
+    EXPECT_FALSE(retained);
+    delete score;
+}
+
+TEST_F(Engraving_PageLocksTests, lockSystemAtStartOfPageLock)
+{
+    MasterScore* score = ScoreRW::readScore(PAGE_LOCKS_DATA_DIR + u"page_locks-1.mscx");
+    EXPECT_TRUE(score);
+
+    // The second page lock, and the first two measures in it
+    std::vector<const RangeLock*> pageLocks = score->pageLocks()->allLocks();
+    ASSERT_GE(pageLocks.size(), 2);
+    MeasureBase* pageStart = pageLocks.at(1)->startMB();
+    MeasureBase* pageEnd = pageLocks.at(1)->endMB();
+    MeasureBase* systemEnd = pageStart->next();
+    ASSERT_TRUE(systemEnd->isBefore(pageEnd));
+
+    score->transactionManager()->transaction(TranslatableString::untranslatable("Engraving page locks tests"), [&](auto& tx) {
+        EditSystemLocks::undoAddSystemLock(tx, new RangeLock(pageStart, systemEnd));
+    });
+
+    // Locking a system that starts together with a page lock leaves the page lock alone
+    EXPECT_TRUE(pageStart->isStartOfSystemLock());
+    EXPECT_TRUE(systemEnd->isEndOfSystemLock());
+    EXPECT_TRUE(pageStart->isStartOfPageLock());
+    EXPECT_EQ(pageStart->pageLock()->endMB(), pageEnd);
 
     delete score;
 }

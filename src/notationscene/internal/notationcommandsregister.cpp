@@ -1596,7 +1596,7 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString("action", "&Parts…"),
         TranslatableString("action", "Parts"),
         InputSchema(),
-        Decoration()
+        Decoration(IconCode::Code::PAGE)
     },
     CommandInfo{
         OPEN_ARTICULATION_MAP_EDITOR_COMMAND,
@@ -1931,6 +1931,15 @@ static const std::vector<CommandInfo> s_commandInfos = {
         RESET_TO_DEFAULT_LAYOUT_COMMAND,
         TranslatableString("action", "Reset entire score to &default layout"),
         TranslatableString("action", "Reset entire score to default layout"),
+        InputSchema(),
+        Decoration()
+    },
+
+    // appearance commands
+    CommandInfo{
+        FREEZE_CURRENT_PLACEMENT_COMMAND,
+        TranslatableString("action", "Freeze current placement"),
+        TranslatableString("action", "Turn off auto-place and freeze the selection’s current position"),
         InputSchema(),
         Decoration()
     },

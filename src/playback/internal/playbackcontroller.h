@@ -41,6 +41,7 @@
 #include "audio/main/iaudioconfiguration.h"
 #include "audio/common/audiotypes.h"
 #include "tours/itoursservice.h"
+#include "interactive/iinteractive.h"
 
 #include "drumsetloader.h"
 #include "videoaudiodecoder.h"
@@ -61,6 +62,7 @@ class PlaybackController : public IPlaybackController, public muse::async::Async
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<muse::tours::IToursService> tours = { this };
+    muse::ContextInject<muse::IInteractive> interactive = { this };
 
 public:
     PlaybackController(const muse::modularity::ContextPtr& iocCtx);
@@ -252,18 +254,20 @@ private:
 
     using TrackAddFinished = std::function<void ()>;
 
-    void addTrack(const engraving::InstrumentTrackId& instrumentTrackId, const TrackAddFinished& onFinished);
-    void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, const TrackAddFinished& onFinished);
-    void addAuxTrack(muse::audio::aux_channel_idx_t index, const TrackAddFinished& onFinished);
+    void addTrack(const engraving::InstrumentTrackId& instrumentTrackId, bool projectHadNoAudioSettings,
+                  const TrackAddFinished& onFinished);
+    void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
+                    const TrackAddFinished& onFinished);
+    void addAuxTrack(muse::audio::aux_channel_idx_t index, bool projectHadNoAudioSettings, const TrackAddFinished& onFinished);
     muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
     //! NOTE: permanently pins this bus's display number on first call (a no-op if already
     //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
-    void ensureAuxDisplayNumberAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus);
+    void ensureAuxDisplayNumberAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus, bool notifySettingsChanged = true);
     //! NOTE: gives this bus an initial sort order (insertion order) on first call, a no-op
     //! if already assigned (e.g. reloading an already-saved project) - see
     //! IProjectAudioSettings::auxSortOrder()'s doc comment. Unlike the display number
     //! above, this CAN change later, via MixerPanelModel::reorderAuxChannels().
-    void ensureAuxSortOrderAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus);
+    void ensureAuxSortOrderAssigned(muse::audio::aux_channel_idx_t index, bool isGroupBus, bool notifySettingsChanged = true);
 
     void setTrackActivity(const engraving::InstrumentTrackId& instrumentTrackId, const bool isActive);
     project::AudioOutputParams trackOutputParams(const engraving::InstrumentTrackId& instrumentTrackId) const;

@@ -195,7 +195,14 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString("action", "Mixer"),
         TranslatableString("action", "Show/hide mixer"),
         InputSchema(),
-        Decoration(rcommand::Checkable::Yes)
+        Decoration(IconCode::Code::MIXER, rcommand::Checkable::Yes)
+        ),
+    CommandInfo(
+        DOCK_TOGGLE_VIDEO_PANEL_COMMAND,
+        TranslatableString("action", "&Video"),
+        TranslatableString("action", "Show/hide video panel"),
+        InputSchema(),
+        Decoration(IconCode::Code::VIDEO, rcommand::Checkable::Yes)
         ),
     CommandInfo(
         DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND,

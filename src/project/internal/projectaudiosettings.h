@@ -40,6 +40,8 @@ class ProjectAudioSettings : public IProjectAudioSettings, public muse::Contexta
     muse::GlobalInject<playback::IPlaybackConfiguration> playbackConfig;
 
 public:
+    bool hasAnyAudioSettings() const override;
+
     const AudioOutputParams& masterAudioOutputParams() const override;
     void setMasterAudioOutputParams(const AudioOutputParams& params) override;
 
@@ -49,37 +51,41 @@ public:
 
     bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
-    void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params) override;
+    void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params,
+                            bool notifySettingsChanged = true) override;
     std::vector<muse::audio::aux_channel_idx_t> auxOutputParamsIndices() const override;
     void removeAuxOutputParams(muse::audio::aux_channel_idx_t index) override;
 
     const TrackInputParamsMap& allTrackInputParams() const override;
     const AudioInputParams& trackInputParams(const engraving::InstrumentTrackId& partId) const override;
-    void setTrackInputParams(const engraving::InstrumentTrackId& partId, const AudioInputParams& params) override;
+    void setTrackInputParams(const engraving::InstrumentTrackId& partId, const AudioInputParams& params,
+                             bool notifySettingsChanged = true) override;
     void clearTrackInputParams() override;
     muse::async::Channel<engraving::InstrumentTrackId> trackInputParamsChanged() const override;
 
     bool trackHasExistingOutputParams(const engraving::InstrumentTrackId& partId) const override;
     const AudioOutputParams& trackOutputParams(const engraving::InstrumentTrackId& partId) const override;
-    void setTrackOutputParams(const engraving::InstrumentTrackId& partId, const AudioOutputParams& params) override;
+    void setTrackOutputParams(const engraving::InstrumentTrackId& partId, const AudioOutputParams& params,
+                              bool notifySettingsChanged = true) override;
 
     const SoloMuteState& auxSoloMuteState(muse::audio::aux_channel_idx_t index) const override;
     void setAuxSoloMuteState(muse::audio::aux_channel_idx_t index, const SoloMuteState& state) override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, SoloMuteState> auxSoloMuteStateChanged() const override;
 
     bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
-    void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup) override;
+    void setIsAuxBusGroup(muse::audio::aux_channel_idx_t index, bool isGroup, bool notifySettingsChanged = true) override;
 
     muse::String auxName(muse::audio::aux_channel_idx_t index) const override;
     void setAuxName(muse::audio::aux_channel_idx_t index, const muse::String& name) override;
 
     muse::audio::aux_channel_idx_t auxDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
-    void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number) override;
-    muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus) override;
+    void setAuxDisplayNumber(muse::audio::aux_channel_idx_t index, muse::audio::aux_channel_idx_t number,
+                             bool notifySettingsChanged = true) override;
+    muse::audio::aux_channel_idx_t takeNextAuxDisplayNumber(bool isGroupBus, bool notifySettingsChanged = true) override;
 
     int auxSortOrder(muse::audio::aux_channel_idx_t index) const override;
-    void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order) override;
-    int takeNextAuxSortOrder(bool isGroupBus) override;
+    void setAuxSortOrder(muse::audio::aux_channel_idx_t index, int order, bool notifySettingsChanged = true) override;
+    int takeNextAuxSortOrder(bool isGroupBus, bool notifySettingsChanged = true) override;
 
     void removeTrackParams(const engraving::InstrumentTrackId& partId) override;
 

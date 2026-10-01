@@ -41,8 +41,6 @@ target_sources(notationscene PRIVATE
     internal/notationundoredocoordinator.h
     internal/notationuiactions.cpp
     internal/notationuiactions.h
-    internal/notationactionsshortcutsmigrator.cpp
-    internal/notationactionsshortcutsmigrator.h
     internal/notationcommandsregister.cpp
     internal/notationcommandsregister.h
     internal/notationcommandsstate.cpp
