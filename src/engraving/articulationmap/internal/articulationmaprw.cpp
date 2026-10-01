@@ -32,8 +32,8 @@ using namespace mu::engraving;
 
 static constexpr const char* MAPS_KEY = "maps";
 static constexpr const char* MARKS_KEY = "marks";
-static constexpr const char* PART_ID_KEY = "partId";
-static constexpr const char* INSTRUMENT_ID_KEY = "instrumentId";
+static constexpr const char* ARTICULATION_MAP_PART_ID_KEY = "partId";
+static constexpr const char* ARTICULATION_MAP_INSTRUMENT_ID_KEY = "instrumentId";
 static constexpr const char* SOURCE_KEY = "source";
 static constexpr const char* SOURCE_PATH_KEY = "sourcePath";
 static constexpr const char* NAME_KEY = "name";
@@ -67,8 +67,8 @@ void ArticulationMapRW::read(ArticulationMapData& data, const muse::ByteArray& j
         const muse::JsonObject mapObj = mapArray.at(i).toObject();
 
         InstrumentTrackId trackId;
-        trackId.partId = muse::ID(mapObj.value(PART_ID_KEY).toString().toStdString());
-        trackId.instrumentId = mapObj.value(INSTRUMENT_ID_KEY).toString();
+        trackId.partId = muse::ID(mapObj.value(ARTICULATION_MAP_PART_ID_KEY).toString().toStdString());
+        trackId.instrumentId = mapObj.value(ARTICULATION_MAP_INSTRUMENT_ID_KEY).toString();
         if (!trackId.isValid()) {
             continue;
         }
@@ -109,8 +109,8 @@ muse::ByteArray ArticulationMapRW::write(const ArticulationMapData& data, const 
     muse::JsonArray mapArray;
     for (const auto& [trackId, map] : data.maps()) {
         muse::JsonObject mapObj;
-        mapObj[PART_ID_KEY] = trackId.partId.toStdString();
-        mapObj[INSTRUMENT_ID_KEY] = trackId.instrumentId;
+        mapObj[ARTICULATION_MAP_PART_ID_KEY] = trackId.partId.toStdString();
+        mapObj[ARTICULATION_MAP_INSTRUMENT_ID_KEY] = trackId.instrumentId;
         mapObj[SOURCE_KEY] = map.sourceText;
         if (!map.name.empty()) {
             mapObj[NAME_KEY] = map.name;
