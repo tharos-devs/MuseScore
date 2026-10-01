@@ -1503,6 +1503,9 @@ void PlaybackController::resetPlayback()
 
     m_instrumentTrackIdMap.clear();
     m_auxTrackIdMap.clear();
+    //! NOTE: an engine round-trip still pending from the previous notation must not keep its index
+    //! reserved for the next one - its callbacks are then ignored (see the playbackKey checks)
+    m_pendingAuxIndices.clear();
 
     m_isRangeSelection = false;
 
@@ -1662,7 +1665,8 @@ void PlaybackController::doAddTrack(const InstrumentTrackId& instrumentTrackId, 
     m_loadingTrackCount++;
 }
 
-void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoAudioSettings, const TrackAddFinished& onFinished)
+void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoAudioSettings, bool isProjectLoad,
+                                     const TrackAddFinished& onFinished)
 {
     IF_ASSERT_FAILED(notationPlayback() && playback()) {
         return;
@@ -1689,11 +1693,14 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoA
     //! NOTE: permanently pins this bus's display number the first time it's ever resolved
     //! (right now, synchronously) - see IProjectAudioSettings::auxDisplayNumber()'s doc
     //! comment for why this must never be recomputed later from the current sibling set
-    ensureAuxDisplayNumberAssigned(index, isGroupBus, !projectHadNoAudioSettings);
+    //! NOTE: only a bus added at runtime is a user change - during project load, these metadata are
+    //! derived (e.g. backfilled for a project saved without them), so they must not mark it unsaved
+    const bool notifyMetadataChanged = !isProjectLoad;
+    ensureAuxDisplayNumberAssigned(index, isGroupBus, notifyMetadataChanged);
     //! NOTE: gives this bus an initial (insertion-order) position in the Mixer, so it
     //! appears at the end of its type's section rather than sorting arbitrarily among
     //! buses that already have an explicit order from a prior drag-and-drop reorder
-    ensureAuxSortOrderAssigned(index, isGroupBus, !projectHadNoAudioSettings);
+    ensureAuxSortOrderAssigned(index, isGroupBus, notifyMetadataChanged);
 
     //! NOTE: reserves this index synchronously, right now - m_auxTrackIdMap only gains this
     //! entry once the engine round-trip below actually resolves, which is too late to stop
@@ -1719,13 +1726,13 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoA
     playback()->addAuxTrack(title, trackParams)
     .onResolve(this, [this, playbackKey, index, onFinished, originParams, projectHadNoAudioSettings](const TrackId trackId,
                                                                                                      const TrackParams& appliedParams) {
-        m_pendingAuxIndices.erase(index);
-
         //! NOTE It may be that while we were adding a track, the notation was already closed (or opened another)
         //! This situation can be if the notation was opened and immediately closed.
         if (notationPlaybackKey() != playbackKey) {
             return;
         }
+
+        m_pendingAuxIndices.erase(index);
 
         m_auxTrackIdMap.insert({ index, trackId });
 
@@ -1740,7 +1747,12 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoA
 
         m_trackAdded.send(trackId);
     })
-    .onReject(this, [this, index, isBrandNewBus, onFinished](int code, const std::string& msg) {
+    .onReject(this, [this, playbackKey, index, isBrandNewBus, notifyMetadataChanged, onFinished](int code, const std::string& msg) {
+        if (notationPlaybackKey() != playbackKey) {
+            LOGE() << "can't add a new aux track, code: [" << code << "] " << msg;
+            return;
+        }
+
         m_pendingAuxIndices.erase(index);
 
         //! NOTE: the index goes back into resolveFreeAuxBusIndex()'s free pool - for a
@@ -1749,9 +1761,9 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoA
         //! later created at this recycled index would silently inherit this failed
         //! attempt's leftover metadata
         if (isBrandNewBus) {
-            audioSettings()->setIsAuxBusGroup(index, false);
-            audioSettings()->setAuxDisplayNumber(index, 0);
-            audioSettings()->setAuxSortOrder(index, -1);
+            audioSettings()->setIsAuxBusGroup(index, false, notifyMetadataChanged);
+            audioSettings()->setAuxDisplayNumber(index, 0, notifyMetadataChanged);
+            audioSettings()->setAuxSortOrder(index, -1, notifyMetadataChanged);
         }
 
         LOGE() << "can't add a new aux track, code: [" << code << "] " << msg;
@@ -1821,7 +1833,7 @@ void PlaybackController::addNewAuxBus()
     //! NOTE: addAuxTrack() unconditionally increments m_loadingTrackCount and relies on its
     //! onFinished callback to bring it back down (see setupTracks()'s onAddFinished); without
     //! this, isLoaded()/isPlayAllowed() would stay stuck false after adding a bus at runtime
-    addAuxTrack(freeIndex, false /*projectHadNoAudioSettings*/, [this]() {
+    addAuxTrack(freeIndex, false /*projectHadNoAudioSettings*/, false /*isProjectLoad*/, [this]() {
         m_loadingTrackCount--;
         m_isPlayAllowedChanged.send(isPlayAllowed());
     });
@@ -1841,7 +1853,7 @@ void PlaybackController::addNewGroupBus()
 
     configuration()->setAuxChannelsVisible(true);
 
-    addAuxTrack(freeIndex, false /*projectHadNoAudioSettings*/, [this]() {
+    addAuxTrack(freeIndex, false /*projectHadNoAudioSettings*/, false /*isProjectLoad*/, [this]() {
         m_loadingTrackCount--;
         m_isPlayAllowedChanged.send(isPlayAllowed());
     });
@@ -2251,6 +2263,9 @@ void PlaybackController::subscribeOnAudioParamsChanges()
 void PlaybackController::setupTracks()
 {
     m_instrumentTrackIdMap.clear();
+    //! NOTE: also covers a project switched while the previous one was still loading (resetPlayback()
+    //! only runs once playback was inited)
+    m_pendingAuxIndices.clear();
 
     if (!masterNotationParts()) {
         return;
@@ -2270,7 +2285,7 @@ void PlaybackController::setupTracks()
         for (aux_channel_idx_t idx = 0; idx < DEFAULT_AUX_CHANNEL_NUM; ++idx) {
             auxIndices.push_back(idx);
             if (idx != REVERB_CHANNEL_IDX) {
-                audioSettings()->setIsAuxBusGroup(idx, true, !projectHadNoAudioSettings);
+                audioSettings()->setIsAuxBusGroup(idx, true, false /*notifySettingsChanged*/);
             }
         }
     }
@@ -2306,7 +2321,7 @@ void PlaybackController::setupTracks()
     }
 
     for (aux_channel_idx_t idx : auxIndices) {
-        addAuxTrack(idx, projectHadNoAudioSettings, onAddFinished);
+        addAuxTrack(idx, projectHadNoAudioSettings, true /*isProjectLoad*/, onAddFinished);
     }
 
     m_loadingProgress.progress(0, trackCount, title);

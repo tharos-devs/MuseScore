@@ -258,7 +258,8 @@ private:
                   const TrackAddFinished& onFinished);
     void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
                     const TrackAddFinished& onFinished);
-    void addAuxTrack(muse::audio::aux_channel_idx_t index, bool projectHadNoAudioSettings, const TrackAddFinished& onFinished);
+    void addAuxTrack(muse::audio::aux_channel_idx_t index, bool projectHadNoAudioSettings, bool isProjectLoad,
+                     const TrackAddFinished& onFinished);
     muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
     //! NOTE: permanently pins this bus's display number on first call (a no-op if already
     //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
