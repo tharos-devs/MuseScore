@@ -243,7 +243,19 @@ String HarpPedalDiagram::createDiagramText()
 
 void HarpPedalDiagram::updateDiagramText()
 {
-    undoChangeProperty(Pid::TEXT, createDiagramText(), PropertyFlags::STYLED);
+    //! NOTE: called on every layout, so only when the text actually changes
+    const String text = createDiagramText();
+    if (text == xmlText()) {
+        return;
+    }
+
+    //! NOTE: palette items are laid out outside of any transaction (even while painting them): no undo there
+    if (score()->isPaletteScore()) {
+        setXmlText(text);
+        return;
+    }
+
+    undoChangeProperty(Pid::TEXT, text, PropertyFlags::STYLED);
 }
 
 void HarpPedalDiagram::undoChangePedalState(std::array<PedalPosition, HARP_STRING_NO> _pedalState)
