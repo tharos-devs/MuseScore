@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCoreApplication>
 #include <QPointer>
 
 #include "async/notifylist.h"
@@ -60,6 +61,32 @@ static bool isExplicitlyMuted(const MixerChannelItem* item)
 MixerPanelModel::MixerPanelModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
+}
+
+MixerPanelModel::~MixerPanelModel()
+{
+    //! NOTE: the channel items are children of this model, but the views only deleteLater() the delegates showing
+    //! them once destroyed themselves, i.e. after this model (declared first in MixerPanel.qml) - so the items are
+    //! detached from it, and only queued for deletion one event loop iteration later, behind those delegates
+    const QList<MixerChannelItem*> items = m_mixerChannelList;
+    for (MixerChannelItem* item : items) {
+        item->setParent(nullptr);
+    }
+
+    QMetaObject::invokeMethod(qApp, [items]() {
+        deleteItemsLater(items);
+    }, Qt::QueuedConnection);
+}
+
+//! NOTE: deleting a channel item while a delegate still shows it nulls that delegate's channelItem,
+//! re-evaluating every one of its bindings against null (hundreds of TypeErrors with all the Mixer
+//! sections) - so items must only be queued for deletion after the views have queued their delegates'
+void MixerPanelModel::deleteItemsLater(const QList<MixerChannelItem*>& items)
+{
+    //! NOTE: no need to disconnect them: clear() already did, and a destroyed model loses its connections anyway
+    for (MixerChannelItem* item : items) {
+        item->deleteLater();
+    }
 }
 
 void MixerPanelModel::componentComplete()
@@ -845,12 +872,17 @@ void MixerPanelModel::reloadItems()
 
     beginResetModel();
 
+    QList<MixerChannelItem*> oldItems;
+
     DEFER {
         endResetModel();
         emit rowCountChanged();
+
+        //! NOTE: only once the views have released the delegates showing them
+        deleteItemsLater(oldItems);
     };
 
-    clear();
+    oldItems = clear();
 
     if (!controller()->isPlaybackInited()) {
         return;
@@ -1184,19 +1216,21 @@ void MixerPanelModel::updateItemsPanelsOrder()
     }
 }
 
-void MixerPanelModel::clear()
+QList<MixerChannelItem*> MixerPanelModel::clear()
 {
     TRACEFUNC;
 
     m_masterChannelItem = nullptr;
-    for (MixerChannelItem* item : m_mixerChannelList) {
-        //! NOTE Disconnect immediately so a not-yet-destroyed item can't fire stale
-        //! controlParamsChanged/soloMuteStateChanged signals (e.g. if reloadItems()
-        //! runs again before this item's deleteLater() is processed).
-        item->disconnect();
-        item->deleteLater();
-    }
+    QList<MixerChannelItem*> items = std::move(m_mixerChannelList);
     m_mixerChannelList.clear();
+
+    //! NOTE Disconnect immediately so a not-yet-destroyed item can't fire stale
+    //! controlParamsChanged/soloMuteStateChanged signals (they are only deleted later).
+    //! Only from this model, which holds all their C++ connections: a full disconnect()
+    //! would also cut their destroyed() signal (Qt warns about it)
+    for (MixerChannelItem* item : items) {
+        item->disconnect(this);
+    }
 
     //! NOTE The channel list is being fully rebuilt, so any stored index would point at the wrong
     //! (or a stale/deleted) channel.
@@ -1208,6 +1242,8 @@ void MixerPanelModel::clear()
     m_soloedTrackIdsBeforeGlobalSolo.clear();
     emit globalMuteEngagedChanged();
     emit globalSoloEngagedChanged();
+
+    return items;
 }
 
 void MixerPanelModel::setupConnections()

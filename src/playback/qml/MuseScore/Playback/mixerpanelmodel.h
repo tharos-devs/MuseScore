@@ -72,6 +72,7 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
 
 public:
     explicit MixerPanelModel(QObject* parent = nullptr);
+    ~MixerPanelModel() override;
 
     Q_INVOKABLE QVariantMap get(int index);
 
@@ -183,7 +184,9 @@ private:
     void addItem(MixerChannelItem* item, int index);
     void removeItem(const muse::audio::TrackId trackId);
     void updateItemsPanelsOrder();
-    void clear();
+    //! Returns the removed items, for deleteItemsLater()
+    QList<MixerChannelItem*> clear();
+    static void deleteItemsLater(const QList<MixerChannelItem*>& items);
     void setupConnections();
 
     void subscribeOnAutomationChanges();
