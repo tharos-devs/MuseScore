@@ -1606,6 +1606,16 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo{
+        NEW_ARTICULATION_MAP_COMMAND,
+        TranslatableString("action", "New…"),
+        TranslatableString("action", "New articulation map"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
         LOAD_ARTICULATION_MAP_COMMAND,
         TranslatableString("action", "Load…"),
         TranslatableString("action", "Load articulation map"),

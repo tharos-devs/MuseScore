@@ -225,6 +225,7 @@ private:
     void openTransposeDialog();
     void openPartsDialog();
     void openArticulationMapEditor();
+    muse::Ret newArticulationMap(const muse::rcommand::Params& params);
     muse::Ret loadArticulationMap(const muse::rcommand::Params& params);
     muse::Ret editArticulationMap(const muse::rcommand::Params& params);
     muse::Ret reloadArticulationMap(const muse::rcommand::Params& params);

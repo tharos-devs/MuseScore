@@ -141,6 +141,7 @@ public:
     //! NOTE: articulation maps drive keyswitch/CC articulation changes of third-party VST instruments
     Q_INVOKABLE bool hasArticulationMap(mu::playback::MixerChannelItem* channelItem) const;
     Q_INVOKABLE QString articulationMapName(mu::playback::MixerChannelItem* channelItem) const;
+    Q_INVOKABLE void newArticulationMap(mu::playback::MixerChannelItem* channelItem);
     Q_INVOKABLE void loadArticulationMap(mu::playback::MixerChannelItem* channelItem);
     Q_INVOKABLE void reloadArticulationMap(mu::playback::MixerChannelItem* channelItem);
     Q_INVOKABLE void removeArticulationMap(mu::playback::MixerChannelItem* channelItem);

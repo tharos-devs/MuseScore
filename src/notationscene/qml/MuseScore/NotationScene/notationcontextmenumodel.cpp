@@ -574,6 +574,7 @@ MenuItem* NotationContextMenuModel::makeArticulationMapMenu()
     MenuItemList items {
         nameItem,
         makeSeparator(),
+        makeTrackItem(NEW_ARTICULATION_MAP_COMMAND, true),
         makeTrackItem(LOAD_ARTICULATION_MAP_COMMAND, true),
         makeTrackItem(EDIT_ARTICULATION_MAP_COMMAND, hasMap),
         makeTrackItem(RELOAD_ARTICULATION_MAP_COMMAND, hasMap),

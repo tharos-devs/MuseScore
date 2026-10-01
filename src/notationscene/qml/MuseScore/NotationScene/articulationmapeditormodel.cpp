@@ -670,10 +670,12 @@ void ArticulationMapEditorModel::reloadIntoTrack()
 
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
-    if (!maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
-        interactive()->error(muse::trc("notation", "This track no longer uses an articulation map"), "");
+    if (!maps || !maps->data()) {
         return;
     }
+
+    //! NOTE: a track without a map yet (the editor opened from its "New…" menu item) gets it attached
+    const bool trackHasMap = maps->data()->map(*m_targetTrack) != nullptr;
 
     const RetVal<ByteArray> file = fileSystem()->readFile(m_filePath);
     if (!file.ret) {
@@ -689,7 +691,8 @@ void ArticulationMapEditorModel::reloadIntoTrack()
 
     EditArticulationMapChanges changes;
     changes.maps.emplace(*m_targetTrack, std::move(result.map));
-    maps->edit(changes, muse::TranslatableString("undoableAction", "Reload articulation map"));
+    maps->edit(changes, trackHasMap ? muse::TranslatableString("undoableAction", "Reload articulation map")
+               : muse::TranslatableString("undoableAction", "Load articulation map"));
 }
 
 // ---- header

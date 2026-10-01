@@ -531,6 +531,7 @@ void NotationActionController::init()
     registerCommand(OPEN_PARTS_COMMAND, &Controller::openPartsDialog);
     registerCommand(OPEN_EDITGRIDSIZE_COMMAND, &Controller::openEditGridSizeDialog);
     registerCommand(OPEN_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::openArticulationMapEditor);
+    registerCommandWithParams(NEW_ARTICULATION_MAP_COMMAND, &Controller::newArticulationMap);
     registerCommandWithParams(LOAD_ARTICULATION_MAP_COMMAND, &Controller::loadArticulationMap);
     registerCommandWithParams(EDIT_ARTICULATION_MAP_COMMAND, &Controller::editArticulationMap);
     registerCommandWithParams(RELOAD_ARTICULATION_MAP_COMMAND, &Controller::reloadArticulationMap);
@@ -2856,6 +2857,23 @@ static std::optional<mu::engraving::InstrumentTrackId> articulationMapTrackId(co
     }
 
     return mu::engraving::InstrumentTrackId { muse::ID(partId), muse::String::fromStdString(params.at("instrumentId").toString()) };
+}
+
+muse::Ret NotationActionController::newArticulationMap(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    if (!trackId) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    //! NOTE: an empty map, bound to this track - the editor's "Reload into the track" saves it
+    //! and attaches it
+    muse::UriQuery uri("musescore://notation/articulationmapeditor");
+    uri.addParam("partId", muse::Val(std::to_string(trackId->partId.toUint64())));
+    uri.addParam("instrumentId", muse::Val(trackId->instrumentId.toStdString()));
+
+    interactive()->open(uri);
+    return muse::make_ok();
 }
 
 muse::Ret NotationActionController::loadArticulationMap(const muse::rcommand::Params& params)
