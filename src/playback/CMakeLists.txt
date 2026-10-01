@@ -24,6 +24,7 @@ target_sources(playback PRIVATE
     playbackmodule.cpp
     playbackmodule.h
     iplaybackcontroller.h
+    imidiccrecorder.h
     iplaybackconfiguration.h
     isoundprofilesrepository.h
     playbacktypes.h
@@ -36,6 +37,8 @@ target_sources(playback PRIVATE
     internal/playbackcommandscontroller.h
     internal/playbackcontroller.cpp
     internal/playbackcontroller.h
+    internal/midiccrecorder.cpp
+    internal/midiccrecorder.h
     internal/onlinesoundscontroller.cpp
     internal/onlinesoundscontroller.h
     internal/playbackcommandsregister.cpp

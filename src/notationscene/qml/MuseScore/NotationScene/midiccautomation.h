@@ -172,6 +172,11 @@ inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& make
 
     muse::uicomponents::MenuItemList items;
 
+    if (muse::uicomponents::MenuItem* deleteItem = makeMenuItem(muse::rcommand::CommandQuery(DELETE_MIDI_CC_POINTS_COMMAND), {})) {
+        items << deleteItem;
+        items << makeSeparator();
+    }
+
     for (const int controller : controllers) {
         muse::rcommand::CommandQuery query(SELECT_AUTOMATION_TYPE_COMMAND);
         query.addParam("type", muse::Val("midicc"));

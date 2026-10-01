@@ -75,6 +75,10 @@ void PlaybackCommandsController::init()
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
     registerCommand(TOGGLE_AUX_CHANNELS_COMMAND, [this]() { return toggleAuxChannels(); });
     registerCommand(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, [this]() { return toggleMixerCondensedView(); });
+    registerCommand(MIDI_CC_RECORD_TOGGLE_COMMAND, [this]() {
+        midiCcRecorder()->toggleArmed();
+        return muse::make_ok();
+    });
 
     // compat
     {

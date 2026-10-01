@@ -37,6 +37,7 @@
 #include "rcommand/icommandsstate.h"
 #include "interactive/iinteractive.h"
 #include "../iplaybackcontroller.h"
+#include "../imidiccrecorder.h"
 #include "../iplaybackconfiguration.h"
 
 namespace mu::playback {
@@ -48,6 +49,7 @@ class PlaybackCommandsController : public IPlaybackCommandsController, public mu
     muse::ContextInject<muse::rcommand::ICommandDispatcher> dispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandsState> commandsState = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
+    muse::ContextInject<IMidiCcRecorder> midiCcRecorder = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
 public:
     PlaybackCommandsController(const muse::modularity::ContextPtr& ctx)

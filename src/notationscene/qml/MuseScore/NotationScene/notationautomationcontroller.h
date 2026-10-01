@@ -186,6 +186,8 @@ private:
 
     INotationAutomationPtr automation() const;
     mu::engraving::AutomationDataConstPtr automationData() const;
+    const mu::engraving::AutomationCurve& displayedCurve(const mu::engraving::AutomationCurveKey& key) const;
+    bool isRecordingPreviewShown() const;
     INotationPtr currentNotation() const;
     mu::engraving::Score* score() const;
 

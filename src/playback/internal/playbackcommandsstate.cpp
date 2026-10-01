@@ -87,6 +87,12 @@ void PlaybackCommandsState::init()
         updateCommandStates({ METRONOME_TOGGLE_COMMAND });
     });
 
+    if (midiCcRecorder()) {
+        midiCcRecorder()->armedChanged().onNotify(this, [this]() {
+            updateCommandStates({ MIDI_CC_RECORD_TOGGLE_COMMAND });
+        });
+    }
+
     notationConfiguration()->isMidiInputEnabledChanged().onNotify(this, [this]() {
         updateCommandStates({ MIDI_TOGGLE_COMMAND });
     });
@@ -182,6 +188,8 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
         return CommandState(true, playbackController()->isLoopEnabled());
     } else if (command == METRONOME_TOGGLE_COMMAND) {
         return CommandState(true, notationConfiguration()->isMetronomeEnabled());
+    } else if (command == MIDI_CC_RECORD_TOGGLE_COMMAND) {
+        return CommandState(true, midiCcRecorder() && midiCcRecorder()->isArmed());
     } else if (command == MIDI_TOGGLE_COMMAND) {
         return CommandState(true, notationConfiguration()->isMidiInputEnabled());
     } else if (command == MIDI_INPUT_WRITTEN_PITCH_COMMAND) {

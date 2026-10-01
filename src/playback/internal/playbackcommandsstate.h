@@ -31,6 +31,7 @@
 #include "interactive/iinteractive.h"
 #include "context/iglobalcontext.h"
 #include "../iplaybackcontroller.h"
+#include "../imidiccrecorder.h"
 #include "rcommand/icommandsregister.h"
 #include "notation/inotationconfiguration.h"
 #include "../iplaybackconfiguration.h"
@@ -44,6 +45,7 @@ class PlaybackCommandsState : public muse::rcommand::IModuleCommandsState, publi
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
+    muse::ContextInject<IMidiCcRecorder> midiCcRecorder = { this };
 
 public:
     PlaybackCommandsState(const muse::modularity::ContextPtr& ctx)

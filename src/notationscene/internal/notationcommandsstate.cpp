@@ -309,6 +309,11 @@ void NotationCommandsState::init()
         updateCommandStates(commands(MOVE_SELECTION_COMMANDS));
         updateCommandStates(LAYOUT_BREAK_COMMANDS);
         updateCommandStates(TAB_COMMANDS);
+        updateCommandStates({ DELETE_MIDI_CC_POINTS_COMMAND });
+    });
+
+    notationConfiguration()->currentAutomationTypeChanged().onNotify(this, [this]() {
+        updateCommandStates({ DELETE_MIDI_CC_POINTS_COMMAND });
     });
 
     controller()->stackChanged().onNotify(this, [this]() {
@@ -509,6 +514,12 @@ CommandState NotationCommandsState::doCommandState(const Command& command) const
 
     if (command == TOGGLE_AUTOMATION_COMMAND) {
         return CommandState(true, controller()->isAutomationModeEnabled());
+    }
+
+    if (command == DELETE_MIDI_CC_POINTS_COMMAND) {
+        const INotationPtr notation = globalContext()->currentNotation();
+        const bool hasRange = notation && notation->interaction()->selection()->isRange();
+        return CommandState(hasRange && notationConfiguration()->currentAutomationType() == mu::engraving::AutomationType::MidiCC, false);
     }
 
     if (command == TOGGLE_NOTE_OFFSET_EDITOR_COMMAND) {
