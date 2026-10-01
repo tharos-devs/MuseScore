@@ -65,6 +65,10 @@ public:
     void setPercussionPanelMoveMidiNotesAndShortcuts(bool move) override;
     muse::async::Notification percussionPanelMoveMidiNotesAndShortcutsChanged() const override;
 
+    bool isTimelineRowVisible(const std::string& rowId) const override;
+    void setTimelineRowVisible(const std::string& rowId, bool visible) override;
+    muse::async::Notification timelineRowsVisibilityChanged() const override;
+
 private:
     muse::async::Notification m_isSmoothPanningChanged;
     muse::async::Notification m_isLimitCanvasScrollAreaChanged;
@@ -74,5 +78,6 @@ private:
     muse::async::Notification m_autoClosePercussionPanelChanged;
     muse::async::Notification m_showPercussionPanelPadSwapDialogChanged;
     muse::async::Notification m_percussionPanelMoveMidiNotesAndShortcutsChanged;
+    muse::async::Notification m_timelineRowsVisibilityChanged;
 };
 }

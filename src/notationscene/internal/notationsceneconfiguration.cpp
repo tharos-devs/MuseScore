@@ -46,6 +46,11 @@ static const Settings::Key AUTO_CLOSE_PERCUSSION_PANEL_KEY(module_name, "ui/auto
 static const Settings::Key SHOW_PERCUSSION_PANEL_SWAP_DIALOG(module_name,  "ui/showPercussionPanelPadSwapDialog");
 static const Settings::Key PERCUSSION_PANEL_MOVE_MIDI_NOTES_AND_SHORTCUTS(module_name,  "ui/percussionPanelMoveMidiNotesAndShortcuts");
 
+static Settings::Key timelineRowVisibleKey(const std::string& rowId)
+{
+    return Settings::Key(module_name, "ui/timeline/rows/" + rowId + "/visible");
+}
+
 NotationSceneConfiguration::NotationSceneConfiguration()
 {
 }
@@ -94,6 +99,14 @@ void NotationSceneConfiguration::init()
     settings()->valueChanged(PERCUSSION_PANEL_MOVE_MIDI_NOTES_AND_SHORTCUTS).onReceive(this, [this](const Val&) {
         m_percussionPanelMoveMidiNotesAndShortcutsChanged.notify();
     });
+
+    for (const std::string& rowId : TIMELINE_ROW_IDS) {
+        const Settings::Key key = timelineRowVisibleKey(rowId);
+        settings()->setDefaultValue(key, Val(true));
+        settings()->valueChanged(key).onReceive(this, [this](const Val&) {
+            m_timelineRowsVisibilityChanged.notify();
+        });
+    }
 }
 
 bool NotationSceneConfiguration::isSmoothPanning() const
@@ -209,4 +222,19 @@ void NotationSceneConfiguration::setPercussionPanelMoveMidiNotesAndShortcuts(boo
 Notification NotationSceneConfiguration::percussionPanelMoveMidiNotesAndShortcutsChanged() const
 {
     return m_percussionPanelMoveMidiNotesAndShortcutsChanged;
+}
+
+bool NotationSceneConfiguration::isTimelineRowVisible(const std::string& rowId) const
+{
+    return settings()->value(timelineRowVisibleKey(rowId)).toBool();
+}
+
+void NotationSceneConfiguration::setTimelineRowVisible(const std::string& rowId, bool visible)
+{
+    settings()->setSharedValue(timelineRowVisibleKey(rowId), Val(visible));
+}
+
+Notification NotationSceneConfiguration::timelineRowsVisibilityChanged() const
+{
+    return m_timelineRowsVisibilityChanged;
 }

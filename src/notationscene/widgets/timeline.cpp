@@ -33,6 +33,7 @@
 #include <cmath>
 
 #include "translation.h"
+#include "ui/view/iconcodes.h"
 
 #include "engraving/dom/barline.h"
 #include "engraving/dom/jump.h"
@@ -46,6 +47,7 @@
 #include "engraving/dom/part.h"
 #include "engraving/dom/rehearsalmark.h"
 #include "engraving/dom/score.h"
+#include "engraving/dom/sharedpart.h"
 #include "engraving/dom/staff.h"
 #include "engraving/dom/system.h"
 #include "engraving/dom/tempotext.h"
@@ -54,7 +56,9 @@
 #include "project/inotationproject.h"
 
 #include "notation/inotationelements.h" // IWYU pragma: keep
+#include "notation/imasternotation.h"
 #include "notation/inotationinteraction.h"
+#include "notation/inotationplayback.h"
 #include "notation/inotationselection.h"
 #include "notation/inotationundostack.h" // IWYU pragma: keep
 
@@ -332,6 +336,103 @@ void TRowLabels::restrictScroll(int value)
 //   TRowLabels::updateLabels
 //---------------------------------------------------------
 
+static constexpr int TRACK_COLOR_STRIP_WIDTH = 4;
+static constexpr int TRACK_COLOR_STRIP_HIT_WIDTH = TRACK_COLOR_STRIP_WIDTH + 3;
+static constexpr int TRACK_COLOR_STRIP_KEY = 3;
+
+//! NOTE: the Mute / Solo / show-in-score buttons at the end of each instrument row,
+//! all the same width
+static constexpr int TRACK_BUTTON_KEY = 4;
+static constexpr int TRACK_BUTTON_WIDTH = 18;
+static constexpr int TRACK_BUTTON_SPACING = 2;
+static constexpr int TRACK_BUTTONS_WIDTH = 3 * TRACK_BUTTON_WIDTH + 3 * TRACK_BUTTON_SPACING;
+
+enum class TrackButton {
+    None = 0,
+    Mute,
+    Solo,
+    Visibility,
+};
+
+static bool isTrackColorStrip(const QGraphicsItem* item)
+{
+    return item && item->data(TRACK_COLOR_STRIP_KEY).toBool();
+}
+
+static TrackButton trackButton(const QGraphicsItem* item)
+{
+    return item ? static_cast<TrackButton>(item->data(TRACK_BUTTON_KEY).toInt()) : TrackButton::None;
+}
+
+static bool isClickableLabelItem(const QGraphicsItem* item)
+{
+    return isTrackColorStrip(item) || trackButton(item) != TrackButton::None;
+}
+
+void TRowLabels::addTrackButtons(int row, unsigned labelRow, int ypos, int height, bool anythingSoloed)
+{
+    const TimelineTheme& theme = _timeline->activeTheme();
+    const QColor accentColor = _timeline->m_defaultTrackColor;
+
+    const Timeline::SoloMuteState state = _timeline->trackSoloMuteState(row);
+    const bool hasTrack = _timeline->staffTrackId(row).isValid();
+    const bool forceMuted = _timeline->isTrackMutedBySolo(row, anythingSoloed);
+    //! NOTE: the eye shows/hides the whole part (see Timeline::toggleShow())
+    const QList<Part*> parts = _timeline->getParts();
+    const bool staffShown = row >= 0 && row < parts.size() && parts.at(row)->show();
+
+    QFont letterFont = QApplication::font();
+    letterFont.setPixelSize(10);
+    letterFont.setBold(true);
+
+    QFont iconFont(QString::fromStdString(_timeline->uiConfiguration()->iconsFontFamily()));
+    iconFont.setPixelSize(14);
+
+    auto addButton = [&](TrackButton type, int index, const QString& text, const QFont& font, bool checked, bool dimmed,
+                         const QString& tooltip) {
+        const qreal x = width() - TRACK_BUTTONS_WIDTH + index * (TRACK_BUTTON_WIDTH + TRACK_BUTTON_SPACING);
+        const QRectF rect(x, ypos + 2, TRACK_BUTTON_WIDTH, height - 4);
+
+        QGraphicsRectItem* button = new QGraphicsRectItem(rect);
+        button->setPen(QPen(theme.labelsColor2));
+        button->setBrush(QBrush(checked ? accentColor : theme.labelsColor3.lighter(115)));
+        button->setOpacity(dimmed ? 0.5 : 1.0);
+        //! NOTE: below the meta rows' labels (z 1-2), which stay pinned on top while the
+        //! instrument rows scroll underneath them
+        button->setZValue(0.5);
+        button->setToolTip(tooltip);
+
+        QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(text, button);
+        label->setFont(font);
+        label->setBrush(QBrush(checked ? QColor(Qt::white) : theme.labelsColor1));
+        const QRectF textRect = label->boundingRect();
+        label->setPos(rect.center() - textRect.center());
+
+        for (QGraphicsItem* item : { static_cast<QGraphicsItem*>(button), static_cast<QGraphicsItem*>(label) }) {
+            item->setData(0, QVariant::fromValue<bool>(false));
+            item->setData(1, QVariant::fromValue<MouseOverValue>(MouseOverValue::NONE));
+            item->setData(2, QVariant::fromValue<unsigned>(labelRow));
+            item->setData(TRACK_BUTTON_KEY, QVariant::fromValue<int>(static_cast<int>(type)));
+        }
+
+        scene()->addItem(button);
+    };
+
+    //! NOTE: like the Mixer's Mute button, shown checked but dimmed (and not clickable)
+    //! while the track is only muted because another track/group bus is soloed. Other
+    //! reasons the engine force-mutes a track (e.g. playing back a range selection only
+    //! plays its staves) aren't a mute the user set, so they're not shown here.
+    addButton(TrackButton::Mute, 0, muse::qtrc("notation/timeline", "M", "mute button"), letterFont,
+              state.mute || forceMuted, !hasTrack || (forceMuted && !state.mute), muse::qtrc("notation/timeline", "Mute"));
+    addButton(TrackButton::Solo, 1, muse::qtrc("notation/timeline", "S", "solo button"), letterFont,
+              state.solo, !hasTrack, muse::qtrc("notation/timeline", "Solo"));
+
+    const muse::ui::IconCode::Code eyeIcon = staffShown ? muse::ui::IconCode::Code::EYE_OPEN : muse::ui::IconCode::Code::EYE_CLOSED;
+    addButton(TrackButton::Visibility, 2, QChar(static_cast<char16_t>(eyeIcon)), iconFont, false, false,
+              staffShown ? muse::qtrc("notation/timeline", "Hide instrument in score")
+              : muse::qtrc("notation/timeline", "Show instrument in score"));
+}
+
 void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int height)
 {
     TRACEFUNC;
@@ -343,6 +444,9 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
     }
 
     unsigned numMetas = _timeline->nmetas();
+    const bool measuresVisible = _timeline->measuresRowVisible();
+    const int numSwappable = _timeline->nswappableMetas();
+    const bool anythingSoloed = _timeline->score() && _timeline->isAnythingSoloed();
     int maxWidth = -1;
     int measureWidth = 0;
     for (unsigned row = 0; row < labels.size(); row++) {
@@ -354,12 +458,21 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
         if (row == numMetas - 1) {
             measureWidth = graphicsTextItem->boundingRect().width();
         }
-        maxWidth = std::max(maxWidth, int(graphicsTextItem->boundingRect().width()));
+        if (row >= numMetas) {
+            maxWidth = std::max(maxWidth, TRACK_COLOR_STRIP_WIDTH + int(graphicsTextItem->boundingRect().width()) + TRACK_BUTTONS_WIDTH);
+        } else {
+            maxWidth = std::max(maxWidth, int(graphicsTextItem->boundingRect().width()));
+        }
+
+        //! NOTE: instrument rows start with a thin strip in the track's Mixer color
+        const bool isInstrumentRow = row >= numMetas;
+        const int textX = isInstrumentRow ? TRACK_COLOR_STRIP_WIDTH : 0;
 
         QFontMetrics f(QApplication::font());
-        QString partName = f.elidedText(labels[row].first, Qt::ElideRight, width());
+        const int textRightReserve = isInstrumentRow ? TRACK_BUTTONS_WIDTH : 0;
+        QString partName = f.elidedText(labels[row].first, Qt::ElideRight, width() - textX - textRightReserve);
         graphicsTextItem->setPlainText(partName);
-        graphicsTextItem->setX(0);
+        graphicsTextItem->setX(textX);
         graphicsTextItem->setY(ypos);
         if (labels[row].second) {
             graphicsTextItem->setDefaultTextColor(_timeline->activeTheme().labelsColor1);
@@ -375,27 +488,21 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
         graphicsTextItem->setData(0, QVariant::fromValue<bool>(false));
 
         MouseOverValue mouseOverArrow = MouseOverValue::NONE;
-        if (numMetas - 1 == row && (numMetas > 2 || _timeline->collapsed())) {
+        const int metaRow = static_cast<int>(row);
+        if (measuresVisible && numMetas - 1 == row && (numMetas > 2 || _timeline->collapsed())) {
             // Measures meta
             if (_timeline->collapsed()) {
                 mouseOverArrow = MouseOverValue::COLLAPSE_DOWN_ARROW;
             } else {
                 mouseOverArrow = MouseOverValue::COLLAPSE_UP_ARROW;
             }
-        } else if (row < numMetas - 1) {
-            if (row != 0 && row + 1 <= numMetas - 2) {
+        } else if (metaRow < numSwappable) {
+            if (metaRow != 0 && metaRow + 1 <= numSwappable - 1) {
                 mouseOverArrow = MouseOverValue::MOVE_UP_DOWN_ARROW;
-            } else if (row == 0 && row + 1 < numMetas - 1) {
+            } else if (metaRow == 0 && metaRow + 1 < numSwappable) {
                 mouseOverArrow = MouseOverValue::MOVE_DOWN_ARROW;
-            } else if (row == numMetas - 2 && row != 0) {
+            } else if (metaRow == numSwappable - 1 && metaRow != 0) {
                 mouseOverArrow = MouseOverValue::MOVE_UP_ARROW;
-            }
-        } else if (numMetas <= row) {
-            if (_timeline->numToStaff(row - numMetas)
-                && _timeline->numToStaff(row - numMetas)->show()) {
-                mouseOverArrow = MouseOverValue::OPEN_EYE;
-            } else {
-                mouseOverArrow = MouseOverValue::CLOSED_EYE;
             }
         }
         graphicsTextItem->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
@@ -406,6 +513,36 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
 
         scene()->addItem(graphicsRectItem);
         scene()->addItem(graphicsTextItem);
+
+        if (isInstrumentRow && _timeline->score()) {
+            QGraphicsRectItem* colorStrip = new QGraphicsRectItem(0, ypos, TRACK_COLOR_STRIP_WIDTH, height);
+            colorStrip->setPen(Qt::NoPen);
+            colorStrip->setBrush(QBrush(_timeline->trackColor(row - numMetas, Fraction(0, 1))));
+            colorStrip->setZValue(0);
+            colorStrip->setData(0, QVariant::fromValue<bool>(false));
+            colorStrip->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
+            colorStrip->setData(2, QVariant::fromValue<unsigned>(row));
+            colorStrip->setData(TRACK_COLOR_STRIP_KEY, QVariant::fromValue<bool>(true));
+            colorStrip->setToolTip(muse::qtrc("notation/timeline", "Edit color…"));
+            scene()->addItem(colorStrip);
+
+            //! NOTE: the strip itself is only a few pixels wide - this transparent area over
+            //! it (and the start of the name) is what actually catches the clicks, so they
+            //! don't have to land exactly on it
+            QGraphicsRectItem* colorStripHitArea = new QGraphicsRectItem(0, ypos, TRACK_COLOR_STRIP_HIT_WIDTH, height);
+            colorStripHitArea->setPen(Qt::NoPen);
+            colorStripHitArea->setBrush(Qt::transparent);
+            colorStripHitArea->setZValue(0.25);
+            colorStripHitArea->setData(0, QVariant::fromValue<bool>(false));
+            colorStripHitArea->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
+            colorStripHitArea->setData(2, QVariant::fromValue<unsigned>(row));
+            colorStripHitArea->setData(TRACK_COLOR_STRIP_KEY, QVariant::fromValue<bool>(true));
+            colorStripHitArea->setToolTip(colorStrip->toolTip());
+            scene()->addItem(colorStripHitArea);
+
+            addTrackButtons(static_cast<int>(row - numMetas), row, ypos, height, anythingSoloed);
+        }
+
         if (row < numMetas) {
             std::pair<QGraphicsItem*, int> p1 = std::make_pair(graphicsRectItem, row);
             std::pair<QGraphicsItem*, int> p2 = std::make_pair(graphicsTextItem, row);
@@ -432,7 +569,9 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
     std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
     _oldItemInfo = tmp;
 
-    setMinimumWidth(measureWidth + 9);
+    //! NOTE: at least wide enough for the instrument rows' color strip + buttons
+    //! with a few characters of name left between them
+    setMinimumWidth(std::max(measureWidth + 9, TRACK_COLOR_STRIP_WIDTH + 40 + TRACK_BUTTONS_WIDTH));
     setMaximumWidth(std::max(maxWidth + 20, 70));
     mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
 }
@@ -463,9 +602,10 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
     unsigned numMetas = _timeline->nmetas();
 
     // Check if mouse position in scene is on the last meta
-    QPointF measureMetaTl = QPointF(0, (numMetas - 1) * 20 + verticalScrollBar()->value());
+    QPointF measureMetaTl = QPointF(0, (static_cast<int>(numMetas) - 1) * 20 + verticalScrollBar()->value());
     QPointF measureMetaBr = QPointF(width(), numMetas * 20 + verticalScrollBar()->value());
-    if (QRectF(measureMetaTl, measureMetaBr).contains(scenePt) && (numMetas > 2 || _timeline->collapsed())) {
+    if (_timeline->measuresRowVisible() && QRectF(measureMetaTl, measureMetaBr).contains(scenePt)
+        && (numMetas > 2 || _timeline->collapsed())) {
         if (std::get<0>(_oldItemInfo)) {
             std::pair<QGraphicsItem*, int> p = std::make_pair(std::get<0>(_oldItemInfo), std::get<2>(_oldItemInfo));
             std::vector<std::pair<QGraphicsItem*, int> >::iterator it = std::find(_metaLabels.begin(), _metaLabels.end(), p);
@@ -481,14 +621,34 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
         _timeline->setCollapsed(!_timeline->collapsed());
         _timeline->updateGridView();
     } else {
+        if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform()); isClickableLabelItem(graphicsItem)) {
+            const int row = static_cast<int>(graphicsItem->data(2).value<unsigned>()) - static_cast<int>(numMetas);
+
+            //! NOTE: each of these relayouts the labels (deleting graphicsItem), so nothing
+            //! may touch it afterwards
+            switch (trackButton(graphicsItem)) {
+            case TrackButton::Mute:
+                _timeline->toggleTrackMute(row);
+                break;
+            case TrackButton::Solo:
+                _timeline->toggleTrackSolo(row);
+                break;
+            case TrackButton::Visibility:
+                _timeline->toggleShow(row);
+                break;
+            case TrackButton::None:
+                _timeline->editTrackColor(row);
+                break;
+            }
+            return;
+        }
+
         // Check if pixmap was selected
         if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
             QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
             if (graphicsPixmapItem) {
                 unsigned row = graphicsPixmapItem->data(2).value<unsigned>();
-                if (row == numMetas - 1) {
-                    return;
-                } else if (row < numMetas - 1) {
+                if (static_cast<int>(row) < _timeline->nswappableMetas()) {
                     // Find mid point between up and down arrow
                     qreal midPoint = graphicsPixmapItem->boundingRect().height() / 2 + graphicsPixmapItem->scenePos().y();
                     if (scenePt.y() > midPoint) {
@@ -537,7 +697,7 @@ void TRowLabels::mouseReleaseEvent(QMouseEvent* event)
 {
     if (QGraphicsItem* graphicsItem = scene()->itemAt(mapToScene(event->pos()), transform())) {
         QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem) {
+        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
             setCursor(Qt::PointingHandCursor);
         } else {
             setCursor(Qt::ArrowCursor);
@@ -579,7 +739,7 @@ void TRowLabels::mouseOver(QPointF scenePt)
     // Handle drawing of arrows
     if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
         QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem) {
+        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
             setCursor(Qt::PointingHandCursor);
             return;
         }
@@ -676,7 +836,7 @@ void TRowLabels::mouseOver(QPointF scenePt)
     }
     if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
         QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem) {
+        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
             setCursor(Qt::PointingHandCursor);
         } else {
             setCursor(Qt::ArrowCursor);
@@ -773,15 +933,7 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
     connect(_rowNames, &TRowLabels::swapMeta, this, &Timeline::swapMeta);
     connect(this, &Timeline::moved, _rowNames, &TRowLabels::mouseOver);
 
-    _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+    initMetas();
 
     std::tuple<QGraphicsItem*, int, QColor> ohi(nullptr, -1, QColor());
     _oldHoverInfo = ohi;
@@ -944,9 +1096,97 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
     _barlines[BarLineType::HEAVY] = heavyBarlinePixmap;
     _barlines[BarLineType::DOUBLE_HEAVY] = doubleHeavyBarlinePixmap;
 
+    updateDefaultTrackColor();
+
     uiConfiguration()->currentThemeChanged().onNotify(this, [this]() {
         updateTimelineTheme();
     });
+
+    initPlaybackCursor();
+
+    //! NOTE: tracks becoming/stopping being force-muted by another track's solo
+    playbackController()->trackMuteStateChanged().onReceive(this, [this](const InstrumentTrackId&, bool, bool) {
+        scheduleLabelsUpdate();
+    });
+
+    configuration()->timelineRowsVisibilityChanged().onNotify(this, [this]() {
+        applyMetaRowsVisibility();
+        updateGrid();
+    });
+}
+
+//! NOTE: the stable id each meta row's visibility is persisted under, see notationscenetypes.h
+const std::string& Timeline::metaRowId(void (Timeline::* func)(Segment*, int*, int))
+{
+    static const std::vector<std::pair<void (Timeline::*)(Segment*, int*, int), std::string> > ids {
+        { &Timeline::tempoMeta, TIMELINE_ROW_TEMPO },
+        { &Timeline::timeMeta, TIMELINE_ROW_TIME_SIGNATURE },
+        { &Timeline::timecodeMeta, TIMELINE_ROW_TIMECODE },
+        { &Timeline::hitPointMeta, TIMELINE_ROW_HIT_POINTS },
+        { &Timeline::rehearsalMeta, TIMELINE_ROW_REHEARSAL_MARK },
+        { &Timeline::keyMeta, TIMELINE_ROW_KEY_SIGNATURE },
+        { &Timeline::barlineMeta, TIMELINE_ROW_BARLINES },
+        { &Timeline::jumpMarkerMeta, TIMELINE_ROW_JUMPS_AND_MARKERS },
+        { &Timeline::measureMeta, TIMELINE_ROW_MEASURES },
+    };
+
+    for (const auto& [metaFunc, id] : ids) {
+        if (metaFunc == func) {
+            return id;
+        }
+    }
+
+    static const std::string empty;
+    return empty;
+}
+
+void Timeline::initMetas()
+{
+    _metas.clear();
+    _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
+    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+
+    applyMetaRowsVisibility();
+}
+
+void Timeline::applyMetaRowsVisibility()
+{
+    for (auto& meta : _metas) {
+        std::get<2>(meta) = configuration()->isTimelineRowVisible(metaRowId(std::get<1>(meta)));
+    }
+
+    //! NOTE: the collapsed view is anchored on the Measures row (it's where the
+    //! expand arrow lives), so it can't stay collapsed without it
+    if (_collapsedMeta && !measuresRowVisible()) {
+        _collapsedMeta = false;
+    }
+}
+
+bool Timeline::measuresRowVisible() const
+{
+    if (_collapsedMeta) {
+        return true;
+    }
+
+    for (const auto& meta : _metas) {
+        if (std::get<1>(meta) == &Timeline::measureMeta) {
+            return std::get<2>(meta);
+        }
+    }
+
+    return false;
+}
+
+int Timeline::nswappableMetas() const
+{
+    return static_cast<int>(nmetas()) - (measuresRowVisible() ? 1 : 0);
 }
 
 bool Timeline::handleEvent(QEvent* e)
@@ -1017,6 +1257,11 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
     setMinimumWidth(_gridWidth * 3);
     _globalZValue = 1;
 
+    m_measureStartTicks.clear();
+    for (const Measure* m = score()->firstMeasure(); m; m = m->nextMeasure()) {
+        m_measureStartTicks.push_back(m->tick().ticks());
+    }
+
     // Draw grid
     Measure* currMeasure = score()->firstMeasure();
     for (int i = 0; i < startMeasure; ++i) {
@@ -1034,19 +1279,7 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
 
             QString translateMeasure = muse::qtrc("notation/timeline", "Measure");
             QChar initialLetter = translateMeasure[0];
-            QTextDocument doc;
-            QString partName = "";
-            if (partList.size() > row) {
-                doc.setHtml(partList.at(row)->longName());
-                partName = doc.toPlainText();
-                if (partName.isEmpty()) {         // No Long instrument name? Fall back to Part name
-                    doc.setHtml(partList.at(row)->partName());
-                    partName = doc.toPlainText();
-                }
-                if (partName.isEmpty()) {       // No Part name? Fall back to Instrument name
-                    partName = partList.at(row)->instrumentName();
-                }
-            }
+            const QString partName = partList.size() > row ? partLabel(partList.at(row)) : QString();
 
             graphicsRectItem->setToolTip(initialLetter + u" "_s + QString::number(currMeasure->measureNumber() + 1) + u", "_s + partName);
             graphicsRectItem->setPen(QPen(activeTheme().backgroundColor));
@@ -1573,27 +1806,12 @@ void Timeline::measureMeta(Segment*, int*, int pos)
 {
     TRACEFUNC;
 
-    // Increment decided by zoom level
-    int incrementValue = 1;
-    int halfway = (_maxZoom + _minZoom) / 2;
-    if (_gridWidth <= _maxZoom && _gridWidth > halfway) {
-        incrementValue = 1;
-    } else if (_gridWidth <= halfway && _gridWidth > _minZoom) {
-        incrementValue = 5;
-    } else {
-        incrementValue = 10;
-    }
-
     int currMeasureNumber = pos / _gridWidth;
     if (currMeasureNumber == _globalMeasureNumber) {
         return;
     }
 
     _globalMeasureNumber = currMeasureNumber;
-    // Check if 1 or 5*n
-    if (currMeasureNumber + 1 != 1 && (currMeasureNumber + 1) % incrementValue != 0) {
-        return;
-    }
 
     // Find position of measureMeta in metas
     int row = getMetaRow(muse::qtrc("notation/timeline", "Measures"));
@@ -1615,10 +1833,10 @@ void Timeline::measureMeta(Segment*, int*, int pos)
     f.setPointSizeF(7.0);
     graphicsTextItem->setFont(f);
 
-    // Center text
-    qreal remainingWidth  = _gridWidth - graphicsTextItem->boundingRect().width();
+    // Left-justify text in its measure (cancelling the text item's own document
+    // margin, so the number sits right against the measure's left edge), centered vertically
     qreal remainingHeight = _gridHeight - graphicsTextItem->boundingRect().height();
-    graphicsTextItem->setX(graphicsTextItem->x() + remainingWidth / 2);
+    graphicsTextItem->setX(graphicsTextItem->x() - graphicsTextItem->document()->documentMargin() + 1);
     graphicsTextItem->setY(graphicsTextItem->y() + remainingHeight / 2);
 
     int endOfText = graphicsTextItem->x() + graphicsTextItem->boundingRect().width();
@@ -1898,17 +2116,88 @@ int Timeline::correctPart(staff_idx_t stave)
 //   Timeline::getParts
 //---------------------------------------------------------
 
+//! NOTE: one instrument row per part (a multi-staff instrument like a piano gets a
+//! single row, its cells colored when ANY of its staves has content), see rowPart()
 QList<Part*> Timeline::getParts()
 {
-    const std::vector<Part*>& realPartList = score()->parts();
     QList<Part*> partList;
-    for (Part* p : realPartList) {
-        for (size_t i = 0; i < p->nstaves(); i++) {
-            partList.append(p);
-        }
+    for (Part* p : timelineParts()) {
+        partList.append(p);
     }
 
     return partList;
+}
+
+//! NOTE: the parts shown as rows, like the score shows them with "Enable stave sharing"
+//! (Layout panel): while it's on, the combined part ("Horn in F 1-2") replaces the parts
+//! it combines (their row buttons act on those parts, see rowAudioParts()); once it's off
+//! again, the combined part stays in the score, just disabled, and is skipped.
+//! NOTE: cached, since it's needed for every grid cell, selected element and playback
+//! cursor frame; rebuilt whenever the score's parts or the stave sharing option change
+//! (so it never holds a part removed in the meantime)
+const std::vector<Part*>& Timeline::timelineParts() const
+{
+    if (!score()) {
+        m_rowsCache.parts.clear();
+        m_rowsCache.sourceParts.clear();
+        m_rowsCache.score = nullptr;
+        return m_rowsCache.parts;
+    }
+
+    const bool staveSharing = score()->style().styleB(Sid::enableStaveSharing);
+    if (m_rowsCache.score == score() && m_rowsCache.staveSharing == staveSharing && m_rowsCache.sourceParts == score()->parts()) {
+        return m_rowsCache.parts;
+    }
+
+    m_rowsCache.score = score();
+    m_rowsCache.staveSharing = staveSharing;
+    m_rowsCache.sourceParts = score()->parts();
+    m_rowsCache.parts.clear();
+
+    for (Part* part : score()->parts()) {
+        if (part->isSharedPart() && !toSharedPart(part)->enabled()) {
+            continue;
+        }
+        if (part->sharedPart() && part->sharedPart()->enabled()) {
+            continue;
+        }
+        m_rowsCache.parts.push_back(part);
+    }
+
+    return m_rowsCache.parts;
+}
+
+Part* Timeline::rowPart(int row) const
+{
+    const std::vector<Part*>& parts = timelineParts();
+    if (row < 0 || static_cast<size_t>(row) >= parts.size()) {
+        return nullptr;
+    }
+
+    return parts.at(row);
+}
+
+int Timeline::staffRow(staff_idx_t staffIdx) const
+{
+    if (!score() || staffIdx >= score()->staves().size()) {
+        return -1;
+    }
+
+    const std::vector<Part*>& parts = timelineParts();
+    const auto it = std::find(parts.begin(), parts.end(), score()->staves().at(staffIdx)->part());
+    return it != parts.end() ? static_cast<int>(std::distance(parts.begin(), it)) : -1;
+}
+
+staff_idx_t Timeline::rowFirstStaff(int row) const
+{
+    const Part* part = rowPart(row);
+    return part && !part->staves().empty() ? part->staves().front()->idx() : 0;
+}
+
+staff_idx_t Timeline::rowLastStaff(int row) const
+{
+    const Part* part = rowPart(row);
+    return part && !part->staves().empty() ? part->staves().back()->idx() : 0;
 }
 
 //---------------------------------------------------------
@@ -1923,6 +2212,7 @@ void Timeline::clearScene()
     nonVisiblePathItem = nullptr;
     visiblePathItem = nullptr;
     selectionItem = nullptr;
+    m_playbackCursorItem = nullptr;
 }
 
 //---------------------------------------------------------
@@ -2073,6 +2363,12 @@ void Timeline::drawSelection()
         if (numToStaff(staffIdx) && !numToStaff(staffIdx)->show()) {
             continue;
         }
+        //! NOTE: an element on a staff without a row (e.g. a part combined by stave
+        //! sharing) is skipped, unless it's a meta element (set to -1 below): -1 is also
+        //! what identifies the meta rows' items, so keeping it would highlight those
+        staffIdx = staffRow(element->staffIdx());
+        const bool hasRow = staffIdx >= 0;
+        bool isMetaElement = false;
 
         if ((element->isTempoText()
              || element->isKeySig()
@@ -2082,10 +2378,12 @@ void Timeline::drawSelection()
              || element->isMarker())
             && !element->generated()) {
             staffIdx = -1;
+            isMetaElement = true;
         }
 
         if (element->isBarLine()) {
             staffIdx = -1;
+            isMetaElement = true;
             BarLine* barline = toBarLine(element);
             if (barline
                 && (barline->barLineType() == BarLineType::END_REPEAT
@@ -2099,6 +2397,10 @@ void Timeline::drawSelection()
                     measure = measure->prevMeasure();
                 }
             }
+        }
+
+        if (!hasRow && !isMetaElement) {
+            continue;
         }
 
         // element->type() for meta rows, invalid for everything else
@@ -2239,9 +2541,10 @@ void Timeline::mousePressEvent(QMouseEvent* event)
         }
     }
     if (currGraphicsItem) {
+        //! NOTE: an instrument row (= part, see getParts()), not a staff
         int stave = currGraphicsItem->data(0).value<int>();
         Measure* currMeasure = static_cast<Measure*>(currGraphicsItem->data(2).value<void*>());
-        if (numToStaff(stave) && !numToStaff(stave)->show()) {
+        if (rowPart(stave) && !rowPart(stave)->show()) {
             return;
         }
 
@@ -2250,7 +2553,8 @@ void Timeline::mousePressEvent(QMouseEvent* event)
             int bottomOfMeta = nmeta * _gridHeight + verticalScrollBar()->value();
 
             // Handle measure box clicks
-            if (scenePt.y() > (nmeta - 1) * _gridHeight + verticalScrollBar()->value()
+            if (measuresRowVisible()
+                && scenePt.y() > (nmeta - 1) * _gridHeight + verticalScrollBar()->value()
                 && scenePt.y() < bottomOfMeta) {
                 QRectF tmp(scenePt.x(), 0, 3, nmeta * _gridHeight + nstaves() * _gridHeight);
                 QList<QGraphicsItem*> gl = scene()->items(tmp);
@@ -2358,22 +2662,19 @@ void Timeline::mousePressEvent(QMouseEvent* event)
         } else {
             // Handle cell clicks
             if (event->modifiers() == Qt::ShiftModifier) {
-                if (currMeasure->mmRest()) {
-                    currMeasure = currMeasure->mmRest();
-                } else if (!currMeasure->isMMRest()) {
-                    currMeasure = currMeasure->prevMeasureMM();
-                }
+                //! NOTE: the multimeasure rest covering this measure, if shown (prevMeasureMM() here
+                //! used to select the measure BEFORE the clicked one)
+                currMeasure = currMeasure->coveringMMRestOrThis();
 
                 if (currMeasure) {
-                    interaction()->select({ currMeasure }, SelectType::RANGE, stave);
+                    interaction()->select({ currMeasure }, SelectType::RANGE, rowFirstStaff(stave));
+                    interaction()->select({ currMeasure }, SelectType::RANGE, rowLastStaff(stave));
                 }
             } else if (event->modifiers() == Qt::ControlModifier) {
                 if (interaction()->selection()->isNone()) {
-                    if (currMeasure->mmRest()) {
-                        currMeasure = currMeasure->mmRest();
-                    } else if (!currMeasure->isMMRest()) {
-                        currMeasure = currMeasure->prevMeasureMM();
-                    }
+                    //! NOTE: the multimeasure rest covering this measure, if shown (prevMeasureMM() here
+                    //! used to select the measure BEFORE the clicked one)
+                    currMeasure = currMeasure->coveringMMRestOrThis();
 
                     if (currMeasure) {
                         interaction()->select({ currMeasure }, SelectType::RANGE, 0);
@@ -2383,19 +2684,24 @@ void Timeline::mousePressEvent(QMouseEvent* event)
                     interaction()->clearSelection();
                 }
             } else {
-                if (currMeasure->mmRest()) {
-                    currMeasure = currMeasure->mmRest();
-                } else if (!currMeasure->isMMRest()) {
-                    currMeasure = currMeasure->prevMeasureMM();
-                }
+                //! NOTE: the multimeasure rest covering this measure, if shown (prevMeasureMM() here
+                //! used to select the measure BEFORE the clicked one)
+                currMeasure = currMeasure->coveringMMRestOrThis();
 
-                if (currMeasure) {
-                    interaction()->select({ currMeasure }, SelectType::SINGLE, stave);
+                //! NOTE: a plain click only moves the playback position: it selects the
+                //! measure's first element on this staff (playback starts from it, see
+                //! seekSelection() below), not the measure itself - a range selection
+                //! would make playback play that staff only. Shift+click selects measures.
+                if (EngravingItem* firstElement = currMeasure ? firstElementInRow(currMeasure, stave) : nullptr) {
+                    interaction()->select({ firstElement }, SelectType::SINGLE);
+                } else if (currMeasure && rowPart(stave)) {
+                    interaction()->select({ currMeasure }, SelectType::SINGLE, rowFirstStaff(stave));
+                    interaction()->select({ currMeasure }, SelectType::RANGE, rowLastStaff(stave));
                 }
             }
 
             if (currMeasure) {
-                interaction()->showItem(currMeasure, stave);
+                interaction()->showItem(currMeasure, static_cast<int>(rowFirstStaff(stave)));
             }
         }
     } else {
@@ -2403,6 +2709,36 @@ void Timeline::mousePressEvent(QMouseEvent* event)
     }
 
     this->seekSelection();
+}
+
+//! NOTE: the earliest element of the measure on any of the row's (part's) staves,
+//! the top staff first at equal ticks
+EngravingItem* Timeline::firstElementInRow(Measure* measure, int row) const
+{
+    const Part* part = rowPart(row);
+    if (!part) {
+        return nullptr;
+    }
+
+    for (Segment* segment = measure->first(SegmentType::ChordRest); segment; segment = segment->next(SegmentType::ChordRest)) {
+        for (const Staff* staff : part->staves()) {
+            for (voice_idx_t voice = 0; voice < VOICES; ++voice) {
+                EngravingItem* element = segment->element(staff->idx() * VOICES + voice);
+                if (!element) {
+                    continue;
+                }
+
+                //! NOTE: a chord is selected through its notes, like clicking it in the score
+                if (element->isChord()) {
+                    return toChord(element)->upNote();
+                }
+
+                return element;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 void Timeline::seekSelection()
@@ -2536,21 +2872,13 @@ void Timeline::mouseReleaseEvent(QMouseEvent*)
         // Select single tlGraphicsItem and then range brGraphicsItem
         if (tlGraphicsItem && brGraphicsItem) {
             Measure* tlMeasure = static_cast<Measure*>(tlGraphicsItem->data(2).value<void*>());
-            int tlStave = tlGraphicsItem->data(0).value<int>();
+            int tlStave = static_cast<int>(rowFirstStaff(tlGraphicsItem->data(0).value<int>()));
             Measure* brMeasure = static_cast<Measure*>(brGraphicsItem->data(2).value<void*>());
-            int brStave = brGraphicsItem->data(0).value<int>();
+            int brStave = static_cast<int>(rowLastStaff(brGraphicsItem->data(0).value<int>()));
             if (tlMeasure && brMeasure) {
-                // Focus selection of mmRests here
-                if (tlMeasure->mmRest()) {
-                    tlMeasure = tlMeasure->mmRest();
-                } else if (!tlMeasure->isMMRest()) {
-                    tlMeasure = tlMeasure->prevMeasureMM();
-                }
-                if (brMeasure->mmRest()) {
-                    brMeasure = brMeasure->mmRest();
-                } else if (!brMeasure->isMMRest()) {
-                    brMeasure = brMeasure->prevMeasureMM();
-                }
+                // Focus selection of mmRests here (see mousePressEvent())
+                tlMeasure = tlMeasure->coveringMMRestOrThis();
+                brMeasure = brMeasure->coveringMMRestOrThis();
 
                 if (tlMeasure) {
                     interaction()->select({ tlMeasure }, SelectType::SINGLE, tlStave);
@@ -2634,16 +2962,7 @@ void Timeline::changeEvent(QEvent* event)
 {
     QGraphicsView::changeEvent(event);
     if (event->type() == QEvent::LanguageChange) {
-        _metas.clear();
-        _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Hit points"), &Timeline::hitPointMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Rehearsal mark"), &Timeline::rehearsalMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
-        _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
+        initMetas();
 
         updateGridFull();
     }
@@ -2663,6 +2982,7 @@ void Timeline::updateGrid(int startMeasure, int endMeasure)
         drawSelection();
         mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
         _rowNames->updateLabels(getLabels(), _gridHeight);
+        updatePlaybackCursor();
     }
     viewport()->update();
 }
@@ -2704,7 +3024,33 @@ void Timeline::updateGridFromCmdState()
 
 void Timeline::setNotation(INotationPtr notation)
 {
+    if (m_audioSettings) {
+        m_audioSettings->settingsChanged().disconnect(this);
+    }
+    if (m_notation && m_notation->soloMuteState()) {
+        m_notation->soloMuteState()->trackSoloMuteStateChanged().disconnect(this);
+    }
+
     m_notation = notation;
+
+    //! NOTE: keeps the instrument rows' Mute/Solo buttons in sync with the Mixer
+    if (m_notation && m_notation->soloMuteState()) {
+        m_notation->soloMuteState()->trackSoloMuteStateChanged().onReceive(this, [this](const InstrumentTrackId&, const SoloMuteState&) {
+            scheduleLabelsUpdate();
+        });
+    }
+
+    m_audioSettings = audioSettings();
+    m_trackColors = trackColorsSnapshot();
+    if (m_audioSettings) {
+        m_audioSettings->settingsChanged().onNotify(this, [this]() {
+            std::vector<QColor> colors = trackColorsSnapshot();
+            if (colors != m_trackColors) {
+                m_trackColors = std::move(colors);
+                updateGrid();
+            }
+        });
+    }
 
     clearScene();
 
@@ -2713,6 +3059,7 @@ void Timeline::setNotation(INotationPtr notation)
         drawSelection();
         changeSelection(SelState::NONE);
         _rowNames->updateLabels(getLabels(), _gridHeight);
+        updatePlaybackCursor();
     } else {
         // Clear timeline if no score is present
         if (_splitter && _splitter->count() > 0) {
@@ -2773,7 +3120,9 @@ void Timeline::updateView()
                     RectF showRect = mmrestMeasure->canvasBoundingRect().intersected(staveRect);
 
                     if (canvas.intersects(showRect)) {
-                        visiblePainterPath.addRect(getMeasureRect(measureIndex, static_cast<int>(staff), numMetas));
+                        if (const int row = staffRow(staff); row >= 0) {
+                            visiblePainterPath.addRect(getMeasureRect(measureIndex, row, numMetas));
+                        }
                     }
                 }
             }
@@ -2790,7 +3139,9 @@ void Timeline::updateView()
                 RectF showRect = mmrestMeasure->canvasBoundingRect().intersected(staveRect);
 
                 if (canvas.intersects(showRect)) {
-                    visiblePainterPath.addRect(getMeasureRect(measureIndex, static_cast<int>(staff), numMetas));
+                    if (const int row = staffRow(staff); row >= 0) {
+                        visiblePainterPath.addRect(getMeasureRect(measureIndex, row, numMetas));
+                    }
                 }
             }
             continue;
@@ -2811,7 +3162,9 @@ void Timeline::updateView()
             RectF showRect = currMeasure->canvasBoundingRect().intersected(staveRect);
 
             if (canvas.intersects(showRect)) {
-                visiblePainterPath.addRect(getMeasureRect(measureIndex, static_cast<int>(staff), numMetas));
+                if (const int row = staffRow(staff); row >= 0) {
+                    visiblePainterPath.addRect(getMeasureRect(measureIndex, row, numMetas));
+                }
             }
         }
     }
@@ -2856,9 +3209,10 @@ void Timeline::updateView()
 //   Timeline::nstaves
 //---------------------------------------------------------
 
+//! NOTE: the number of instrument ROWS (one per part, see getParts())
 int Timeline::nstaves() const
 {
-    return static_cast<int>(score()->staves().size());
+    return static_cast<int>(timelineParts().size());
 }
 
 //---------------------------------------------------------
@@ -2868,22 +3222,443 @@ int Timeline::nstaves() const
 QColor Timeline::colorBox(QGraphicsRectItem* item)
 {
     Measure* measure = static_cast<Measure*>(item->data(2).value<void*>());
-    staff_idx_t stave = static_cast<staff_idx_t>(item->data(0).value<int>());
+    const int row = item->data(0).value<int>();
+    const Part* part = rowPart(row);
+    if (!part) {
+        return QColor(224, 224, 224);
+    }
+
     for (Segment* seg = measure->first(); seg; seg = seg->next()) {
         if (!seg->isChordRestType()) {
             continue;
         }
-        for (track_idx_t track = stave * VOICES; track < stave * VOICES + VOICES; track++) {
-            ChordRest* chordRest = seg->cr(track);
-            if (chordRest) {
-                ElementType crt = chordRest->type();
-                if (crt == ElementType::CHORD || crt == ElementType::MEASURE_REPEAT) {
-                    return activeTheme().colorBoxColor;
+        for (const Staff* staff : part->staves()) {
+            const track_idx_t startTrack = staff->idx() * VOICES;
+            for (track_idx_t track = startTrack; track < startTrack + VOICES; track++) {
+                ChordRest* chordRest = seg->cr(track);
+                if (chordRest) {
+                    ElementType crt = chordRest->type();
+                    if (crt == ElementType::CHORD || crt == ElementType::MEASURE_REPEAT) {
+                        return trackColor(row, measure->tick());
+                    }
                 }
             }
         }
     }
     return QColor(224, 224, 224);
+}
+
+//---------------------------------------------------------
+//   Timeline::trackColor
+//---------------------------------------------------------
+
+//! NOTE: the color the Mixer shows for the instrument track playing this row at this
+//! tick (a part with instrument changes has one track per instrument; a stave sharing
+//! combined part shows its first origin part's): its custom color if one was picked in
+//! the Mixer, otherwise the theme's accent color, the same fallback the Mixer itself uses.
+QColor Timeline::trackColor(int row, const Fraction& tick) const
+{
+    const std::vector<const Part*> parts = rowAudioParts(row);
+    return parts.empty() ? m_defaultTrackColor : partTrackColor(parts.front(), tick);
+}
+
+QColor Timeline::partTrackColor(const Part* part, const Fraction& tick) const
+{
+    const Instrument* instrument = part ? part->instrument(tick) : nullptr;
+    const project::IProjectAudioSettingsPtr audio = audioSettings();
+    if (!instrument || !audio) {
+        return m_defaultTrackColor;
+    }
+
+    const InstrumentTrackId trackId { part->id(), instrument->id() };
+    if (audio->trackHasExistingOutputParams(trackId)) {
+        const QColor color = audio->trackOutputParams(trackId).color;
+        if (color.isValid()) {
+            return color;
+        }
+    }
+
+    return m_defaultTrackColor;
+}
+
+//! NOTE: snapshot of every instrument track's color, so a project audio settings change
+//! (fired on any Mixer change, e.g. every step of a fader drag) only redraws the
+//! Timeline when a color actually changed
+std::vector<QColor> Timeline::trackColorsSnapshot() const
+{
+    std::vector<QColor> colors;
+    if (!score()) {
+        return colors;
+    }
+
+    //! NOTE: every part, rows or not (a combined part's row shows its origin parts' color)
+    for (const Part* part : score()->parts()) {
+        for (const auto& [tick, instrument] : part->instruments()) {
+            colors.push_back(partTrackColor(part, Fraction::fromTicks(tick)));
+        }
+    }
+
+    return colors;
+}
+
+//---------------------------------------------------------
+//   Timeline playback cursor
+//---------------------------------------------------------
+
+//! NOTE: a vertical line at the playback position, following the same position and
+//! the same seconds -> tick conversion as the score's own playback cursor (see
+//! AbstractNotationPaintView): INotationPlayback::secToTick() already resolves repeats,
+//! jumps and loops back to the right score tick. While stopped it stays at the position
+//! playback will start from, which clicking the score or the Timeline moves (both seek).
+void Timeline::initPlaybackCursor()
+{
+    m_elapsedTimer.start();
+
+    //! NOTE: same interpolation rate as the score's cursor
+    m_playbackCursorTimer.setInterval(23);
+    connect(&m_playbackCursorTimer, &QTimer::timeout, this, [this]() {
+        updatePlaybackCursor();
+    });
+
+    m_lastPlaybackPosition = globalContext()->playbackState()->playbackPosition();
+
+    globalContext()->playbackState()->playbackPositionChanged().onReceive(this, [this](muse::audio::secs_t secs) {
+        m_lastPlaybackPosition = secs;
+        m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
+
+        if (!m_playbackCursorTimer.isActive()) {
+            updatePlaybackCursor();
+        }
+    });
+
+    globalContext()->playbackState()->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
+        onPlaybackStatusChanged();
+    });
+}
+
+void Timeline::onPlaybackStatusChanged()
+{
+    m_lastPlaybackPosition = globalContext()->playbackState()->playbackPosition();
+    m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
+
+    if (globalContext()->playbackState()->isPlaying()) {
+        m_playbackCursorTimer.start();
+    } else {
+        m_playbackCursorTimer.stop();
+    }
+
+    updatePlaybackCursor();
+}
+
+qreal Timeline::playbackCursorX(int tick) const
+{
+    if (m_measureStartTicks.empty() || !score()) {
+        return 0.0;
+    }
+
+    // Measure containing tick: the last one starting at or before it
+    auto it = std::upper_bound(m_measureStartTicks.begin(), m_measureStartTicks.end(), tick);
+    const size_t index = it == m_measureStartTicks.begin() ? 0 : static_cast<size_t>(std::distance(m_measureStartTicks.begin(), it) - 1);
+
+    const int startTick = m_measureStartTicks.at(index);
+    const int endTick = index + 1 < m_measureStartTicks.size() ? m_measureStartTicks.at(index + 1) : score()->endTick().ticks();
+    const int duration = endTick - startTick;
+    const qreal fraction = duration > 0 ? std::clamp(qreal(tick - startTick) / qreal(duration), 0.0, 1.0) : 0.0;
+
+    return (static_cast<qreal>(index) + fraction) * _gridWidth;
+}
+
+void Timeline::updatePlaybackCursor()
+{
+    const INotationPlaybackPtr playback = m_notation ? m_notation->masterNotation()->playback() : nullptr;
+    if (!score() || !playback || m_measureStartTicks.empty()) {
+        if (m_playbackCursorItem) {
+            m_playbackCursorItem->setVisible(false);
+        }
+        return;
+    }
+
+    muse::audio::secs_t secs = m_lastPlaybackPosition;
+    const bool playing = m_playbackCursorTimer.isActive();
+    if (playing) {
+        secs += (m_elapsedTimer.nsecsElapsed() - m_lastPlaybackPositionUpdateTimeNs) / 1e9;
+    }
+
+    const qreal x = playbackCursorX(playback->secToTick(secs));
+
+    if (!m_playbackCursorItem) {
+        m_playbackCursorItem = new QGraphicsLineItem();
+        m_playbackCursorItem->setAcceptedMouseButtons(Qt::NoButton);
+        m_playbackCursorItem->setAcceptHoverEvents(false);
+        //! NOTE: above everything (meta values' z keeps growing, see _globalZValue)
+        m_playbackCursorItem->setZValue(1e9);
+        scene()->addItem(m_playbackCursorItem);
+    }
+
+    QPen pen(m_defaultTrackColor, 1);
+    pen.setCosmetic(true);
+    m_playbackCursorItem->setPen(pen);
+    m_playbackCursorItem->setLine(x, 0, x, std::max<qreal>(getHeight(), sceneRect().height()));
+    m_playbackCursorItem->setVisible(true);
+
+    if (playing) {
+        ensurePlaybackCursorVisible(x);
+    }
+}
+
+//! NOTE: page by page, like the score follows its cursor: once the cursor leaves the
+//! visible area (past the right edge, or back before the left one after a repeat), the
+//! view jumps so the cursor is near its left edge again
+void Timeline::ensurePlaybackCursorVisible(qreal x)
+{
+    const int left = horizontalScrollBar()->value();
+    const int visibleWidth = viewport()->width();
+    if (visibleWidth <= 0) {
+        return;
+    }
+
+    if (x < left || x > left + visibleWidth - _gridWidth / 2) {
+        horizontalScrollBar()->setValue(static_cast<int>(x) - _gridWidth);
+    }
+}
+
+//! NOTE: the parts whose instrument tracks a row's buttons and color strip act on: the
+//! row's own part, or for a stave sharing combined part (which has no track of its own),
+//! the parts it combines
+std::vector<const Part*> Timeline::rowAudioParts(int row) const
+{
+    const Part* part = rowPart(row);
+    if (!part) {
+        return {};
+    }
+
+    if (part->isSharedPart()) {
+        const std::vector<Part*>& originParts = toSharedPart(part)->originParts();
+        return std::vector<const Part*>(originParts.begin(), originParts.end());
+    }
+
+    return { part };
+}
+
+static InstrumentTrackId partTrackId(const Part* part)
+{
+    const Instrument* instrument = part ? part->instrument(Fraction(0, 1)) : nullptr;
+    if (!instrument) {
+        return {};
+    }
+
+    return { part->id(), instrument->id() };
+}
+
+//! NOTE: each part's first instrument's track (a part with instrument changes has one
+//! Mixer track per instrument)
+std::vector<InstrumentTrackId> Timeline::rowTrackIds(int row) const
+{
+    std::vector<InstrumentTrackId> trackIds;
+    for (const Part* part : rowAudioParts(row)) {
+        const InstrumentTrackId trackId = partTrackId(part);
+        if (trackId.isValid()) {
+            trackIds.push_back(trackId);
+        }
+    }
+
+    return trackIds;
+}
+
+//! NOTE: the first one, see rowTrackIds()
+InstrumentTrackId Timeline::staffTrackId(int row) const
+{
+    const std::vector<InstrumentTrackId> trackIds = rowTrackIds(row);
+    return trackIds.empty() ? InstrumentTrackId() : trackIds.front();
+}
+
+//! NOTE: for a row acting on several tracks, mute/solo show as on only when they're on
+//! for ALL of them
+Timeline::SoloMuteState Timeline::trackSoloMuteState(int row) const
+{
+    const std::vector<InstrumentTrackId> trackIds = rowTrackIds(row);
+    if (trackIds.empty() || !playbackController()) {
+        return {};
+    }
+
+    SoloMuteState result { true, true };
+    for (const InstrumentTrackId& trackId : trackIds) {
+        const SoloMuteState& state = playbackController()->trackSoloMuteState(trackId);
+        result.mute &= state.mute;
+        result.solo &= state.solo;
+    }
+
+    return result;
+}
+
+bool Timeline::isTrackMutedBySolo(int row) const
+{
+    return isTrackMutedBySolo(row, isAnythingSoloed());
+}
+
+//! NOTE: anythingSoloed = isAnythingSoloed(), passed in when checking several rows in a row
+bool Timeline::isTrackMutedBySolo(int row, bool anythingSoloed) const
+{
+    const std::vector<InstrumentTrackId> trackIds = rowTrackIds(row);
+    if (trackIds.empty() || !playbackController() || !anythingSoloed) {
+        return false;
+    }
+
+    for (const InstrumentTrackId& trackId : trackIds) {
+        if (!playbackController()->isTrackForceMuted(trackId) || playbackController()->trackSoloMuteState(trackId).solo) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Timeline::isAnythingSoloed() const
+{
+    if (!score() || !playbackController()) {
+        return false;
+    }
+
+    //! NOTE: every part, rows or not (a combined part's origin parts have no row)
+    for (const Part* part : score()->parts()) {
+        const InstrumentTrackId trackId = partTrackId(part);
+        if (trackId.isValid() && playbackController()->trackSoloMuteState(trackId).solo) {
+            return true;
+        }
+    }
+
+    //! NOTE: a soloed group bus force-mutes every track not feeding it too
+    if (const project::IProjectAudioSettingsPtr audio = audioSettings()) {
+        for (muse::audio::aux_channel_idx_t index : audio->auxOutputParamsIndices()) {
+            if (audio->isAuxBusGroup(index) && audio->auxSoloMuteState(index).solo) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+//! NOTE: same as the Mixer's Mute/Solo buttons (which pick the change up from the same state);
+//! a row acting on several tracks sets them all to the same new state
+void Timeline::toggleTrackMute(int row)
+{
+    const std::vector<InstrumentTrackId> trackIds = rowTrackIds(row);
+    if (trackIds.empty() || !playbackController()) {
+        return;
+    }
+
+    const bool mute = !trackSoloMuteState(row).mute;
+    if (mute && isTrackMutedBySolo(row)) {
+        return;
+    }
+
+    for (const InstrumentTrackId& trackId : trackIds) {
+        SoloMuteState state = playbackController()->trackSoloMuteState(trackId);
+        state.mute = mute;
+        playbackController()->setTrackSoloMuteState(trackId, state);
+    }
+}
+
+void Timeline::toggleTrackSolo(int row)
+{
+    const std::vector<InstrumentTrackId> trackIds = rowTrackIds(row);
+    if (trackIds.empty() || !playbackController()) {
+        return;
+    }
+
+    const bool solo = !trackSoloMuteState(row).solo;
+    for (const InstrumentTrackId& trackId : trackIds) {
+        SoloMuteState state = playbackController()->trackSoloMuteState(trackId);
+        state.solo = solo;
+        playbackController()->setTrackSoloMuteState(trackId, state);
+    }
+}
+
+void Timeline::scheduleLabelsUpdate()
+{
+    if (m_labelsUpdateScheduled) {
+        return;
+    }
+
+    m_labelsUpdateScheduled = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_labelsUpdateScheduled = false;
+        if (score()) {
+            _rowNames->updateLabels(getLabels(), _gridHeight);
+        }
+    }, Qt::QueuedConnection);
+}
+
+//! NOTE: same picker as the Mixer's "Edit color…", applied to every track the row acts
+//! on (see rowTrackIds())
+void Timeline::editTrackColor(int row)
+{
+    const project::IProjectAudioSettingsPtr audio = audioSettings();
+    if (!score() || !audio) {
+        return;
+    }
+
+    std::vector<InstrumentTrackId> trackIds;
+    for (const InstrumentTrackId& trackId : rowTrackIds(row)) {
+        if (audio->trackHasExistingOutputParams(trackId)) {
+            trackIds.push_back(trackId);
+        }
+    }
+    if (trackIds.empty()) {
+        return;
+    }
+
+    const QColor currentColor = trackColor(row, Fraction(0, 1));
+
+    //! NOTE: applied to the audio settings of the project the picker was opened for,
+    //! even if another one became current meanwhile
+    interactive()->selectColor(muse::Color::fromQColor(currentColor))
+    .onResolve(this, [audio, trackIds](const muse::Color& color) {
+        for (const InstrumentTrackId& trackId : trackIds) {
+            if (!audio->trackHasExistingOutputParams(trackId)) {
+                continue;
+            }
+
+            project::AudioOutputParams outParams = audio->trackOutputParams(trackId);
+            outParams.color = color.toQColor();
+            audio->setTrackOutputParams(trackId, outParams);
+        }
+    });
+}
+
+mu::project::IProjectAudioSettingsPtr Timeline::audioSettings() const
+{
+    return m_notation && m_notation->project() ? m_notation->project()->audioSettings() : nullptr;
+}
+
+void Timeline::updateDefaultTrackColor()
+{
+    m_defaultTrackColor = QColor(uiConfiguration()->currentTheme().values[muse::ui::ACCENT_COLOR].toString());
+}
+
+//---------------------------------------------------------
+//   Timeline::partLabel
+//---------------------------------------------------------
+
+//! NOTE: the same name as the Layout panel shows (see PartTreeItem): the part name, which
+//! includes the instrument's number and transposition (e.g. "Horn in F 1"), and for the
+//! combined part of "Enable stave sharing" the parts it combines ("Horn in F 1-2", see
+//! SharedPart::partName()). Falls back to the instrument's long name, then its name.
+QString Timeline::partLabel(Part* part) const
+{
+    QTextDocument doc;
+    doc.setHtml(part->partName());
+    QString partName = doc.toPlainText().simplified();
+    if (partName.isEmpty()) {
+        doc.setHtml(part->longName());
+        partName = doc.toPlainText().simplified();
+    }
+    if (partName.isEmpty()) {
+        partName = part->instrumentName();
+    }
+
+    return partName;
 }
 
 //---------------------------------------------------------
@@ -2917,17 +3692,7 @@ std::vector<std::pair<QString, bool> > Timeline::getLabels()
     }
 
     for (int stave = 0; stave < partList.size(); stave++) {
-        QTextDocument doc;
-        QString partName = "";
-        doc.setHtml(partList.at(stave)->longName());
-        partName = doc.toPlainText();
-        if (partName.isEmpty()) {     // No Long instrument name? Fall back to Part name
-            doc.setHtml(partList.at(stave)->partName());
-            partName = doc.toPlainText();
-        }
-        if (partName.isEmpty()) {   // No Part name? Fall back to Instrument name
-            partName = partList.at(stave)->instrumentName();
-        }
+        const QString partName = partLabel(partList.at(stave));
 
         std::pair<QString, bool> instrumentLabel = std::make_pair(partName, partList.at(stave)->show());
         rowLabels.push_back(instrumentLabel);
@@ -3095,7 +3860,7 @@ void Timeline::swapMeta(unsigned row, bool switchUp)
             swap--;
         }
         iter_swap(_metas.begin() + correctMetaRow(row), swap);
-    } else if (!switchUp && row != nmetas() - 2) {
+    } else if (!switchUp && static_cast<int>(row) != nswappableMetas() - 1) {
         // traverse forwards until visible one is found
         auto swap = _metas.begin() + correctMetaRow(row) + 1;
         while (!std::get<2>(*swap)) {
@@ -3170,14 +3935,11 @@ void Timeline::contextMenuEvent(QContextMenuEvent* event)
     } else if (_rowNames->cursorIsOn() == "meta" || cursorIsOn(event->pos()) == "meta") {
         for (auto it = _metas.begin(); it != _metas.end(); ++it) {
             std::tuple<QString, void (Timeline::*)(Segment*, int*, int), bool> meta = *it;
-            QString row_name = std::get<0>(meta);
-            if (row_name != muse::qtrc("notation/timeline", "Measures")) {
-                QAction* action = new QAction(row_name, this);
-                action->setCheckable(true);
-                action->setChecked(std::get<2>(meta));
-                connect(action, &QAction::triggered, this, &Timeline::toggleMetaRow);
-                contextMenu->addAction(action);
-            }
+            QAction* action = new QAction(std::get<0>(meta), this);
+            action->setCheckable(true);
+            action->setChecked(std::get<2>(meta));
+            connect(action, &QAction::triggered, this, &Timeline::toggleMetaRow);
+            contextMenu->addAction(action);
         }
         contextMenu->addSeparator();
         QAction* hide_all = new QAction(muse::qtrc("notation/timeline", "Hide all"), this);
@@ -3203,30 +3965,28 @@ void Timeline::toggleMetaRow()
 
     QString targetText = action->text();
 
+    //! NOTE: copied, since each setTimelineRowVisible() call below re-applies the
+    //! settings to _metas through timelineRowsVisibilityChanged()
+    const auto metas = _metas;
+
     if (targetText == muse::qtrc("notation/timeline", "Hide all")) {
-        for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-            QString metaText = std::get<0>(*it);
-            if (metaText != muse::qtrc("notation/timeline", "Measures")) {
-                std::get<2>(*it) = false;
+        for (const auto& meta : metas) {
+            if (std::get<1>(meta) != &Timeline::measureMeta) {
+                configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), false);
             }
         }
-        updateGrid();
         return;
     } else if (targetText == muse::qtrc("notation/timeline", "Show all")) {
-        for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-            std::get<2>(*it) = true;
+        for (const auto& meta : metas) {
+            configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), true);
         }
-        updateGrid();
         return;
     }
 
-    bool checked = action->isChecked();
     // Find target text in metas and toggle visibility to the checked status of action
-    for (auto it = _metas.begin(); it != _metas.end(); ++it) {
-        QString metaText = std::get<0>(*it);
-        if (metaText == targetText) {
-            std::get<2>(*it) = checked;
-            updateGrid();
+    for (const auto& meta : metas) {
+        if (std::get<0>(meta) == targetText) {
+            configuration()->setTimelineRowVisible(metaRowId(std::get<1>(meta)), action->isChecked());
             break;
         }
     }
@@ -3292,9 +4052,8 @@ QString Timeline::cursorIsOn(const QPoint& cursorPos)
     QList<QGraphicsItem*> graphicsItemList = scene()->items(cursorPos);
     for (QGraphicsItem* currGraphicsItem : graphicsItemList) {
         Measure* currMeasure = static_cast<Measure*>(currGraphicsItem->data(2).value<void*>());
-        int stave = currGraphicsItem->data(0).value<int>();
-        const Staff* st = numToStaff(stave);
-        if (currMeasure && !(st && st->show())) {
+        const Part* part = rowPart(currGraphicsItem->data(0).value<int>());
+        if (currMeasure && !(part && part->show())) {
             return "invalid";
         }
     }
@@ -3320,6 +4079,7 @@ const TimelineTheme& Timeline::activeTheme() const
 
 void Timeline::updateTimelineTheme()
 {
+    updateDefaultTrackColor();
     const QBrush backgroundBrush = QBrush(activeTheme().backgroundColor);
     scene()->setBackgroundBrush(backgroundBrush);
     _rowNames->scene()->setBackgroundBrush(backgroundBrush);

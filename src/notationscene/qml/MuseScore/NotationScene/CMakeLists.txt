@@ -189,6 +189,8 @@ qt_add_qml_module(notationscene_qml
         styledialog/voltaspagemodel.h
         timelineview.cpp
         timelineview.h
+        timelinepanelcontextmenumodel.cpp
+        timelinepanelcontextmenumodel.h
 
     QML_FILES
         AbstractElementPopup.qml

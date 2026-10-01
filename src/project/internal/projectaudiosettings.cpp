@@ -244,6 +244,7 @@ void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId,
         paramsChanged |= !muse::RealIsEqual(it->second.gain, params.gain);
         paramsChanged |= (it->second.fxChain != params.fxChain);
         paramsChanged |= (it->second.auxSends != params.auxSends);
+        paramsChanged |= (it->second.color != params.color);
     }
 
     m_trackOutputParamsMap.insert_or_assign(partId, params);

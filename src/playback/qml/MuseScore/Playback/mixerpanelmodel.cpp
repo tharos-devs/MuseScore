@@ -34,6 +34,8 @@
 #include "translation.h"
 
 #include "notation/imasternotation.h"
+#include "notation/inotation.h"
+#include "notation/inotationsolomutestate.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/inotationparts.h"
@@ -1272,6 +1274,30 @@ void MixerPanelModel::setupConnections()
         }
     });
 
+    //! NOTE: an instrument track's own Mute/Solo can also be toggled from outside the Mixer
+    //! (the Timeline's row buttons) - pick it up like the aux buses' above, so the channel's
+    //! buttons and the global Mute/Solo header buttons (fed by its mutedChanged/soloChanged,
+    //! see connectGlobalMuteSoloAggregate()) follow. Same no-op when it came from the Mixer.
+    const notation::INotationPtr currentNotation = context()->currentNotation();
+    if (currentNotation && currentNotation->soloMuteState()) {
+        const notation::INotationSoloMuteState* soloMuteState = currentNotation->soloMuteState().get();
+        currentNotation->soloMuteState()->trackSoloMuteStateChanged().onReceive(
+            this, [this, soloMuteState](const InstrumentTrackId& instrumentTrackId,
+                                        const notation::INotationSoloMuteState::SoloMuteState& newSoloMuteState) {
+            //! NOTE: solo/mute states are per notation (score/part) - ignore a notation that's
+            //! no longer the current one
+            const notation::INotationPtr current = context()->currentNotation();
+            if (!current || current->soloMuteState().get() != soloMuteState) {
+                return;
+            }
+
+            TrackId trackId = muse::value(controller()->instrumentTrackIdMap(), instrumentTrackId, INVALID_TRACK_ID);
+            if (MixerChannelItem* item = findChannelItem(trackId)) {
+                item->loadSoloMuteState(newSoloMuteState);
+            }
+        }, Asyncable::Mode::SetReplace);
+    }
+
     //! NOTE: refreshes a channel item's LIVE effective mute/forceMute (e.g. every sibling
     //! that becomes/stops being force-muted as a side effect of some OTHER track's solo
     //! changing) - see IPlaybackController::trackMuteStateChanged()'s doc comment
@@ -1351,6 +1377,30 @@ void MixerPanelModel::setupConnections()
         videoSettings()->settingsChanged().onNotify(this, [this]() {
             onVideoAttachmentChanged();
         });
+    }
+
+    //! NOTE: a track's color can also be changed from outside the Mixer (the Timeline's
+    //! label color strips) - pick it up. setColor() persists it back, but that's a no-op
+    //! here since the value is already the saved one.
+    if (audioSettings()) {
+        audioSettings()->settingsChanged().onNotify(this, [this]() {
+            for (MixerChannelItem* item : m_mixerChannelList) {
+                if (item->type() != MixerChannelItem::Type::PrimaryInstrument
+                    && item->type() != MixerChannelItem::Type::SecondaryInstrument) {
+                    continue;
+                }
+
+                const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
+                if (!audioSettings()->trackHasExistingOutputParams(trackId)) {
+                    continue;
+                }
+
+                const QColor color = audioSettings()->trackOutputParams(trackId).color;
+                if (item->color() != color) {
+                    item->setColor(color);
+                }
+            }
+        }, Asyncable::Mode::SetReplace);
     }
 
     controller()->videoMuteStateChanged().onReceive(this, [this](bool muted, bool forceMute) {
