@@ -9,6 +9,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - The floating Mixer's "Full screen" menu item now shows a checkmark while the Mixer is full screen.
 - A track's "Articulation map" menu (Mixer and VST3 staff) now has "New…": it opens the editor on an empty map bound to the track, attached on "Reload into the track".
 - In the articulation map editor, a new articulation's keyswitch continues from the previous articulation's (one semitone up).
+- Added MIDI CC recording: a "Record MIDI CC" button in the playback toolbar (red when armed) records, during playback, the MIDI CCs received from the MIDI input device into the selected VST3 staff's MIDI CC curves (each CC into its own curve, heard live). "Touch" mode: the existing curve is only replaced where the controller moved (seeks and loops included), written on Stop as one undoable step, simplified, and drawn live while recording.
+- The MIDI CC menus now start with "Delete selected points": erases the shown MIDI CC curve's points within the range selection, as one undoable step.
 
 ### 2026-09-30
 - Added an "MP4 video (attached video)" export (the existing one is now "MP4 video (score)"): the attached video over the score's timeline, placed by its offset, with the score's audio and the video's own audio as mixed in the Mixer, sample-accurate. The picture is copied as is (no loss of quality) — only re-encoded (same size, frame rate and bit rate) when the video starts after the score, to add real black frames before it. Uses the FFmpeg bundled with Qt, no setup needed.
@@ -108,3 +110,4 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed opening a score saved without the custom Mixer bus data (e.g. by stock MuseScore) marking it as modified (2026-10-01).
 - Fixed the docked Video panel not narrowing below the sidebar's width once its right-side sidebar was hidden (2026-10-01).
 - Fixed the Audio FX slot's menu arrow being centered on a blank slot instead of on its right (2026-10-01).
+- Fixed the main window (KDDockWidgets v2) reopening shrunk to a tiny size after being kept maximized, or minimized to the Dock after quitting while minimized (2026-10-01).
