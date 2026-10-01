@@ -110,6 +110,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed a floating panel (e.g. the Mixer, full screen or not) restored at startup keeping its old, smaller content size inside its window (2026-10-01).
 - Fixed thousands of "Cannot read property ... of null" warnings logged by the Mixer when quitting or closing a score with the Mixer open (2026-10-01).
 - Fixed a crash when dragging a panel to an edge of the main window, and "Dock" doing nothing, once the saved layout had lost the panel's (or the docking zones') docked location (2026-10-01).
+- Fixed opening a score logging a "not found type for tag" error for nearly every note (its "eid", or a playback offset): a stock bug, the tags were read fine (2026-10-01).
 - Fixed opening a score saved without the custom Mixer bus data (e.g. by stock MuseScore) marking it as modified (2026-10-01).
 - Fixed the docked Video panel not narrowing below the sidebar's width once its right-side sidebar was hidden (2026-10-01).
 - Fixed the Audio FX slot's menu arrow being centered on a blank slot instead of on its right (2026-10-01).
