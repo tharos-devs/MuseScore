@@ -364,13 +364,13 @@ void MixerPanelContextMenuModel::updateItems()
 
     if (m_floating) {
         UiAction fullScreenAction;
-        fullScreenAction.title = m_isFullScreen ? TranslatableString("playback", "Exit full screen") : TranslatableString(
-            "playback", "Full screen");
+        fullScreenAction.title = TranslatableString("playback", "Full screen");
         fullScreenAction.code = TOGGLE_FULL_SCREEN_ACTION;
+        fullScreenAction.checkable = Checkable::Yes;
 
         MenuItem* fullScreenItem = new MenuItem(fullScreenAction, this);
         fullScreenItem->setId("mixer-panel-fullscreen");
-        fullScreenItem->setState(UiActionState::make_enabled());
+        fullScreenItem->setState(UiActionState::make_enabled(m_isFullScreen));
 
         items << fullScreenItem;
     }
