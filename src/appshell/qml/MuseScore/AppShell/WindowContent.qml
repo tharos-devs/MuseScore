@@ -26,6 +26,7 @@ import QtQuick
 
 import Muse.Dock
 import Muse.Interactive
+import Muse.Shortcuts
 import Muse.Ui
 import Muse.UiComponents
 import MuseScore.AppShell
@@ -44,6 +45,15 @@ DockWindow {
     onPageLoaded: {
         console.log("WindowContent::onPageLoaded")
         interactiveProvider.onPageOpened()
+    }
+
+    secondaryWindowComponent: Component {
+        DockSecondaryWindow {
+            title: qsTrc("appshell", "Secondary window")
+
+            //! NOTE: shortcuts are per window (see AppWindow.qml)
+            Shortcuts { }
+        }
     }
 
     InteractiveProvider {

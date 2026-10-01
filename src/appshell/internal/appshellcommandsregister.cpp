@@ -205,6 +205,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::VIDEO, rcommand::Checkable::Yes)
         ),
     CommandInfo(
+        DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND,
+        TranslatableString("action", "Secondary &window"),
+        TranslatableString("action", "Show/hide secondary window"),
+        InputSchema(),
+        Decoration(rcommand::Checkable::Yes)
+        ),
+    CommandInfo(
         DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND,
         TranslatableString("action", "Piano &keyboard"),
         TranslatableString("action", "Show/hide piano keyboard"),

@@ -54,4 +54,5 @@ inline static const muse::rcommand::Command DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND("
 inline static const muse::rcommand::Command DOCK_TOGGLE_PERCUSSION_COMMAND("command://app/dock/toggle-percussion");
 inline static const muse::rcommand::Command DOCK_TOGGLE_STATUSBAR_COMMAND("command://app/dock/toggle-statusbar");
 inline static const muse::rcommand::Command DOCK_TOGGLE_VIDEO_PANEL_COMMAND("command://app/dock/toggle-video-panel");
+inline static const muse::rcommand::Command DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND("command://app/dock/toggle-secondary-window");
 }

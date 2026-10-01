@@ -42,6 +42,8 @@ DockPage {
     objectName: "Notation"
     uri: "musescore://notation"
 
+    secondaryWindowAvailable: true
+
     required property NavigationSection topToolbarKeyNavSec
 
     property NotationPageModel pageModel: NotationPageModel {}
@@ -432,6 +434,7 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
             visible: false
@@ -486,6 +489,7 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
             visible: false
@@ -520,6 +524,7 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
             visible: false
@@ -631,6 +636,7 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
             visible: false
