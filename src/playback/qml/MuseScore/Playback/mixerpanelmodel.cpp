@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCoreApplication>
 #include <QPointer>
 
 #include "async/notifylist.h"
@@ -64,20 +65,26 @@ MixerPanelModel::MixerPanelModel(QObject* parent)
 
 MixerPanelModel::~MixerPanelModel()
 {
-    //! NOTE: the channel items are children of this model, but the delegates showing them can outlive it
-    //! (MixerPanel.qml's own teardown destroys this model before its channel strips) - see deleteItemsLater()
-    deleteItemsLater(m_mixerChannelList);
+    //! NOTE: the channel items are children of this model, but the views only deleteLater() the delegates showing
+    //! them once destroyed themselves, i.e. after this model (declared first in MixerPanel.qml) - so the items are
+    //! detached from it, and only queued for deletion one event loop iteration later, behind those delegates
+    const QList<MixerChannelItem*> items = m_mixerChannelList;
+    for (MixerChannelItem* item : items) {
+        item->setParent(nullptr);
+    }
+
+    QMetaObject::invokeMethod(qApp, [items]() {
+        deleteItemsLater(items);
+    }, Qt::QueuedConnection);
 }
 
 //! NOTE: deleting a channel item while a delegate still shows it nulls that delegate's channelItem,
 //! re-evaluating every one of its bindings against null (hundreds of TypeErrors with all the Mixer
-//! sections) - so items are only deleted once the delegates are gone, which are themselves deleted
-//! later by the views (or right away, when their whole tree is destroyed)
+//! sections) - so items must only be queued for deletion after the views have queued their delegates'
 void MixerPanelModel::deleteItemsLater(const QList<MixerChannelItem*>& items)
 {
     //! NOTE: no need to disconnect them: clear() already did, and a destroyed model loses its connections anyway
     for (MixerChannelItem* item : items) {
-        item->setParent(nullptr);
         item->deleteLater();
     }
 }
