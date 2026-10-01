@@ -57,12 +57,23 @@ void MasterNotationParts::setExcerpts(ExcerptNotationList excerpts)
 void MasterNotationParts::startGlobalEdit(const muse::TranslatableString& actionName)
 {
     NotationParts::startEdit(actionName);
+
+    //! NOTE: the undo stack's lock isn't nestable: only unlock it at the end if it's locked here, not if it was
+    //! already (e.g. by MasterNotation::setupNewScore(), whose lock would otherwise end in the middle of it)
+    if (m_globalEditDepth++ == 0) {
+        m_globalEditLockedUndoStack = !undoStack()->isLocked();
+    }
+
     undoStack()->lock();
 }
 
 void MasterNotationParts::endGlobalEdit()
 {
-    undoStack()->unlock();
+    if (m_globalEditDepth > 0 && --m_globalEditDepth == 0 && m_globalEditLockedUndoStack) {
+        m_globalEditLockedUndoStack = false;
+        undoStack()->unlock();
+    }
+
     NotationParts::apply();
 }
 

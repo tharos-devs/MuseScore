@@ -279,6 +279,10 @@ Ret MasterNotation::setupNewScore(mu::engraving::MasterScore* score, const Score
 
     undoStack()->lock();
 
+    //! NOTE: the score is built with the undo stack locked (it's not an undoable step), so its changes are done
+    //! outside of any transaction, like when loading a score - which Score::undo() would otherwise warn about
+    mu::engraving::ScoreLoad scoreLoad;
+
     parts()->setParts(scoreOptions.parts, scoreOptions.order);
 
     score->checkChordList();

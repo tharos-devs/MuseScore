@@ -427,7 +427,11 @@ Ret NotationProject::loadTemplate(const ProjectCreateOptions& projectOptions)
         setupScoreMetaTags(masterScore, projectOptions);
 
         m_masterNotation->notation()->undoStack()->lock();
-        m_masterNotation->applyOptions(masterScore, projectOptions.scoreOptions, true /*createdFromTemplate*/);
+        {
+            //! NOTE: not an undoable step either (see MasterNotation::setupNewScore())
+            mu::engraving::ScoreLoad scoreLoad;
+            m_masterNotation->applyOptions(masterScore, projectOptions.scoreOptions, true /*createdFromTemplate*/);
+        }
         m_masterNotation->notation()->undoStack()->unlock();
 
         setNeedSave(false);
