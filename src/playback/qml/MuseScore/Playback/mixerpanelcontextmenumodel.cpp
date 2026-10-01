@@ -22,6 +22,9 @@
 
 #include "mixerpanelcontextmenumodel.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -39,6 +42,13 @@ using namespace muse::audio;
 
 static const QString VIEW_MENU_ID("view-menu");
 static const ActionCode TOGGLE_FULL_SCREEN_ACTION("mixer-panel-toggle-fullscreen");
+static const ActionCode ZOOM_IN_ACTION("mixer-panel-zoom-in");
+static const ActionCode ZOOM_OUT_ACTION("mixer-panel-zoom-out");
+static const ActionCode ZOOM_RESET_ACTION("mixer-panel-zoom-reset");
+
+static constexpr int MIN_ZOOM_PERCENT = 50;
+static constexpr int MAX_ZOOM_PERCENT = 200;
+static constexpr int ZOOM_STEP_PERCENT = 10;
 
 static TranslatableString mixerSectionTitle(MixerSectionType type)
 {
@@ -119,6 +129,26 @@ bool MixerPanelContextMenuModel::condensedViewEnabled() const
     return configuration()->isMixerCondensedViewEnabled();
 }
 
+qreal MixerPanelContextMenuModel::zoom() const
+{
+    return configuration()->mixerZoom();
+}
+
+//! NOTE: works in whole percents so repeated steps land exactly on 100% again
+//! (no floating-point drift), and snaps an off-grid stored value onto the grid.
+void MixerPanelContextMenuModel::stepZoom(int direction)
+{
+    const int current = static_cast<int>(std::lround(zoom() * 100));
+    int next = direction > 0
+               ? (current / ZOOM_STEP_PERCENT + 1) * ZOOM_STEP_PERCENT
+               : ((current + ZOOM_STEP_PERCENT - 1) / ZOOM_STEP_PERCENT - 1) * ZOOM_STEP_PERCENT;
+    next = std::clamp(next, MIN_ZOOM_PERCENT, MAX_ZOOM_PERCENT);
+
+    if (next != current) {
+        configuration()->setMixerZoom(next / 100.0);
+    }
+}
+
 bool MixerPanelContextMenuModel::floating() const
 {
     return m_floating;
@@ -181,6 +211,17 @@ void MixerPanelContextMenuModel::load()
         emit toggleFullScreenRequested();
     });
 
+    dispatcher()->reg(this, ZOOM_IN_ACTION, [this]() { stepZoom(+1); });
+    dispatcher()->reg(this, ZOOM_OUT_ACTION, [this]() { stepZoom(-1); });
+    dispatcher()->reg(this, ZOOM_RESET_ACTION, [this]() { configuration()->setMixerZoom(1.0); });
+
+    configuration()->mixerZoomChanged().onReceive(this, [this](double) {
+        emit zoomChanged();
+
+        //! NOTE: rebuilt so Zoom in/out get disabled at the limits
+        updateItems();
+    });
+
     configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool newVisibilityValue) {
         auto query = rcommand::make_query(TOGGLE_AUX_CHANNELS_COMMAND, rcommand::Params());
         setViewMenuItemChecked(query, newVisibilityValue);
@@ -235,6 +276,18 @@ MenuItem* MixerPanelContextMenuModel::buildCondensedViewItem()
     item->setCheckable(true);
     item->setChecked(configuration()->isMixerCondensedViewEnabled());
     item->setCommandQuery(rcommand::make_query(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, rcommand::Params()));
+    return item;
+}
+
+MenuItem* MixerPanelContextMenuModel::buildZoomItem(const TranslatableString& title, const ActionCode& code, bool enabled)
+{
+    UiAction action;
+    action.title = title;
+    action.code = code;
+
+    MenuItem* item = new MenuItem(action, this);
+    item->setId(QString::fromStdString(code));
+    item->setState(UiActionState::make_enabled(enabled));
     return item;
 }
 
@@ -377,6 +430,12 @@ void MixerPanelContextMenuModel::updateItems()
 
     items << makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND);
     items << makeMenu(TranslatableString("playback", "View"), viewMenuItems, VIEW_MENU_ID);
+
+    const int zoomPercent = static_cast<int>(std::lround(zoom() * 100));
+    items << makeSeparator();
+    items << buildZoomItem(TranslatableString("playback", "Zoom in"), ZOOM_IN_ACTION, zoomPercent < MAX_ZOOM_PERCENT);
+    items << buildZoomItem(TranslatableString("playback", "Zoom out"), ZOOM_OUT_ACTION, zoomPercent > MIN_ZOOM_PERCENT);
+    items << buildZoomItem(TranslatableString("playback", "Reset zoom"), ZOOM_RESET_ACTION, zoomPercent != 100);
 
     setItems(items);
 }
