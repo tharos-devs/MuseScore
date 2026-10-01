@@ -7,6 +7,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ### 2026-10-01
 - Synced with upstream `main` (120 commits, incl. the new "Convert file to score" import, offsets applied after autoplace with "Freeze placement", MusicXML/TablEdit import fixes). The build now uses the docking engine upstream defaults to (KDDockWidgets v2).
 - The floating Mixer's "Full screen" menu item now shows a checkmark while the Mixer is full screen.
+- A track's "Articulation map" menu (Mixer and VST3 staff) now has "New…": it opens the editor on an empty map bound to the track, attached on "Reload into the track".
+- In the articulation map editor, a new articulation's keyswitch continues from the previous articulation's (one semitone up).
 
 ### 2026-09-30
 - Added an "MP4 video (attached video)" export (the existing one is now "MP4 video (score)"): the attached video over the score's timeline, placed by its offset, with the score's audio and the video's own audio as mixed in the Mixer, sample-accurate. The picture is copied as is (no loss of quality) — only re-encoded (same size, frame rate and bit rate) when the video starts after the score, to add real black frames before it. Uses the FFmpeg bundled with Qt, no setup needed.
@@ -104,3 +106,5 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed audio exports going ahead while the attached video's audio was still loading right after opening a project, and canceling an export being ignored while it waited for the playback to be ready (2026-09-30).
 - Fixed a floating panel (e.g. the Mixer, full screen or not) restored at startup keeping its old, smaller content size inside its window (2026-10-01).
 - Fixed opening a score saved without the custom Mixer bus data (e.g. by stock MuseScore) marking it as modified (2026-10-01).
+- Fixed the docked Video panel not narrowing below the sidebar's width once its right-side sidebar was hidden (2026-10-01).
+- Fixed the Audio FX slot's menu arrow being centered on a blank slot instead of on its right (2026-10-01).
