@@ -74,9 +74,10 @@ private:
     void onPlaybackPositionChanged(muse::secs_t position);
     std::optional<int> currentUtick() const;
 
-    //! NOTE: the curve as it is once a controller's take is applied to it, and the utick ranges the take covers
+    //! NOTE: the curve as it is once a controller's take is applied to it, and the utick ranges the take covers.
+    //! Final: as written (thinned, every segment joining the curve back), otherwise as drawn while recording
     engraving::AutomationCurve curveWithTake(const engraving::AutomationCurve& existing, const std::vector<TakeSegment>& segments,
-                                             bool thin, std::vector<std::pair<int, int> >* ranges) const;
+                                             bool isFinal, std::vector<std::pair<int, int> >* ranges) const;
 
     void commitTake();
     void publishPreviews();

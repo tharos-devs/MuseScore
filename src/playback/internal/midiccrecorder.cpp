@@ -54,8 +54,10 @@ static constexpr qint64 MAX_POSITION_REFINEMENT_MS = 250;
 
 static constexpr int PREVIEW_REFRESH_INTERVAL_MS = 40;
 
-//! NOTE: a reported position this far past the previous one (they come every few tens of milliseconds) is a jump
-static constexpr double POSITION_JUMP_SECS = 0.5;
+//! NOTE: a reported position this far past the previous one (they come every few tens of milliseconds), or this
+//! far before it, is a jump (a seek, a loop...) - not just the report correcting the previous refined position
+static constexpr double POSITION_JUMP_FORWARD_SECS = 0.5;
+static constexpr double POSITION_JUMP_BACKWARD_SECS = 0.1;
 
 static AutomationPoint takePoint(double value)
 {
@@ -282,7 +284,7 @@ void MidiCcRecorder::onPlaybackPositionChanged(secs_t position)
 {
     if (m_lastReportedPosition) {
         const double delta = double(position - *m_lastReportedPosition);
-        if (delta < 0. || delta > POSITION_JUMP_SECS) {
+        if (delta < -POSITION_JUMP_BACKWARD_SECS || delta > POSITION_JUMP_FORWARD_SECS) {
             ++m_segmentGeneration;
         }
     }
@@ -324,7 +326,7 @@ void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
         return;
     }
 
-    const std::optional<int> utick = currentUtick();
+    std::optional<int> utick = currentUtick();
     if (!utick) {
         return;
     }
@@ -332,10 +334,14 @@ void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
     std::vector<TakeSegment>& segments = m_take[controller];
     auto generationIt = m_controllerSegmentGeneration.find(controller);
     const bool isNewSegment = segments.empty() || generationIt == m_controllerSegmentGeneration.end()
-                              || generationIt->second != m_segmentGeneration || *utick < segments.back().crbegin()->first;
+                              || generationIt->second != m_segmentGeneration;
     if (isNewSegment) {
         segments.emplace_back();
         m_controllerSegmentGeneration.insert_or_assign(controller, m_segmentGeneration);
+    } else {
+        // The refined position can overshoot a little until the next report corrects it: within a segment,
+        // the take never goes backwards
+        utick = std::max(*utick, segments.back().crbegin()->first);
     }
 
     segments.back()[*utick] = value;
@@ -377,12 +383,13 @@ std::optional<int> MidiCcRecorder::currentUtick() const
     return repeatList.empty() ? tick : tick + (repeatList.back()->utick - repeatList.back()->tick);
 }
 
-AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, const std::vector<TakeSegment>& segments, bool thin,
+AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, const std::vector<TakeSegment>& segments, bool isFinal,
                                               std::vector<std::pair<int, int> >* ranges) const
 {
     AutomationCurve result = existing;
 
-    for (const TakeSegment& segment : segments) {
+    for (size_t segmentIdx = 0; segmentIdx < segments.size(); ++segmentIdx) {
+        const TakeSegment& segment = segments[segmentIdx];
         if (segment.empty()) {
             continue;
         }
@@ -401,7 +408,11 @@ AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, c
 
         result.erase(result.lower_bound(fromUtick), result.upper_bound(toUtick));
 
-        const std::vector<TakePoint> points = thin ? thinned(segment) : takePoints(segment);
+        const std::vector<TakePoint> points = isFinal ? thinned(segment) : takePoints(segment);
+
+        // While recording, the segment being recorded isn't over yet: it doesn't join the curve back after its
+        // last value (that would draw a step right at the playback position)
+        const bool isOngoing = !isFinal && segmentIdx == segments.size() - 1;
 
         for (size_t i = 0; i < points.size(); ++i) {
             AutomationPoint point = takePoint(points[i].value);
@@ -411,7 +422,7 @@ AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, c
             }
 
             // A single-point segment keeps its value afterwards: there's no movement to end
-            if (hasCurve && i == points.size() - 1 && points.size() > 1) {
+            if (hasCurve && !isOngoing && i == points.size() - 1 && points.size() > 1) {
                 point.value.outValue = valueAfter;
             }
 
@@ -439,7 +450,7 @@ void MidiCcRecorder::publishPreviews()
         }
 
         const AutomationCurveKey key = AutomationCurveKey::midiCc(m_target->trackId, controller);
-        const AutomationCurve preview = curveWithTake(data->curve(key), takeIt->second, false /*thin*/, nullptr);
+        const AutomationCurve preview = curveWithTake(data->curve(key), takeIt->second, false /*isFinal*/, nullptr);
         automation->setRecordingPreview(key, preview, range.first, range.second);
     }
 
@@ -484,7 +495,7 @@ void MidiCcRecorder::commitTake()
         const AutomationCurve& existing = data->curve(key);
 
         std::vector<std::pair<int, int> > ranges;
-        const AutomationCurve result = curveWithTake(existing, segments, true /*thin*/, &ranges);
+        const AutomationCurve result = curveWithTake(existing, segments, true /*isFinal*/, &ranges);
         if (ranges.empty()) {
             continue;
         }
