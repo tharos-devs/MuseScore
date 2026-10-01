@@ -126,6 +126,45 @@ static mpe::MidiMessage defaultNote(int middleCOctave)
            : messages.front();
 }
 
+//! NOTE: the last articulation of a subtree, in display order (nullptr if it has none)
+template<typename NodeT>
+static const NodeT* lastArticulationIn(const NodeT* node)
+{
+    if (!node->isFolder) {
+        return node;
+    }
+
+    for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
+        if (const NodeT* found = lastArticulationIn<NodeT>(it->get())) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
+//! NOTE: the articulation displayed right before position `index` of `parent` (nullptr if none)
+template<typename NodeT>
+static const NodeT* articulationBefore(const NodeT* parent, size_t index)
+{
+    while (parent) {
+        for (size_t i = std::min(index, parent->children.size()); i > 0; --i) {
+            if (const NodeT* found = lastArticulationIn<NodeT>(parent->children[i - 1].get())) {
+                return found;
+            }
+        }
+
+        if (!parent->parent) {
+            break;
+        }
+
+        index = parent->parent->indexOf(parent);
+        parent = parent->parent;
+    }
+
+    return nullptr;
+}
+
 ArticulationMapEditorModel::ArticulationMapEditorModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this)), m_root(std::make_unique<Node>())
 {
@@ -849,6 +888,17 @@ void ArticulationMapEditorModel::addArticulation()
     auto node = std::make_unique<Node>();
     node->name = uniqueName(parent, muse::qtrc("notation", "New articulation"));
     node->messages = { defaultNote(m_middleCOctave) };
+
+    //! NOTE: keyswitches usually follow each other chromatically - continue from the
+    //! articulation right before this one, the one after its first keyswitch note
+    if (const Node* previous = articulationBefore(parent, index)) {
+        auto it = std::find_if(previous->messages.cbegin(), previous->messages.cend(), [](const mpe::MidiMessage& m) {
+            return m.type == mpe::MidiMessage::Type::Note;
+        });
+        if (it != previous->messages.cend() && it->number < 127) {
+            node->messages = { mpe::MidiMessage { mpe::MidiMessage::Type::Note, uint8_t(it->number + 1), it->value } };
+        }
+    }
 
     const Node* added = parent->addChild(std::move(node), index);
     if (!m_defaultNode) {
