@@ -49,6 +49,11 @@ class MixerPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
 
     Q_PROPERTY(bool condensedViewEnabled READ condensedViewEnabled NOTIFY condensedViewEnabledChanged)
 
+    //! NOTE: scale factor applied to the whole channel strip area by MixerPanel.qml
+    //! (a plain Qt Quick `scale`, so none of the sections need to know about it).
+    //! Persisted, changed through the "Zoom in"/"Zoom out"/"Reset zoom" menu items.
+    Q_PROPERTY(qreal zoom READ zoom NOTIFY zoomChanged)
+
     //! NOTE Full screen only makes sense once this panel is its own floating
     //! window -- when docked, "full screen" would apply to the whole MuseScore
     //! window instead (there's no separate window to fullscreen), which isn't
@@ -84,6 +89,8 @@ public:
 
     bool condensedViewEnabled() const;
 
+    qreal zoom() const;
+
     bool floating() const;
     void setFloating(bool floating);
 
@@ -118,6 +125,8 @@ signals:
 
     void condensedViewEnabledChanged();
 
+    void zoomChanged();
+
     void floatingChanged();
     void isFullScreenChanged();
 
@@ -149,6 +158,9 @@ private:
     void emitMixerSectionVisibilityChanged(MixerSectionType sectionType);
 
     void setViewMenuItemChecked(const muse::rcommand::CommandQuery& query, bool checked);
+
+    void stepZoom(int direction);
+    muse::uicomponents::MenuItem* buildZoomItem(const muse::TranslatableString& title, const muse::actions::ActionCode& code, bool enabled);
 
     void updateItems();
 

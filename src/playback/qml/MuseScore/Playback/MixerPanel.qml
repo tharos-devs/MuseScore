@@ -228,365 +228,385 @@ ColumnLayout {
         }
     }
 
-    StyledFlickable {
-        id: flickable
+    //! NOTE: the Mixer's Zoom in/out menu items scale the whole channel strip area
+    //! as one block (Qt Quick `scale`, anchored top-left), so none of the sections
+    //! below need to know about zoom at all. The flickable is given this container's
+    //! size divided by the zoom, so once scaled back up it exactly fills it; its
+    //! implicitHeight is multiplied back here so the panel's auto-fit-to-content
+    //! height (resizePanelToContentHeight) follows the zoomed size.
+    Item {
+        id: zoomContainer
 
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        //! NOTE: + channelItemWidth reserves the master channel's own slot at the
-        //! tail end -- master's delegate is excluded from contentColumn's normal
-        //! flow (zero width, see MixerPanelSection.qml) since it's rendered
-        //! pinned instead, but the scrollable range still needs to leave that
-        //! much room, or scrolling to the end would put the LAST REGULAR channel
-        //! directly underneath the pinned master column instead of stopping
-        //! just before it.
-        contentWidth: contentColumn.width + 1 + prv.masterChannelItemWidth // for trailing separator + reserved master slot
-        contentHeight: Math.max(contentColumn.height, height)
+        implicitHeight: flickable.implicitHeight * flickable.scale
 
-        implicitHeight: contentColumn.height
+        clip: true
 
-        interactive: (height < contentHeight || width < contentWidth) && !flickable.resourcePickingActive
+        StyledFlickable {
+            id: flickable
 
-        ScrollBar.horizontal: horizontalScrollBar
+            width: zoomContainer.width / scale
+            height: zoomContainer.height / scale
 
-        ScrollBar.vertical: StyledScrollBar { policy: ScrollBar.AlwaysOn }
+            scale: contextMenuModel.zoom > 0 ? contextMenuModel.zoom : 1
+            transformOrigin: Item.TopLeft
 
-        property bool completed: false
-        property bool resourcePickingActive: soundSection.resourcePickingActive || fxSection.resourcePickingActive
+            //! NOTE: + channelItemWidth reserves the master channel's own slot at the
+            //! tail end -- master's delegate is excluded from contentColumn's normal
+            //! flow (zero width, see MixerPanelSection.qml) since it's rendered
+            //! pinned instead, but the scrollable range still needs to leave that
+            //! much room, or scrolling to the end would put the LAST REGULAR channel
+            //! directly underneath the pinned master column instead of stopping
+            //! just before it.
+            contentWidth: contentColumn.width + 1 + prv.masterChannelItemWidth // for trailing separator + reserved master slot
+            contentHeight: Math.max(contentColumn.height, height)
 
-        function positionViewAtEnd() {
-            if (!flickable.completed) {
-                return
-            }
+            implicitHeight: contentColumn.height
 
-            if (flickable.contentY == flickable.contentHeight) {
-                return
-            }
+            interactive: (height < contentHeight || width < contentWidth) && !flickable.resourcePickingActive
 
-            flickable.contentY = flickable.contentHeight - flickable.height
-        }
+            ScrollBar.horizontal: horizontalScrollBar
 
-        onContentHeightChanged: {
-            flickable.positionViewAtEnd()
-        }
-
-        Component.onCompleted: {
-            flickable.completed = true
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-
-            onClicked: {
-                mixerPanelModel.clearSelection()
-            }
-        }
-
-        Row {
-            id: separators
-
-            anchors.fill: parent
-            anchors.leftMargin: prv.channelItemWidth + (contextMenuModel.labelsSectionVisible ? prv.headerWidth : 0)
-
-            spacing: prv.channelItemWidth
-
-            Repeater {
-                //! NOTE: -2 to drop both the boundary right before the master channel
-                //! and the trailing one right after it -- master is now pinned
-                //! (excluded from the normal scrolling flow, see
-                //! MixerPanelSection.qml), so neither boundary tracks real scrolled
-                //! content any more; the "before master" one is replaced by the
-                //! dedicated pinned separator below instead, and the trailing one has
-                //! nothing left to bound.
-                model: Math.max(0, mixerPanelModel.count - 2)
-
-                SeparatorLine { orientation: Qt.Vertical }
-            }
-        }
-
-        //! NOTE: this used to be the leading item in `separators` above (the boundary
-        //! right after the label column) -- pinned in lockstep with the sticky header
-        //! labels (see MixerPanelSection.qml's headerPinOffsetX) via the same
-        //! contentX-cancelling trick, since it would otherwise visibly detach from the
-        //! header as soon as the user scrolled.
-        SeparatorLine {
-            orientation: Qt.Vertical
-            visible: contextMenuModel.labelsSectionVisible
-            z: 2
-
-            x: flickable.contentX + prv.headerWidth
-        }
-
-        //! NOTE: right-edge analogue of the pinned separator above, for the master
-        //! channel's own pinned strip (see MixerPanelSection.qml's masterPinOffsetX) --
-        //! sits immediately to its left so it doesn't visually detach from it either.
-        SeparatorLine {
-            orientation: Qt.Vertical
-            visible: mixerPanelModel.count > 0
-            z: 2
-
-            x: prv.masterPinOffsetX - 1
-        }
-
-        //! NOTE: the aux drag-and-drop reorder gesture's drop-position indicator (see
-        //! MixerTitleSection.qml, the only section that actually drives this - titleSection
-        //! is that section's own id, so its auxDropBeforeIndex/etc. properties are read
-        //! directly from here). Drawn at this shared MixerPanel.qml level, spanning the
-        //! whole channel column (every section stacked, not just the Name row it's
-        //! dragged from), rather than as a per-row indicator local to MixerTitleSection -
-        //! a plain child of flickable (not one of the pinned/contentX-cancelled overlays
-        //! above) so it scrolls normally along with the channel it's pointing at.
-        Rectangle {
-            id: auxDropIndicator
-
-            visible: titleSection.auxDropBeforeIndex !== -2
-            z: 3
-
-            anchors.bottom: parent.bottom
-            height: contentColumn.height
-
-            width: 2
-            color: ui.theme.accentColor
-
-            x: {
-                if (!auxDropIndicator.visible) {
-                    return 0
-                }
-
-                let targetModelIndex
-                if (titleSection.auxDropBeforeIndex === -1) {
-                    targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxLastOfTypeIndex) + 1
-                } else {
-                    targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxDropBeforeIndex)
-                }
-
-                if (targetModelIndex < 0) {
-                    return 0
-                }
-
-                let columnStartX = contextMenuModel.labelsSectionVisible ? (prv.headerWidth + 1) : 0
-                return columnStartX + targetModelIndex * (prv.channelItemWidth + 1) - 1
-            }
-        }
-
-        Column {
-            id: contentColumn
-
-            anchors.bottom: parent.bottom
-            width: childrenRect.width
-            spacing: 0
+            ScrollBar.vertical: StyledScrollBar { policy: ScrollBar.AlwaysOn }
 
             property bool completed: false
+            property bool resourcePickingActive: soundSection.resourcePickingActive || fxSection.resourcePickingActive
 
-            Component.onCompleted: {
-                contentColumn.completed = true
+            function positionViewAtEnd() {
+                if (!flickable.completed) {
+                    return
+                }
+
+                if (flickable.contentY == flickable.contentHeight) {
+                    return
+                }
+
+                flickable.contentY = flickable.contentHeight - flickable.height
             }
 
-                MixerSoundSection {
-                    id: soundSection
+            onContentHeightChanged: {
+                flickable.positionViewAtEnd()
+            }
 
-                    visible: contextMenuModel.soundSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
-                    spacingAbove: 8
+            Component.onCompleted: {
+                flickable.completed = true
+            }
 
-                    model: mixerPanelModel
+            MouseArea {
+                anchors.fill: parent
+                z: -1
 
-                    navigationRowStart: 1
-                    needReadChannelName: prv.isPanelActivated
+                onClicked: {
+                    mixerPanelModel.clearSelection()
+                }
+            }
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+            Row {
+                id: separators
+
+                anchors.fill: parent
+                anchors.leftMargin: prv.channelItemWidth + (contextMenuModel.labelsSectionVisible ? prv.headerWidth : 0)
+
+                spacing: prv.channelItemWidth
+
+                Repeater {
+                    //! NOTE: -2 to drop both the boundary right before the master channel
+                    //! and the trailing one right after it -- master is now pinned
+                    //! (excluded from the normal scrolling flow, see
+                    //! MixerPanelSection.qml), so neither boundary tracks real scrolled
+                    //! content any more; the "before master" one is replaced by the
+                    //! dedicated pinned separator below instead, and the trailing one has
+                    //! nothing left to bound.
+                    model: Math.max(0, mixerPanelModel.count - 2)
+
+                    SeparatorLine { orientation: Qt.Vertical }
+                }
+            }
+
+            //! NOTE: this used to be the leading item in `separators` above (the boundary
+            //! right after the label column) -- pinned in lockstep with the sticky header
+            //! labels (see MixerPanelSection.qml's headerPinOffsetX) via the same
+            //! contentX-cancelling trick, since it would otherwise visibly detach from the
+            //! header as soon as the user scrolled.
+            SeparatorLine {
+                orientation: Qt.Vertical
+                visible: contextMenuModel.labelsSectionVisible
+                z: 2
+
+                x: flickable.contentX + prv.headerWidth
+            }
+
+            //! NOTE: right-edge analogue of the pinned separator above, for the master
+            //! channel's own pinned strip (see MixerPanelSection.qml's masterPinOffsetX) --
+            //! sits immediately to its left so it doesn't visually detach from it either.
+            SeparatorLine {
+                orientation: Qt.Vertical
+                visible: mixerPanelModel.count > 0
+                z: 2
+
+                x: prv.masterPinOffsetX - 1
+            }
+
+            //! NOTE: the aux drag-and-drop reorder gesture's drop-position indicator (see
+            //! MixerTitleSection.qml, the only section that actually drives this - titleSection
+            //! is that section's own id, so its auxDropBeforeIndex/etc. properties are read
+            //! directly from here). Drawn at this shared MixerPanel.qml level, spanning the
+            //! whole channel column (every section stacked, not just the Name row it's
+            //! dragged from), rather than as a per-row indicator local to MixerTitleSection -
+            //! a plain child of flickable (not one of the pinned/contentX-cancelled overlays
+            //! above) so it scrolls normally along with the channel it's pointing at.
+            Rectangle {
+                id: auxDropIndicator
+
+                visible: titleSection.auxDropBeforeIndex !== -2
+                z: 3
+
+                anchors.bottom: parent.bottom
+                height: contentColumn.height
+
+                width: 2
+                color: ui.theme.accentColor
+
+                x: {
+                    if (!auxDropIndicator.visible) {
+                        return 0
                     }
+
+                    let targetModelIndex
+                    if (titleSection.auxDropBeforeIndex === -1) {
+                        targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxLastOfTypeIndex) + 1
+                    } else {
+                        targetModelIndex = mixerPanelModel.auxBusModelIndex(titleSection.auxDropBeforeIndex)
+                    }
+
+                    if (targetModelIndex < 0) {
+                        return 0
+                    }
+
+                    let columnStartX = contextMenuModel.labelsSectionVisible ? (prv.headerWidth + 1) : 0
+                    return columnStartX + targetModelIndex * (prv.channelItemWidth + 1) - 1
+                }
+            }
+
+            Column {
+                id: contentColumn
+
+                anchors.bottom: parent.bottom
+                width: childrenRect.width
+                spacing: 0
+
+                property bool completed: false
+
+                Component.onCompleted: {
+                    contentColumn.completed = true
                 }
 
-                MixerGainSection {
-                    id: gainSection
+                    MixerSoundSection {
+                        id: soundSection
 
-                    visible: contextMenuModel.gainSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        visible: contextMenuModel.soundSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
+                        spacingAbove: 8
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 50
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 1
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerFxSection {
-                    id: fxSection
+                    MixerGainSection {
+                        id: gainSection
 
-                    visible: contextMenuModel.audioFxSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        visible: contextMenuModel.gainSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 100
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 50
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerAuxSendsSection {
-                    id: auxSendsSection
+                    MixerFxSection {
+                        id: fxSection
 
-                    visible: contextMenuModel.auxSendsSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
+                        visible: contextMenuModel.audioFxSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        model: mixerPanelModel
 
-                    model: mixerPanelModel
+                        navigationRowStart: 100
+                        needReadChannelName: prv.isPanelActivated
 
-                    navigationRowStart: 200
-                    needReadChannelName: prv.isPanelActivated
-
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerBalanceSection {
-                    id: balanceSection
+                    MixerAuxSendsSection {
+                        id: auxSendsSection
 
-                    visible: contextMenuModel.balanceSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        visible: contextMenuModel.auxSendsSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
 
-                    model: mixerPanelModel
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    navigationRowStart: 300
-                    needReadChannelName: prv.isPanelActivated
+                        model: mixerPanelModel
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        navigationRowStart: 200
+                        needReadChannelName: prv.isPanelActivated
+
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerVolumeSection {
-                    id: volumeSection
+                    MixerBalanceSection {
+                        id: balanceSection
 
-                    visible: contextMenuModel.volumeSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        visible: contextMenuModel.balanceSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 400
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 300
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerFaderSection {
-                    id: faderSection
+                    MixerVolumeSection {
+                        id: volumeSection
 
-                    visible: contextMenuModel.faderSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
-                    spacingAbove: -3
-                    spacingBelow: -2
+                        visible: contextMenuModel.volumeSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 500
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 400
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerMuteAndSoloSection {
-                    id: muteAndSoloSection
+                    MixerFaderSection {
+                        id: faderSection
 
-                    visible: contextMenuModel.muteAndSoloSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
+                        visible: contextMenuModel.faderSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
+                        spacingAbove: -3
+                        spacingBelow: -2
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 600
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 500
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
 
-                MixerTitleSection {
-                    id: titleSection
+                    MixerMuteAndSoloSection {
+                        id: muteAndSoloSection
 
-                    visible: contextMenuModel.titleSectionVisible
-                    headerVisible: contextMenuModel.labelsSectionVisible
-                    headerWidth: prv.headerWidth
-                    channelItemWidth: prv.channelItemWidth
-                    masterChannelItemWidth: prv.masterChannelItemWidth
-                    condensedView: contextMenuModel.condensedViewEnabled
-                    headerPinOffsetX: flickable.contentX
-                    masterPinOffsetX: prv.masterPinOffsetX
-                    spacingAbove: 2
-                    spacingBelow: 0
+                        visible: contextMenuModel.muteAndSoloSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
 
-                    model: mixerPanelModel
+                        model: mixerPanelModel
 
-                    navigationRowStart: 700
-                    needReadChannelName: prv.isPanelActivated
+                        navigationRowStart: 600
+                        needReadChannelName: prv.isPanelActivated
 
-                    onNavigateControlIndexChanged: function(index) {
-                        prv.setNavigateControlIndex(index)
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
                     }
-                }
+
+                    MixerTitleSection {
+                        id: titleSection
+
+                        visible: contextMenuModel.titleSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
+                        spacingAbove: 2
+                        spacingBelow: 0
+
+                        model: mixerPanelModel
+
+                        navigationRowStart: 700
+                        needReadChannelName: prv.isPanelActivated
+
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
+                    }
+            }
         }
     }
 
