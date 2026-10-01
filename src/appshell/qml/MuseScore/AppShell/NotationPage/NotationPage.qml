@@ -542,6 +542,10 @@ DockPage {
                 Component.onCompleted: {
                     timelinePanel.contextMenuModel = contextMenuModel
                 }
+
+                Component.onDestruction: {
+                    timelinePanel.contextMenuModel = null
+                }
             }
         },
 

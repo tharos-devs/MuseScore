@@ -24,15 +24,20 @@
 
 #include <vector>
 
+#include <QElapsedTimer>
 #include <QGraphicsView>
 #include <QSplitter>
+#include <QTimer>
 
 #include "modularity/ioc.h"
 #include "ui/iuiconfiguration.h"
 #include "notation/inotation.h"
 #include "project/iprojectvideosettings.h"
+#include "project/iprojectaudiosettings.h"
 #include "async/asyncable.h"
+#include "context/iglobalcontext.h"
 #include "actions/iactionsdispatcher.h"
+#include "interactive/iinteractive.h"
 #include "playback/iplaybackcontroller.h"
 #include "notationscene/inotationsceneconfiguration.h"
 
@@ -78,6 +83,9 @@ private:
     std::map<MouseOverValue, QPixmap*> _mouseoverMap;
     std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> _oldItemInfo;
 
+    //! NOTE: row = instrument row (part index), labelRow = row among all the labels (metas included)
+    void addTrackButtons(int row, unsigned labelRow, int ypos, int height, bool anythingSoloed);
+
     void resizeEvent(QResizeEvent*) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -118,7 +126,9 @@ class Timeline : public QGraphicsView, public muse::Contextable, public muse::as
     muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
     muse::GlobalInject<INotationSceneConfiguration> configuration;
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
+    muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
+    muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
 public:
     enum class ItemType {
@@ -235,6 +245,23 @@ private:
     INotationInteractionPtr interaction() const;
     engraving::Score* score() const;
     project::IProjectVideoSettingsPtr videoSettings() const;
+    project::IProjectAudioSettingsPtr audioSettings() const;
+
+    //! NOTE: these take an instrument ROW (= part index, see getParts()), see the .cpp
+    QColor trackColor(int row, const engraving::Fraction& tick) const;
+    void editTrackColor(int row);
+
+    using SoloMuteState = INotationSoloMuteState::SoloMuteState;
+    engraving::InstrumentTrackId staffTrackId(int row) const;
+    std::vector<const engraving::Part*> rowAudioParts(int row) const;
+    std::vector<engraving::InstrumentTrackId> rowTrackIds(int row) const;
+    QColor partTrackColor(const engraving::Part* part, const engraving::Fraction& tick) const;
+    SoloMuteState trackSoloMuteState(int row) const;
+    bool isTrackMutedBySolo(int row) const;
+    bool isTrackMutedBySolo(int row, bool anythingSoloed) const;
+    bool isAnythingSoloed() const;
+    void toggleTrackMute(int row);
+    void toggleTrackSolo(int row);
     QString formatVideoTimecode(int videoPositionMs) const;
 
 private slots:
@@ -282,15 +309,55 @@ private:
 
     static const std::string& metaRowId(void (Timeline::* func)(engraving::Segment*, int*, int));
     void initMetas();
+
+    //! NOTE: playback cursor, see the .cpp
+    void initPlaybackCursor();
+    void onPlaybackStatusChanged();
+    void updatePlaybackCursor();
+    qreal playbackCursorX(int tick) const;
+    void ensurePlaybackCursorVisible(qreal x);
+
+    QGraphicsLineItem* m_playbackCursorItem = nullptr;
+    QTimer m_playbackCursorTimer;
+    QElapsedTimer m_elapsedTimer;
+    muse::audio::secs_t m_lastPlaybackPosition = 0;
+    qint64 m_lastPlaybackPositionUpdateTimeNs = 0;
+    std::vector<int> m_measureStartTicks;
+
+    std::vector<QColor> trackColorsSnapshot() const;
+    void updateDefaultTrackColor();
+    void scheduleLabelsUpdate();
+
+    bool m_labelsUpdateScheduled = false;
+
+    project::IProjectAudioSettingsPtr m_audioSettings;
+    std::vector<QColor> m_trackColors;
+    QColor m_defaultTrackColor;
     void applyMetaRowsVisibility();
 
     bool collapsed() const { return _collapsedMeta; }
     void setCollapsed(bool st) { _collapsedMeta = st; }
 
     engraving::Staff* numToStaff(int staff);
+
+    const std::vector<engraving::Part*>& timelineParts() const;
+
+    struct RowsCache {
+        const engraving::Score* score = nullptr;
+        bool staveSharing = false;
+        std::vector<engraving::Part*> sourceParts;
+        std::vector<engraving::Part*> parts;
+    };
+    mutable RowsCache m_rowsCache;
+    engraving::Part* rowPart(int row) const;
+    QString partLabel(engraving::Part* part) const;
+    int staffRow(engraving::staff_idx_t staffIdx) const;
+    engraving::staff_idx_t rowFirstStaff(int row) const;
+    engraving::staff_idx_t rowLastStaff(int row) const;
     void toggleShow(int staff);
     QString cursorIsOn(const QPoint& cursorPos);
 
     void seekSelection();
+    engraving::EngravingItem* firstElementInRow(engraving::Measure* measure, int row) const;
 };
 }
