@@ -186,10 +186,16 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
         return;
     }
 
+    //! NOTE The MIDI port names are reported by the plugin once loaded, they aren't saved: not a project change
+    const bool onlyMidiPortNamesChanged = it != m_trackInputParamsMap.end()
+                                          && it->second.hasSameSource(params)
+                                          && it->second.midiPort == params.midiPort
+                                          && it->second.midiChannel == params.midiChannel;
+
     m_trackInputParamsMap.insert_or_assign(partId, params);
     m_trackInputParamsChanged.send(partId);
 
-    if (notifySettingsChanged) {
+    if (notifySettingsChanged && !onlyMidiPortNamesChanged) {
         m_settingsChanged.notify();
     }
 }
@@ -569,6 +575,8 @@ AudioInputParams ProjectAudioSettings::inputParamsFromJson(const QJsonObject& ob
     AudioInputParams result;
     result.resourceMeta = resourceMetaFromJson(object.value("resourceMeta").toObject());
     result.configuration = unitConfigFromJson(object.value("unitConfiguration").toObject());
+    result.midiPort = object.value("midiPort").toInt(0);
+    result.midiChannel = object.value("midiChannel").toInt(0);
 
     return result;
 }
@@ -690,6 +698,14 @@ QJsonObject ProjectAudioSettings::inputParamsToJson(const AudioInputParams& para
     QJsonObject result;
     result.insert("resourceMeta", resourceMetaToJson(params.resourceMeta));
     result.insert("unitConfiguration", unitConfigToJson(params.configuration));
+
+    //! NOTE Only written when not the default (first port, channel 1), so older versions read the same file
+    if (params.midiPort != 0) {
+        result.insert("midiPort", params.midiPort);
+    }
+    if (params.midiChannel != 0) {
+        result.insert("midiChannel", params.midiChannel);
+    }
 
     return result;
 }

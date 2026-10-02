@@ -45,6 +45,9 @@ static const QString VST_MENU_ITEM_ID("VST3");
 static const QString SOUNDFONTS_MENU_ITEM_ID("SoundFonts");
 static const QString MUSE_MENU_ITEM_ID("MuseSounds");
 static const QString GET_MORE_SOUNDS_ID("getMoreSounds");
+static const QString MIDI_PORT_ITEM_ID_PREFIX("midiPort\\");
+static const QString MIDI_CHANNEL_ITEM_ID_PREFIX("midiChannel\\");
+static constexpr int MIDI_CHANNEL_COUNT = 16;
 
 static const muse::String MS_BASIC_SOUNDFONT_NAME(u"MS Basic");
 
@@ -91,7 +94,7 @@ void InputResourceItem::requestAvailableResources()
                 buildMenuItem(makeMenuResourceItemId(muse::audio::resourceTypeFromString(m_currentInputParams.resourceMeta.type),
                                                      currentResourceId),
                               title(),
-                              /*checked*/ true, /*subItems*/ QVariantList(), /*includeInFilteredLists*/ false);
+                              /*checked*/ true, buildMidiRoutingMenuItems(), /*includeInFilteredLists*/ false);
 
             result << buildSeparator();
         }
@@ -131,6 +134,16 @@ void InputResourceItem::requestAvailableResources()
 
 void InputResourceItem::handleMenuItem(const QString& menuItemId)
 {
+    if (menuItemId.startsWith(MIDI_PORT_ITEM_ID_PREFIX)) {
+        setMidiRouting(menuItemId.mid(MIDI_PORT_ITEM_ID_PREFIX.size()).toInt(), m_currentInputParams.midiChannel);
+        return;
+    }
+
+    if (menuItemId.startsWith(MIDI_CHANNEL_ITEM_ID_PREFIX)) {
+        setMidiRouting(m_currentInputParams.midiPort, menuItemId.mid(MIDI_CHANNEL_ITEM_ID_PREFIX.size()).toInt());
+        return;
+    }
+
     if (menuItemId == GET_MORE_SOUNDS_ID) {
         const QString url = QString::fromStdString(globalConfiguration()->museHubWebUrl());
         const QString urlParams("muse-sounds?utm_source=mss-mixer&utm_medium=mh&utm_campaign=mss-mixer-ms-mainpage");
@@ -184,6 +197,9 @@ void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
 
     m_currentInputParams.resourceMeta = newMeta;
     m_currentInputParams.configuration.clear();
+    m_currentInputParams.midiPort = 0;
+    m_currentInputParams.midiChannel = 0;
+    m_currentInputParams.midiPortNames.clear();
 
     emit titleChanged();
     emit isBlankChanged();
@@ -191,6 +207,53 @@ void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
     emit inputParamsChanged();
 
     requestToLaunchNativeEditorView();
+}
+
+//! NOTE Submenu of the current sound's line: where a VST3 instrument receives its MIDI
+//! (port = the plugin's event input, only listed when it has several, and channel)
+QVariantList InputResourceItem::buildMidiRoutingMenuItems() const
+{
+    QVariantList result;
+
+    if (m_currentInputParams.type() != AudioSourceType::Vsti) {
+        return result;
+    }
+
+    const std::vector<String>& portNames = m_currentInputParams.midiPortNames;
+    if (portNames.size() > 1) {
+        QVariantList portItems;
+        for (int port = 0; port < static_cast<int>(portNames.size()); ++port) {
+            //: %1 is the number of a MIDI port of a VST3 instrument, %2 its name given by the plugin
+            const QString portTitle = muse::qtrc("playback", "Port %1: %2").arg(port + 1).arg(portNames.at(port).toQString());
+            portItems << buildMenuItem(MIDI_PORT_ITEM_ID_PREFIX + QString::number(port), portTitle,
+                                       m_currentInputParams.midiPort == port);
+        }
+
+        result << buildMenuItem(QStringLiteral("midiPortMenu"), muse::qtrc("playback", "MIDI port"), /*checked*/ false, portItems,
+                                /*includeInFilteredLists*/ false);
+        result << buildSeparator();
+    }
+
+    for (int channel = 0; channel < MIDI_CHANNEL_COUNT; ++channel) {
+        //: %1 is a MIDI channel number (1-16)
+        const QString channelTitle = muse::qtrc("playback", "MIDI channel %1").arg(channel + 1);
+        result << buildMenuItem(MIDI_CHANNEL_ITEM_ID_PREFIX + QString::number(channel), channelTitle,
+                                m_currentInputParams.midiChannel == channel);
+    }
+
+    return result;
+}
+
+void InputResourceItem::setMidiRouting(int port, int channel)
+{
+    if (m_currentInputParams.midiPort == port && m_currentInputParams.midiChannel == channel) {
+        return;
+    }
+
+    m_currentInputParams.midiPort = port;
+    m_currentInputParams.midiChannel = channel;
+
+    emit inputParamsChanged();
 }
 
 QString InputResourceItem::title() const
