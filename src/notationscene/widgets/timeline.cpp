@@ -2568,9 +2568,29 @@ void Timeline::mousePressEvent(QMouseEvent* event)
                     }
                 }
 
+                //! NOTE: like a plain click on an instrument cell, but for all the visible
+                //! instruments: moves the playback position to the start of the measure
                 if (measure) {
+                    measure = measure->coveringMMRestOrThis();
+
+                    std::vector<const Part*> visibleParts;
+                    for (const Part* part : timelineParts()) {
+                        if (part->show()) {
+                            visibleParts.push_back(part);
+                        }
+                    }
+
+                    if (EngravingItem* firstElement = firstElementInParts(measure, visibleParts)) {
+                        interaction()->select({ firstElement }, SelectType::SINGLE);
+                    } else {
+                        interaction()->select({ measure }, SelectType::SINGLE, 0);
+                        interaction()->select({ measure }, SelectType::RANGE, score()->nstaves() - 1);
+                    }
+
                     interaction()->showItem(measure);
+                    seekSelection();
                 }
+                return;
             }
             if (scenePt.y() < bottomOfMeta) {
                 return;
@@ -2720,20 +2740,28 @@ EngravingItem* Timeline::firstElementInRow(Measure* measure, int row) const
         return nullptr;
     }
 
+    return firstElementInParts(measure, { part });
+}
+
+//! NOTE: same as firstElementInRow(), on the staves of all the given parts (in score order)
+EngravingItem* Timeline::firstElementInParts(Measure* measure, const std::vector<const Part*>& parts) const
+{
     for (Segment* segment = measure->first(SegmentType::ChordRest); segment; segment = segment->next(SegmentType::ChordRest)) {
-        for (const Staff* staff : part->staves()) {
-            for (voice_idx_t voice = 0; voice < VOICES; ++voice) {
-                EngravingItem* element = segment->element(staff->idx() * VOICES + voice);
-                if (!element) {
-                    continue;
-                }
+        for (const Part* part : parts) {
+            for (const Staff* staff : part->staves()) {
+                for (voice_idx_t voice = 0; voice < VOICES; ++voice) {
+                    EngravingItem* element = segment->element(staff->idx() * VOICES + voice);
+                    if (!element) {
+                        continue;
+                    }
 
-                //! NOTE: a chord is selected through its notes, like clicking it in the score
-                if (element->isChord()) {
-                    return toChord(element)->upNote();
-                }
+                    //! NOTE: a chord is selected through its notes, like clicking it in the score
+                    if (element->isChord()) {
+                        return toChord(element)->upNote();
+                    }
 
-                return element;
+                    return element;
+                }
             }
         }
     }
