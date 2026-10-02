@@ -5,6 +5,14 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-02
+- The articulation lane now also stops on rests: an articulation set on a rest applies from the next note on (also on a staff with rests only). Its menu starts with the articulation last placed on the track (with its folders, e.g. "Long > Con vibrato") and ends with "Edit articulation map…".
+- Articulation lane chips keep their size when hovered: their full name shows in a tooltip while Cmd is held, a click always goes to the note under the target marker (even over a chip), and the cursor stays the default arrow (a double arrow only while dragging a chip). The hovered chip's text stays readable with light colors.
+- In the articulation map editor, "Copy" duplicates the selected articulation right below it (name and triggers), "New folder" always adds the folder at the end of the map, outside of any folder, and dropping an item below the last row moves it there (that drop didn't move anything before). The "Note On + Off" type is now labelled "Note On/Off".
+- Cmd+click on a Tempo, Volume, Pan or MIDI CC automation point opens a small field to type its value in its own unit (BPM, dB, balance, MIDI value), kept within bounds: Enter or a click elsewhere applies it, Escape cancels. Automation curves show the default arrow cursor (no cross).
+- Dynamics automation values now read as dynamics ("f", "p +50%") instead of a percentage, and dragging or adding a point draws it to the dynamics' own levels (Alt: free placement).
+- The staff menu's "Automation type" submenu (automation mode) starts with "Delete selected points": erases the points of the curve shown within the range selection, keeping those the score drives.
+- While playing, VST3 instruments now hear the notes and all MIDI controllers played on the MIDI keyboard (MuseScore ignored them during playback), and pressing a MIDI key never starts note input. All controllers are passed on, not only modulation and sustain.
+- A MIDI input activity light in the status bar, next to the zoom: it flashes green on every MIDI message received.
 - Clicking a measure number in the Timeline's Measures row now moves the playback position to that measure (it selects the measure's first element, all visible instruments), like a plain click on an instrument cell; it used to only scroll the score there.
 
 ### 2026-10-01
