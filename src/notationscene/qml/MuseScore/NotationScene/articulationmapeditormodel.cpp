@@ -52,6 +52,7 @@ struct ArticulationMapEditorModel::Node {
     bool hasImplicitAliases = true; // re-derived from the name when saving, see ArticulationMapParser::implicitAliases
     std::optional<int> keyswitchOffsetMs;
     int notesOffsetMs = 0;
+    std::optional<int> channel; // 0-based, unset = the track's
     std::optional<uint32_t> color;
     bool disabled = false;
 
@@ -173,6 +174,7 @@ std::unique_ptr<ArticulationMapEditorModel::Node> ArticulationMapEditorModel::co
     copy->messages = entry.messages;
     copy->keyswitchOffsetMs = entry.keyswitchOffsetMs;
     copy->notesOffsetMs = entry.notesOffsetMs;
+    copy->channel = entry.channel;
     copy->color = entry.color;
     copy->disabled = entry.disabled;
     return copy;
@@ -331,6 +333,11 @@ QString ArticulationMapEditorModel::sequenceText(const Node* node) const
             parts << QString("PC%1").arg(message.number);
             break;
         }
+    }
+
+    if (node->channel) {
+        //: %1 is a MIDI channel number (1-16), shown after the activation sequence of an articulation
+        parts << muse::qtrc("notation", "Ch %1").arg(*node->channel + 1);
     }
 
     return parts.join(" | ");
@@ -522,6 +529,7 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
         node->hasImplicitAliases = entry.aliases == ArticulationMapParser::implicitAliases(entry.id);
         node->keyswitchOffsetMs = entry.keyswitchOffsetMs;
         node->notesOffsetMs = entry.notesOffsetMs;
+        node->channel = entry.channel;
         node->color = entry.color;
         node->disabled = entry.disabled;
 
@@ -571,7 +579,8 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path)
                 continue;
             }
 
-            if (child->messages.empty()) {
+            // A channel alone is enough, e.g. one instrument per channel in Kontakt
+            if (child->messages.empty() && !child->channel) {
                 withoutMessages << pathOf(child.get());
                 continue;
             }
@@ -582,6 +591,7 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path)
             entry.aliases = child->hasImplicitAliases ? ArticulationMapParser::implicitAliases(path) : child->aliases;
             entry.keyswitchOffsetMs = child->keyswitchOffsetMs;
             entry.notesOffsetMs = child->notesOffsetMs;
+            entry.channel = child->channel;
             entry.color = child->color;
             entry.disabled = child->disabled;
 
@@ -843,6 +853,12 @@ int ArticulationMapEditorModel::selectedNotesOffsetMs() const
 {
     const Node* entry = selectedEntry();
     return entry ? entry->notesOffsetMs : 0;
+}
+
+int ArticulationMapEditorModel::selectedChannel() const
+{
+    const Node* entry = selectedEntry();
+    return entry && entry->channel ? *entry->channel + 1 : 0;
 }
 
 QVariantList ArticulationMapEditorModel::selectedMessages() const
@@ -1172,6 +1188,21 @@ void ArticulationMapEditorModel::setSelectedKeyswitchOffsetMs(int ms)
     }
 
     entry->keyswitchOffsetMs = ms;
+    markDirty();
+    emit selectionChanged();
+}
+
+void ArticulationMapEditorModel::setSelectedChannel(int channel)
+{
+    Node* entry = selectedEntry();
+    const std::optional<int> newChannel = channel >= 1 && channel <= ArticulationMapParser::MIDI_CHANNEL_COUNT
+                                          ? std::optional<int>(channel - 1) : std::nullopt;
+    if (!entry || entry->channel == newChannel) {
+        return;
+    }
+
+    entry->channel = newChannel;
+    notifyRowChanged(entry);
     markDirty();
     emit selectionChanged();
 }

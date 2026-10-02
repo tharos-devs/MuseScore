@@ -35,6 +35,8 @@ namespace mu::engraving {
 //!     *C0       Legato             '*' marks the default articulation
 //!     D0        Spiccato  = staccato, staccatissimo       score articulations selecting it automatically
 //!     cc32=10   Pizzicato = pizzicato  ks=-30ms delay=-60ms color=#D03B3B
+//!     C1        Tremolo  ch=2      plays on MIDI channel 2 (1-16) instead of the track's
+//!     ch=3      Harmonics          a channel alone, no message: e.g. one instrument per channel in Kontakt
 //!     C0D1cc3=64 Legato > Fast     chained messages; '>' nests submenus
 //!     C#0       Staccatissimo      without '=', a name matching a score articulation is its own alias
 //!     -E0       Tremolo            '-' disables an articulation: kept, but never offered nor sent
@@ -66,6 +68,7 @@ public:
 
     static constexpr int DEFAULT_MIDDLE_C_OCTAVE = 3; // C3 = 60, as in Kontakt, Cubase, Synchron Player...
     static constexpr uint8_t DEFAULT_KEYSWITCH_VELOCITY = 100;
+    static constexpr int MIDI_CHANNEL_COUNT = 16;
 
     static Result parse(const muse::String& text);
 

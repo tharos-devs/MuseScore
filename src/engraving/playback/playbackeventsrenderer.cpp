@@ -140,7 +140,8 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
         source = ResolvedArticulation::Source::Default;
     }
 
-    const bool resolved = entry && !entry->messages.empty();
+    //! NOTE: an articulation may only change the channel (e.g. one instrument per channel in Kontakt)
+    const bool resolved = entry && (!entry->messages.empty() || entry->channel);
 
     if (recordResolved) {
         ctx.playbackCtx->setResolvedArticulation(chord->track(), chord->tick().ticks(),
@@ -161,6 +162,7 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
     event.messages = entry->messages;
     event.messagesOffset = tickOffsetDuration + timestamp_t(map->keyswitchOffsetMsFor(*entry) * 1000);
     event.notesOffset = timestamp_t(entry->notesOffsetMs * 1000);
+    event.channel = entry->channel.value_or(-1);
     event.layerIdx = static_cast<mpe::layer_idx_t>(chord->track());
 
     events.emplace_back(std::move(event));

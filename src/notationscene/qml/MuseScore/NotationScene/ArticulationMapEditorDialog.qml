@@ -654,6 +654,31 @@ StyledDialogView {
                         }
                     }
 
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledTextLabel {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                            text: qsTrc("notation", "MIDI channel")
+                        }
+
+                        StyledDropdown {
+                            Layout.preferredWidth: 90
+                            model: {
+                                var items = [ { text: qsTrc("notation", "Track"), value: 0 } ]
+                                for (var channel = 1; channel <= 16; ++channel) {
+                                    items.push({ text: String(channel), value: channel })
+                                }
+                                return items
+                            }
+                            currentIndex: editorModel.selectedChannel
+                            onActivated: function(index, value) {
+                                editorModel.setSelectedChannel(value)
+                            }
+                        }
+                    }
+
                     StyledTextLabel {
                         Layout.topMargin: 8
                         horizontalAlignment: Text.AlignLeft

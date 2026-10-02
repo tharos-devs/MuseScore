@@ -287,6 +287,8 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
 {
     static const std::regex OPTION_REGEX(R"((^|\s)(ks|delay)\s*=\s*(-?\d+)\s*ms\b)", std::regex::icase);
     static const std::regex COLOR_REGEX(R"((^|\s)color\s*=\s*#([0-9a-f]{6}|[0-9a-f]{3})\b)", std::regex::icase);
+    static const std::regex CHANNEL_REGEX(R"((^|\s)ch\s*=\s*(-?\d+)\b)", std::regex::icase);
+    static const std::regex CHANNEL_CODE_REGEX(R"(^ch=(-?\d+)$)", std::regex::icase);
 
     Result result;
     ExpressionMap& map = result.map;
@@ -358,12 +360,34 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
         ExpressionMapEntry entry;
         entry.disabled = isDisabled;
 
-        if (!parseMessages(String::fromStdString(first), middleCOctave, entry.messages)) {
+        //! NOTE: 1-16 in the file, 0-based in the entry
+        auto readChannel = [&](const std::string& number) {
+            const std::optional<int> channel = toInt(number);
+            if (!channel || *channel < 1 || *channel > MIDI_CHANNEL_COUNT) {
+                addError(lineIdx, "ch= expects a MIDI channel between 1 and " + std::to_string(MIDI_CHANNEL_COUNT));
+                return;
+            }
+            entry.channel = *channel - 1;
+        };
+
+        std::smatch match;
+
+        if (std::regex_match(first, match, CHANNEL_CODE_REGEX)) {
+            readChannel(match[1].str());
+            if (!entry.channel) {
+                continue;
+            }
+        } else if (!parseMessages(String::fromStdString(first), middleCOctave, entry.messages)) {
             addError(lineIdx, "invalid MIDI code \"" + first + "\"");
             continue;
         }
 
-        std::smatch match;
+        // Before the aliases are looked for: "ch=2" isn't an alias list
+        if (std::regex_search(rest, match, CHANNEL_REGEX)) {
+            readChannel(match[2].str());
+            rest = match.prefix().str() + " " + match.suffix().str();
+        }
+
         std::string remaining;
         std::string searched = rest;
         while (std::regex_search(searched, match, OPTION_REGEX)) {

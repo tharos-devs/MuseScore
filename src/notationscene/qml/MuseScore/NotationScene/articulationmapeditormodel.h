@@ -68,6 +68,8 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(bool selectedHasKeyswitchOffset READ selectedHasKeyswitchOffset NOTIFY selectionChanged)
     Q_PROPERTY(int selectedKeyswitchOffsetMs READ selectedKeyswitchOffsetMs NOTIFY selectionChanged)
     Q_PROPERTY(int selectedNotesOffsetMs READ selectedNotesOffsetMs NOTIFY selectionChanged)
+    //! NOTE: 1-16, 0 = the track's channel
+    Q_PROPERTY(int selectedChannel READ selectedChannel NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList selectedMessages READ selectedMessages NOTIFY selectionChanged)
 
     muse::ContextInject<muse::IInteractive> interactive = { this };
@@ -120,6 +122,7 @@ public:
     bool selectedHasKeyswitchOffset() const;
     int selectedKeyswitchOffsetMs() const;
     int selectedNotesOffsetMs() const;
+    int selectedChannel() const;
     QVariantList selectedMessages() const;
 
     Q_INVOKABLE void newMap();
@@ -155,6 +158,7 @@ public:
     Q_INVOKABLE void setSelectedHasKeyswitchOffset(bool has);
     Q_INVOKABLE void setSelectedKeyswitchOffsetMs(int ms);
     Q_INVOKABLE void setSelectedNotesOffsetMs(int ms);
+    Q_INVOKABLE void setSelectedChannel(int channel);
 
     Q_INVOKABLE void addMessage();
     Q_INVOKABLE void removeMessage(int index);

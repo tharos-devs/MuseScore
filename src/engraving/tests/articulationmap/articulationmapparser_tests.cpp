@@ -24,6 +24,7 @@
 
 #include "engraving/articulationmap/articulationmapdata.h"
 #include "engraving/articulationmap/articulationmapparser.h"
+#include "engraving/articulationmap/articulationmapwriter.h"
 #include "engraving/articulationmap/internal/articulationmaprw.h"
 
 using namespace mu::engraving;
@@ -190,4 +191,47 @@ TEST_F(ArticulationMapParser_Tests, RW_RoundTrip)
     ASSERT_TRUE(read.map(trackId));
     EXPECT_EQ(*read.map(trackId), *data.map(trackId));
     EXPECT_EQ(read.marks(), data.marks());
+}
+
+TEST_F(ArticulationMapParser_Tests, Parse_Channels)
+{
+    // [GIVEN] Articulations on their own MIDI channel, one with a channel alone
+    const String text = u"*C0    Legato\n"
+                        u"D0     Spiccato  ch=2 = staccato\n"
+                        u"ch=3   Pizzicato\n"
+                        u"E0     Tremolo   ch=0\n"
+                        u"F0     Trill     ch=17\n";
+
+    const ArticulationMapParser::Result result = ArticulationMapParser::parse(text);
+
+    // [THEN] Channels are read 1-based and stored 0-based, out-of-range ones are errors
+    ASSERT_EQ(result.errors.size(), 2);
+    EXPECT_EQ(result.errors[0].line, 4);
+    EXPECT_EQ(result.errors[1].line, 5);
+
+    const ExpressionMap& map = result.map;
+    ASSERT_TRUE(map.entry(u"Legato"));
+    EXPECT_FALSE(map.entry(u"Legato")->channel);
+
+    // [THEN] "ch=2" isn't mistaken for the alias list
+    const ExpressionMapEntry* spiccato = map.entry(u"Spiccato");
+    ASSERT_TRUE(spiccato);
+    EXPECT_EQ(spiccato->channel, 1);
+    EXPECT_EQ(spiccato->aliases, std::vector<mpe::ArticulationType> { mpe::ArticulationType::Staccato });
+
+    const ExpressionMapEntry* pizzicato = map.entry(u"Pizzicato");
+    ASSERT_TRUE(pizzicato);
+    EXPECT_TRUE(pizzicato->messages.empty());
+    EXPECT_EQ(pizzicato->channel, 2);
+}
+
+TEST_F(ArticulationMapParser_Tests, Write_Channels_RoundTrip)
+{
+    const ArticulationMapParser::Result file = ArticulationMapParser::parse(u"*C0 Legato ch=2\nch=3 Pizzicato\n");
+    ASSERT_TRUE(file.errors.empty());
+
+    const ArticulationMapParser::Result reread = ArticulationMapParser::parse(ArticulationMapWriter::write(file));
+
+    EXPECT_TRUE(reread.errors.empty());
+    EXPECT_EQ(reread.map.entries, file.map.entries);
 }

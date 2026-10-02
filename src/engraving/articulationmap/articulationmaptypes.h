@@ -41,14 +41,15 @@ struct ExpressionMapEntry {
     std::vector<muse::mpe::ArticulationType> aliases; // score articulations that select this entry automatically
     std::optional<int> keyswitchOffsetMs; // overrides ExpressionMap::keyswitchOffsetMs
     int notesOffsetMs = 0; // shifts the notes played with this articulation (e.g. slow legato attacks)
+    std::optional<int> channel; // 0-based MIDI channel of its messages and notes (e.g. one instrument per channel in Kontakt)
     std::optional<uint32_t> color; // 0xRRGGBB, how the articulation is shown in the score
     bool disabled = false; // kept in the file, but never offered nor sent
 
     bool operator==(const ExpressionMapEntry& e) const
     {
         return id == e.id && messages == e.messages && aliases == e.aliases
-               && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && color == e.color
-               && disabled == e.disabled;
+               && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && channel == e.channel
+               && color == e.color && disabled == e.disabled;
     }
 };
 
