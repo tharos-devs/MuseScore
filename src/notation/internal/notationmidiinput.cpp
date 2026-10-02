@@ -59,6 +59,12 @@ static mu::playback::IPlaybackController::PlayParams makeNoteOnParams(bool infin
     return params;
 }
 
+static std::pair<muse::midi::Event::Opcode, int> controllerKey(const muse::midi::Event& event)
+{
+    const muse::midi::Event::Opcode opcode = event.opcode();
+    return { opcode, opcode == muse::midi::Event::Opcode::ControlChange ? static_cast<int>(event.index()) : 0 };
+}
+
 static mu::playback::IPlaybackController::PlayParams makeNoteOffParams()
 {
     mu::playback::IPlaybackController::PlayParams params;
@@ -182,7 +188,7 @@ void NotationMidiInput::doProcessEvents()
         const muse::midi::Event::Opcode opcode = event.opcode();
 
         if (opcode == muse::midi::Event::Opcode::ControlChange || opcode == muse::midi::Event::Opcode::PitchBend) {
-            controllers[opcode] = event; // keep only last received to prevent spam
+            controllers[controllerKey(event)] = event; // keep only last received to prevent spam
             continue;
         }
 
@@ -230,7 +236,8 @@ void NotationMidiInput::doProcessEvents()
 
 void NotationMidiInput::startNoteInputIfNeed()
 {
-    if (isNoteInputMode()) {
+    // While playing, a MIDI keyboard plays along with the score: it never starts writing notes into it
+    if (isNoteInputMode() || playbackController()->isPlaying()) {
         return;
     }
 
@@ -280,7 +287,7 @@ void NotationMidiInput::addNoteEventsToInputState()
             m_holdingNotesInInputByDuration = false;
         } else if (opcode == muse::midi::Event::Opcode::ControlChange || opcode == muse::midi::Event::Opcode::PitchBend) {
             if (playPreviewNotes) {
-                controllers[opcode] = event; // keep only last received to prevent spam
+                controllers[controllerKey(event)] = event; // keep only last received to prevent spam
             }
         }
     }
@@ -408,12 +415,20 @@ void NotationMidiInput::triggerControllers(const ControllerEventMap& events)
         const muse::midi::Event& e = pair.second;
         muse::mpe::ControllerChangeEvent cc;
 
-        if (pair.first == muse::midi::Event::Opcode::PitchBend) {
+        if (pair.first.first == muse::midi::Event::Opcode::PitchBend) {
             cc.type = muse::mpe::ControllerChangeEvent::PitchBend;
             cc.val = static_cast<float>(e.pitchBend14()) / 16383.f;
         } else {
             cc.type = muse::value(MIDI_CC_TO_EVENT_TYPE, e.index(), muse::mpe::ControllerChangeEvent::Undefined);
             cc.val = static_cast<float>(e.data()) / 127.f;
+
+            //! NOTE: any other controller (expression, breath...) as is - only VST instruments use these. Not while
+            //! MIDI CC recording is armed: the recorder already sends them, to the staff it records into
+            const bool recorderSendsIt = midiCcRecorder() && midiCcRecorder()->isArmed();
+            if (cc.type == muse::mpe::ControllerChangeEvent::Undefined && e.index() <= 127 && !recorderSendsIt) {
+                cc.type = muse::mpe::ControllerChangeEvent::ControlChange;
+                cc.controller = static_cast<uint8_t>(e.index());
+            }
         }
 
         if (cc.type != muse::mpe::ControllerChangeEvent::Undefined) {

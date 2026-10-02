@@ -143,7 +143,7 @@ using MakeSeparatorFn = std::function<muse::uicomponents::MenuItem* ()>;
 //! a controller that already has a curve somewhere in the score is marked with a dot
 inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& makeMenuItem, const MakeSeparatorFn& makeSeparator,
                                                       const INotationConfiguration* configuration,
-                                                      const INotationAutomationPtr& automation)
+                                                      const INotationAutomationPtr& automation, bool withDeleteItem = true)
 {
     std::vector<int> controllers = predefinedControllers();
     std::set<int> controllersWithCurve;
@@ -172,9 +172,11 @@ inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& make
 
     muse::uicomponents::MenuItemList items;
 
-    if (muse::uicomponents::MenuItem* deleteItem = makeMenuItem(muse::rcommand::CommandQuery(DELETE_MIDI_CC_POINTS_COMMAND), {})) {
-        items << deleteItem;
-        items << makeSeparator();
+    if (withDeleteItem) {
+        if (muse::uicomponents::MenuItem* deleteItem = makeMenuItem(muse::rcommand::CommandQuery(DELETE_MIDI_CC_POINTS_COMMAND), {})) {
+            items << deleteItem;
+            items << makeSeparator();
+        }
     }
 
     for (const int controller : controllers) {
@@ -215,10 +217,11 @@ using MakeMenuFn = std::function<muse::uicomponents::MenuItem* (const muse::Tran
 inline muse::uicomponents::MenuItem* makeMenu(const MakeMenuFn& makeMenu, const MakeMenuItemFn& makeMenuItem,
                                               const MakeSeparatorFn& makeSeparator, const INotationConfiguration* configuration,
                                               const IMasterNotationPtr& masterNotation, const project::INotationProjectPtr& project,
-                                              const QString& menuId)
+                                              const QString& menuId, bool withDeleteItem = true)
 {
     const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
-    const muse::uicomponents::MenuItemList items = makeMenuItems(makeMenuItem, makeSeparator, configuration, automation);
+    const muse::uicomponents::MenuItemList items = makeMenuItems(makeMenuItem, makeSeparator, configuration, automation,
+                                                                 withDeleteItem);
 
     const bool enabled = masterNotation && hasVstInstrument(project, masterNotation->masterScore());
     muse::uicomponents::MenuItem* menu = makeMenu(muse::TranslatableString::untranslatable("MIDI CC"), items, menuId, enabled);

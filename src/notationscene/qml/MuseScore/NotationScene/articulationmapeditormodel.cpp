@@ -165,6 +165,19 @@ static const NodeT* articulationBefore(const NodeT* parent, size_t index)
     return nullptr;
 }
 
+//! NOTE: its name and triggers - not what makes it unique in its map (explicit aliases, default)
+std::unique_ptr<ArticulationMapEditorModel::Node> ArticulationMapEditorModel::copyOfArticulation(const Node& entry)
+{
+    auto copy = std::make_unique<Node>();
+    copy->name = entry.name;
+    copy->messages = entry.messages;
+    copy->keyswitchOffsetMs = entry.keyswitchOffsetMs;
+    copy->notesOffsetMs = entry.notesOffsetMs;
+    copy->color = entry.color;
+    copy->disabled = entry.disabled;
+    return copy;
+}
+
 ArticulationMapEditorModel::ArticulationMapEditorModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this)), m_root(std::make_unique<Node>())
 {
@@ -913,28 +926,33 @@ void ArticulationMapEditorModel::addArticulation()
     markDirty();
 }
 
+//! NOTE: always at the end of the map, outside of any folder - drag it into a folder to make it a subfolder
 void ArticulationMapEditorModel::addFolder()
 {
     Node* parent = m_root.get();
-    size_t index = parent->children.size();
-
-    if (hasSelection()) {
-        Node* selected = nodeAt(rowOf(m_selectedNode));
-        if (selected->isFolder) {
-            parent = selected;
-            parent->expanded = true;
-            index = parent->children.size();
-        } else {
-            parent = selected->parent;
-            index = parent->indexOf(selected) + 1;
-        }
-    }
+    const size_t index = parent->children.size();
 
     auto node = std::make_unique<Node>();
     node->isFolder = true;
     node->name = uniqueName(parent, muse::qtrc("notation", "New folder"));
 
     m_selectedNode = parent->addChild(std::move(node), index);
+    rebuildRows();
+    markDirty();
+}
+
+void ArticulationMapEditorModel::copySelectedArticulation()
+{
+    Node* entry = selectedEntry();
+    if (!entry || !entry->parent) {
+        return;
+    }
+
+    Node* parent = entry->parent;
+    std::unique_ptr<Node> copy = copyOfArticulation(*entry);
+    copy->name = uniqueName(parent, entry->name);
+
+    m_selectedNode = parent->addChild(std::move(copy), parent->indexOf(entry) + 1);
     rebuildRows();
     markDirty();
 }
@@ -985,9 +1003,14 @@ void ArticulationMapEditorModel::removeSelected()
     });
 }
 
+//! NOTE: toRow -1 = at the end of the map, outside of any folder
 bool ArticulationMapEditorModel::canMove(int fromRow, int toRow, DropPosition position) const
 {
     const Node* from = nodeAt(fromRow);
+    if (toRow < 0) {
+        return from && position == DropPosition::After;
+    }
+
     const Node* to = nodeAt(toRow);
     if (!from || !to || from == to) {
         return false;
@@ -1008,13 +1031,16 @@ void ArticulationMapEditorModel::move(int fromRow, int toRow, DropPosition posit
     }
 
     Node* from = nodeAt(fromRow);
-    Node* to = nodeAt(toRow);
+    Node* to = toRow >= 0 ? nodeAt(toRow) : nullptr;
 
     std::unique_ptr<Node> taken = from->parent->takeChild(from);
 
     Node* parent = nullptr;
     size_t index = 0;
-    if (position == DropPosition::Into) {
+    if (!to) {
+        parent = m_root.get();
+        index = parent->children.size();
+    } else if (position == DropPosition::Into) {
         parent = to;
         parent->expanded = true;
         index = parent->children.size();

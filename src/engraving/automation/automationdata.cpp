@@ -22,11 +22,46 @@
 
 #include "automationdata.h"
 
+#include "containers.h"
+
+#include "engraving/dom/masterscore.h"
+#include "engraving/dom/segment.h"
+#include "engraving/dom/spanner.h"
+#include "engraving/infrastructure/eidregister.h"
+
 #include "log.h"
 
 using namespace mu::engraving;
 
 static const AutomationCurve EMPTY_CURVE;
+
+bool AutomationData::isLinkedItemInScore(const Score* score, const EID& itemId)
+{
+    const mu::engraving::EngravingObject* obj = score ? score->masterScore()->eidRegister()->itemFromEID(itemId) : nullptr;
+    if (!obj || !obj->isEngravingItem()) {
+        return false;
+    }
+
+    const mu::engraving::EngravingItem* item = mu::engraving::toEngravingItem(obj);
+    if (item->isSpanner()) {
+        // The map is keyed by the spanner's start tick
+        const auto range = item->score()->spannerMap().map().equal_range(item->tick().ticks());
+        return std::any_of(range.first, range.second, [item](const auto& pair) { return pair.second == item; });
+    }
+
+    const mu::engraving::EngravingObject* parent = item->parent();
+    if (parent && parent->isSegment()) {
+        const Segment* segment = mu::engraving::toSegment(parent);
+        return segment->measure() && muse::contains(segment->annotations(), const_cast<mu::engraving::EngravingItem*>(item));
+    }
+
+    return true;
+}
+
+bool AutomationData::isScoreDrivenPoint(const Score* score, const AutomationPoint& point)
+{
+    return point.generated || (point.itemId && isLinkedItemInScore(score, *point.itemId));
+}
 
 static void diffPoints(const AutomationCurveKey& key, const AutomationCurve& oldCurve, const AutomationCurve& newCurve,
                        AutomationChanges& changes)

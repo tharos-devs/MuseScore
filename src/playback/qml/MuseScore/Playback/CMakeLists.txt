@@ -39,6 +39,8 @@ qt_add_qml_module(playback_qml
         auxsenditemlistmodel.h
         inputresourceitem.cpp
         inputresourceitem.h
+        midiinputactivitymodel.cpp
+        midiinputactivitymodel.h
         mixerchannelitem.cpp
         mixerchannelitem.h
         mixerpanelcontextmenumodel.cpp
@@ -65,6 +67,7 @@ qt_add_qml_module(playback_qml
         videopanelmodel.cpp
         videopanelmodel.h
     QML_FILES
+        MidiInputActivityIndicator.qml
         internal/AudioProcessingProgressBar.qml
         internal/AudioResourceControl.qml
         internal/AuxSendControl.qml

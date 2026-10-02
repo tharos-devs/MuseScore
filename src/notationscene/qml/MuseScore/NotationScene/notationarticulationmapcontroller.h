@@ -33,6 +33,7 @@
 #include "notation/inotationarticulationmaps.h"
 #include "notation/notationtypes.h"
 #include "playback/iplaybackcontroller.h"
+#include "rcommand/icommanddispatcher.h"
 
 namespace mu::notation {
 class ArticulationMapOverlay;
@@ -43,6 +44,7 @@ class NotationArticulationMapController : public muse::Contextable, public muse:
 {
     muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 
 public:
     NotationArticulationMapController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx);
@@ -65,9 +67,10 @@ private:
         }
     };
 
+    //! NOTE: a chord, or a rest (a mark there only changes the articulation from the next chord on)
     struct ChordEntry {
-        mu::engraving::Chord* chord = nullptr; // in the current (possibly excerpt) score
-        mu::engraving::Chord* masterChord = nullptr; // articulation marks and playback belong to the master score
+        mu::engraving::ChordRest* chord = nullptr; // in the current (possibly excerpt) score
+        mu::engraving::ChordRest* masterChord = nullptr; // articulation marks and playback belong to the master score
         double canvasX = 0.0;
         muse::String entryId;
         mu::engraving::ResolvedArticulation::Source source = mu::engraving::ResolvedArticulation::Source::Default;
@@ -90,18 +93,18 @@ private:
     void createOverlayForStaff(const System* system, staff_idx_t staffIdx, OverlaysMap& newOverlays);
     void updateOverlaysGeometry();
 
-    void onClicked(const SysStaffKey& key, int chipIndex, qreal xN, const QPointF& globalPos);
+    void onClicked(const SysStaffKey& key, qreal xN, const QPointF& globalPos);
     void onChipDragged(const SysStaffKey& key, int chipIndex, qreal deltaXN, bool completed);
     void onDragCancelled(const SysStaffKey& key, int chipIndex);
 
     void showMenu(const SysStaffKey& key, size_t chordIndex, const QPointF& globalPos);
-    void setMarks(const std::vector<mu::engraving::Chord*>& masterChords, const std::optional<ArticulationMark>& mark,
+    void setMarks(const std::vector<mu::engraving::ChordRest*>& masterChords, const std::optional<ArticulationMark>& mark,
                   const muse::TranslatableString& actionName);
-    std::vector<mu::engraving::Chord*> targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const;
-    void auditionChord(const mu::engraving::Chord* chord);
+    std::vector<mu::engraving::ChordRest*> targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const;
+    void auditionChord(const mu::engraving::ChordRest* chord);
 
     //! NOTE: the tick offset of a mark <-> its horizontal distance from the chord, in canvas units
-    double ticksPerCanvasUnit(const mu::engraving::Chord* chord) const;
+    double ticksPerCanvasUnit(const mu::engraving::ChordRest* chord) const;
     int clampTickOffset(const StaffOverlayData& data, size_t chordIndex, int tickOffset) const;
 
     INotationArticulationMapsPtr articulationMaps() const;
@@ -113,5 +116,8 @@ private:
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;
     bool m_rebuildAfterDrag = false;
+
+    //! NOTE: the articulation last given to a note of each track (this session only), offered first in its menu
+    std::map<mu::engraving::InstrumentTrackId, muse::String> m_lastPlacedEntryIdByTrack;
 };
 }

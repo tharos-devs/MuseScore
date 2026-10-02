@@ -31,7 +31,7 @@
 #include "articulationmaptypes.h"
 
 namespace mu::engraving {
-class Chord;
+class ChordRest;
 class MasterScore;
 
 //! NOTE: per score: which articulation map each instrument uses, and the manual articulation marks
@@ -48,9 +48,9 @@ public:
 
     bool isEmpty() const;
 
-    //! NOTE: the chord a mark belongs to, if it is still part of the score - a deleted chord is kept alive
+    //! NOTE: the chord (or rest) a mark belongs to, if it is still part of the score - a deleted chord is kept alive
     //! (and its EID registered) by the undo stack, but its mark must not affect anything anymore
-    static const Chord* chordOfMark(const MasterScore* score, const EID& chordId);
+    static const ChordRest* chordOfMark(const MasterScore* score, const EID& chordId);
 
     muse::async::Notification changed() const;
 

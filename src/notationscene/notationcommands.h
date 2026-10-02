@@ -496,6 +496,7 @@ inline static const muse::rcommand::Command VOICE_ASSIGNMENT_ALL_IN_INSTR_COMMAN
 inline static const muse::rcommand::Command VOICE_ASSIGNMENT_ALL_IN_STAFF_COMMAND("command://notation/voice-assignment-all-in-staff");
 inline static const muse::rcommand::Command TOGGLE_AUTOMATION_COMMAND("command://notation/toggle-automation");
 inline static const muse::rcommand::Command DELETE_MIDI_CC_POINTS_COMMAND("command://notation/automation-midicc-delete-points");
+inline static const muse::rcommand::Command DELETE_AUTOMATION_POINTS_COMMAND("command://notation/automation-delete-points");
 inline static const muse::rcommand::Command SELECT_AUTOMATION_TYPE_COMMAND("command://notation/select-automation-type"); // with params
 inline static const muse::rcommand::Command TOGGLE_NOTE_OFFSET_EDITOR_COMMAND("command://notation/toggle-note-offset-editor");
 inline static const muse::rcommand::Command TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND("command://notation/toggle-note-velocity-editor");

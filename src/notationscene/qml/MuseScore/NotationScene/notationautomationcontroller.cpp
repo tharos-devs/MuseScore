@@ -28,6 +28,11 @@
 #include <optional>
 #include <set>
 
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QDoubleSpinBox>
+#include <QGuiApplication>
+
 #include "segmentcanvasinterpolation.h"
 #include "midiccautomation.h"
 
@@ -220,6 +225,55 @@ static muse::real_t automationValueFromDisplay(AutomationType type, double displ
     return muse::real_t(displayValue);
 }
 
+// The Dynamics lane shows [pppp, ffff], one dynamic level apart from the next (see ORDINARY_DYNAMIC_VALUES):
+// a display value as a level from pppp (0) to ffff (9), fractions in between
+static const QStringList DYNAMIC_LEVEL_NAMES { "pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff" };
+static constexpr double DYNAMIC_LEVEL_SNAP_DISTANCE_PX = 6.0;
+
+static double dynamicLevelFromDisplay(double display)
+{
+    return display * (DYNAMIC_LEVEL_NAMES.size() - 1);
+}
+
+static double dynamicDisplayFromLevel(double level)
+{
+    return level / (DYNAMIC_LEVEL_NAMES.size() - 1);
+}
+
+//! NOTE: a Dynamics point's y (inverted display value), drawn to the nearest dynamic level when close to it
+static qreal snappedDynamicsY(AutomationType type, qreal heightPx, qreal y, bool free)
+{
+    if (type != AutomationType::Dynamics || heightPx <= 0 || free) {
+        return y;
+    }
+
+    const double level = dynamicLevelFromDisplay(std::clamp(1.0 - y, 0.0, 1.0));
+    const double nearest = std::round(level);
+    if (std::abs(dynamicDisplayFromLevel(level - nearest)) * heightPx <= DYNAMIC_LEVEL_SNAP_DISTANCE_PX) {
+        return 1.0 - dynamicDisplayFromLevel(nearest);
+    }
+
+    return y;
+}
+
+//! NOTE: e.g. "f" exactly on forte's level, "f +20%" a fifth of the way from it to ff - always from the dynamic below
+static QString dynamicLevelText(double level)
+{
+    const int lastLevel = static_cast<int>(DYNAMIC_LEVEL_NAMES.size()) - 1;
+    int below = std::clamp(static_cast<int>(std::floor(level)), 0, lastLevel);
+    int offsetPercent = static_cast<int>(std::lround((level - below) * 100.0));
+    if (offsetPercent >= 100 && below < lastLevel) {
+        ++below;
+        offsetPercent = 0;
+    }
+
+    if (offsetPercent <= 0) {
+        return DYNAMIC_LEVEL_NAMES.at(below);
+    }
+
+    return QString("%1 +%2%").arg(DYNAMIC_LEVEL_NAMES.at(below)).arg(offsetPercent);
+}
+
 // Formats a point's "display"-space value (as tracked live by PolylinePlot during a drag, i.e. the
 // same value passed as pointMoved's y argument) into the drag tooltip's label text, in each
 // automation type's own natural unit - reuses the fader-curve helpers above rather than duplicating them
@@ -231,7 +285,7 @@ static QString formattedActivePointValue(AutomationType type, double pointDomain
     const double displayValue = std::clamp(1.0 - pointDomainY, 0.0, 1.0);
 
     if (type == AutomationType::Dynamics) {
-        return QString("%1%").arg(qRound(displayValue * 100.0));
+        return dynamicLevelText(dynamicLevelFromDisplay(displayValue));
     }
 
     if (type == AutomationType::MidiCC) {
@@ -258,31 +312,6 @@ static QString formattedActivePointValue(AutomationType type, double pointDomain
     // not MIDI CC10 - the engine's balance_t is -1.0..+1.0, shown there as a signed -100..+100 percentage
     const int panValue = qRound((displayValue - 0.5) * 2.0 * 100.0);
     return panValue > 0 ? QString("+%1").arg(panValue) : QString::number(panValue);
-}
-
-//! NOTE: whether the item a point was generated from (e.g. a tempo marking) is still in the score - a deleted
-//! item stays registered (and parented) while the undo stack keeps it, so the register alone can't tell
-static bool isLinkedItemInScore(const mu::engraving::Score* score, const mu::engraving::EID& itemId)
-{
-    const mu::engraving::EngravingObject* obj = score ? score->masterScore()->eidRegister()->itemFromEID(itemId) : nullptr;
-    if (!obj || !obj->isEngravingItem()) {
-        return false;
-    }
-
-    const mu::engraving::EngravingItem* item = mu::engraving::toEngravingItem(obj);
-    if (item->isSpanner()) {
-        // The map is keyed by the spanner's start tick
-        const auto range = item->score()->spannerMap().map().equal_range(item->tick().ticks());
-        return std::any_of(range.first, range.second, [item](const auto& pair) { return pair.second == item; });
-    }
-
-    const mu::engraving::EngravingObject* parent = item->parent();
-    if (parent && parent->isSegment()) {
-        const Segment* segment = mu::engraving::toSegment(parent);
-        return segment->measure() && muse::contains(segment->annotations(), const_cast<mu::engraving::EngravingItem*>(item));
-    }
-
-    return true;
 }
 
 static const Segment* lastSegmentOfSystem(const System* system)
@@ -388,6 +417,11 @@ NotationAutomationController::NotationAutomationController(QQuickItem* linesPare
 {
 }
 
+NotationAutomationController::~NotationAutomationController()
+{
+    closePointValueEditor();
+}
+
 void NotationAutomationController::init()
 {
     IF_ASSERT_FAILED(automation() && currentNotation()) {
@@ -397,6 +431,7 @@ void NotationAutomationController::init()
     onCurrentNotationChanged();
 
     automation()->automationModeEnabledChanged().onNotify(this, [this]() {
+        closePointValueEditor();
         if (automation()->isAutomationModeEnabled() && !m_pendingChanges.isEmpty()) {
             applyAutomationChanges(m_pendingChanges);
             m_pendingChanges.clear();
@@ -506,6 +541,8 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         pointsForPolyline.emplace_back(pointData.qPointF);
     }
     polyline->setPoints(pointsForPolyline);
+    // Typed values (Cmd+click): not on dynamics, placed by dragging, drawn to their levels
+    polyline->setPointValueEditEnabled(curveKey.type != AutomationType::Dynamics && curveKey.type != AutomationType::Unknown);
     applyPointFlags(polyline, key);
     applyPolylineStyle(polyline, key);
     polyline->setVisible(false);
@@ -526,6 +563,12 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         }
 
         const PointData& oldPointData = pointsDataIt->second[pointIdx];
+
+        // Alt is usually let go just before the mouse button: the release keeps what the drag was doing
+        const bool altHeld = QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier;
+        const bool freeDrag = altHeld || (completed && m_freeDynamicsDrag);
+        m_freeDynamicsDrag = completed ? false : altHeld;
+        y = snappedDynamicsY(currentAutomationType(), polyline->height(), y, freeDrag);
 
         // Pressing on the line inserts a pending point (not in the curve yet, see pointAdded below) that
         // PolylinePlot lets the user drag right away - press-and-drag must create it at the drop position
@@ -593,6 +636,9 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
 
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::pointAdded,
                      [this, key, polyline, system, staffCanvasRect](qreal x, qreal y, bool completed) {
+        // A plain click on the line creates the point right away: drawn to the dynamics' levels like a drag
+        y = snappedDynamicsY(currentAutomationType(), polyline->height(), y, QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier);
+
         if (completed) {
             requestAddPoint(key, x, y);
             return;
@@ -636,6 +682,22 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     // Every press ends here: a group drag not committed by then (e.g. a click with a little jitter) is dropped
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::interactionFinished, [this]() {
         cancelGroupDrag();
+    });
+
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::pointValueEditRequested,
+                     [this, key, polyline](int pointIdx, const QPointF& positionPx) {
+        // Not on dynamics: their points are placed by dragging, drawn to the dynamics' own levels
+        const AutomationType type = currentAutomationType();
+        if (type == AutomationType::Unknown || type == AutomationType::Dynamics || !polylinePointIndexIsValid(polyline, pointIdx)) {
+            return;
+        }
+
+        const QPointF globalPos = polyline->mapToGlobal(positionPx);
+
+        // The editor runs outside of the polyline's mouse event handler
+        muse::async::Async::call(this, [this, key, pointIdx, globalPos]() {
+            showPointValueEditor(key, pointIdx, globalPos);
+        });
     });
 
     // Previewed by PolylinePlot itself while dragging, committed on release
@@ -1147,6 +1209,9 @@ void NotationAutomationController::processPendingChanges()
 
 void NotationAutomationController::rebuildAllPolylines()
 {
+    // Its point (and system) are about to go
+    closePointValueEditor();
+
     // TODO: More efficient if we don't clear/recreate the polylines every time...
     for (const auto& [staff, polylines] : m_stavesToLinesMap) {
         for (PolylinePlot* polyline : polylines) {
@@ -1574,6 +1639,216 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
     updatePolylinesGeometry();
 }
 
+namespace {
+//! NOTE: Return/Enter or a click elsewhere (the editor losing focus) commits the typed value, Escape closes the editor
+//! without changing anything. It's a window of its own that takes the keyboard: the score's shortcuts belong to the
+//! main window (and are also kept off while typing, through ShortcutOverride)
+class PointValueEditorFilter : public QObject
+{
+public:
+    PointValueEditorFilter(QWidget* editor, QDoubleSpinBox* spinBox, std::function<void(double)> commit)
+        : QObject(editor), m_editor(editor), m_spinBox(spinBox), m_commit(std::move(commit)) {}
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        switch (event->type()) {
+        case QEvent::ShortcutOverride:
+            event->accept();
+            return true;
+        case QEvent::KeyPress: {
+            const int key = static_cast<QKeyEvent*>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                finish(true);
+                return true;
+            }
+            if (key == Qt::Key_Escape) {
+                finish(false);
+                return true;
+            }
+            break;
+        }
+        case QEvent::WindowDeactivate:
+            if (watched == m_editor) {
+                finish(true);
+            }
+            break;
+        default:
+            break;
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    void finish(bool commit)
+    {
+        if (m_finished) {
+            return;
+        }
+        m_finished = true;
+
+        if (commit) {
+            m_spinBox->interpretText();
+            m_commit(m_spinBox->value());
+        }
+
+        m_editor->close();
+    }
+
+    QWidget* m_editor = nullptr;
+    QDoubleSpinBox* m_spinBox = nullptr;
+    std::function<void(double)> m_commit;
+    bool m_finished = false;
+};
+}
+
+//! NOTE: a point's value as typed by the user, in its type's own unit - the same as the drag tooltip's
+//! (see formattedActivePointValue()) - and its conversions from/to the display range [0, 1]
+struct PointValueField {
+    double min = 0.0;
+    double max = 1.0;
+    int decimals = 0;
+    QString prefix;
+    QString suffix;
+    std::function<double(double)> fromDisplay;
+    std::function<double(double)> toDisplay;
+};
+
+static PointValueField pointValueField(AutomationType type, int midiCc)
+{
+    PointValueField field;
+
+    switch (type) {
+    case AutomationType::Tempo:
+        // Up to the lane's display cap, like a drag
+        field.min = mu::engraving::Constants::MIN_TEMPO.toBPM().val;
+        field.max = TEMPO_RANGE_MAX_BPM;
+        field.suffix = QStringLiteral(" BPM");
+        field.fromDisplay = [](double display) { return tempoLocalBpmToLogicalBpm(display * TEMPO_RANGE_MAX_BPM); };
+        field.toDisplay = [](double value) { return tempoLogicalBpmToLocalBpm(value) / TEMPO_RANGE_MAX_BPM; };
+        break;
+    case AutomationType::Volume:
+        field.min = VOLUME_RANGE_MIN_DB;
+        field.max = VOLUME_RANGE_MAX_DB;
+        field.decimals = 1;
+        field.suffix = QStringLiteral(" dB");
+        field.fromDisplay = [](double display) {
+            return volumeLocalDbToLogicalDb(VOLUME_RANGE_MIN_DB + display * (VOLUME_RANGE_MAX_DB - VOLUME_RANGE_MIN_DB));
+        };
+        field.toDisplay = [](double value) {
+            return (volumeLogicalDbToLocalDb(value) - VOLUME_RANGE_MIN_DB) / (VOLUME_RANGE_MAX_DB - VOLUME_RANGE_MIN_DB);
+        };
+        break;
+    case AutomationType::Pan:
+        // The Mixer's balance: -100 (left) to +100 (right)
+        field.min = -100.0;
+        field.max = 100.0;
+        field.fromDisplay = [](double display) { return (display - 0.5) * 200.0; };
+        field.toDisplay = [](double value) { return value / 200.0 + 0.5; };
+        break;
+    case AutomationType::MidiCC:
+        field.max = MAX_MIDI_CC;
+        field.prefix = QString("CC%1: ").arg(midiCc);
+        field.fromDisplay = [](double display) { return display * 127.0; };
+        field.toDisplay = [](double value) { return value / 127.0; };
+        break;
+    case AutomationType::Dynamics: // not typed (see the pointValueEditRequested handler)
+    case AutomationType::Unknown:
+        field.fromDisplay = [](double display) { return display; };
+        field.toDisplay = [](double value) { return value; };
+        break;
+    }
+
+    return field;
+}
+
+static const QString POINT_VALUE_EDITOR_FILTER_NAME = QStringLiteral("pointValueEditorFilter");
+
+//! NOTE: without committing anything: its filter (which commits when it loses focus) goes first
+void NotationAutomationController::closePointValueEditor()
+{
+    if (!m_pointValueEditor) {
+        return;
+    }
+
+    delete m_pointValueEditor->findChild<QObject*>(POINT_VALUE_EDITOR_FILTER_NAME);
+    if (QWidget* editor = qobject_cast<QWidget*>(m_pointValueEditor.data())) {
+        editor->close();
+    }
+    m_pointValueEditor = nullptr;
+}
+
+void NotationAutomationController::showPointValueEditor(const SysStaffKey& key, int pointIdx, const QPointF& globalPos)
+{
+    const auto pointsDataIt = m_pointsDataByStaff.find(key);
+    if (pointsDataIt == m_pointsDataByStaff.end() || pointIdx < 0 || pointIdx >= pointsDataIt->second.size()) {
+        return;
+    }
+
+    const PointData pointData = pointsDataIt->second.at(pointIdx);
+    if (pointData.polylinePointIndex < 0) {
+        return;
+    }
+
+    const PointValueField field = pointValueField(currentAutomationType(), notationConfiguration()->currentAutomationMidiCc());
+
+    // Point Y is inverted relative to the display range (see formattedActivePointValue())
+    const double currentDisplay = std::clamp(1.0 - pointData.qPointF.y(), 0.0, 1.0);
+    const double scale = std::pow(10.0, field.decimals);
+    const double currentValue = std::clamp(std::round(field.fromDisplay(currentDisplay) * scale) / scale, field.min, field.max);
+
+    closePointValueEditor();
+
+    QWidget* editor = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    editor->setAttribute(Qt::WA_DeleteOnClose);
+    m_pointValueEditor = editor;
+
+    QHBoxLayout* layout = new QHBoxLayout(editor);
+    layout->setContentsMargins(2, 2, 2, 2);
+
+    QDoubleSpinBox* spinBox = new QDoubleSpinBox(editor);
+    spinBox->setDecimals(field.decimals);
+    spinBox->setRange(field.min, field.max);
+    spinBox->setValue(currentValue);
+    spinBox->setPrefix(field.prefix);
+    spinBox->setSuffix(field.suffix);
+    layout->addWidget(spinBox);
+
+    PointValueEditorFilter* filter = new PointValueEditorFilter(editor, spinBox, [this, key, pointData, currentValue, field](double typed) {
+        const double value = std::clamp(typed, field.min, field.max);
+        if (muse::RealIsEqual(value, currentValue)) {
+            return;
+        }
+
+        const double display = std::clamp(field.toDisplay(value), 0.0, 1.0);
+
+        // The curve may have been rebuilt while the editor was open: edit the same point, if it's still there
+        const auto it = m_pointsDataByStaff.find(key);
+        if (it == m_pointsDataByStaff.end()) {
+            return;
+        }
+
+        for (const PointData& current : it->second) {
+            if (current.tick == pointData.tick && current.pointType == pointData.pointType && current.polylinePointIndex >= 0) {
+                requestEditPoint(current, key, current.qPointF.x(), 1.0 - display);
+                return;
+            }
+        }
+    });
+    filter->setObjectName(POINT_VALUE_EDITOR_FILTER_NAME);
+    editor->installEventFilter(filter);
+    spinBox->installEventFilter(filter);
+
+    editor->adjustSize();
+    editor->move(globalPos.toPoint() + QPoint(12, -editor->height() / 2));
+    editor->show();
+    editor->raise();
+    editor->activateWindow();
+    spinBox->setFocus(Qt::PopupFocusReason);
+    spinBox->selectAll();
+}
+
 bool NotationAutomationController::requestEditPoint(const PointData& oldPointData, const SysStaffKey& key, qreal x, qreal y)
 {
     if (isRecordingPreviewShown()) {
@@ -1650,7 +1925,7 @@ bool NotationAutomationController::requestEditPoint(const PointData& oldPointDat
     mu::engraving::AutomationPoint newPoint;
     newPoint.value.outValue = newValue;
     newPoint.value.inValue = mu::engraving::AutomationPoint::ExplicitArrival { newPoint.value.outValue, originalEase };
-    if (existingPoint.itemId && isLinkedItemInScore(score(), *existingPoint.itemId)) {
+    if (existingPoint.itemId && AutomationData::isLinkedItemInScore(score(), *existingPoint.itemId)) {
         newPoint.itemId = existingPoint.itemId;
     }
 
@@ -1679,7 +1954,7 @@ void NotationAutomationController::setEditedValue(mu::engraving::AutomationPoint
         point.value.outValue = value;
     }
     point.generated = false;
-    if (point.itemId && !isLinkedItemInScore(score(), *point.itemId)) {
+    if (point.itemId && !AutomationData::isLinkedItemInScore(score(), *point.itemId)) {
         point.itemId.reset(); // its item was deleted: now just a point of the user's own
     }
 }
@@ -1863,7 +2138,7 @@ std::optional<int> NotationAutomationController::firstPassTickForUtick(int utick
 //! (e.g. a tempo marking) - such a point can't be removed or moved in time
 bool NotationAutomationController::isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const
 {
-    return !point || point->generated || (point->itemId && isLinkedItemInScore(score(), *point->itemId));
+    return !point || AutomationData::isScoreDrivenPoint(score(), *point);
 }
 
 AutomationType NotationAutomationController::currentAutomationType() const

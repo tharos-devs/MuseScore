@@ -3030,6 +3030,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo {
+        DELETE_AUTOMATION_POINTS_COMMAND,
+        TranslatableString("action", "Delete selected points"),
+        TranslatableString("action", "Delete the points of the automation curve shown within the range selection"),
+        InputSchema(),
+        Decoration()
+    },
+    CommandInfo {
         DELETE_MIDI_CC_POINTS_COMMAND,
         TranslatableString("action", "Delete selected points"),
         TranslatableString("action", "Delete the points of the MIDI CC curve shown within the range selection"),

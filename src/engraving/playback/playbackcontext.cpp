@@ -907,7 +907,7 @@ void PlaybackContext::updateLatchedArticulationMarks()
             continue;
         }
 
-        const Chord* chord = ArticulationMapData::chordOfMark(m_score->masterScore(), chordId);
+        const ChordRest* chord = ArticulationMapData::chordOfMark(m_score->masterScore(), chordId);
         if (!chord) {
             continue;
         }
