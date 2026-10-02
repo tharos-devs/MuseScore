@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-02
+- Clicking a measure number in the Timeline's Measures row now moves the playback position to that measure (it selects the measure's first element, all visible instruments), like a plain click on an instrument cell; it used to only scroll the score there.
+
 ### 2026-10-01
 - Synced with upstream `main` (120 commits, incl. the new "Convert file to score" import, offsets applied after autoplace with "Freeze placement", MusicXML/TablEdit import fixes). The build now uses the docking engine upstream defaults to (KDDockWidgets v2).
 - The floating Mixer's "Full screen" menu item now shows a checkmark while the Mixer is full screen.
