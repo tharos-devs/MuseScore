@@ -222,6 +222,10 @@ Item {
             }
         }
 
+        MidiInputActivityIndicator {
+            Layout.alignment: Qt.AlignVCenter
+        }
+
         SeparatorLine { orientation: Qt.Vertical; visible: hiddenControlsMenuButton.visible }
 
         MenuButton {

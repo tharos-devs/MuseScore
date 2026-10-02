@@ -26,13 +26,16 @@
 #include <cmath>
 
 #include <QFontMetricsF>
+#include <QGuiApplication>
 #include <QHoverEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QToolTip>
 
 using namespace mu::notation;
 
 constexpr static qreal ARTMAP_CLICK_MOVE_THRESHOLD_PX = 3.0;
+constexpr static int ARTMAP_TOOLTIP_KEY_POLL_MS = 100;
 constexpr static qreal ARTMAP_CHIP_V_MARGIN_PX = 2.0;
 constexpr static qreal ARTMAP_CHIP_PADDING_X_PX = 4.0;
 constexpr static qreal ARTMAP_CHIP_MIN_WIDTH_PX = 6.0;
@@ -45,10 +48,28 @@ constexpr static int ARTMAP_HOVERED_CHIP_ALPHA = 60;
 constexpr static qreal ARTMAP_TARGET_MARKER_SIZE_PX = 5.0;
 static const QColor ARTMAP_TARGET_MARKER_COLOR(90, 90, 90);
 
+static double artMapLuminance(const QColor& color)
+{
+    return 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue();
+}
+
 static QColor artMapTextColorFor(const QColor& fill)
 {
-    const double luminance = 0.299 * fill.red() + 0.587 * fill.green() + 0.114 * fill.blue();
-    return luminance > 150.0 ? QColor(20, 20, 20) : QColor(255, 255, 255);
+    return artMapLuminance(fill) > 150.0 ? QColor(20, 20, 20) : QColor(255, 255, 255);
+}
+
+//! NOTE: the see-through (hovered) chip's text: its own color, darkened as needed to read on the light paper
+//! and the faint tint of that same color under it (a light yellow on its own would be invisible)
+static QColor artMapSeeThroughTextColorFor(const QColor& color)
+{
+    constexpr double MAX_LUMINANCE = 105.0;
+
+    QColor result = color;
+    result.setAlpha(255);
+    for (int i = 0; i < 12 && artMapLuminance(result) > MAX_LUMINANCE; ++i) {
+        result = result.darker(120);
+    }
+    return result;
 }
 
 ArticulationMapOverlay::ArticulationMapOverlay(QQuickItem* parent)
@@ -57,6 +78,53 @@ ArticulationMapOverlay::ArticulationMapOverlay(QQuickItem* parent)
     // Left button only: a right click must reach MuseScore's own context menu underneath
     setAcceptedMouseButtons(Qt::LeftButton);
     setAcceptHoverEvents(true);
+
+    // The lane has no keyboard focus: Cmd is watched while a chip is hovered
+    m_tooltipTimer.setInterval(ARTMAP_TOOLTIP_KEY_POLL_MS);
+    QObject::connect(&m_tooltipTimer, &QTimer::timeout, this, [this]() {
+        updateChipTooltip();
+    });
+}
+
+ArticulationMapOverlay::~ArticulationMapOverlay()
+{
+    hideChipTooltip();
+}
+
+//! NOTE: the full name of the hovered chip ("Legato > Auto-speed"), only while Cmd (Ctrl elsewhere) is held,
+//! under the lane: never over another chip, nor in the way of a click
+void ArticulationMapOverlay::updateChipTooltip()
+{
+    const bool wanted = m_hoveredChip >= 0 && m_hoveredChip < m_chips.size() && !m_pressed
+                        && (QGuiApplication::queryKeyboardModifiers() & Qt::ControlModifier);
+    if (!wanted) {
+        if (m_tooltipShown) {
+            QToolTip::hideText();
+            m_tooltipShown = false;
+        }
+        return;
+    }
+
+    if (m_tooltipShown) {
+        return;
+    }
+
+    const QRectF rect = chipRectPx(m_chips.at(m_hoveredChip));
+    // QToolTip shows the tip at an offset from the given position (2, 16 px): cancelled, to stick to the chip
+    constexpr QPointF TOOLTIP_OFFSET_PX(2.0, 16.0);
+    constexpr qreal TOOLTIP_GAP_PX = 2.0;
+    const QPointF globalPos = mapToGlobal(QPointF(rect.left(), rect.bottom() + TOOLTIP_GAP_PX)) - TOOLTIP_OFFSET_PX;
+    QToolTip::showText(globalPos.toPoint(), m_chips.at(m_hoveredChip).fullName);
+    m_tooltipShown = true;
+}
+
+void ArticulationMapOverlay::hideChipTooltip()
+{
+    m_tooltipTimer.stop();
+    if (m_tooltipShown) {
+        QToolTip::hideText();
+        m_tooltipShown = false;
+    }
 }
 
 void ArticulationMapOverlay::setContent(const QVector<ChipData>& chips, const QVector<LineData>& lines)
@@ -64,6 +132,7 @@ void ArticulationMapOverlay::setContent(const QVector<ChipData>& chips, const QV
     m_chips = chips;
     m_lines = lines;
     m_hoveredChip = -1;
+    hideChipTooltip();
     update();
 }
 
@@ -84,13 +153,10 @@ void ArticulationMapOverlay::setPinnedTargetX(qreal xN)
     update();
 }
 
-//! NOTE: the same choice as the controller's click handling: a chip's own chord, else the nearest one
-qreal ArticulationMapOverlay::targetChordXN(const QPointF& posPx, int hitChip) const
+//! NOTE: the same choice as the controller's click handling: the chord nearest to the mouse, also over a chip
+//! (a chip is only grabbed to be dragged)
+qreal ArticulationMapOverlay::targetChordXN(const QPointF& posPx) const
 {
-    if (hitChip >= 0 && hitChip < m_chips.size()) {
-        return m_chips.at(hitChip).chordXN;
-    }
-
     const qreal posXN = posPx.x() / std::max(1.0, width());
     qreal best = -1.0;
     for (const qreal xN : m_chordXNs) {
@@ -136,33 +202,28 @@ bool ArticulationMapOverlay::isDragging() const
     return m_pressed && m_movedPastClickThreshold;
 }
 
-//! NOTE: a chip never spans over the next one - on consecutive short notes, chips shrink (down to a
-//! colored tick) instead of colliding; the hovered chip is the exception, shown in full on top
+//! NOTE: a chip shows its whole name, cut only where the next chip starts - on consecutive changes, chips
+//! shrink (down to a colored tick); hovering doesn't change that (see updateChipTooltip()). It may span over
+//! the next notes: a click there still goes to the note under the target marker, not to the chip
 QRectF ArticulationMapOverlay::chipRectPx(const ChipData& chip) const
 {
-    const int index = static_cast<int>(&chip - m_chips.constData());
-
     QFont font;
     font.setPixelSize(static_cast<int>(std::clamp(height() * 0.55, ARTMAP_MIN_FONT_PX, ARTMAP_MAX_FONT_PX)));
     font.setBold(true);
     const QFontMetricsF metrics(font);
 
-    const bool hovered = index == m_hoveredChip;
-    const QString& text = hovered ? chip.fullName : chip.label;
-    qreal chipWidth = std::max(ARTMAP_CHIP_MIN_WIDTH_PX, metrics.horizontalAdvance(text) + 2 * ARTMAP_CHIP_PADDING_X_PX);
+    qreal chipWidth = std::max(ARTMAP_CHIP_MIN_WIDTH_PX, metrics.horizontalAdvance(chip.label) + 2 * ARTMAP_CHIP_PADDING_X_PX);
 
     const qreal leftPx = chip.xN * width();
 
-    if (!hovered) {
-        qreal nextLeftPx = width();
-        for (const ChipData& other : m_chips) {
-            const qreal otherLeftPx = other.xN * width();
-            if (otherLeftPx > leftPx + 0.5) {
-                nextLeftPx = std::min(nextLeftPx, otherLeftPx);
-            }
+    qreal nextLeftPx = width();
+    for (const ChipData& other : m_chips) {
+        const qreal otherLeftPx = other.xN * width();
+        if (otherLeftPx > leftPx + 0.5) {
+            nextLeftPx = std::min(nextLeftPx, otherLeftPx);
         }
-        chipWidth = std::max(ARTMAP_CHIP_MIN_WIDTH_PX, std::min(chipWidth, nextLeftPx - leftPx - ARTMAP_CHIP_GAP_PX));
     }
+    chipWidth = std::max(ARTMAP_CHIP_MIN_WIDTH_PX, std::min(chipWidth, nextLeftPx - leftPx - ARTMAP_CHIP_GAP_PX));
 
     return QRectF(leftPx, ARTMAP_CHIP_V_MARGIN_PX, chipWidth, std::max(1.0, height() - 2 * ARTMAP_CHIP_V_MARGIN_PX));
 }
@@ -206,7 +267,7 @@ void ArticulationMapOverlay::paint(QPainter* painter)
         if (seeThrough) {
             fillColor.setAlpha(ARTMAP_HOVERED_CHIP_ALPHA);
         }
-        const QColor textColor = seeThrough ? chip.color : artMapTextColorFor(chip.color);
+        const QColor textColor = seeThrough ? artMapSeeThroughTextColorFor(chip.color) : artMapTextColorFor(chip.color);
         painter->setPen(Qt::NoPen);
         painter->setBrush(fillColor);
         painter->drawRoundedRect(rect, ARTMAP_CHIP_CORNER_RADIUS_PX, ARTMAP_CHIP_CORNER_RADIUS_PX);
@@ -215,7 +276,7 @@ void ArticulationMapOverlay::paint(QPainter* painter)
 
         // Shrunk chips show as many leading letters as fit (no ellipsis), down to the first one,
         // then become a plain colored tick; the text stays centered, so both paddings stay equal
-        const QString& text = hovered ? chip.fullName : chip.label;
+        const QString& text = chip.label;
         const qreal textWidth = textRect.width() - 2 * ARTMAP_CHIP_PADDING_X_PX;
         QString shownText = text;
         while (shownText.size() > 1 && metrics.horizontalAdvance(shownText) > textWidth) {
@@ -251,10 +312,6 @@ void ArticulationMapOverlay::paint(QPainter* painter)
 
 int ArticulationMapOverlay::hitTestPx(const QPointF& posPx) const
 {
-    if (m_hoveredChip >= 0 && m_hoveredChip < m_chips.size() && chipRectPx(m_chips.at(m_hoveredChip)).contains(posPx)) {
-        return m_hoveredChip;
-    }
-
     for (int i = static_cast<int>(m_chips.size()) - 1; i >= 0; --i) {
         if (chipRectPx(m_chips.at(i)).contains(posPx)) {
             return i;
@@ -267,23 +324,34 @@ int ArticulationMapOverlay::hitTestPx(const QPointF& posPx) const
 void ArticulationMapOverlay::hoverMoveEvent(QHoverEvent* e)
 {
     const int hit = hitTestPx(e->position());
-    const qreal targetXN = targetChordXN(e->position(), hit);
+    const qreal targetXN = targetChordXN(e->position());
+    if (hit != m_hoveredChip) {
+        hideChipTooltip();
+    }
     if (hit != m_hoveredChip || targetXN != m_hoverTargetXN) {
         m_hoveredChip = hit;
         m_hoverTargetXN = targetXN;
         update();
     }
+    if (hit >= 0 && !m_pressed) {
+        if (!m_tooltipTimer.isActive()) {
+            m_tooltipTimer.start();
+        }
+        updateChipTooltip();
+    }
 
     // See the cursor-priority notes in notevelocityoverlay.cpp: the displayed cursor follows the
     // topmost item that declared one, so declare it here, over the whole lane
-    // Every chip can be moved: moving an automatic one turns it into a mark (see the controller)
-    setCursor(hit >= 0 ? Qt::SizeHorCursor : Qt::ArrowCursor);
+    // The default arrow, chips included: a click is what they're mostly for; the double arrow only shows
+    // once a chip is being dragged (see mouseMoveEvent)
+    setCursor(Qt::ArrowCursor);
     m_hoveringChip = true;
 }
 
 void ArticulationMapOverlay::hoverLeaveEvent(QHoverEvent*)
 {
     m_hoveringChip = false;
+    hideChipTooltip();
     if (m_hoveredChip != -1 || m_hoverTargetXN >= 0.0) {
         m_hoveredChip = -1;
         m_hoverTargetXN = -1.0;
@@ -294,6 +362,7 @@ void ArticulationMapOverlay::hoverLeaveEvent(QHoverEvent*)
 
 void ArticulationMapOverlay::mousePressEvent(QMouseEvent* e)
 {
+    hideChipTooltip();
     m_pressed = true;
     m_pressedButton = e->button();
     m_activeChip = hitTestPx(e->position());
@@ -309,8 +378,10 @@ void ArticulationMapOverlay::mouseMoveEvent(QMouseEvent* e)
         return;
     }
 
-    if (std::abs(e->position().x() - m_dragStartXPx) > ARTMAP_CLICK_MOVE_THRESHOLD_PX) {
+    if (!m_movedPastClickThreshold && std::abs(e->position().x() - m_dragStartXPx) > ARTMAP_CLICK_MOVE_THRESHOLD_PX) {
         m_movedPastClickThreshold = true;
+        // Every chip can be moved: moving an automatic one turns it into a mark (see the controller)
+        setCursor(Qt::SizeHorCursor);
     }
 
     if (m_movedPastClickThreshold) {
@@ -326,6 +397,9 @@ void ArticulationMapOverlay::mouseReleaseEvent(QMouseEvent* e)
 
     const int chip = m_activeChip;
     const bool wasDrag = m_movedPastClickThreshold;
+    if (wasDrag) {
+        setCursor(Qt::ArrowCursor);
+    }
 
     m_pressed = false;
     m_activeChip = -1;
@@ -337,12 +411,13 @@ void ArticulationMapOverlay::mouseReleaseEvent(QMouseEvent* e)
         return;
     }
 
-    emit clicked(chip, e->position().x() / std::max(1.0, width()), e->globalPosition());
+    emit clicked(e->position().x() / std::max(1.0, width()), e->globalPosition());
 }
 
 void ArticulationMapOverlay::mouseUngrabEvent()
 {
     if (m_pressed && m_movedPastClickThreshold) {
+        setCursor(Qt::ArrowCursor);
         emit dragCancelled(m_activeChip);
     }
 

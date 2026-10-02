@@ -87,18 +87,18 @@ muse::async::Notification ArticulationMapData::changed() const
     return m_changed;
 }
 
-const Chord* ArticulationMapData::chordOfMark(const MasterScore* score, const EID& chordId)
+const ChordRest* ArticulationMapData::chordOfMark(const MasterScore* score, const EID& chordId)
 {
     if (!score || !chordId.isValid()) {
         return nullptr;
     }
 
     const EngravingObject* obj = score->eidRegister()->itemFromEID(chordId);
-    if (!obj || !obj->isChord()) {
+    if (!obj || !obj->isChordRest()) {
         return nullptr;
     }
 
-    const Chord* chord = toChord(obj);
+    const ChordRest* chord = toChordRest(obj);
     const Segment* segment = chord->segment();
     if (!segment || segment->element(chord->track()) != chord || !segment->measure()) {
         return nullptr;

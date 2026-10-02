@@ -140,6 +140,8 @@ public:
     Q_INVOKABLE void addArticulation();
     Q_INVOKABLE void addFolder();
     Q_INVOKABLE void removeSelected();
+    //! NOTE: duplicates the selected articulation right below it, at the same level
+    Q_INVOKABLE void copySelectedArticulation();
     Q_INVOKABLE bool canMove(int fromRow, int toRow, DropPosition position) const;
     Q_INVOKABLE void move(int fromRow, int toRow, DropPosition position);
     Q_INVOKABLE void toggleExpanded(int row);
@@ -210,6 +212,8 @@ private:
 
     void markDirty();
     void notifyRowChanged(const Node* node);
+
+    static std::unique_ptr<Node> copyOfArticulation(const Node& entry);
 
     std::unique_ptr<Node> m_root;
     std::vector<Row> m_rows;

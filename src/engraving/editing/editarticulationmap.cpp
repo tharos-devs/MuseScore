@@ -79,8 +79,8 @@ void EditArticulationMap::flip()
         m_data->setMark(chordId, mark);
 
         const EngravingObject* obj = eidRegister->itemFromEID(chordId);
-        if (obj && obj->isChord()) {
-            const staff_idx_t staffIdx = toChord(obj)->staffIdx();
+        if (obj && obj->isChordRest()) {
+            const staff_idx_t staffIdx = toChordRest(obj)->staffIdx();
             includeStaves(staffIdx, staffIdx);
         }
     }

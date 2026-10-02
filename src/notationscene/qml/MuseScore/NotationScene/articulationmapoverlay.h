@@ -24,6 +24,7 @@
 #include <QColor>
 #include <QQuickPaintedItem>
 #include <QString>
+#include <QTimer>
 #include <QVector>
 
 // A lane drawn under a staff, showing which articulation of its instrument's articulation map
@@ -61,6 +62,7 @@ public:
     };
 
     explicit ArticulationMapOverlay(QQuickItem* parent);
+    ~ArticulationMapOverlay() override;
 
     void setContent(const QVector<ChipData>& chips, const QVector<LineData>& lines);
 
@@ -80,8 +82,8 @@ public:
 signals:
     void chipDragged(int chipIndex, qreal deltaXN, bool completed);
     void dragCancelled(int chipIndex);
-    //! NOTE: a plain left click on a chip (chipIndex >= 0) or on an empty part of the lane
-    void clicked(int chipIndex, qreal xN, const QPointF& globalPos);
+    //! NOTE: a plain left click anywhere on the lane, chips included (it's for the note under the target marker)
+    void clicked(qreal xN, const QPointF& globalPos);
 
 protected:
     void hoverMoveEvent(QHoverEvent* e) override;
@@ -94,7 +96,9 @@ protected:
 private:
     QRectF chipRectPx(const ChipData& chip) const;
     int hitTestPx(const QPointF& posPx) const;
-    qreal targetChordXN(const QPointF& posPx, int hitChip) const;
+    qreal targetChordXN(const QPointF& posPx) const;
+    void updateChipTooltip();
+    void hideChipTooltip();
     void drawTargetMarker(QPainter* painter, qreal xN) const;
 
     QVector<ChipData> m_chips;
@@ -112,5 +116,8 @@ private:
     Qt::MouseButton m_pressedButton = Qt::NoButton;
     qreal m_dragStartXPx = 0.0;
     bool m_movedPastClickThreshold = false;
+
+    QTimer m_tooltipTimer;
+    bool m_tooltipShown = false;
 };
 }

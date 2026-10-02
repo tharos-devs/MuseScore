@@ -599,12 +599,17 @@ bool NotationContextMenuModel::isDrumsetStaff() const
 
 MenuItemList NotationContextMenuModel::makeAutomationTypeItems()
 {
-    return {
+    MenuItemList items;
+    if (MenuItem* deleteItem = makeMenuItem(rcommand::CommandQuery(DELETE_AUTOMATION_POINTS_COMMAND))) {
+        items << deleteItem << makeSeparator();
+    }
+
+    return items << MenuItemList {
         makeAutomationTypeItem(AutomationType::Dynamics, "dynamics", TranslatableString::untranslatable("Dynamics")),
         makeAutomationTypeItem(AutomationType::Tempo, "tempo", TranslatableString::untranslatable("Tempo")),
         makeAutomationTypeItem(AutomationType::Volume, "volume", TranslatableString::untranslatable("Volume")),
         makeAutomationTypeItem(AutomationType::Pan, "pan", TranslatableString::untranslatable("Pan")),
-    };
+        };
 }
 
 //! NOTE: same as the toolbar's Automation dropdown: MIDI CCs only reach VST instruments
@@ -617,7 +622,7 @@ MenuItem* NotationContextMenuModel::makeMidiCcMenu()
         [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
         notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(),
-        "automation-midi-cc");
+        "automation-midi-cc", false /*withDeleteItem: "Automation type" right above already starts with it*/);
 }
 
 MenuItem* NotationContextMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,

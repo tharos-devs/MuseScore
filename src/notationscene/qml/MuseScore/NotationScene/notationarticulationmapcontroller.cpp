@@ -42,6 +42,7 @@
 #include "engraving/dom/measure.h"
 #include "engraving/dom/note.h"
 #include "engraving/dom/part.h"
+#include "engraving/dom/rest.h"
 #include "engraving/dom/segment.h"
 #include "engraving/dom/staff.h"
 #include "engraving/dom/system.h"
@@ -54,6 +55,8 @@
 #include "notation/inotationplayback.h"
 #include "notation/inotationselection.h"
 #include "notation/inotationstyle.h"
+
+#include "notationscene/notationcommands.h"
 
 using namespace mu::notation;
 using namespace mu::engraving;
@@ -236,8 +239,18 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     const track_idx_t strack = staffIdx * VOICES;
     const track_idx_t etrack = strack + VOICES;
 
+    const auto toMasterChordRest = [masterScore](ChordRest* chordRest) -> ChordRest* {
+        if (chordRest->score() == masterScore) {
+            return chordRest;
+        }
+        EngravingItem* linked = chordRest->findLinkedInScore(masterScore);
+        return linked && linked->isChordRest() ? toChordRest(linked) : nullptr;
+    };
+
     for (const Segment* seg = system->firstMeasure() ? system->firstMeasure()->first(SegmentType::ChordRest) : nullptr;
          seg && seg->system() == system; seg = seg->next1(SegmentType::ChordRest)) {
+        bool chordFound = false;
+
         // One lane per staff: the first voice with a chord at this position speaks for it
         for (track_idx_t track = strack; track < etrack; ++track) {
             EngravingItem* item = seg->element(track);
@@ -246,8 +259,8 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
             }
 
             Chord* chord = toChord(item);
-            Chord* masterChord = chord->score() == masterScore ? chord : static_cast<Chord*>(chord->findLinkedInScore(masterScore));
-            if (!masterChord) {
+            ChordRest* masterChord = toMasterChordRest(chord);
+            if (!masterChord || !masterChord->isChord()) {
                 continue;
             }
 
@@ -275,12 +288,98 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
                 entry.mark = mapData->mark(masterChord->eid());
             }
             data.chords.push_back(std::move(entry));
+            chordFound = true;
+            break;
+        }
+
+        if (chordFound) {
+            continue;
+        }
+
+        // Silent position: a mark can be placed on its (visible) rest, to change the articulation
+        // ahead of the next chord - the first voice speaks for it
+        for (track_idx_t track = strack; track < etrack; ++track) {
+            EngravingItem* item = seg->element(track);
+            if (!item || !item->isRest() || toRest(item)->isGap() || !item->visible()) {
+                continue;
+            }
+
+            ChordRest* rest = toChordRest(item);
+            ChordRest* masterRest = toMasterChordRest(rest);
+            if (!masterRest) {
+                continue;
+            }
+
+            // A staff with rests only (e.g. before its first note) can get marks too
+            if (!map) {
+                data.trackId = makeInstrumentTrackId(masterRest);
+                map = mapData->map(data.trackId);
+                if (!map) {
+                    return;
+                }
+            }
+
+            ChordEntry entry;
+            entry.chord = rest;
+            entry.masterChord = masterRest;
+            entry.canvasX = rest->canvasX();
+            if (masterRest->eid().isValid()) {
+                entry.mark = mapData->mark(masterRest->eid());
+            }
+            if (entry.mark) {
+                entry.entryId = entry.mark->entryId;
+                entry.source = ResolvedArticulation::Source::OwnMark;
+            }
+            data.chords.push_back(std::move(entry));
             break;
         }
     }
 
     if (data.chords.empty() || !map) {
         return;
+    }
+
+    // A rest without a mark doesn't play anything: it shows the articulation in effect around it - the latest one
+    // that stays in effect (not a "this note only" mark nor a score articulation, which only apply to their chord),
+    // or at the start of the system the next one, if it's one that was already in effect
+    using Source = ResolvedArticulation::Source;
+    const auto staysInEffect = [](const ChordEntry& entry) {
+        if (entry.chord->isRest()) {
+            return entry.mark.has_value() || !entry.entryId.empty();
+        }
+        if (entry.source == Source::Alias) {
+            return false;
+        }
+        return entry.source != Source::OwnMark || (entry.mark && entry.mark->scope == ArticulationMark::Scope::Latched);
+    };
+
+    std::optional<muse::String> inEffect;
+    for (size_t i = 0; i < data.chords.size(); ++i) {
+        ChordEntry& entry = data.chords[i];
+        if (!entry.chord->isRest() || entry.mark) {
+            if (staysInEffect(entry)) {
+                inEffect = entry.entryId;
+            }
+            continue;
+        }
+
+        if (inEffect) {
+            entry.entryId = *inEffect;
+            entry.source = Source::Latched;
+            continue;
+        }
+
+        for (size_t j = i + 1; j < data.chords.size(); ++j) {
+            const ChordEntry& next = data.chords[j];
+            if (next.chord->isRest() && !next.mark) {
+                continue;
+            }
+            if (next.source == Source::Latched || next.source == Source::Default) {
+                entry.entryId = next.entryId;
+                entry.source = Source::Latched;
+            }
+            break;
+        }
     }
 
     const double spatium = data.chords.front().chord->spatium();
@@ -295,19 +394,28 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     QVector<ArticulationMapOverlay::ChipData> chips;
     QVector<ArticulationMapOverlay::LineData> lines;
     muse::String previousEntryId;
+    bool hasPrevious = false;
 
     for (size_t i = 0; i < data.chords.size(); ++i) {
         const ChordEntry& entry = data.chords[i];
         const QColor color = artMapEntryColor(*map, entry.entryId);
 
-        const double nextX = i + 1 < data.chords.size() ? data.chords[i + 1].canvasX : data.bandRect.right();
-        lines.push_back({ toN(entry.canvasX), toN(nextX), color });
+        // Nothing known to be in effect (rests only so far in this system): no line
+        if (!entry.entryId.empty()) {
+            const double nextX = i + 1 < data.chords.size() ? data.chords[i + 1].canvasX : data.bandRect.right();
+            lines.push_back({ toN(entry.canvasX), toN(nextX), color });
+        }
 
-        using Source = ResolvedArticulation::Source;
+        // A rest without a mark only continues the line
+        if (entry.chord->isRest() && !entry.mark) {
+            continue;
+        }
+
         const bool isOwnMark = entry.source == Source::OwnMark;
         const bool isAlias = entry.source == Source::Alias;
-        const bool changed = i == 0 || entry.entryId != previousEntryId;
+        const bool changed = !hasPrevious || entry.entryId != previousEntryId;
         previousEntryId = entry.entryId;
+        hasPrevious = true;
 
         // Consecutive notes playing the same articulation share one chip, the line shows it continues
         if (!isOwnMark && !changed) {
@@ -343,8 +451,8 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
         overlay = new ArticulationMapOverlay(m_overlaysParent);
         overlay->setVisible(false);
 
-        QObject::connect(overlay, &ArticulationMapOverlay::clicked, [this, key](int chipIndex, qreal xN, const QPointF& globalPos) {
-            onClicked(key, chipIndex, xN, globalPos);
+        QObject::connect(overlay, &ArticulationMapOverlay::clicked, [this, key](qreal xN, const QPointF& globalPos) {
+            onClicked(key, xN, globalPos);
         });
         QObject::connect(overlay, &ArticulationMapOverlay::chipDragged, [this, key](int chipIndex, qreal deltaXN, bool completed) {
             onChipDragged(key, chipIndex, deltaXN, completed);
@@ -396,7 +504,7 @@ void NotationArticulationMapController::setViewMatrix(const muse::draw::Transfor
     }
 }
 
-void NotationArticulationMapController::onClicked(const SysStaffKey& key, int chipIndex, qreal xN, const QPointF& globalPos)
+void NotationArticulationMapController::onClicked(const SysStaffKey& key, qreal xN, const QPointF& globalPos)
 {
     const auto dataIt = m_overlaysByStaff.find(key);
     if (dataIt == m_overlaysByStaff.end() || dataIt->second.chords.empty()) {
@@ -404,19 +512,16 @@ void NotationArticulationMapController::onClicked(const SysStaffKey& key, int ch
     }
     const StaffOverlayData& data = dataIt->second;
 
+    // The note nearest to the click, as the lane's target marker shows - also over a chip, which is only
+    // grabbed to be dragged (a chip may span over the next notes)
     size_t chordIndex = 0;
-    if (chipIndex >= 0 && static_cast<size_t>(chipIndex) < data.chipChords.size()) {
-        chordIndex = data.chipChords[chipIndex];
-    } else {
-        // An empty part of the lane: the nearest chord
-        const double canvasX = data.bandRect.x() + xN * data.bandRect.width();
-        double bestDistance = std::numeric_limits<double>::max();
-        for (size_t i = 0; i < data.chords.size(); ++i) {
-            const double distance = std::abs(data.chords[i].canvasX - canvasX);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                chordIndex = i;
-            }
+    const double canvasX = data.bandRect.x() + xN * data.bandRect.width();
+    double bestDistance = std::numeric_limits<double>::max();
+    for (size_t i = 0; i < data.chords.size(); ++i) {
+        const double distance = std::abs(data.chords[i].canvasX - canvasX);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            chordIndex = i;
         }
     }
 
@@ -441,18 +546,47 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
         return;
     }
 
-    const std::vector<Chord*> targets = targetMasterChords(data, chordIndex);
+    const std::vector<ChordRest*> targets = targetMasterChords(data, chordIndex);
     const std::optional<ArticulationMark> ownMark = entry.mark;
+    const bool isRest = entry.chord->isRest();
+    const InstrumentTrackId trackId = data.trackId;
 
     // A mark over a notated articulation (e.g. staccato played staccatissimo) is most likely meant
-    // for that note only; anywhere else, it most likely starts a new passage
-    const ArticulationMark::Scope defaultScope = ownMark ? ownMark->scope
+    // for that note only; anywhere else, it most likely starts a new passage - always on a rest
+    const ArticulationMark::Scope defaultScope = isRest ? ArticulationMark::Scope::Latched
+                                                 : ownMark ? ownMark->scope
                                                  : entry.source == ResolvedArticulation::Source::Alias
                                                  ? ArticulationMark::Scope::SingleChord
                                                  : ArticulationMark::Scope::Latched;
 
+    const auto placeArticulation = [this, targets, ownMark, defaultScope, trackId](const muse::String& entryId) {
+        ArticulationMark mark;
+        mark.entryId = entryId;
+        mark.scope = defaultScope;
+        mark.tickOffset = ownMark ? ownMark->tickOffset : 0;
+        m_lastPlacedEntryIdByTrack[trackId] = entryId;
+        setMarks(targets, mark, muse::TranslatableString("undoableAction", "Set articulation"));
+    };
+
     QMenu menu;
     std::map<QString, QMenu*> submenus;
+
+    // The articulation last given to a note of this track, to repeat it in one click
+    const auto lastPlacedIt = m_lastPlacedEntryIdByTrack.find(trackId);
+    const ExpressionMapEntry* lastPlaced = lastPlacedIt != m_lastPlacedEntryIdByTrack.end() ? map->entry(lastPlacedIt->second) : nullptr;
+    if (lastPlaced) {
+        // With its folders, e.g. "Long > Con vibrato" (entry ids are stored that way, see ArticulationMapParser)
+        QAction* lastPlacedAction = menu.addAction(lastPlaced->id.toQString());
+        lastPlacedAction->setCheckable(true);
+        lastPlacedAction->setChecked(lastPlaced->id == entry.entryId);
+
+        const muse::String entryId = lastPlaced->id;
+        QObject::connect(lastPlacedAction, &QAction::triggered, [placeArticulation, entryId]() {
+            placeArticulation(entryId);
+        });
+
+        menu.addSeparator();
+    }
 
     for (const ExpressionMapEntry& mapEntry : map->entries) {
         if (mapEntry.disabled) {
@@ -476,18 +610,14 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
         action->setChecked(mapEntry.id == entry.entryId);
 
         const muse::String entryId = mapEntry.id;
-        QObject::connect(action, &QAction::triggered, [this, targets, entryId, ownMark, defaultScope]() {
-            ArticulationMark mark;
-            mark.entryId = entryId;
-            mark.scope = defaultScope;
-            mark.tickOffset = ownMark ? ownMark->tickOffset : 0;
-            setMarks(targets, mark, muse::TranslatableString("undoableAction", "Set articulation"));
+        QObject::connect(action, &QAction::triggered, [placeArticulation, entryId]() {
+            placeArticulation(entryId);
         });
     }
 
     menu.addSeparator();
 
-    if (ownMark) {
+    if (ownMark && !isRest) {
         QAction* singleChordAction = menu.addAction(muse::qtrc("notation", "This note only"));
         singleChordAction->setCheckable(true);
         singleChordAction->setChecked(ownMark->scope == ArticulationMark::Scope::SingleChord);
@@ -505,17 +635,30 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
                 setMarks(targets, mark, muse::TranslatableString("undoableAction", "Reset articulation position"));
             });
         }
+    }
 
+    if (ownMark) {
         QAction* removeAction = menu.addAction(muse::qtrc("notation", "Remove articulation change"));
         QObject::connect(removeAction, &QAction::triggered, [this, targets]() {
             setMarks(targets, std::nullopt, muse::TranslatableString("undoableAction", "Remove articulation change"));
         });
     } else {
-        QAction* hint = menu.addAction(defaultScope == ArticulationMark::Scope::SingleChord
+        QAction* hint = menu.addAction(isRest ? muse::qtrc("notation", "Applies from the next note until the next change")
+                                       : defaultScope == ArticulationMark::Scope::SingleChord
                                        ? muse::qtrc("notation", "Applies to this note only")
                                        : muse::qtrc("notation", "Applies until the next change"));
         hint->setEnabled(false);
     }
+
+    menu.addSeparator();
+
+    QAction* editMapAction = menu.addAction(muse::qtrc("notation", "Edit articulation map…"));
+    QObject::connect(editMapAction, &QAction::triggered, [this, trackId]() {
+        muse::rcommand::CommandQuery query(EDIT_ARTICULATION_MAP_COMMAND);
+        query.addParam("partId", muse::Val(std::to_string(trackId.partId.toUint64())));
+        query.addParam("instrumentId", muse::Val(trackId.instrumentId.toStdString()));
+        commandDispatcher()->dispatch(query);
+    });
 
     // Keep showing which note the choice applies to while the menu is open (the choice may rebuild the lane)
     QPointer<ArticulationMapOverlay> overlay = data.overlay;
@@ -530,9 +673,12 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
     }
 }
 
-std::vector<Chord*> NotationArticulationMapController::targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const
+std::vector<ChordRest*> NotationArticulationMapController::targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const
 {
-    Chord* clicked = data.chords[chordIndex].masterChord;
+    ChordRest* clicked = data.chords[chordIndex].masterChord;
+    if (clicked->isRest()) {
+        return { clicked };
+    }
 
     const INotationPtr notation = currentNotation();
     const INotationSelectionPtr selection = notation && notation->interaction() ? notation->interaction()->selection() : nullptr;
@@ -541,14 +687,14 @@ std::vector<Chord*> NotationArticulationMapController::targetMasterChords(const 
     }
 
     // Clicking one of several selected chords applies to all of them
-    std::vector<Chord*> selectedChords;
+    std::vector<ChordRest*> selectedChords;
     for (const Note* note : selection->notes()) {
         Chord* chord = note->chord();
         if (!chord || chord->staffIdx() != data.chords[chordIndex].chord->staffIdx()) {
             continue;
         }
 
-        Chord* masterChord = chord->score()->isMaster() ? chord : static_cast<Chord*>(chord->findLinkedInScore(chord->masterScore()));
+        ChordRest* masterChord = chord->score()->isMaster() ? chord : static_cast<Chord*>(chord->findLinkedInScore(chord->masterScore()));
         if (masterChord && !muse::contains(selectedChords, masterChord)) {
             selectedChords.push_back(masterChord);
         }
@@ -561,7 +707,7 @@ std::vector<Chord*> NotationArticulationMapController::targetMasterChords(const 
     return { clicked };
 }
 
-void NotationArticulationMapController::setMarks(const std::vector<Chord*>& masterChords, const std::optional<ArticulationMark>& mark,
+void NotationArticulationMapController::setMarks(const std::vector<ChordRest*>& masterChords, const std::optional<ArticulationMark>& mark,
                                                  const muse::TranslatableString& actionName)
 {
     if (masterChords.empty() || !articulationMaps()) {
@@ -569,7 +715,7 @@ void NotationArticulationMapController::setMarks(const std::vector<Chord*>& mast
     }
 
     EditArticulationMapChanges changes;
-    for (const Chord* chord : masterChords) {
+    for (const ChordRest* chord : masterChords) {
         EID chordId = chord->eid();
         if (!chordId.isValid()) {
             chordId = chord->assignNewEID();
@@ -584,16 +730,16 @@ void NotationArticulationMapController::setMarks(const std::vector<Chord*>& mast
     }
 }
 
-void NotationArticulationMapController::auditionChord(const Chord* chord)
+void NotationArticulationMapController::auditionChord(const ChordRest* chord)
 {
-    if (!chord || playbackController()->isPlaying()) {
+    if (!chord || !chord->isChord() || playbackController()->isPlaying()) {
         return;
     }
 
     playbackController()->playElements({ chord });
 }
 
-double NotationArticulationMapController::ticksPerCanvasUnit(const Chord* chord) const
+double NotationArticulationMapController::ticksPerCanvasUnit(const ChordRest* chord) const
 {
     const Measure* measure = chord ? chord->measure() : nullptr;
     if (!measure || measure->width() <= 0.0) {
@@ -606,7 +752,7 @@ double NotationArticulationMapController::ticksPerCanvasUnit(const Chord* chord)
 //! NOTE: a change can be anticipated up to the previous chord, or delayed up to half of its own chord
 int NotationArticulationMapController::clampTickOffset(const StaffOverlayData& data, size_t chordIndex, int tickOffset) const
 {
-    const Chord* chord = data.chords[chordIndex].chord;
+    const ChordRest* chord = data.chords[chordIndex].chord;
     const int tick = chord->tick().ticks();
 
     const int previousTick = chordIndex > 0 ? data.chords[chordIndex - 1].chord->tick().ticks()
@@ -627,6 +773,14 @@ void NotationArticulationMapController::onChipDragged(const SysStaffKey& key, in
 
     const size_t chordIndex = data.chipChords[chipIndex];
     const ChordEntry& entry = data.chords[chordIndex];
+
+    // A change on a rest takes effect at the next chord: there's nothing to fine-tune
+    if (entry.chord->isRest()) {
+        if (completed) {
+            onDragCancelled(key, chipIndex);
+        }
+        return;
+    }
 
     // Moving an automatic articulation (score articulation, default, resumed latched mark) turns it
     // into a mark of the same articulation for this chord only: nothing else about playback changes

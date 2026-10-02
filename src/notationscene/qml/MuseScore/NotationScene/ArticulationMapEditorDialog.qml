@@ -125,21 +125,27 @@ StyledDialogView {
         property int dragFromRow: -1
         property int dropRow: -1
         property int dropPosition: ArticulationMapEditorModel.Before
+        // below the last row: to the end of the map, outside of any folder (the indicator shows on the last row)
+        property bool dropAtEnd: false
         readonly property bool isDragging: dragFromRow >= 0
 
         function cancelDrag() {
             dragFromRow = -1
             dropRow = -1
+            dropAtEnd = false
         }
 
         function drop() {
             const from = dragFromRow
-            const to = dropRow
+            const atEnd = dropAtEnd
+            const to = atEnd ? -1 : dropRow
             const position = dropPosition
+            const hasTarget = atEnd || dropRow >= 0
             cancelDrag()
 
             // the move rebuilds the list, destroying the delegate whose handler is running
-            if (from >= 0 && to >= 0) {
+            // (-1 = the end of the map, outside of any folder)
+            if (from >= 0 && hasTarget) {
                 Qt.callLater(editorModel.move, from, to, position)
             }
         }
@@ -358,8 +364,17 @@ StyledDialogView {
 
                                     const p = mapToItem(listView.contentItem, mouse.x, mouse.y)
                                     const targetRow = listView.indexAt(10, p.y)
+                                    prv.dropAtEnd = false
                                     if (targetRow < 0) {
-                                        prv.dropRow = -1
+                                        const lastItem = listView.itemAtIndex(listView.count - 1)
+                                        if (lastItem && p.y >= lastItem.y + lastItem.height
+                                                && editorModel.canMove(prv.dragFromRow, -1, ArticulationMapEditorModel.After)) {
+                                            prv.dropAtEnd = true
+                                            prv.dropRow = listView.count - 1
+                                            prv.dropPosition = ArticulationMapEditorModel.After
+                                        } else {
+                                            prv.dropRow = -1
+                                        }
                                         return
                                     }
 
@@ -369,6 +384,16 @@ StyledDialogView {
                                                                               : ArticulationMapEditorModel.After
                                     if (target.isFolder && yInRow > target.height / 4 && yInRow < target.height * 3 / 4) {
                                         position = ArticulationMapEditorModel.Into
+                                    }
+
+                                    // After the very last row = the end of the map, outside of any folder (the list may
+                                    // have no empty space below it); "Into" its folder is for the end of that folder
+                                    if (targetRow === listView.count - 1 && position === ArticulationMapEditorModel.After
+                                            && editorModel.canMove(prv.dragFromRow, -1, ArticulationMapEditorModel.After)) {
+                                        prv.dropAtEnd = true
+                                        prv.dropRow = targetRow
+                                        prv.dropPosition = position
+                                        return
                                     }
 
                                     if (editorModel.canMove(prv.dragFromRow, targetRow, position)) {
@@ -496,7 +521,8 @@ StyledDialogView {
                     }
                 }
 
-                RowLayout {
+                // wraps onto a second line when the list is narrow
+                Flow {
                     Layout.fillWidth: true
                     Layout.topMargin: 8
                     spacing: 8
@@ -522,12 +548,17 @@ StyledDialogView {
 
                     FlatButton {
                         minWidth: 0
+                        text: qsTrc("global", "Copy")
+                        enabled: editorModel.hasSelection && !editorModel.selectedIsFolder
+                        onClicked: editorModel.copySelectedArticulation()
+                    }
+
+                    FlatButton {
+                        minWidth: 0
                         text: qsTrc("global", "Remove")
                         enabled: editorModel.hasSelection
                         onClicked: editorModel.removeSelected()
                     }
-
-                    Item { Layout.fillWidth: true }
                 }
             }
 
@@ -680,7 +711,7 @@ StyledDialogView {
                                     StyledDropdown {
                                         Layout.preferredWidth: 120
                                         model: [
-                                            { text: qsTrc("notation", "Note On + Off"), value: ArticulationMapEditorModel.Note },
+                                            { text: qsTrc("notation", "Note On/Off"), value: ArticulationMapEditorModel.Note },
                                             { text: qsTrc("notation", "MIDI CC"), value: ArticulationMapEditorModel.ControlChange },
                                             { text: qsTrc("notation", "Program Change"), value: ArticulationMapEditorModel.ProgramChange }
                                         ]

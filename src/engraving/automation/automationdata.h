@@ -30,9 +30,17 @@
 #include <vector>
 
 namespace mu::engraving {
+class Score;
+
 class AutomationData
 {
 public:
+    //! NOTE: whether the item a point was generated from (e.g. a tempo marking) is still in the score - a deleted
+    //! item stays registered (and parented) while the undo stack keeps it, so the register alone can't tell
+    static bool isLinkedItemInScore(const Score* score, const EID& itemId);
+    //! NOTE: a point the score drives (generated, or from an item still in the score): not edited/removed by hand
+    static bool isScoreDrivenPoint(const Score* score, const AutomationPoint& point);
+
     const AutomationCurveMap& curves() const;
     const AutomationCurve& curve(const AutomationCurveKey& key) const;
 

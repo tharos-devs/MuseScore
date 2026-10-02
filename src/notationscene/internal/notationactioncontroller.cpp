@@ -611,7 +611,8 @@ void NotationActionController::init()
 
     registerCommand(TOGGLE_AUTOMATION_COMMAND, &Controller::toggleAutomation);
     registerCommandWithParams(SELECT_AUTOMATION_TYPE_COMMAND, &Controller::selectAutomationType);
-    registerCommand(DELETE_MIDI_CC_POINTS_COMMAND, &Controller::deleteMidiCcPointsInSelection);
+    registerCommand(DELETE_MIDI_CC_POINTS_COMMAND, &Controller::deleteAutomationPointsInSelection);
+    registerCommand(DELETE_AUTOMATION_POINTS_COMMAND, &Controller::deleteAutomationPointsInSelection);
     registerCommand(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, &Controller::toggleNoteOffsetEditor);
     registerCommand(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, &Controller::toggleNoteVelocityEditor);
     registerCommand(TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::toggleArticulationMapEditor);
@@ -3638,15 +3639,20 @@ void NotationActionController::resetNoteVelocities()
     undoStack->commitChanges();
 }
 
-//! NOTE: erases the points of the MIDI CC curve shown (on each selected staff's instrument) within the range
-//! selection - on every pass through it, since the curve is stored with repeats unrolled - as one undoable step
-void NotationActionController::deleteMidiCcPointsInSelection()
+//! NOTE: erases the points of the automation curve shown (Dynamics: each selected staff's, Tempo: the score's,
+//! Volume/Pan/MIDI CC: each selected staff's instrument's) within the range selection - on every pass through it,
+//! since curves are stored with repeats unrolled - as one undoable step. The points the score drives (e.g. from
+//! a dynamic or tempo marking) are kept, like when removing a point by hand
+void NotationActionController::deleteAutomationPointsInSelection()
 {
+    using mu::engraving::AutomationType;
+
     const INotationPtr notation = currentNotation();
     const IMasterNotationPtr masterNotation = currentMasterNotation();
     const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     const AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
-    if (!notation || !data || configuration()->currentAutomationType() != mu::engraving::AutomationType::MidiCC) {
+    const AutomationType type = configuration()->currentAutomationType();
+    if (!notation || !data || type == AutomationType::Unknown) {
         return;
     }
 
@@ -3661,13 +3667,36 @@ void NotationActionController::deleteMidiCcPointsInSelection()
     const uint8_t controller = static_cast<uint8_t>(configuration()->currentAutomationMidiCc());
 
     const mu::engraving::Score* score = notation->elements()->msScore();
-    std::set<mu::engraving::InstrumentTrackId> trackIds;
+    std::set<mu::engraving::AutomationCurveKey> curveKeys;
+    if (type == AutomationType::Tempo) {
+        curveKeys.insert(mu::engraving::AutomationCurveKey::global(type));
+    }
     for (mu::engraving::staff_idx_t staffIdx = range->startStaffIndex(); staffIdx < range->endStaffIndex(); ++staffIdx) {
         const mu::engraving::Staff* staff = score->staff(staffIdx);
         const mu::engraving::Part* part = staff ? staff->part() : nullptr;
-        // Only VST instruments show (and play) MIDI CC curves; they belong to the part's first instrument
-        if (part && midicc::isVstInstrument(globalContext()->currentProject(), part)) {
-            trackIds.insert({ part->id(), part->instrumentId() });
+        if (!part) {
+            continue;
+        }
+
+        // Instrument curves belong to the part's first instrument
+        const mu::engraving::InstrumentTrackId trackId { part->id(), part->instrumentId() };
+        switch (type) {
+        case AutomationType::Dynamics:
+            curveKeys.insert(mu::engraving::AutomationCurveKey::staff(type, staff->id()));
+            break;
+        case AutomationType::Volume:
+        case AutomationType::Pan:
+            curveKeys.insert(mu::engraving::AutomationCurveKey::instrument(type, trackId));
+            break;
+        case AutomationType::MidiCC:
+            // Only VST instruments show (and play) MIDI CC curves
+            if (midicc::isVstInstrument(globalContext()->currentProject(), part)) {
+                curveKeys.insert(mu::engraving::AutomationCurveKey::midiCc(trackId, controller));
+            }
+            break;
+        case AutomationType::Tempo:
+        case AutomationType::Unknown:
+            break;
         }
     }
 
@@ -3686,14 +3715,15 @@ void NotationActionController::deleteMidiCcPointsInSelection()
     }
 
     std::vector<std::pair<mu::engraving::AutomationCurveKey, mu::engraving::AutomationPointEdits> > editsByCurve;
-    for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
-        const mu::engraving::AutomationCurveKey key = mu::engraving::AutomationCurveKey::midiCc(trackId, controller);
+    for (const mu::engraving::AutomationCurveKey& key : curveKeys) {
         const mu::engraving::AutomationCurve& curve = data->curve(key);
 
         mu::engraving::AutomationPointEdits edits;
         for (const auto& [from, to] : utickRanges) {
             for (auto it = curve.lower_bound(from); it != curve.end() && it->first < to; ++it) {
-                edits.push_back({ it->first, mu::engraving::AutomationPointEdit::ErasePoint {} });
+                if (!mu::engraving::AutomationData::isScoreDrivenPoint(score, it->second)) {
+                    edits.push_back({ it->first, mu::engraving::AutomationPointEdit::ErasePoint {} });
+                }
             }
         }
 

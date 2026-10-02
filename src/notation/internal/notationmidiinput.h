@@ -30,6 +30,7 @@
 
 #include "modularity/ioc.h"
 #include "playback/iplaybackcontroller.h"
+#include "playback/imidiccrecorder.h"
 #include "inotationconfiguration.h"
 #include "actions/iactionsdispatcher.h"
 #include "rcommand/icommanddispatcher.h"
@@ -49,6 +50,7 @@ class NotationMidiInput : public INotationMidiInput, public muse::Contextable
 {
     muse::GlobalInject<INotationConfiguration> configuration;
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
+    muse::ContextInject<playback::IMidiCcRecorder> midiCcRecorder = { this };
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandsDispatcher = { this };
 public:
@@ -71,7 +73,8 @@ private:
     Note* addNoteToScore(const muse::midi::Event& e);
     Note* makePreviewNote(const muse::midi::Event& e);
 
-    using ControllerEventMap = std::map<muse::midi::Event::Opcode, muse::midi::Event>;
+    //! NOTE: the last event of each controller (its number, 0 for pitch bend)
+    using ControllerEventMap = std::map<std::pair<muse::midi::Event::Opcode, int>, muse::midi::Event>;
     void triggerControllers(const ControllerEventMap& events);
     void releasePlayingNotes(const std::vector<int>& pitches);
 

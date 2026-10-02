@@ -27,6 +27,7 @@
 #include <unordered_set>
 #include <vector>
 #include <QPointF>
+#include <QPointer>
 #include <QQuickItem>
 
 #include "context/iglobalcontext.h"
@@ -60,6 +61,7 @@ class NotationAutomationController : public muse::Contextable, public muse::asyn
 
 public:
     NotationAutomationController(QQuickItem* linesParent, const muse::modularity::ContextPtr& iocCtx);
+    ~NotationAutomationController();
 
     void init();
     void setViewMatrix(const muse::draw::Transform& viewMatrix);
@@ -180,6 +182,9 @@ private:
     bool requestEditPoint(const PointData& oldPointData, const SysStaffKey& key, qreal x, qreal y);
     bool requestAddPoint(const SysStaffKey& key, qreal x, qreal y);
     bool requestRemovePoint(const PointData& pointData, const SysStaffKey& key);
+    //! NOTE: Cmd+click on a point: a small field next to it to type its value, in its type's unit
+    void showPointValueEditor(const SysStaffKey& key, int pointIdx, const QPointF& globalPos);
+    void closePointValueEditor();
     void editAutomationPoints(const mu::engraving::AutomationCurveKey& key, mu::engraving::AutomationPointEdits& edits);
 
     const mu::engraving::AutomationPoint* automationPointAt(const SysStaffKey& key, int tick) const;
@@ -199,6 +204,8 @@ private:
     PendingScoreState m_pendingScoreState;
     bool m_updateScheduled = false;
     bool m_rebuildScheduled = false;
+    QPointer<QObject> m_pointValueEditor; // a QWidget (see showPointValueEditor())
+    bool m_freeDynamicsDrag = false; // Alt held during the current drag (see the pointMoved handler)
 
     struct GroupDrag {
         bool active = false;
