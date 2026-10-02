@@ -400,6 +400,19 @@ std::optional<ResolvedArticulation> PlaybackModel::resolvedArticulation(track_id
     return m_playbackCtx ? m_playbackCtx->resolvedArticulation(trackIdx, tick) : std::nullopt;
 }
 
+std::optional<int> PlaybackModel::articulationChannel(const InstrumentTrackId& trackId, track_idx_t trackIdx, int tick) const
+{
+    const ExpressionMap* map = m_playbackCtx ? m_playbackCtx->expressionMap(trackId) : nullptr;
+    if (!map) {
+        return std::nullopt;
+    }
+
+    const std::optional<ResolvedArticulation> resolved = m_playbackCtx->resolvedArticulation(trackIdx, tick);
+    const ExpressionMapEntry* entry = resolved ? map->entry(resolved->entryId) : nullptr;
+
+    return entry && entry->channel ? *entry->channel : -1;
+}
+
 dynamic_level_t PlaybackModel::appliableDynamicLevel(track_idx_t trackIdx, int tick) const
 {
     if (!m_playbackCtx) {

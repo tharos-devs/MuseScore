@@ -202,6 +202,13 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
         UNREACHABLE;
     }
 
+    //! NOTE: a note played on a MIDI keyboard (outside note input) is a temporary one, outside the score:
+    //! it plays with the articulation of the selected chord of its staff (keyswitch, channel)
+    if (chord && chord->track() == muse::nidx && item->isNote()) {
+        const ChordRest* selected = chord->score() ? chord->score()->inputState().cr() : nullptr;
+        chord = selected && selected->isChord() && selected->staffIdx() == toNote(item)->staffIdx() ? toChord(selected) : nullptr;
+    }
+
     //! NOTE: so that auditioning a note (e.g. clicking it) plays it with its own articulation
     //! Marks and staff indices belong to the master score, while the auditioned item may come from a part
     if (chord && !chord->score()->isMaster()) {
@@ -209,7 +216,9 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
         chord = linked && linked->isChord() ? toChord(linked) : nullptr;
     }
 
-    if (chord && playbackCtx->expressionMap(makeInstrumentTrackId(chord))) {
+    // Not for a key released (duration 0): its keyswitch would be sent again, and the audio side
+    // already knows which channel the key was played on
+    if (chord && actualDuration > 0 && playbackCtx->expressionMap(makeInstrumentTrackId(chord))) {
         const Score* score = chord->score();
         const int tick = chord->tick().ticks();
         const int tickOffset = score ? score->repeatList().tick2utick(tick) - tick : 0;

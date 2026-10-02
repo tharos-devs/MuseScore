@@ -95,6 +95,9 @@ public:
 
     muse::mpe::dynamic_level_t appliableDynamicLevel(track_idx_t trackIdx, int tick) const;
     std::optional<ResolvedArticulation> resolvedArticulation(track_idx_t trackIdx, int tick) const;
+    //! NOTE: the MIDI channel (0-based) of the articulation the chord at trackIdx/tick plays, -1 = the track's own;
+    //! nullopt when the instrument has no articulation map
+    std::optional<int> articulationChannel(const InstrumentTrackId& trackId, track_idx_t trackIdx, int tick) const;
 
 private:
     static const InstrumentTrackId METRONOME_TRACK_ID;
