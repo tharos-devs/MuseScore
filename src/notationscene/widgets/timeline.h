@@ -359,5 +359,6 @@ private:
 
     void seekSelection();
     engraving::EngravingItem* firstElementInRow(engraving::Measure* measure, int row) const;
+    engraving::EngravingItem* firstElementInParts(engraving::Measure* measure, const std::vector<const engraving::Part*>& parts) const;
 };
 }
