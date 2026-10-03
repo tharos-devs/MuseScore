@@ -2837,7 +2837,7 @@ void PlaybackController::refreshAudioPluginStates()
     if (m_videoTrackId != INVALID_TRACK_ID) {
         AudioOutputParams outParams = settings->videoOutputParams();
         if (refreshFxChain(outParams.fxChain, trackFxState(m_videoTrackId))) {
-            settings->setVideoOutputParams(outParams);
+            settings->setVideoOutputParams(outParams, false /*notifySettingsChanged*/);
         }
     }
 
@@ -2846,7 +2846,7 @@ void PlaybackController::refreshAudioPluginStates()
         return vstPluginStateProvider()->masterFxPluginState(fxParams.resourceMeta.id, chainOrder);
     };
     if (refreshFxChain(masterParams.fxChain, masterFxState)) {
-        settings->setMasterAudioOutputParams(masterParams);
+        settings->setMasterAudioOutputParams(masterParams, false /*notifySettingsChanged*/);
     }
 #endif
 }

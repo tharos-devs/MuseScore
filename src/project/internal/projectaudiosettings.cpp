@@ -72,14 +72,17 @@ const AudioOutputParams& ProjectAudioSettings::masterAudioOutputParams() const
     return m_masterOutputParams;
 }
 
-void ProjectAudioSettings::setMasterAudioOutputParams(const AudioOutputParams& params)
+void ProjectAudioSettings::setMasterAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged)
 {
     if (m_masterOutputParams == params) {
         return;
     }
 
     m_masterOutputParams = params;
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 bool ProjectAudioSettings::containsVideoOutputParams() const
@@ -93,14 +96,17 @@ const AudioOutputParams& ProjectAudioSettings::videoOutputParams() const
     return m_videoOutputParams ? *m_videoOutputParams : DEFAULT;
 }
 
-void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params)
+void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged)
 {
     if (m_videoOutputParams == params) {
         return;
     }
 
     m_videoOutputParams = params;
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 bool ProjectAudioSettings::containsAuxOutputParams(aux_channel_idx_t index) const
@@ -192,8 +198,18 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
                                           && it->second.midiPort == params.midiPort
                                           && it->second.midiChannel == params.midiChannel;
 
+    //! NOTE Only the plugin's state (e.g. read before saving): nothing the listeners show
+    const bool onlyStateChanged = it != m_trackInputParamsMap.end()
+                                  && it->second.type() == params.type()
+                                  && it->second.resourceMeta == params.resourceMeta
+                                  && it->second.midiPort == params.midiPort
+                                  && it->second.midiChannel == params.midiChannel
+                                  && it->second.midiPortNames == params.midiPortNames;
+
     m_trackInputParamsMap.insert_or_assign(partId, params);
-    m_trackInputParamsChanged.send(partId);
+    if (!onlyStateChanged) {
+        m_trackInputParamsChanged.send(partId);
+    }
 
     if (notifySettingsChanged && !onlyMidiPortNamesChanged) {
         m_settingsChanged.notify();
@@ -432,6 +448,11 @@ void ProjectAudioSettings::setActiveSoundProfile(const playback::SoundProfileNam
 muse::async::Notification ProjectAudioSettings::settingsChanged() const
 {
     return m_settingsChanged;
+}
+
+void ProjectAudioSettings::markAsChanged()
+{
+    m_settingsChanged.notify();
 }
 
 Ret ProjectAudioSettings::read(const engraving::MscReader& reader)

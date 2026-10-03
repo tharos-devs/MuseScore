@@ -314,6 +314,10 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
             continue;
         }
 
+        // "ch = 3 Name": the channel-only code may be written with spaces too
+        static const std::regex CHANNEL_CODE_SPACES_REGEX(R"(^([*\-]*)ch\s*=\s*)", std::regex::icase);
+        line = std::regex_replace(line, CHANNEL_CODE_SPACES_REGEX, "$1ch=", std::regex_constants::format_first_only);
+
         const size_t firstSpace = line.find_first_of(" \t");
         std::string first = line.substr(0, firstSpace);
         std::string rest = firstSpace == std::string::npos ? std::string() : trimmed(line.substr(firstSpace));
@@ -384,8 +388,17 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
 
         // Before the aliases are looked for: "ch=2" isn't an alias list
         if (std::regex_search(rest, match, CHANNEL_REGEX)) {
-            readChannel(match[2].str());
+            if (entry.channel) {
+                addError(lineIdx, "several ch= on the line, keeping the first one");
+            } else {
+                readChannel(match[2].str());
+            }
             rest = match.prefix().str() + " " + match.suffix().str();
+
+            if (std::regex_search(rest, match, CHANNEL_REGEX)) {
+                addError(lineIdx, "several ch= on the line, keeping the first one");
+                rest = match.prefix().str() + " " + match.suffix().str();
+            }
         }
 
         std::string remaining;

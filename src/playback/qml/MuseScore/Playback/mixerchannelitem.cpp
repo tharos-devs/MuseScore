@@ -1469,9 +1469,12 @@ void MixerChannelItem::openEditor(AbstractAudioResourceItem* item, const actions
     dispatcher()->dispatch(action);
 
     //! NOTE: some plugins change their state without reporting it (e.g. Kontakt's solo/mute): once its window is
-    //! open, the project may have changed - and saving reads the plugins' current state (see refreshAudioPluginStates)
+    //! open, the project may have changed - and saving reads the plugins' current state (see refreshAudioPluginStates).
+    //! Through the audio settings, so that an undo back to a clean stack doesn't make the project look unchanged
     if (project::INotationProjectPtr project = context()->currentProject()) {
-        project->markAsUnsaved();
+        if (project::IProjectAudioSettingsPtr settings = project->audioSettings()) {
+            settings->markAsChanged();
+        }
     }
 }
 

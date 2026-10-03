@@ -168,6 +168,38 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
     events.emplace_back(std::move(event));
 }
 
+//! NOTE: the articulation in effect at a staff's position with no chord of its own (see PlaybackContext::articulationInEffect)
+static void appendArticulationInEffectEvent(const Staff* staff, const int tick, const PlaybackContextPtr& playbackCtx,
+                                            PlaybackEventList& events)
+{
+    if (staff && !staff->score()->isMaster()) {
+        const EngravingItem* linked = staff->findLinkedInScore(staff->masterScore());
+        staff = linked ? toStaff(linked) : nullptr;
+    }
+
+    const Part* part = staff ? staff->part() : nullptr;
+    if (!part || part->staves().empty()) {
+        return;
+    }
+
+    const InstrumentTrackId trackId { part->id(), part->instrumentId(Fraction::fromTicks(tick)) };
+    const staff_idx_t firstStaffIdx = part->staves().front()->idx();
+    const ExpressionMap* map = playbackCtx->expressionMap(trackId);
+    const ExpressionMapEntry* entry = playbackCtx->articulationInEffect(trackId, firstStaffIdx, tick);
+    if (!map || !entry || (entry->messages.empty() && !entry->channel)) {
+        return;
+    }
+
+    mpe::MidiMessagesEvent event;
+    event.messages = entry->messages;
+    event.messagesOffset = timestamp_t(map->keyswitchOffsetMsFor(*entry) * 1000);
+    event.notesOffset = timestamp_t(entry->notesOffsetMs * 1000);
+    event.channel = entry->channel.value_or(-1);
+    event.layerIdx = static_cast<mpe::layer_idx_t>(staff2track(firstStaffIdx));
+
+    events.emplace_back(std::move(event));
+}
+
 void PlaybackEventsRenderer::render(const EngravingItem* item, const int tickPositionOffset,
                                     const ArticulationsProfilePtr profile, const PlaybackContextPtr playbackCtx,
                                     PlaybackEventsMap& result) const
@@ -202,11 +234,24 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
         UNREACHABLE;
     }
 
-    //! NOTE: a note played on a MIDI keyboard (outside note input) is a temporary one, outside the score:
-    //! it plays with the articulation of the selected chord of its staff (keyswitch, channel)
+    //! NOTE: a note played on a MIDI keyboard, or while entering notes, is a temporary one, outside the score: it plays
+    //! with the articulation at the input position of its staff - the selected chord's own one, else the articulation
+    //! in effect there (e.g. a rest or a measure clicked)
     if (chord && chord->track() == muse::nidx && item->isNote()) {
-        const ChordRest* selected = chord->score() ? chord->score()->inputState().cr() : nullptr;
-        chord = selected && selected->isChord() && selected->staffIdx() == toNote(item)->staffIdx() ? toChord(selected) : nullptr;
+        const Note* note = toNote(item);
+        const Score* score = chord->score();
+        const ChordRest* cr = score ? score->inputState().cr() : nullptr;
+
+        if (cr && cr->isChord() && cr->staffIdx() == note->staffIdx()) {
+            chord = toChord(cr);
+        } else {
+            chord = nullptr;
+            // Not for a key released, see below
+            if (score && actualDuration > 0) {
+                const int tick = cr ? cr->tick().ticks() : score->inputState().tick().ticks();
+                appendArticulationInEffectEvent(note->staff(), tick, playbackCtx, result[actualTimestamp]);
+            }
+        }
     }
 
     //! NOTE: so that auditioning a note (e.g. clicking it) plays it with its own articulation

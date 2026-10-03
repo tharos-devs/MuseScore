@@ -136,6 +136,7 @@ private:
     muse::Ret doSave(const muse::io::path_t& path, engraving::MscIoMode ioMode, bool generateBackup = true, bool createThumbnail = true,
                      bool isAutosave = false, const engraving::write::WriteContext* ctx = nullptr);
     muse::Ret makeBackup(muse::io::path_t filePath);
+    void refreshAudioPluginStates();
     muse::Ret writeProject(const muse::io::path_t& path, const engraving::write::WriteContext* ctx = nullptr);
     muse::Ret writeProject(engraving::MscWriter& msczWriter, bool createThumbnail = true,
                            const engraving::write::WriteContext* ctx = nullptr);

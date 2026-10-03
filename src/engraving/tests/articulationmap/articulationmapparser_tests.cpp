@@ -235,3 +235,24 @@ TEST_F(ArticulationMapParser_Tests, Write_Channels_RoundTrip)
     EXPECT_TRUE(reread.errors.empty());
     EXPECT_EQ(reread.map.entries, file.map.entries);
 }
+
+TEST_F(ArticulationMapParser_Tests, Parse_Channels_SpacesAndDuplicates)
+{
+    // [GIVEN] A channel-only code written with spaces, and a line with two channels
+    const String text = u"ch = 3   Pizzicato\n"
+                        u"C0       Legato  ch=2  ch=4\n";
+
+    const ArticulationMapParser::Result result = ArticulationMapParser::parse(text);
+
+    // [THEN] The spaced code is read, the second channel is reported and left out of the name
+    ASSERT_EQ(result.errors.size(), 1);
+    EXPECT_EQ(result.errors[0].line, 2);
+
+    const ExpressionMapEntry* pizzicato = result.map.entry(u"Pizzicato");
+    ASSERT_TRUE(pizzicato);
+    EXPECT_EQ(pizzicato->channel, 2);
+
+    const ExpressionMapEntry* legato = result.map.entry(u"Legato");
+    ASSERT_TRUE(legato);
+    EXPECT_EQ(legato->channel, 1);
+}

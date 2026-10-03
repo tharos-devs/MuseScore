@@ -407,8 +407,17 @@ std::optional<int> PlaybackModel::articulationChannel(const InstrumentTrackId& t
         return std::nullopt;
     }
 
+    // The chord's own articulation, else (e.g. a rest) the one in effect at this position
     const std::optional<ResolvedArticulation> resolved = m_playbackCtx->resolvedArticulation(trackIdx, tick);
     const ExpressionMapEntry* entry = resolved ? map->entry(resolved->entryId) : nullptr;
+
+    if (!entry) {
+        const Staff* staff = m_score ? m_score->staff(track2staff(trackIdx)) : nullptr;
+        const Part* part = staff ? staff->part() : nullptr;
+        if (part && !part->staves().empty()) {
+            entry = m_playbackCtx->articulationInEffect(trackId, part->staves().front()->idx(), tick);
+        }
+    }
 
     return entry && entry->channel ? *entry->channel : -1;
 }

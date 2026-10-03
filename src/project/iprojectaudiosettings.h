@@ -96,13 +96,13 @@ public:
     virtual bool hasAnyAudioSettings() const = 0;
 
     virtual const AudioOutputParams& masterAudioOutputParams() const = 0;
-    virtual void setMasterAudioOutputParams(const AudioOutputParams& params) = 0;
+    virtual void setMasterAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) = 0;
 
     //! NOTE Output params of the attached video's sound track (see IPlaybackController::videoTrackId()).
     //! Its solo/mute state is not stored here but in VideoAttachmentSettings, shared with the Video panel.
     virtual bool containsVideoOutputParams() const = 0;
     virtual const AudioOutputParams& videoOutputParams() const = 0;
-    virtual void setVideoOutputParams(const AudioOutputParams& params) = 0;
+    virtual void setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) = 0;
 
     virtual bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
@@ -169,6 +169,8 @@ public:
     virtual void setActiveSoundProfile(const playback::SoundProfileName& profileName) = 0;
 
     virtual muse::async::Notification settingsChanged() const = 0;
+    //! NOTE: for a change these settings can't see, e.g. an audio plugin whose state may have changed without reporting it
+    virtual void markAsChanged() = 0;
 };
 
 using IProjectAudioSettingsPtr = std::shared_ptr<IProjectAudioSettings>;
