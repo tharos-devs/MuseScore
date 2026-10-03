@@ -94,7 +94,8 @@ MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()
     },
         [this](const muse::rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
-        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(), "midi-cc");
+        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(), "midi-cc",
+        false /*withDeleteItem: only in the staff context menu*/);
 }
 
 MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,

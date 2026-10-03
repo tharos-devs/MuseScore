@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-03
+- "Delete selected points" for MIDI CC curves moved from the toolbar's Automation dropdown to the staff menu's "MIDI CC" submenu (first item, also in automation mode).
 - Timeline meta rows: reordered by dragging their label (a blue line shows where), order remembered like their visibility; Measures always first, right below Video, with a collapse/expand arrow; measure separators across all meta rows; clicking a meta row moves the playback position to that measure; tempo marks show their note like in the score and aren't cut needlessly.
 - Fixed: collapsing/expanding the Timeline's meta rows (or showing/hiding one) left the instrument rows in place, under a dark empty area (stock bug); the wheel over the Measures row zooms again (and around the mouse).
 - Timeline Video row: the attached video's pictures along the score, at the top of the Timeline (View menu: "Video"). Decoded in the background, only those in view, and kept in memory; "Loading…" until the first ones show, "No video" without a video. Its height is set by dragging its bottom edge (1 to 6 rows, remembered), and its header has Mute, Solo (the video's sound, like the Mixer) and a button to choose the video file.
