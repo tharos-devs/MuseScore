@@ -622,7 +622,7 @@ MenuItem* NotationContextMenuModel::makeMidiCcMenu()
         [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
         notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(),
-        "automation-midi-cc", false /*withDeleteItem: "Automation type" right above already starts with it*/);
+        "automation-midi-cc");
 }
 
 MenuItem* NotationContextMenuModel::makeAutomationTypeItem(AutomationType type, const std::string& queryTypeParam,
