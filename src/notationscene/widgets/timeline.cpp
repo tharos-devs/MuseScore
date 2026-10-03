@@ -505,13 +505,22 @@ private:
         QFont iconFont(QString::fromStdString(m_timeline->uiConfiguration()->iconsFontFamily()));
         iconFont.setPixelSize(14);
 
-        auto paintButton = [&](int index, const QString& text, const QFont& font, bool checked, bool dimmed) {
+        const QColor background = theme.labelsColor3.lighter(115);
+
+        //! NOTE: the text color, a third of the way to the button's background: light grey in the dark theme,
+        //! mid grey in the light one
+        QColor softTextColor;
+        softTextColor.setRgbF(theme.labelsColor1.redF() * 2 / 3 + background.redF() / 3,
+                              theme.labelsColor1.greenF() * 2 / 3 + background.greenF() / 3,
+                              theme.labelsColor1.blueF() * 2 / 3 + background.blueF() / 3);
+
+        auto paintButton = [&](int index, const QString& text, const QFont& font, bool checked, bool dimmed, bool soft = false) {
             const QRectF rect = buttonRect(index);
             painter.setOpacity(dimmed ? 0.5 : 1.0);
             painter.setPen(theme.labelsColor2);
-            painter.setBrush(checked ? m_timeline->m_defaultTrackColor : theme.labelsColor3.lighter(115));
+            painter.setBrush(checked ? m_timeline->m_defaultTrackColor : background);
             painter.drawRect(rect);
-            painter.setPen(checked ? QColor(Qt::white) : theme.labelsColor1);
+            painter.setPen(checked ? QColor(Qt::white) : (soft ? softTextColor : theme.labelsColor1));
             painter.setFont(font);
             painter.drawText(rect, Qt::AlignCenter, text);
             painter.setOpacity(1.0);
@@ -521,7 +530,7 @@ private:
         paintButton(0, muse::qtrc("notation/timeline", "M", "mute button"), letterFont,
                     attachment.muted || forceMuted, !hasVideo || (forceMuted && !attachment.muted));
         paintButton(1, muse::qtrc("notation/timeline", "S", "solo button"), letterFont, attachment.solo, !hasVideo);
-        paintButton(2, QChar(static_cast<char16_t>(muse::ui::IconCode::Code::OPEN_FILE)), iconFont, false, false);
+        paintButton(2, QChar(static_cast<char16_t>(muse::ui::IconCode::Code::OPEN_FILE)), iconFont, false, false, true);
     }
 
     bool isOnHandle(const QPointF& pos) const
