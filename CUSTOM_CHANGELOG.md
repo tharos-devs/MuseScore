@@ -4,6 +4,13 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-03
+- VST3 instruments can now receive their MIDI on any channel (and port, when the plugin has several event inputs, e.g. not Kontakt): the current sound's line in the Mixer's Sound menu (e.g. "Kontakt 8") opens a submenu to pick it, saved with the project. Everything the track sends follows it: notes, keyswitches, MIDI CC curves, sustain, pitch bend and the MIDI keyboard.
+- An articulation map can put each articulation on its own MIDI channel (`ch=2`, or a channel alone: `ch=3 Pizzicato`), e.g. one instrument per channel in a Kontakt multi; the map editor has a "MIDI channel" field. Notes and keyswitches play on their articulation's channel, and MIDI CC curves, sustain and pitch bend go to the channel of the articulation playing at that time (the new channel gets the curves' current values on each change; pedals are released where they were pressed).
+- Notes and controllers played on the MIDI keyboard (or while entering notes) follow the articulation at the input position: the clicked note's own one, else the one in effect at a clicked rest or measure; while playing, the one at the playback position.
+- VST3 plugins keep running for a second after Stop before being deactivated: reverb and release tails end naturally instead of being cut, and the plugin's own displays (e.g. Kontakt's MIDI activity light) no longer freeze lit.
+- Saving now reads the current state of every VST3 plugin (instruments and effects), and opening a plugin's window marks the project as modified: changes a plugin doesn't report (e.g. Kontakt's solo/mute) are no longer lost.
+
 ### 2026-10-02
 - The articulation lane now also stops on rests: an articulation set on a rest applies from the next note on (also on a staff with rests only). Its menu starts with the articulation last placed on the track (with its folders, e.g. "Long > Con vibrato") and ends with "Edit articulation map…".
 - Articulation lane chips keep their size when hovered: their full name shows in a tooltip while Cmd is held, a click always goes to the note under the target marker (even over a chip), and the cursor stays the default arrow (a double arrow only while dragging a chip). The hovered chip's text stays readable with light colors.
@@ -137,3 +144,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Fixed clicking a measure cell in the Timeline (also with Shift/Ctrl, or a lasso) selecting the measure before the clicked one: a stock bug (2026-10-01).
 - Fixed changing only a track's color in the Mixer not marking the project as modified: a stock bug (2026-10-01).
 - Fixed the Mixer not picking up an instrument track's Mute/Solo changed from outside it (e.g. the Timeline): its channel and global Mute/Solo buttons stayed off (2026-10-01).
+- Fixed notes getting stuck on Stop once a VST3 track plays on several MIDI channels: the playing notes' key could collide across channels (e.g. pitch 62 on channel 1 and 60 on channel 2), so one of them never got its note-off: a stock bug (2026-10-03).
+- Fixed a VST3 plugin's state being saved outdated when it was changed with its window open, e.g. an instrument loaded in Kontakt: the plugin only reports it through restartComponent(), which was ignored: a stock bug (2026-10-03).
+- Fixed the articulation, note offset and velocity lanes and the automation curves in a part with multimeasure rests: the lanes lost every chord after the first multimeasure rest of a line, and dragging a curve point there moved it onto a single position (overwriting other points) (2026-10-03).
+- Fixed the controllers (mod wheel, sustain, pitch bend...) played on the MIDI keyboard from a part going to the score's first instruments instead of the part's: a stock bug (2026-10-03).
