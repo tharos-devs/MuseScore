@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-03
+- Timeline meta rows: reordered by dragging their label (a blue line shows where), order remembered like their visibility; Measures always first, right below Video, with a collapse/expand arrow; measure separators across all meta rows; clicking a meta row moves the playback position to that measure; tempo marks show their note like in the score and aren't cut needlessly.
+- Fixed: collapsing/expanding the Timeline's meta rows (or showing/hiding one) left the instrument rows in place, under a dark empty area (stock bug); the wheel over the Measures row zooms again (and around the mouse).
 - Timeline Video row: the attached video's pictures along the score, at the top of the Timeline (View menu: "Video"). Decoded in the background, only those in view, and kept in memory; "Loading…" until the first ones show, "No video" without a video. Its height is set by dragging its bottom edge (1 to 6 rows, remembered), and its header has Mute, Solo (the video's sound, like the Mixer) and a button to choose the video file.
 - The Timeline zooms in much further (up to 400 px per measure, was 50), for precise video pictures; Ctrl+wheel zooms like the wheel over the Measures row (doubling every 4 notches, around the mouse), instead of 1 px a notch.
 - Timeline zoom from the Measures row: click and hold on it, then drag up to zoom in or down to zoom out; the mouse wheel over that row zooms the same way. The clicked (or hovered) point stays in place. A plain click still moves the playback position.
