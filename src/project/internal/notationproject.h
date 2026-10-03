@@ -43,6 +43,7 @@
 
 #include "global/iglobalconfiguration.h"
 #include "context/iglobalcontext.h"
+#include "playback/iplaybackcontroller.h"
 
 namespace mu::engraving {
 class MscReader;
@@ -64,6 +65,7 @@ class NotationProject : public INotationProject, public muse::Contextable, publi
     muse::GlobalInject<INotationWritersRegister> writers;
     muse::GlobalInject<engraving::rendering::IScoreRenderer> renderer;
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<playback::IPlaybackController> playbackController = { this };
     muse::ContextInject<IProjectMigrator> migrator = { this };
 
 public:

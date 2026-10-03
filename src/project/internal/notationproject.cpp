@@ -935,7 +935,10 @@ Ret NotationProject::writeProject(MscWriter& msczWriter, bool createThumbnail, c
         return make_ret(notation::Err::UnknownError);
     }
 
-    // Write master audio settings
+    // Write master audio settings, with the current state of the audio plugins (some don't report every change)
+    if (globalContext() && globalContext()->currentProject().get() == this && playbackController()) {
+        playbackController()->refreshAudioPluginStates();
+    }
     ret = m_projectAudioSettings->write(msczWriter, m_masterNotation->notation()->soloMuteState());
     if (!ret) {
         LOGE() << "failed write project audio settings, err: " << ret.toString();

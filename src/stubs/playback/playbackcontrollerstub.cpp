@@ -357,6 +357,10 @@ void PlaybackControllerStub::setNotation(notation::INotationPtr)
 {
 }
 
+void PlaybackControllerStub::refreshAudioPluginStates()
+{
+}
+
 void PlaybackControllerStub::setIsExportingAudio(bool)
 {
 }
