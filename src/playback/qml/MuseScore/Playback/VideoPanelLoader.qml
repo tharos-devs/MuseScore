@@ -82,16 +82,36 @@ Item {
     readonly property bool hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
     readonly property bool needsWideMinimumWidth: hitPointsPanelVisible && !hitPointsPanelBelowTimeline
 
-    readonly property bool shouldLoadPanel: width > 0 && height > 0
+    // NOTE: the real height floor of the content (VideoPanel.qml's implicitHeight), for the DockPanel's
+    // minimumHeight; 280 = its previewPaneMinHeight, until loaded
+    readonly property int contentMinimumHeight: videoPanelLoader.item ? videoPanelLoader.item.implicitHeight : 280
 
-    // NOTE: fired once the lazy Loader below has actually finished
-    // instantiating VideoPanel.qml (after that item's own Component.onCompleted
-    // has already run, per Loader's own semantics -- see NotationPage.qml's use
-    // of this for hitPointsPanelBelowTimeline). Reading hitPointsPanelBelowTimeline
-    // any earlier than this (e.g. from this component's own Component.onCompleted)
-    // sees it still at its pre-load default, since videoPanelLoader.item is still
-    // null at that point -- this signal is the first reliable point to read it.
+    // NOTE: kept loaded once it had a size: resizing a column it shares with other panels can report a 0
+    // size for a moment, and unloading then would reset the panel's layout (and its minimum width)
+    readonly property bool hasSize: width > 0 && height > 0
+    property bool hadSize: false
+    onHasSizeChanged: {
+        if (hasSize) {
+            hadSize = true
+        }
+    }
+
+    readonly property bool shouldLoadPanel: hasSize || hadSize
+
+    // NOTE: true once VideoPanel.qml has read its saved layout: hitPointsPanelBelowTimeline & co. (and so the
+    // minimum sizes above) are only its defaults before. Not Loader.onLoaded: created along with the DockPanel's
+    // content, the loaded item's Component.onCompleted only runs after it - reading them there pushed the wide
+    // minimum width (640) for a moment, enough to widen the restored column for good
+    readonly property bool contentReady: videoPanelLoader.item ? videoPanelLoader.item.stateRestored : false
+
+    // NOTE: fired once contentReady - the first reliable point to read hitPointsPanelBelowTimeline & co.
     signal panelReady()
+
+    onContentReadyChanged: {
+        if (contentReady) {
+            root.panelReady()
+        }
+    }
 
     // NOTE: this does NOT use QWindow.showFullScreen()/showNormal() at all --
     // tried that first, but it turned out unreliable specifically for this
@@ -214,7 +234,6 @@ Item {
 
         onLoaded: {
             root.updateLoadedItem()
-            root.panelReady()
         }
     }
 

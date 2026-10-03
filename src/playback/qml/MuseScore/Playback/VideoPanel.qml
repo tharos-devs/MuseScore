@@ -206,6 +206,10 @@ Item {
     readonly property int scrubSeekIntervalMs: 80
     property real lastScrubSeekTime: 0
 
+    // NOTE: set once the saved layout (sidebar placement, visibility...) has been read below - see
+    // VideoPanelLoader.qml's contentReady
+    property bool stateRestored: false
+
     Component.onCompleted: {
         videoModel.load()
         root.hitPointsPanelWidth = Math.max(root.hitPointsPanelMinWidth, Math.min(root.hitPointsPanelMaxWidth, videoModel.hitPointsPanelWidth()))
@@ -214,6 +218,7 @@ Item {
         root.hitPointsPanelBelowTimeline = videoModel.hitPointsPanelBelowTimeline()
         root.timelineVisible = videoModel.timelineVisible()
         root.controlsVisible = videoModel.controlsVisible()
+        root.stateRestored = true
     }
 
     function toggleHitPointsPanelVisible() {
@@ -1032,6 +1037,8 @@ Item {
                 visible: root.controlsVisible
 
                 RowLayout {
+                    id: fileButtons
+
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
@@ -1042,9 +1049,6 @@ Item {
                     // previewPaneFullControlsWidth threshold) -- there's nothing
                     // left to trim after this, so this is the last line of
                     // defense against the transport cluster overlapping Load.
-                    // The transport cluster stays centered on buttonRow's full
-                    // width regardless (see its own NOTE), so hiding this
-                    // doesn't shift it.
                     visible: buttonRow.width >= root.previewPaneMinWidth
 
                     FilePicker {
@@ -1110,8 +1114,11 @@ Item {
                 // preview's width above -- not on the space left over between the
                 // Load/Recent group and the zoom controls (those differ in width, so
                 // that would center this group off from the video's true midpoint).
+                // NOTE: but never on the Load/Recent group: a narrow row moves it a bit to the right instead,
+                // a margin after the Recent arrow
                 RowLayout {
-                    anchors.centerIn: parent
+                    x: Math.max((parent.width - width) / 2, fileButtons.visible ? fileButtons.width + 12 : 0)
+                    anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
 
                     FlatButton {
