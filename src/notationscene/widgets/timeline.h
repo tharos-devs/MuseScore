@@ -63,16 +63,6 @@ class TRowLabels : public QGraphicsView
     friend class TimelineAdapter;
 
 public:
-    enum class MouseOverValue {
-        NONE,
-        MOVE_UP_ARROW,
-        MOVE_DOWN_ARROW,
-        MOVE_UP_DOWN_ARROW,
-        COLLAPSE_UP_ARROW,
-        COLLAPSE_DOWN_ARROW,
-        OPEN_EYE,
-        CLOSED_EYE
-    };
 
 private:
     QSplitter* _splitter { nullptr };
@@ -83,8 +73,6 @@ private:
     bool _dragging = false;
 
     std::vector<std::pair<QGraphicsItem*, int> > _metaLabels;
-    std::map<MouseOverValue, QPixmap*> _mouseoverMap;
-    std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> _oldItemInfo;
 
     //! NOTE: row = instrument row (part index), labelRow = row among all the labels (metas included)
     void addTrackButtons(int row, unsigned labelRow, int ypos, int height, bool anythingSoloed);
@@ -104,7 +92,6 @@ public slots:
 
 signals:
     void moved(QPointF p);
-    void swapMeta(unsigned r, bool up);
     void requestContextMenu(QContextMenuEvent*);
 
 public:
@@ -120,7 +107,20 @@ public:
     void updateVideoBand(); // repaints it, e.g. its Mute/Solo buttons
 
 private:
+    void updateMetaDrag(qreal sceneY);
+
+    bool hasCollapseButton() const;
+    QRectF collapseButtonRect() const;
+    bool isOnCollapseButton(const QPointF& scenePt) const;
+    void addCollapseButton();
+
     QWidget* m_videoLabel = nullptr;
+
+    //! NOTE: meta row being dragged to be reordered, see mousePressEvent()
+    int m_metaDragRow = -1;
+    int m_metaDragBoundary = -1;
+    qreal m_metaDragStartY = 0.0;
+    QGraphicsLineItem* m_dropIndicator = nullptr;
 };
 
 struct TimelineTheme {
@@ -203,6 +203,7 @@ private:
 
     int gridRows = 0;
     int gridCols = 0;
+    unsigned gridMetas = 0;
 
     QGraphicsPathItem* nonVisiblePathItem = nullptr;
     QGraphicsPathItem* visiblePathItem = nullptr;
@@ -292,7 +293,6 @@ private slots:
 
     void changeSelection(engraving::SelState);
     void mouseOver(QPointF pos);
-    void swapMeta(unsigned row, bool switchUp);
     void requestInstrumentDialog();
     void toggleMetaRow();
     void updateTimelineTheme();
@@ -327,11 +327,15 @@ private:
     //! layout (collapse arrow, reorder range, measure box clicks) assumes it is, which
     //! no longer holds once it's hidden from the View menu.
     bool measuresRowVisible() const;
-    //! NOTE: number of meta rows that can be reordered (every visible meta row but Measures)
-    int nswappableMetas() const;
+    //! NOTE: the meta rows from this one on can be reordered (all of them but Measures, always the first)
+    int firstMovableMetaRow() const;
+    void moveMeta(int row, int boundary);
+    void setMetaDropIndicator(int boundary);
+    QGraphicsLineItem* m_metaDropIndicator = nullptr;
 
     static const std::string& metaRowId(void (Timeline::* func)(engraving::Segment*, int*, int));
     void initMetas();
+    void applyMetaRowsOrder();
 
     //! NOTE: playback cursor, see the .cpp
     void initPlaybackCursor();

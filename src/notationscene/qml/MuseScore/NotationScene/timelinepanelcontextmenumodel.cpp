@@ -48,6 +48,7 @@ void TimelinePanelContextMenuModel::load()
     //! NOTE: same titles (and translation context) as the Timeline's own row labels
     const std::vector<std::pair<TranslatableString, std::string> > rows {
         { TranslatableString("notation/timeline", "Video"), TIMELINE_ROW_VIDEO },
+        { TranslatableString("notation/timeline", "Measures"), TIMELINE_ROW_MEASURES },
         { TranslatableString("notation/timeline", "Tempo"), TIMELINE_ROW_TEMPO },
         { TranslatableString("notation/timeline", "Time signature"), TIMELINE_ROW_TIME_SIGNATURE },
         { TranslatableString("notation/timeline", "Timecode"), TIMELINE_ROW_TIMECODE },
@@ -56,7 +57,6 @@ void TimelinePanelContextMenuModel::load()
         { TranslatableString("notation/timeline", "Key signature"), TIMELINE_ROW_KEY_SIGNATURE },
         { TranslatableString("notation/timeline", "Barlines"), TIMELINE_ROW_BARLINES },
         { TranslatableString("notation/timeline", "Jumps and markers"), TIMELINE_ROW_JUMPS_AND_MARKERS },
-        { TranslatableString("notation/timeline", "Measures"), TIMELINE_ROW_MEASURES },
     };
 
     MenuItemList viewItems;

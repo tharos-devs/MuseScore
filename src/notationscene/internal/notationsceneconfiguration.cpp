@@ -47,6 +47,7 @@ static const Settings::Key SHOW_PERCUSSION_PANEL_SWAP_DIALOG(module_name,  "ui/s
 static const Settings::Key PERCUSSION_PANEL_MOVE_MIDI_NOTES_AND_SHORTCUTS(module_name,  "ui/percussionPanelMoveMidiNotesAndShortcuts");
 
 static const Settings::Key TIMELINE_VIDEO_ROW_HEIGHT(module_name, "ui/timeline/videoRowHeight");
+static const Settings::Key TIMELINE_ROWS_ORDER(module_name, "ui/timeline/rowsOrder");
 
 static Settings::Key timelineRowVisibleKey(const std::string& rowId)
 {
@@ -103,6 +104,11 @@ void NotationSceneConfiguration::init()
     });
 
     settings()->setDefaultValue(TIMELINE_VIDEO_ROW_HEIGHT, Val(60));
+
+    settings()->setDefaultValue(TIMELINE_ROWS_ORDER, Val(std::string()));
+    settings()->valueChanged(TIMELINE_ROWS_ORDER).onReceive(this, [this](const Val&) {
+        m_timelineRowsOrderChanged.notify();
+    });
 
     for (const std::string& rowId : TIMELINE_ROW_IDS) {
         const Settings::Key key = timelineRowVisibleKey(rowId);
@@ -241,6 +247,30 @@ void NotationSceneConfiguration::setTimelineRowVisible(const std::string& rowId,
 Notification NotationSceneConfiguration::timelineRowsVisibilityChanged() const
 {
     return m_timelineRowsVisibilityChanged;
+}
+
+std::vector<std::string> NotationSceneConfiguration::timelineRowsOrder() const
+{
+    std::vector<std::string> order;
+    const QString value = QString::fromStdString(settings()->value(TIMELINE_ROWS_ORDER).toString());
+    for (const QString& id : value.split(u',', Qt::SkipEmptyParts)) {
+        order.push_back(id.toStdString());
+    }
+    return order;
+}
+
+void NotationSceneConfiguration::setTimelineRowsOrder(const std::vector<std::string>& order)
+{
+    QStringList ids;
+    for (const std::string& id : order) {
+        ids << QString::fromStdString(id);
+    }
+    settings()->setSharedValue(TIMELINE_ROWS_ORDER, Val(ids.join(u',').toStdString()));
+}
+
+Notification NotationSceneConfiguration::timelineRowsOrderChanged() const
+{
+    return m_timelineRowsOrderChanged;
 }
 
 int NotationSceneConfiguration::timelineVideoRowHeight() const

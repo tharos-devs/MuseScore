@@ -70,6 +70,18 @@ private:
             return handleMouseEvent(me);
         }
 
+        //! NOTE: the wheel always goes to the Timeline (also over the labels column), in its viewport's
+        //! coordinates, like the mouse events (it came in this adapter's)
+        if (e->type() == QEvent::Wheel) {
+            QWheelEvent* we = static_cast<QWheelEvent*>(e);
+            QWheelEvent mappedEvent(m_msTimeline->viewport()->mapFrom(this, we->position()), we->globalPosition(),
+                                    we->pixelDelta(), we->angleDelta(), we->buttons(), we->modifiers(), we->phase(),
+                                    we->inverted(), we->source(), we->pointingDevice());
+            const bool result = m_msTimeline->handleEvent(&mappedEvent);
+            e->setAccepted(mappedEvent.isAccepted());
+            return result;
+        }
+
         return m_msTimeline->handleEvent(e);
     }
 

@@ -24,6 +24,7 @@
 
 #include <QApplication>
 #include <QGraphicsTextItem>
+#include <QStyleOptionGraphicsItem>
 #include <QGuiApplication>
 #include <QPainter>
 #include <QMenu>
@@ -106,185 +107,6 @@ TRowLabels::TRowLabels(QSplitter* splitter, Timeline* time)
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, &TRowLabels::restrictScroll);
     connect(this, &TRowLabels::moved, time, &Timeline::mouseOver);
 
-    static const char* udArrow[] = {
-        "10 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        "..........",
-        "..........",
-        "....##....",
-        "...####...",
-        "..##..##..",
-        "..#....#..",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..#....#..",
-        "..##..##..",
-        "...####...",
-        "....##....",
-        "..........",
-        ".........."
-    };
-
-    static const char* uArrow[] = {
-        "10 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        "..........",
-        "..........",
-        "....##....",
-        "...####...",
-        "..##..##..",
-        "..#....#..",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        ".........."
-    };
-
-    static const char* dArrow[] = {
-        "10 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..........",
-        "..#....#..",
-        "..##..##..",
-        "...####...",
-        "....##....",
-        "..........",
-        ".........."
-    };
-
-    static const char* cuArrow[] = {
-        "9 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        ".........",
-        ".........",
-        ".........",
-        ".........",
-        "....#....",
-        "...###...",
-        "..#.#.#..",
-        ".#..#..#.",
-        "....#....",
-        "....#....",
-        "....#....",
-        "....#....",
-        ".........",
-        ".........",
-        ".........",
-        ".........",
-        ".........",
-        "........."
-    };
-
-    static const char* cdArrow[] = {
-        "9 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        ".........",
-        ".........",
-        ".........",
-        ".........",
-        ".........",
-        "....#....",
-        "....#....",
-        "....#....",
-        "....#....",
-        "....#....",
-        ".#..#..#.",
-        "..#.#.#..",
-        "...###...",
-        "....#....",
-        ".........",
-        ".........",
-        ".........",
-        "........."
-    };
-
-    static const char* openEye[] = {
-        "11 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...####....",
-        ".##....##..",
-        ".#......#..",
-        "#........#.",
-        "#...##...#.",
-        "#...##...#.",
-        "#........#.",
-        ".#......#..",
-        ".##....##..",
-        "...####....",
-        "...........",
-        "...........",
-        "...........",
-        "..........."
-    };
-
-    static const char* closedEye[] = {
-        "11 18 2 1",
-        "# c #000000",
-        ". c #d3d3d3",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "..######...",
-        "##..##..##.",
-        "##..##..##.",
-        "..######...",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "...........",
-        "..........."
-    };
-
-    _mouseoverMap[MouseOverValue::COLLAPSE_DOWN_ARROW] = new QPixmap(cdArrow);
-    _mouseoverMap[MouseOverValue::COLLAPSE_UP_ARROW] = new QPixmap(cuArrow);
-    _mouseoverMap[MouseOverValue::MOVE_DOWN_ARROW] = new QPixmap(dArrow);
-    _mouseoverMap[MouseOverValue::MOVE_UP_DOWN_ARROW] = new QPixmap(udArrow);
-    _mouseoverMap[MouseOverValue::MOVE_UP_ARROW] = new QPixmap(uArrow);
-    _mouseoverMap[MouseOverValue::OPEN_EYE] = new QPixmap(openEye);
-    _mouseoverMap[MouseOverValue::CLOSED_EYE] = new QPixmap(closedEye);
-
-    std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
-    _oldItemInfo = tmp;
-
     connect(this, &TRowLabels::requestContextMenu, _timeline, &Timeline::contextMenuEvent);
 }
 
@@ -312,7 +134,6 @@ void TRowLabels::restrictScroll(int value)
 
         QGraphicsRectItem* graphicsRectItem = qgraphicsitem_cast<QGraphicsRectItem*>(graphicsItem);
         QGraphicsLineItem* graphicsLineItem = qgraphicsitem_cast<QGraphicsLineItem*>(graphicsItem);
-        QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
         int y = pairGraphicInt.second * 20;
         int scrollbarValue = verticalScrollBar()->value();
 
@@ -325,8 +146,6 @@ void TRowLabels::restrictScroll(int value)
             QLineF linef = graphicsLineItem->line();
             linef.setLine(linef.x1(), y + scrollbarValue + 1, linef.x2(), y + scrollbarValue + 1);
             graphicsLineItem->setLine(linef);
-        } else if (graphicsPixmapItem) {
-            graphicsPixmapItem->setY(qreal(scrollbarValue + y + 1));
         } else {
             graphicsItem->setY(qreal(scrollbarValue + y));
         }
@@ -369,6 +188,23 @@ static TrackButton trackButton(const QGraphicsItem* item)
 static bool isClickableLabelItem(const QGraphicsItem* item)
 {
     return isTrackColorStrip(item) || trackButton(item) != TrackButton::None;
+}
+
+static const QColor META_DROP_INDICATOR_COLOR(0x3B, 0x94, 0xE5);
+static constexpr int COLLAPSE_BUTTON_WIDTH = 20;
+
+//! NOTE: for the secondary icons (Video row's Load video, Measures' collapse arrow): the text color, a third
+//! of the way to the buttons' background: light grey in the dark theme, mid grey in the light one
+static QColor softIconColor(const TimelineTheme& theme)
+{
+    const QColor text = theme.labelsColor1;
+    const QColor background = theme.labelsColor3.lighter(115);
+
+    QColor color;
+    color.setRgbF(text.redF() * 2 / 3 + background.redF() / 3,
+                  text.greenF() * 2 / 3 + background.greenF() / 3,
+                  text.blueF() * 2 / 3 + background.blueF() / 3);
+    return color;
 }
 
 namespace mu::notation {
@@ -506,13 +342,7 @@ private:
         iconFont.setPixelSize(14);
 
         const QColor background = theme.labelsColor3.lighter(115);
-
-        //! NOTE: the text color, a third of the way to the button's background: light grey in the dark theme,
-        //! mid grey in the light one
-        QColor softTextColor;
-        softTextColor.setRgbF(theme.labelsColor1.redF() * 2 / 3 + background.redF() / 3,
-                              theme.labelsColor1.greenF() * 2 / 3 + background.greenF() / 3,
-                              theme.labelsColor1.blueF() * 2 / 3 + background.blueF() / 3);
+        const QColor softTextColor = softIconColor(theme);
 
         auto paintButton = [&](int index, const QString& text, const QFont& font, bool checked, bool dimmed, bool soft = false) {
             const QRectF rect = buttonRect(index);
@@ -587,7 +417,6 @@ void TRowLabels::addTrackButtons(int row, unsigned labelRow, int ypos, int heigh
 
         for (QGraphicsItem* item : { static_cast<QGraphicsItem*>(button), static_cast<QGraphicsItem*>(label) }) {
             item->setData(0, QVariant::fromValue<bool>(false));
-            item->setData(1, QVariant::fromValue<MouseOverValue>(MouseOverValue::NONE));
             item->setData(2, QVariant::fromValue<unsigned>(labelRow));
             item->setData(TRACK_BUTTON_KEY, QVariant::fromValue<int>(static_cast<int>(type)));
         }
@@ -616,13 +445,13 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
 
     scene()->clear();
     _metaLabels.clear();
+    m_dropIndicator = nullptr; // deleted by clear()
     if (labels.empty()) {
         return;
     }
 
     unsigned numMetas = _timeline->nmetas();
     const bool measuresVisible = _timeline->measuresRowVisible();
-    const int numSwappable = _timeline->nswappableMetas();
     const bool anythingSoloed = _timeline->score() && _timeline->isAnythingSoloed();
     int maxWidth = -1;
     int measureWidth = 0;
@@ -632,7 +461,7 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
         QGraphicsRectItem* graphicsRectItem = new QGraphicsRectItem(0, ypos, width(), height);
         QGraphicsTextItem* graphicsTextItem = new QGraphicsTextItem(labels[row].first);
 
-        if (row == numMetas - 1) {
+        if (measuresVisible && row == 0) {
             measureWidth = graphicsTextItem->boundingRect().width();
         }
         if (row >= numMetas) {
@@ -664,26 +493,11 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
         graphicsRectItem->setData(0, QVariant::fromValue<bool>(false));
         graphicsTextItem->setData(0, QVariant::fromValue<bool>(false));
 
-        MouseOverValue mouseOverArrow = MouseOverValue::NONE;
-        const int metaRow = static_cast<int>(row);
-        if (measuresVisible && numMetas - 1 == row && (numMetas > 2 || _timeline->collapsed())) {
-            // Measures meta
-            if (_timeline->collapsed()) {
-                mouseOverArrow = MouseOverValue::COLLAPSE_DOWN_ARROW;
-            } else {
-                mouseOverArrow = MouseOverValue::COLLAPSE_UP_ARROW;
-            }
-        } else if (metaRow < numSwappable) {
-            if (metaRow != 0 && metaRow + 1 <= numSwappable - 1) {
-                mouseOverArrow = MouseOverValue::MOVE_UP_DOWN_ARROW;
-            } else if (metaRow == 0 && metaRow + 1 < numSwappable) {
-                mouseOverArrow = MouseOverValue::MOVE_DOWN_ARROW;
-            } else if (metaRow == numSwappable - 1 && metaRow != 0) {
-                mouseOverArrow = MouseOverValue::MOVE_UP_ARROW;
-            }
+        //! NOTE: the meta rows are reordered by dragging their label (see mousePressEvent()), but Measures,
+        //! always first, which has the button to collapse/expand them instead
+        if (measuresVisible && row == 0 && hasCollapseButton()) {
+            addCollapseButton();
         }
-        graphicsTextItem->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
-        graphicsRectItem->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
 
         graphicsTextItem->setData(2, QVariant::fromValue<unsigned>(row));
         graphicsRectItem->setData(2, QVariant::fromValue<unsigned>(row));
@@ -697,7 +511,6 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
             colorStrip->setBrush(QBrush(_timeline->trackColor(row - numMetas, Fraction(0, 1))));
             colorStrip->setZValue(0);
             colorStrip->setData(0, QVariant::fromValue<bool>(false));
-            colorStrip->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
             colorStrip->setData(2, QVariant::fromValue<unsigned>(row));
             colorStrip->setData(TRACK_COLOR_STRIP_KEY, QVariant::fromValue<bool>(true));
             colorStrip->setToolTip(muse::qtrc("notation/timeline", "Edit color…"));
@@ -711,7 +524,6 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
             colorStripHitArea->setBrush(Qt::transparent);
             colorStripHitArea->setZValue(0.25);
             colorStripHitArea->setData(0, QVariant::fromValue<bool>(false));
-            colorStripHitArea->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
             colorStripHitArea->setData(2, QVariant::fromValue<unsigned>(row));
             colorStripHitArea->setData(TRACK_COLOR_STRIP_KEY, QVariant::fromValue<bool>(true));
             colorStripHitArea->setToolTip(colorStrip->toolTip());
@@ -743,9 +555,6 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
 
     setSceneRect(0, 0, maxWidth, _timeline->getHeight() + _timeline->horizontalScrollBar()->height());
 
-    std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
-    _oldItemInfo = tmp;
-
     //! NOTE: at least wide enough for the instrument rows' color strip + buttons
     //! with a few characters of name left between them
     setMinimumWidth(std::max(measureWidth + 9, TRACK_COLOR_STRIP_WIDTH + 40 + TRACK_BUTTONS_WIDTH));
@@ -766,6 +575,81 @@ void TRowLabels::resizeEvent(QResizeEvent*)
     if (m_videoLabel && !m_videoLabel->isHidden()) {
         m_videoLabel->setGeometry(viewport()->x(), 0, viewport()->width(), m_videoLabel->height());
     }
+}
+
+//! NOTE: where the dragged meta row would go: before the meta row `boundary` (nmetas(): after the last one),
+//! shown by a blue line, here and across the Timeline. Nothing shown where it would stay in place.
+void TRowLabels::updateMetaDrag(qreal sceneY)
+{
+    const int numMetas = static_cast<int>(_timeline->nmetas());
+    int boundary = static_cast<int>(std::lround((sceneY - verticalScrollBar()->value()) / 20));
+    boundary = std::clamp(boundary, _timeline->firstMovableMetaRow(), numMetas);
+    if (boundary == m_metaDragRow || boundary == m_metaDragRow + 1) {
+        boundary = -1;
+    }
+
+    m_metaDragBoundary = boundary;
+    _timeline->setMetaDropIndicator(boundary);
+
+    if (boundary < 0) {
+        if (m_dropIndicator) {
+            m_dropIndicator->hide();
+        }
+        return;
+    }
+
+    if (!m_dropIndicator) {
+        m_dropIndicator = new QGraphicsLineItem();
+        m_dropIndicator->setPen(QPen(META_DROP_INDICATOR_COLOR, 2));
+        m_dropIndicator->setZValue(1000);
+        scene()->addItem(m_dropIndicator);
+    }
+
+    const qreal y = boundary * 20 + verticalScrollBar()->value();
+    m_dropIndicator->setLine(0, y, width(), y);
+    m_dropIndicator->show();
+}
+
+//! NOTE: at the end of the Measures row (always the first meta row), shown when there's something to collapse
+bool TRowLabels::hasCollapseButton() const
+{
+    return _timeline->measuresRowVisible() && (_timeline->nmetas() > 2 || _timeline->collapsed());
+}
+
+QRectF TRowLabels::collapseButtonRect() const
+{
+    return QRectF(width() - COLLAPSE_BUTTON_WIDTH, verticalScrollBar()->value(), COLLAPSE_BUTTON_WIDTH, 20);
+}
+
+bool TRowLabels::isOnCollapseButton(const QPointF& scenePt) const
+{
+    return hasCollapseButton() && collapseButtonRect().contains(scenePt);
+}
+
+void TRowLabels::addCollapseButton()
+{
+    const bool collapsed = _timeline->collapsed();
+    const muse::ui::IconCode::Code icon = collapsed ? muse::ui::IconCode::Code::SMALL_ARROW_DOWN
+                                          : muse::ui::IconCode::Code::SMALL_ARROW_UP;
+
+    QFont iconFont(QString::fromStdString(_timeline->uiConfiguration()->iconsFontFamily()));
+    iconFont.setPixelSize(14);
+
+    QGraphicsSimpleTextItem* button = new QGraphicsSimpleTextItem(QChar(static_cast<char16_t>(icon)));
+    button->setFont(iconFont);
+    button->setBrush(softIconColor(_timeline->activeTheme()));
+    button->setToolTip(collapsed ? muse::qtrc("notation/timeline", "Expand meta rows")
+                       : muse::qtrc("notation/timeline", "Collapse meta rows"));
+
+    // Centered in its area; the position itself follows the vertical scroll (see restrictScroll())
+    const QRectF area = collapseButtonRect();
+    const QRectF glyph = button->boundingRect();
+    button->setPos(area.left(), area.top());
+    button->setTransform(QTransform::fromTranslate((area.width() - glyph.width()) / 2, (area.height() - glyph.height()) / 2));
+    button->setZValue(3);
+    scene()->addItem(button);
+
+    _metaLabels.push_back({ button, 0 });
 }
 
 void TRowLabels::updateVideoBand()
@@ -803,23 +687,7 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
     QPointF scenePt = mapToScene(event->pos());
     unsigned numMetas = _timeline->nmetas();
 
-    // Check if mouse position in scene is on the last meta
-    QPointF measureMetaTl = QPointF(0, (static_cast<int>(numMetas) - 1) * 20 + verticalScrollBar()->value());
-    QPointF measureMetaBr = QPointF(width(), numMetas * 20 + verticalScrollBar()->value());
-    if (_timeline->measuresRowVisible() && QRectF(measureMetaTl, measureMetaBr).contains(scenePt)
-        && (numMetas > 2 || _timeline->collapsed())) {
-        if (std::get<0>(_oldItemInfo)) {
-            std::pair<QGraphicsItem*, int> p = std::make_pair(std::get<0>(_oldItemInfo), std::get<2>(_oldItemInfo));
-            std::vector<std::pair<QGraphicsItem*, int> >::iterator it = std::find(_metaLabels.begin(), _metaLabels.end(), p);
-            if (it != _metaLabels.end()) {
-                _metaLabels.erase(it);
-            }
-            scene()->removeItem(std::get<0>(_oldItemInfo));
-        }
-        std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
-        _oldItemInfo = tmp;
-        mouseOver(mapToScene(viewport()->mapFromGlobal(QCursor::pos())));
-
+    if (isOnCollapseButton(scenePt)) {
         _timeline->setCollapsed(!_timeline->collapsed());
         _timeline->updateGridView();
     } else {
@@ -845,32 +713,18 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
             return;
         }
 
-        // Check if pixmap was selected
-        if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
-            QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-            if (graphicsPixmapItem) {
-                unsigned row = graphicsPixmapItem->data(2).value<unsigned>();
-                if (static_cast<int>(row) < _timeline->nswappableMetas()) {
-                    // Find mid point between up and down arrow
-                    qreal midPoint = graphicsPixmapItem->boundingRect().height() / 2 + graphicsPixmapItem->scenePos().y();
-                    if (scenePt.y() > midPoint) {
-                        emit swapMeta(row, false);
-                    } else {
-                        emit swapMeta(row, true);
-                    }
-                } else if (row >= numMetas) {
-                    _timeline->toggleShow(row - numMetas);
-                }
-            } else {
-                _dragging = true;
-                setCursor(Qt::SizeAllCursor);
-                _oldLoc = QPoint(int(scenePt.x()), int(scenePt.y()));
-            }
-        } else {
-            _dragging = true;
-            setCursor(Qt::SizeAllCursor);
-            _oldLoc = QPoint(int(scenePt.x()), int(scenePt.y()));
+        //! NOTE: a meta row's label is dragged to reorder the meta rows (Measures stays first)
+        const int metaRow = static_cast<int>(std::floor((scenePt.y() - verticalScrollBar()->value()) / 20));
+        if (!_timeline->collapsed() && metaRow >= _timeline->firstMovableMetaRow() && metaRow < static_cast<int>(numMetas)) {
+            m_metaDragRow = metaRow;
+            m_metaDragStartY = scenePt.y();
+            m_metaDragBoundary = -1;
+            return;
         }
+
+        _dragging = true;
+        setCursor(Qt::SizeAllCursor);
+        _oldLoc = QPoint(int(scenePt.x()), int(scenePt.y()));
     }
 }
 
@@ -881,6 +735,23 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
 void TRowLabels::mouseMoveEvent(QMouseEvent* event)
 {
     QPointF scenePt = mapToScene(event->pos());
+
+    if (m_metaDragRow >= 0) {
+        //! NOTE: the release can be lost on the way through the QML adapter (see Timeline::mouseMoveEvent())
+        if (!event->buttons().testFlag(Qt::LeftButton)) {
+            mouseReleaseEvent(event);
+            return;
+        }
+
+        if (m_metaDragBoundary < 0 && std::abs(scenePt.y() - m_metaDragStartY) <= 3) {
+            return; // not a drag yet
+        }
+
+        setCursor(Qt::SizeVerCursor);
+        updateMetaDrag(scenePt.y());
+        return;
+    }
+
     if (_dragging) {
         setCursor(Qt::SizeAllCursor);
         int yOffset = int(_oldLoc.y()) - int(scenePt.y());
@@ -897,17 +768,25 @@ void TRowLabels::mouseMoveEvent(QMouseEvent* event)
 
 void TRowLabels::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (QGraphicsItem* graphicsItem = scene()->itemAt(mapToScene(event->pos()), transform())) {
-        QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
-            setCursor(Qt::PointingHandCursor);
-        } else {
-            setCursor(Qt::ArrowCursor);
+    if (m_metaDragRow >= 0) {
+        const int row = m_metaDragRow;
+        const int boundary = m_metaDragBoundary;
+        m_metaDragRow = -1;
+        m_metaDragBoundary = -1;
+        if (m_dropIndicator) {
+            m_dropIndicator->hide();
         }
-    } else {
+        _timeline->setMetaDropIndicator(-1);
         setCursor(Qt::ArrowCursor);
+
+        if (boundary >= 0) {
+            _timeline->moveMeta(row, boundary); // relayouts the labels
+        }
+        return;
     }
+
     _dragging = false;
+    mouseOver(mapToScene(event->pos()));
 }
 
 //---------------------------------------------------------
@@ -936,116 +815,9 @@ void TRowLabels::contextMenuEvent(QContextMenuEvent* event)
 
 void TRowLabels::mouseOver(QPointF scenePt)
 {
-    TRACEFUNC;
-
-    // Handle drawing of arrows
-    if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
-        QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
-            setCursor(Qt::PointingHandCursor);
-            return;
-        }
-
-        MouseOverValue mouseOverArrow = graphicsItem->data(1).value<MouseOverValue>();
-        if (mouseOverArrow != MouseOverValue::NONE) {
-            QPixmap* pixmapArrow = _mouseoverMap[mouseOverArrow];
-            QGraphicsPixmapItem* graphicsPixmapItemArrow = new QGraphicsPixmapItem(*pixmapArrow);
-            unsigned row = graphicsItem->data(2).value<unsigned>();
-
-            QString tooltip;
-            switch (mouseOverArrow) {
-            case MouseOverValue::COLLAPSE_DOWN_ARROW:
-                tooltip = muse::qtrc("notation/timeline", "Expand meta rows");
-                break;
-            case MouseOverValue::COLLAPSE_UP_ARROW:
-                tooltip = muse::qtrc("notation/timeline", "Collapse meta rows");
-                break;
-            case MouseOverValue::MOVE_DOWN_ARROW:
-                tooltip = muse::qtrc("notation/timeline", "Move meta row down one");
-                break;
-            case MouseOverValue::MOVE_UP_ARROW:
-                tooltip = muse::qtrc("notation/timeline", "Move meta row up one");
-                break;
-            case MouseOverValue::MOVE_UP_DOWN_ARROW:
-                tooltip = muse::qtrc("notation/timeline", "Move meta row up/down one");
-                break;
-            case MouseOverValue::OPEN_EYE:
-                tooltip = muse::qtrc("notation/timeline", "Hide instrument in score");
-                break;
-            case MouseOverValue::CLOSED_EYE:
-                tooltip = muse::qtrc("notation/timeline", "Show instrument in score");
-                break;
-            default:
-                tooltip = "";
-                break;
-            }
-
-            graphicsPixmapItemArrow->setToolTip(tooltip);
-            if (mouseOverArrow == MouseOverValue::OPEN_EYE || mouseOverArrow == MouseOverValue::CLOSED_EYE) {
-                graphicsPixmapItemArrow->setData(0, QVariant::fromValue<bool>(false));
-            } else {
-                graphicsPixmapItemArrow->setData(0, QVariant::fromValue<bool>(true));
-            }
-            graphicsPixmapItemArrow->setData(1, QVariant::fromValue<MouseOverValue>(mouseOverArrow));
-            graphicsPixmapItemArrow->setData(2, QVariant::fromValue<unsigned>(row));
-
-            // Draw arrow at correct location
-            if (row < _timeline->nmetas()) {
-                graphicsPixmapItemArrow->setPos(width() - 12, verticalScrollBar()->value() + 1 + row * 20);
-                graphicsPixmapItemArrow->setZValue(3);
-            } else {
-                graphicsPixmapItemArrow->setPos(width() - 13, row * 20 + 5);
-                graphicsPixmapItemArrow->setZValue(-1);
-            }
-
-            if (std::get<2>(_oldItemInfo) == row && std::get<1>(_oldItemInfo) == mouseOverArrow) {
-                // DO NOTHING
-            } else {
-                if (std::get<0>(_oldItemInfo)) {
-                    std::pair<QGraphicsItem*, int> p = std::make_pair(std::get<0>(_oldItemInfo), std::get<2>(_oldItemInfo));
-                    std::vector<std::pair<QGraphicsItem*, int> >::iterator it = std::find(_metaLabels.begin(), _metaLabels.end(), p);
-                    if (it != _metaLabels.end()) {
-                        _metaLabels.erase(it);
-                    }
-                    scene()->removeItem(std::get<0>(_oldItemInfo));
-                }
-                std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(graphicsPixmapItemArrow, mouseOverArrow, row);
-                _oldItemInfo = tmp;
-                if (mouseOverArrow != MouseOverValue::OPEN_EYE && mouseOverArrow != MouseOverValue::CLOSED_EYE) {
-                    std::pair<QGraphicsItem*, int> p = std::make_pair(graphicsPixmapItemArrow, row);
-                    _metaLabels.push_back(p);
-                }
-                scene()->addItem(graphicsPixmapItemArrow);
-            }
-        } else {
-            if (std::get<0>(_oldItemInfo)) {
-                scene()->removeItem(std::get<0>(_oldItemInfo));
-            }
-            std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
-            _oldItemInfo = tmp;
-        }
-    } else {
-        if (std::get<0>(_oldItemInfo)) {
-            std::pair<QGraphicsItem*, int> p = std::make_pair(std::get<0>(_oldItemInfo), std::get<2>(_oldItemInfo));
-            std::vector<std::pair<QGraphicsItem*, int> >::iterator it = std::find(_metaLabels.begin(), _metaLabels.end(), p);
-            if (it != _metaLabels.end()) {
-                _metaLabels.erase(it);
-            }
-            scene()->removeItem(std::get<0>(_oldItemInfo));
-        }
-        std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
-        _oldItemInfo = tmp;
-    }
-    if (QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform())) {
-        QGraphicsPixmapItem* graphicsPixmapItem = qgraphicsitem_cast<QGraphicsPixmapItem*>(graphicsItem);
-        if (graphicsPixmapItem || isClickableLabelItem(graphicsItem)) {
-            setCursor(Qt::PointingHandCursor);
-        } else {
-            setCursor(Qt::ArrowCursor);
-        }
-    } else {
-        setCursor(Qt::ArrowCursor);
-    }
+    const QGraphicsItem* graphicsItem = scene()->itemAt(scenePt, transform());
+    const bool clickable = isClickableLabelItem(graphicsItem) || isOnCollapseButton(scenePt);
+    setCursor(clickable ? Qt::PointingHandCursor : Qt::ArrowCursor);
 }
 
 //---------------------------------------------------------
@@ -1132,7 +904,6 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
 
     connect(verticalScrollBar(), &QScrollBar::valueChanged, _rowNames->verticalScrollBar(), &QScrollBar::setValue);
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, &Timeline::handleScroll);
-    connect(_rowNames, &TRowLabels::swapMeta, this, &Timeline::swapMeta);
     connect(this, &Timeline::moved, _rowNames, &TRowLabels::mouseOver);
 
     m_videoThumbnails = new TimelineVideoThumbnails(this);
@@ -1323,6 +1094,11 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
         updateVideoBand();
         updateGrid();
     });
+
+    configuration()->timelineRowsOrderChanged().onNotify(this, [this]() {
+        applyMetaRowsOrder();
+        updateGrid();
+    });
 }
 
 //! NOTE: the stable id each meta row's visibility is persisted under, see notationscenetypes.h
@@ -1353,6 +1129,8 @@ const std::string& Timeline::metaRowId(void (Timeline::* func)(Segment*, int*, i
 void Timeline::initMetas()
 {
     _metas.clear();
+    //! NOTE: always the first meta row (when shown), right below the Video row: the others can't be moved above it
+    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
     _metas.push_back({ muse::qtrc("notation/timeline", "Tempo"), &Timeline::tempoMeta, true });
     _metas.push_back({ muse::qtrc("notation/timeline", "Time signature"), &Timeline::timeMeta, true });
     _metas.push_back({ muse::qtrc("notation/timeline", "Timecode"), &Timeline::timecodeMeta, true });
@@ -1361,9 +1139,25 @@ void Timeline::initMetas()
     _metas.push_back({ muse::qtrc("notation/timeline", "Key signature"), &Timeline::keyMeta, true });
     _metas.push_back({ muse::qtrc("notation/timeline", "Barlines"), &Timeline::barlineMeta, true });
     _metas.push_back({ muse::qtrc("notation/timeline", "Jumps and markers"), &Timeline::jumpMarkerMeta, true });
-    _metas.push_back({ muse::qtrc("notation/timeline", "Measures"), &Timeline::measureMeta, true });
 
+    applyMetaRowsOrder();
     applyMetaRowsVisibility();
+}
+
+//! NOTE: the order saved by moveMeta(); rows it doesn't know (e.g. new ones) keep their default place,
+//! after the known ones. Measures stays first whatever the saved order.
+void Timeline::applyMetaRowsOrder()
+{
+    const std::vector<std::string> order = configuration()->timelineRowsOrder();
+
+    auto rank = [&order](const auto& meta) {
+        const auto it = std::find(order.begin(), order.end(), metaRowId(std::get<1>(meta)));
+        return std::get<1>(meta) == &Timeline::measureMeta ? -1 : static_cast<int>(it - order.begin());
+    };
+
+    std::stable_sort(_metas.begin(), _metas.end(), [&rank](const auto& a, const auto& b) {
+        return rank(a) < rank(b);
+    });
 }
 
 void Timeline::applyMetaRowsVisibility()
@@ -1394,14 +1188,95 @@ bool Timeline::measuresRowVisible() const
     return false;
 }
 
-int Timeline::nswappableMetas() const
+int Timeline::firstMovableMetaRow() const
 {
-    return static_cast<int>(nmetas()) - (measuresRowVisible() ? 1 : 0);
+    return measuresRowVisible() ? 1 : 0;
+}
+
+//! NOTE: moves the meta row `row` before the meta row `boundary` (nmetas(): after the last one)
+void Timeline::moveMeta(int row, int boundary)
+{
+    const int numMetas = static_cast<int>(nmetas());
+    if (_collapsedMeta || row < firstMovableMetaRow() || row >= numMetas || boundary < firstMovableMetaRow() || boundary > numMetas
+        || boundary == row || boundary == row + 1) {
+        return;
+    }
+
+    const size_t from = correctMetaRow(row);
+    //! NOTE: the index in _metas (hidden rows included) the row goes before
+    size_t to = boundary < numMetas ? correctMetaRow(boundary) : _metas.size();
+
+    auto metas = _metas;
+    const auto meta = metas[from];
+    metas.erase(metas.begin() + from);
+    if (to > from) {
+        --to;
+    }
+    metas.insert(metas.begin() + to, meta);
+
+    //! NOTE: applied (and the grid redrawn) through timelineRowsOrderChanged(), like the visibility
+    std::vector<std::string> order;
+    for (const auto& m : metas) {
+        order.push_back(metaRowId(std::get<1>(m)));
+    }
+    configuration()->setTimelineRowsOrder(order);
+}
+
+void Timeline::setMetaDropIndicator(int boundary)
+{
+    if (boundary < 0) {
+        if (m_metaDropIndicator) {
+            m_metaDropIndicator->hide();
+        }
+        return;
+    }
+
+    if (!m_metaDropIndicator) {
+        m_metaDropIndicator = new QGraphicsLineItem();
+        m_metaDropIndicator->setPen(QPen(META_DROP_INDICATOR_COLOR, 2));
+        m_metaDropIndicator->setZValue(100000);
+        scene()->addItem(m_metaDropIndicator);
+    }
+
+    const qreal y = boundary * _gridHeight + verticalScrollBar()->value();
+    m_metaDropIndicator->setLine(0, y, getWidth(), y);
+    m_metaDropIndicator->show();
 }
 
 bool Timeline::handleEvent(QEvent* e)
 {
     return QWidget::event(e);
+}
+
+namespace mu::notation {
+//! NOTE: one item for all the meta rows, drawing only the edges in view (see drawGrid())
+class TimelineMeasureSeparatorsItem : public QGraphicsItem
+{
+public:
+    TimelineMeasureSeparatorsItem(int gridWidth, const QRectF& rect, const QColor& color)
+        : m_gridWidth(gridWidth), m_rect(rect), m_color(color)
+    {
+        setFlag(QGraphicsItem::ItemUsesExtendedStyleOption);
+    }
+
+    QRectF boundingRect() const override { return m_rect; }
+
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget*) override
+    {
+        const QRectF exposed = option->exposedRect.intersected(m_rect);
+        painter->setPen(QPen(m_color, 0)); // cosmetic: a pixel wide whatever the scale
+
+        const int first = std::max(1, static_cast<int>(std::ceil(exposed.left() / m_gridWidth)));
+        for (qreal x = first * m_gridWidth; x <= exposed.right(); x += m_gridWidth) {
+            painter->drawLine(QPointF(x, m_rect.top()), QPointF(x, m_rect.bottom()));
+        }
+    }
+
+private:
+    int m_gridWidth = 0;
+    QRectF m_rect;
+    QColor m_color;
+};
 }
 
 //---------------------------------------------------------
@@ -1419,13 +1294,15 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
         endMeasure = startMeasure;
     }
 
+    const unsigned numMetas = nmetas();
+
+    //! NOTE: the instrument rows' cells sit below the meta rows: all moved when their number changes
+    //! (collapsing/expanding them, showing/hiding one)
     const bool rebuildAll = (
-        gridRows != globalRows || gridCols != globalCols
+        gridRows != globalRows || gridCols != globalCols || gridMetas != numMetas
         || (startMeasure == 0 && 2 * (endMeasure - startMeasure) > globalCols)  // rebuild all if more than half of score has changed
         );
     const bool rebuildPartial = !rebuildAll && (startMeasure >= 0);
-
-    const unsigned numMetas = nmetas();
 
     if (rebuildAll) {
         clearScene();
@@ -1530,6 +1407,15 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
         _metaRows.push_back(pairGraphicsIntMeta);
     }
 
+    //! NOTE: the measures' edges across the meta rows, like between the instrument rows' cells
+    TimelineMeasureSeparatorsItem* separators = new TimelineMeasureSeparatorsItem(
+        _gridWidth, QRectF(0, 0, getWidth(), _gridHeight * numMetas), activeTheme().backgroundColor);
+    separators->setData(keyItemType, QVariant::fromValue(ItemType::TYPE_META));
+    separators->setPos(0, verticalScrollBar()->value());
+    separators->setZValue(0.5); // above the rows' background, below their values
+    scene()->addItem(separators);
+    _metaRows.push_back({ separators, 0 });
+
     int xPos = 0;
 
     // Create stagger array if _collapsedMeta is false
@@ -1606,6 +1492,7 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
 
     gridRows = globalRows;
     gridCols = globalCols;
+    gridMetas = numMetas;
 }
 
 //---------------------------------------------------------
@@ -2280,10 +2167,10 @@ void Timeline::measureMeta(Segment*, int*, int pos)
     f.setPointSizeF(7.0);
     graphicsTextItem->setFont(f);
 
-    // Left-justify text in its measure (cancelling the text item's own document
-    // margin, so the number sits right against the measure's left edge), centered vertically
+    // Left-justify text in its measure (cancelling the text item's own document margin, a few
+    // pixels away from the measure's left edge line), centered vertically
     qreal remainingHeight = _gridHeight - graphicsTextItem->boundingRect().height();
-    graphicsTextItem->setX(graphicsTextItem->x() - graphicsTextItem->document()->documentMargin() + 1);
+    graphicsTextItem->setX(graphicsTextItem->x() - graphicsTextItem->document()->documentMargin() + 4);
     graphicsTextItem->setY(graphicsTextItem->y() + remainingHeight / 2);
 
     int endOfText = graphicsTextItem->x() + graphicsTextItem->boundingRect().width();
@@ -2304,9 +2191,9 @@ unsigned Timeline::getMetaRow(QString targetText)
 {
     if (_collapsedMeta) {
         if (targetText == muse::qtrc("notation/timeline", "Measures")) {
-            return 1;
-        } else {
             return 0;
+        } else {
+            return 1;
         }
     }
     int row = 0;
@@ -2334,6 +2221,13 @@ bool Timeline::addMetaValue(int x, int pos, QString metaText, int row, ElementTy
     TRACEFUNC;
 
     QGraphicsTextItem* graphicsTextItem = new QGraphicsTextItem(metaText);
+
+    //! NOTE: music symbols (e.g. a tempo's note) are SMuFL characters: drawn with the score's musical
+    //! text font, like in the score, the rest of the text with the UI one
+    QFont font = graphicsTextItem->font();
+    font.setFamilies({ font.family(), score()->style().styleSt(Sid::musicalTextFont).toQString() });
+    graphicsTextItem->setFont(font);
+
     qreal textWidth = graphicsTextItem->boundingRect().width();
 
     QGraphicsPixmapItem* graphicsPixmapItem = nullptr;
@@ -2421,7 +2315,7 @@ bool Timeline::addMetaValue(int x, int pos, QString metaText, int row, ElementTy
         itemToAdd = graphicsTextItem;
     }
 
-    QFontMetrics f(QApplication::font());
+    QFontMetrics f(font); // with the musical text font too (see above)
     QString partName = f.elidedText(graphicsTextItem->toPlainText(),
                                     Qt::ElideRight,
                                     textWidth);
@@ -2660,6 +2554,7 @@ void Timeline::clearScene()
     visiblePathItem = nullptr;
     selectionItem = nullptr;
     m_playbackCursorItem = nullptr;
+    m_metaDropIndicator = nullptr;
 }
 
 //---------------------------------------------------------
@@ -2999,14 +2894,16 @@ void Timeline::mousePressEvent(QMouseEvent* event)
             int nmeta = nmetas();
             int bottomOfMeta = nmeta * _gridHeight + verticalScrollBar()->value();
 
-            // Handle measure box clicks
-            if (isOnMeasuresRow(scenePt)) {
-                //! NOTE: dragging vertically from here zooms (see mouseMoveEvent())
-                _measuresZoomPressed = true;
-                _zoomStartY = event->pos().y();
-                _zoomStartGridWidth = _gridWidth;
-                _zoomAnchorViewX = event->pos().x();
-                _zoomAnchorMeasures = scenePt.x() / qreal(_gridWidth);
+            // Handle clicks on the meta rows, outside of their values (those select their element, see below)
+            if (scenePt.y() < bottomOfMeta) {
+                if (isOnMeasuresRow(scenePt)) {
+                    //! NOTE: dragging vertically from here zooms (see mouseMoveEvent())
+                    _measuresZoomPressed = true;
+                    _zoomStartY = event->pos().y();
+                    _zoomStartGridWidth = _gridWidth;
+                    _zoomAnchorViewX = event->pos().x();
+                    _zoomAnchorMeasures = scenePt.x() / qreal(_gridWidth);
+                }
 
                 QRectF tmp(scenePt.x(), 0, 3, nmeta * _gridHeight + nstaves() * _gridHeight);
                 QList<QGraphicsItem*> gl = scene()->items(tmp);
@@ -3022,6 +2919,7 @@ void Timeline::mousePressEvent(QMouseEvent* event)
 
                 //! NOTE: like a plain click on an instrument cell, but for all the visible
                 //! instruments: moves the playback position to the start of the measure
+                //! (on any meta row: Measures, Tempo, Time signature...)
                 if (measure) {
                     measure = measure->coveringMMRestOrThis();
 
@@ -3042,9 +2940,6 @@ void Timeline::mousePressEvent(QMouseEvent* event)
                     interaction()->showItem(measure);
                     seekSelection();
                 }
-                return;
-            }
-            if (scenePt.y() < bottomOfMeta) {
                 return;
             }
 
@@ -3246,8 +3141,8 @@ bool Timeline::isOnMeasuresRow(const QPointF& scenePt) const
         return false;
     }
 
-    int nmeta = nmetas();
-    int top = (nmeta - 1) * _gridHeight + verticalScrollBar()->value();
+    // The first meta row
+    int top = verticalScrollBar()->value();
     return scenePt.y() > top && scenePt.y() < top + _gridHeight;
 }
 
@@ -3447,7 +3342,9 @@ void Timeline::leaveEvent(QEvent*)
 
 void Timeline::wheelEvent(QWheelEvent* event)
 {
-    QPointF scenePt = mapToScene(event->position().toPoint());
+    //! NOTE: in viewport coordinates (see TimelineAdapter::handleEvent()); x < 0 over the labels column
+    const QPoint viewPos(std::clamp(event->position().toPoint().x(), 0, viewport()->width()), event->position().toPoint().y());
+    QPointF scenePt = mapToScene(viewPos);
     const bool zoomOnMeasuresRow = event->modifiers() == Qt::NoModifier && isOnMeasuresRow(scenePt);
     if (zoomOnMeasuresRow || event->modifiers().testFlag(Qt::ControlModifier)) {
         //! NOTE: like dragging vertically on the Measures row (see mouseMoveEvent()): up zooms in,
@@ -3458,7 +3355,7 @@ void Timeline::wheelEvent(QWheelEvent* event)
         gridWidth = std::clamp(gridWidth, _minZoom, _maxZoom);
         if (gridWidth != _gridWidth) {
             _wheelZoomDelta = 0;
-            zoomAround(gridWidth, event->position().toPoint().x(), scenePt.x() / qreal(_gridWidth));
+            zoomAround(gridWidth, viewPos.x(), scenePt.x() / qreal(_gridWidth));
         } else if ((gridWidth == _maxZoom && _wheelZoomDelta > 0) || (gridWidth == _minZoom && _wheelZoomDelta < 0)) {
             _wheelZoomDelta = 0; // don't pile up past the limits
         }
@@ -4222,8 +4119,8 @@ std::vector<std::pair<QString, bool> > Timeline::getLabels()
     // Transfer them into a vector of qstrings and then add the meta row names
     std::vector<std::pair<QString, bool> > rowLabels;
     if (_collapsedMeta) {
-        std::pair<QString, bool> first = std::make_pair("", true);
-        std::pair<QString, bool> second = std::make_pair(muse::qtrc("notation/timeline", "Measures"), true);
+        std::pair<QString, bool> first = std::make_pair(muse::qtrc("notation/timeline", "Measures"), true);
+        std::pair<QString, bool> second = std::make_pair("", true);
         rowLabels.push_back(first);
         rowLabels.push_back(second);
     } else {
@@ -4390,32 +4287,6 @@ void Timeline::mouseOver(QPointF pos)
             graphicsRectItem2->setBrush(QBrush(activeTheme().backgroundColor));
         }
     }
-}
-
-//---------------------------------------------------------
-//   Timeline::swapMeta
-//---------------------------------------------------------
-
-void Timeline::swapMeta(unsigned row, bool switchUp)
-{
-    // Attempt to switch row up or down, skipping non visible rows
-    if (switchUp && row != 0) {
-        // traverse backwards until visible one is found
-        auto swap = _metas.begin() + correctMetaRow(row) - 1;
-        while (!std::get<2>(*swap)) {
-            swap--;
-        }
-        iter_swap(_metas.begin() + correctMetaRow(row), swap);
-    } else if (!switchUp && static_cast<int>(row) != nswappableMetas() - 1) {
-        // traverse forwards until visible one is found
-        auto swap = _metas.begin() + correctMetaRow(row) + 1;
-        while (!std::get<2>(*swap)) {
-            swap++;
-        }
-        iter_swap(_metas.begin() + correctMetaRow(row), swap);
-    }
-
-    updateGrid();
 }
 
 //---------------------------------------------------------
