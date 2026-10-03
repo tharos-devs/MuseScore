@@ -69,6 +69,10 @@ public:
     void setTimelineRowVisible(const std::string& rowId, bool visible) override;
     muse::async::Notification timelineRowsVisibilityChanged() const override;
 
+    std::vector<std::string> timelineRowsOrder() const override;
+    void setTimelineRowsOrder(const std::vector<std::string>& order) override;
+    muse::async::Notification timelineRowsOrderChanged() const override;
+
     int timelineVideoRowHeight() const override;
     void setTimelineVideoRowHeight(int height) override;
 
@@ -82,5 +86,6 @@ private:
     muse::async::Notification m_showPercussionPanelPadSwapDialogChanged;
     muse::async::Notification m_percussionPanelMoveMidiNotesAndShortcutsChanged;
     muse::async::Notification m_timelineRowsVisibilityChanged;
+    muse::async::Notification m_timelineRowsOrderChanged;
 };
 }

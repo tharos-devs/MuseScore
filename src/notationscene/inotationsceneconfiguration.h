@@ -72,6 +72,11 @@ public:
     virtual void setTimelineRowVisible(const std::string& rowId, bool visible) = 0;
     virtual muse::async::Notification timelineRowsVisibilityChanged() const = 0;
 
+    //! NOTE: the meta rows' ids (see TIMELINE_ROW_IDS), from top to bottom; empty: the default order
+    virtual std::vector<std::string> timelineRowsOrder() const = 0;
+    virtual void setTimelineRowsOrder(const std::vector<std::string>& order) = 0;
+    virtual muse::async::Notification timelineRowsOrderChanged() const = 0;
+
     //! NOTE: in pixels, set by dragging the bottom edge of the row
     virtual int timelineVideoRowHeight() const = 0;
     virtual void setTimelineVideoRowHeight(int height) = 0;
