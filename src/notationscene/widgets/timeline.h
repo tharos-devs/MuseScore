@@ -117,6 +117,7 @@ public:
 
     //! NOTE: the Video row's label, above the other rows (0: hidden), see Timeline::updateVideoBand()
     void setVideoBand(int height);
+    void updateVideoBand(); // repaints it, e.g. its Mute/Solo buttons
 
 private:
     QWidget* m_videoLabel = nullptr;

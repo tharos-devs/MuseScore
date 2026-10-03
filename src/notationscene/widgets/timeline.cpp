@@ -768,6 +768,13 @@ void TRowLabels::resizeEvent(QResizeEvent*)
     }
 }
 
+void TRowLabels::updateVideoBand()
+{
+    if (m_videoLabel) {
+        m_videoLabel->update();
+    }
+}
+
 void TRowLabels::setVideoBand(int height)
 {
     if (!m_videoLabel) {
@@ -1670,6 +1677,7 @@ void Timeline::onVideoSettingsChanged()
     if (path == m_videoPath) {
         //! NOTE: e.g. a new offset: the pictures are filed by video time, still valid
         m_videoBand->update();
+        _rowNames->updateVideoBand(); // e.g. Mute/Solo
         return;
     }
 
@@ -4124,6 +4132,7 @@ void Timeline::scheduleLabelsUpdate()
         if (score()) {
             _rowNames->updateLabels(getLabels(), _gridHeight);
         }
+        _rowNames->updateVideoBand(); // its Mute button shows whether another track's solo mutes the video
     }, Qt::QueuedConnection);
 }
 
