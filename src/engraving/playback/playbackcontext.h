@@ -84,6 +84,9 @@ public:
     std::optional<ArticulationMark> articulationMark(const Chord* chord) const;
     //! NOTE: the latest latched mark of the staff at or before the given tick
     std::optional<ArticulationMark> latchedArticulationMark(const staff_idx_t staffIdx, const int tick) const;
+    //! NOTE: the articulation a note at this position would play without anything of its own (mark, score articulation):
+    //! the latest latched one of the instrument's first staff, else the map's default
+    const ExpressionMapEntry* articulationInEffect(const InstrumentTrackId& trackId, const staff_idx_t firstStaffIdx, const int tick) const;
 
     //! NOTE: recorded while rendering, for the UI to show exactly what playback resolved - per track (voice),
     //! so simultaneous chords of different voices keep their own result

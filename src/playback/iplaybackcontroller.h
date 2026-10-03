@@ -190,6 +190,10 @@ public:
     virtual void setNotation(notation::INotationPtr notation) = 0;
     virtual void setIsExportingAudio(bool exporting) = 0;
 
+    //! NOTE: reads the current state of the project's audio plugins (VST) into its audio settings, e.g. before
+    //! saving: some plugins change their state without reporting it (e.g. Kontakt's solo/mute)
+    virtual void refreshAudioPluginStates() = 0;
+
     virtual const std::map<muse::audio::TrackId, muse::audio::AudioResourceMeta>& onlineSounds() const = 0;
     virtual muse::async::Notification onlineSoundsChanged() const = 0;
     virtual muse::Progress onlineSoundsProcessingProgress() const = 0;

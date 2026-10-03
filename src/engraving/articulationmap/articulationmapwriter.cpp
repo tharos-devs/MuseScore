@@ -62,7 +62,10 @@ String ArticulationMapWriter::messagesCode(const std::vector<mpe::MidiMessage>& 
 
 static String entryLine(const ExpressionMapEntry& entry, bool isDefault, int middleCOctave)
 {
-    const String code = ArticulationMapWriter::messagesCode(entry.messages, middleCOctave);
+    //! NOTE: an articulation that only changes the channel has the channel as its code
+    const bool channelOnly = entry.messages.empty() && entry.channel;
+    const String channel = entry.channel ? u"ch=" + String::number(*entry.channel + 1) : String();
+    const String code = channelOnly ? channel : ArticulationMapWriter::messagesCode(entry.messages, middleCOctave);
     String line = String(isDefault ? u"*" : u"") + (entry.disabled ? u"-" : u"") + code + u" " + entry.id;
 
     if (entry.aliases != ArticulationMapParser::implicitAliases(entry.id)) {
@@ -79,6 +82,10 @@ static String entryLine(const ExpressionMapEntry& entry, bool isDefault, int mid
 
     if (entry.notesOffsetMs != 0) {
         line += u" delay=" + String::number(entry.notesOffsetMs) + u"ms";
+    }
+
+    if (entry.channel && !channelOnly) {
+        line += u" " + channel;
     }
 
     if (entry.color) {

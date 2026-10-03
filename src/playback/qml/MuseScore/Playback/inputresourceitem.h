@@ -81,6 +81,9 @@ private:
     QVariantMap buildSoundFontMenuItem(const muse::String& soundFont, const muse::audio::AudioResourceMetaList& availableResources,
                                        bool isCurrentSoundFont, const std::optional<muse::midi::Program>& currentPreset) const;
 
+    QVariantList buildMidiRoutingMenuItems() const;
+    void setMidiRouting(int port, int channel);
+
     void updateAvailableResources(const muse::audio::AudioResourceMetaList& availableResources);
 
     std::map<muse::audio::AudioResourceType, ResourceByVendorMap > m_availableResourceMap;

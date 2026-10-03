@@ -231,7 +231,7 @@ void NotationNoteVelocityController::createOverlayForStaff(const System* system,
     const track_idx_t etrack = strack + VOICES;
 
     for (const Segment* seg = system->firstMeasure() ? system->firstMeasure()->first(SegmentType::ChordRest) : nullptr;
-         seg && seg->system() == system; seg = seg->next1(SegmentType::ChordRest)) {
+         seg && seg->system() == system; seg = seg->next1MM(SegmentType::ChordRest)) {
         for (track_idx_t track = strack; track < etrack; ++track) {
             EngravingItem* item = seg->element(track);
             if (!item || !item->isChord()) {

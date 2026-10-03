@@ -140,7 +140,8 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
         source = ResolvedArticulation::Source::Default;
     }
 
-    const bool resolved = entry && !entry->messages.empty();
+    //! NOTE: an articulation may only change the channel (e.g. one instrument per channel in Kontakt)
+    const bool resolved = entry && (!entry->messages.empty() || entry->channel);
 
     if (recordResolved) {
         ctx.playbackCtx->setResolvedArticulation(chord->track(), chord->tick().ticks(),
@@ -161,7 +162,40 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
     event.messages = entry->messages;
     event.messagesOffset = tickOffsetDuration + timestamp_t(map->keyswitchOffsetMsFor(*entry) * 1000);
     event.notesOffset = timestamp_t(entry->notesOffsetMs * 1000);
+    event.channel = entry->channel.value_or(-1);
     event.layerIdx = static_cast<mpe::layer_idx_t>(chord->track());
+
+    events.emplace_back(std::move(event));
+}
+
+//! NOTE: the articulation in effect at a staff's position with no chord of its own (see PlaybackContext::articulationInEffect)
+static void appendArticulationInEffectEvent(const Staff* staff, const int tick, const PlaybackContextPtr& playbackCtx,
+                                            PlaybackEventList& events)
+{
+    if (staff && !staff->score()->isMaster()) {
+        const EngravingItem* linked = staff->findLinkedInScore(staff->masterScore());
+        staff = linked ? toStaff(linked) : nullptr;
+    }
+
+    const Part* part = staff ? staff->part() : nullptr;
+    if (!part || part->staves().empty()) {
+        return;
+    }
+
+    const InstrumentTrackId trackId { part->id(), part->instrumentId(Fraction::fromTicks(tick)) };
+    const staff_idx_t firstStaffIdx = part->staves().front()->idx();
+    const ExpressionMap* map = playbackCtx->expressionMap(trackId);
+    const ExpressionMapEntry* entry = playbackCtx->articulationInEffect(trackId, firstStaffIdx, tick);
+    if (!map || !entry || (entry->messages.empty() && !entry->channel)) {
+        return;
+    }
+
+    mpe::MidiMessagesEvent event;
+    event.messages = entry->messages;
+    event.messagesOffset = timestamp_t(map->keyswitchOffsetMsFor(*entry) * 1000);
+    event.notesOffset = timestamp_t(entry->notesOffsetMs * 1000);
+    event.channel = entry->channel.value_or(-1);
+    event.layerIdx = static_cast<mpe::layer_idx_t>(staff2track(firstStaffIdx));
 
     events.emplace_back(std::move(event));
 }
@@ -200,6 +234,26 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
         UNREACHABLE;
     }
 
+    //! NOTE: a note played on a MIDI keyboard, or while entering notes, is a temporary one, outside the score: it plays
+    //! with the articulation at the input position of its staff - the selected chord's own one, else the articulation
+    //! in effect there (e.g. a rest or a measure clicked)
+    if (chord && chord->track() == muse::nidx && item->isNote()) {
+        const Note* note = toNote(item);
+        const Score* score = chord->score();
+        const ChordRest* cr = score ? score->inputState().cr() : nullptr;
+
+        if (cr && cr->isChord() && cr->staffIdx() == note->staffIdx()) {
+            chord = toChord(cr);
+        } else {
+            chord = nullptr;
+            // Not for a key released, see below
+            if (score && actualDuration > 0) {
+                const int tick = cr ? cr->tick().ticks() : score->inputState().tick().ticks();
+                appendArticulationInEffectEvent(note->staff(), tick, playbackCtx, result[actualTimestamp]);
+            }
+        }
+    }
+
     //! NOTE: so that auditioning a note (e.g. clicking it) plays it with its own articulation
     //! Marks and staff indices belong to the master score, while the auditioned item may come from a part
     if (chord && !chord->score()->isMaster()) {
@@ -207,7 +261,9 @@ void PlaybackEventsRenderer::render(const EngravingItem* item, const mpe::timest
         chord = linked && linked->isChord() ? toChord(linked) : nullptr;
     }
 
-    if (chord && playbackCtx->expressionMap(makeInstrumentTrackId(chord))) {
+    // Not for a key released (duration 0): its keyswitch would be sent again, and the audio side
+    // already knows which channel the key was played on
+    if (chord && actualDuration > 0 && playbackCtx->expressionMap(makeInstrumentTrackId(chord))) {
         const Score* score = chord->score();
         const int tick = chord->tick().ticks();
         const int tickOffset = score ? score->repeatList().tick2utick(tick) - tick : 0;

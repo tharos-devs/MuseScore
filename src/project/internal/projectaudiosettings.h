@@ -43,11 +43,11 @@ public:
     bool hasAnyAudioSettings() const override;
 
     const AudioOutputParams& masterAudioOutputParams() const override;
-    void setMasterAudioOutputParams(const AudioOutputParams& params) override;
+    void setMasterAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) override;
 
     bool containsVideoOutputParams() const override;
     const AudioOutputParams& videoOutputParams() const override;
-    void setVideoOutputParams(const AudioOutputParams& params) override;
+    void setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) override;
 
     bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
@@ -93,6 +93,7 @@ public:
     void setActiveSoundProfile(const playback::SoundProfileName& profileName) override;
 
     muse::async::Notification settingsChanged() const override;
+    void markAsChanged() override;
 
     muse::Ret read(const engraving::MscReader& reader);
     muse::Ret write(engraving::MscWriter& writer, notation::INotationSoloMuteStatePtr masterSoloMuteStatePtr);

@@ -248,7 +248,7 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     };
 
     for (const Segment* seg = system->firstMeasure() ? system->firstMeasure()->first(SegmentType::ChordRest) : nullptr;
-         seg && seg->system() == system; seg = seg->next1(SegmentType::ChordRest)) {
+         seg && seg->system() == system; seg = seg->next1MM(SegmentType::ChordRest)) {
         bool chordFound = false;
 
         // One lane per staff: the first voice with a chord at this position speaks for it

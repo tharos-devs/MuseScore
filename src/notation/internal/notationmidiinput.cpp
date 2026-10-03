@@ -34,6 +34,7 @@
 #include "engraving/dom/note.h"
 #include "engraving/dom/score.h"
 #include "engraving/dom/segment.h"
+#include "engraving/dom/staff.h"
 #include "engraving/editing/noteinput.h"
 #include "engraving/editing/transaction/transaction.h"
 
@@ -411,6 +412,20 @@ void NotationMidiInput::triggerControllers(const ControllerEventMap& events)
 
     const InputState& is = score()->inputState();
 
+    //! NOTE: the controllers are played by the master score's playback: from a part, its staff and track
+    //! there (otherwise the part's first staff would be taken for the score's first one, another instrument)
+    staff_idx_t staffIdx = is.staffIdx();
+    track_idx_t track = is.track();
+    if (!score()->isMaster()) {
+        const Staff* staff = score()->staff(staffIdx);
+        const EngravingItem* masterStaff = staff ? staff->findLinkedInScore(score()->masterScore()) : nullptr;
+        if (!masterStaff) {
+            return;
+        }
+        staffIdx = toStaff(masterStaff)->idx();
+        track = engraving::staff2track(staffIdx, track % engraving::VOICES);
+    }
+
     for (const auto& pair : events) {
         const muse::midi::Event& e = pair.second;
         muse::mpe::ControllerChangeEvent cc;
@@ -432,12 +447,12 @@ void NotationMidiInput::triggerControllers(const ControllerEventMap& events)
         }
 
         if (cc.type != muse::mpe::ControllerChangeEvent::Undefined) {
-            cc.layerIdx = static_cast<muse::mpe::layer_idx_t>(is.track());
+            cc.layerIdx = static_cast<muse::mpe::layer_idx_t>(track);
             controllers.push_back(cc);
         }
     }
 
-    playbackController()->triggerControllers(controllers, is.staffIdx(), is.tick().ticks());
+    playbackController()->triggerControllers(controllers, staffIdx, is.tick().ticks());
 }
 
 void NotationMidiInput::releasePlayingNotes(const std::vector<int>& pitches)

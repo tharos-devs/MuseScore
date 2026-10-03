@@ -72,14 +72,17 @@ const AudioOutputParams& ProjectAudioSettings::masterAudioOutputParams() const
     return m_masterOutputParams;
 }
 
-void ProjectAudioSettings::setMasterAudioOutputParams(const AudioOutputParams& params)
+void ProjectAudioSettings::setMasterAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged)
 {
     if (m_masterOutputParams == params) {
         return;
     }
 
     m_masterOutputParams = params;
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 bool ProjectAudioSettings::containsVideoOutputParams() const
@@ -93,14 +96,17 @@ const AudioOutputParams& ProjectAudioSettings::videoOutputParams() const
     return m_videoOutputParams ? *m_videoOutputParams : DEFAULT;
 }
 
-void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params)
+void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged)
 {
     if (m_videoOutputParams == params) {
         return;
     }
 
     m_videoOutputParams = params;
-    m_settingsChanged.notify();
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
 }
 
 bool ProjectAudioSettings::containsAuxOutputParams(aux_channel_idx_t index) const
@@ -186,10 +192,26 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
         return;
     }
 
-    m_trackInputParamsMap.insert_or_assign(partId, params);
-    m_trackInputParamsChanged.send(partId);
+    //! NOTE The MIDI port names are reported by the plugin once loaded, they aren't saved: not a project change
+    const bool onlyMidiPortNamesChanged = it != m_trackInputParamsMap.end()
+                                          && it->second.hasSameSource(params)
+                                          && it->second.midiPort == params.midiPort
+                                          && it->second.midiChannel == params.midiChannel;
 
-    if (notifySettingsChanged) {
+    //! NOTE Only the plugin's state (e.g. read before saving): nothing the listeners show
+    const bool onlyStateChanged = it != m_trackInputParamsMap.end()
+                                  && it->second.type() == params.type()
+                                  && it->second.resourceMeta == params.resourceMeta
+                                  && it->second.midiPort == params.midiPort
+                                  && it->second.midiChannel == params.midiChannel
+                                  && it->second.midiPortNames == params.midiPortNames;
+
+    m_trackInputParamsMap.insert_or_assign(partId, params);
+    if (!onlyStateChanged) {
+        m_trackInputParamsChanged.send(partId);
+    }
+
+    if (notifySettingsChanged && !onlyMidiPortNamesChanged) {
         m_settingsChanged.notify();
     }
 }
@@ -428,6 +450,11 @@ muse::async::Notification ProjectAudioSettings::settingsChanged() const
     return m_settingsChanged;
 }
 
+void ProjectAudioSettings::markAsChanged()
+{
+    m_settingsChanged.notify();
+}
+
 Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
 {
     ByteArray json = reader.readAudioSettingsJsonFile();
@@ -569,6 +596,8 @@ AudioInputParams ProjectAudioSettings::inputParamsFromJson(const QJsonObject& ob
     AudioInputParams result;
     result.resourceMeta = resourceMetaFromJson(object.value("resourceMeta").toObject());
     result.configuration = unitConfigFromJson(object.value("unitConfiguration").toObject());
+    result.midiPort = object.value("midiPort").toInt(0);
+    result.midiChannel = object.value("midiChannel").toInt(0);
 
     return result;
 }
@@ -690,6 +719,14 @@ QJsonObject ProjectAudioSettings::inputParamsToJson(const AudioInputParams& para
     QJsonObject result;
     result.insert("resourceMeta", resourceMetaToJson(params.resourceMeta));
     result.insert("unitConfiguration", unitConfigToJson(params.configuration));
+
+    //! NOTE Only written when not the default (first port, channel 1), so older versions read the same file
+    if (params.midiPort != 0) {
+        result.insert("midiPort", params.midiPort);
+    }
+    if (params.midiChannel != 0) {
+        result.insert("midiChannel", params.midiChannel);
+    }
 
     return result;
 }

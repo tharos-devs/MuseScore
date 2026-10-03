@@ -892,6 +892,23 @@ std::optional<ArticulationMark> PlaybackContext::latchedArticulationMark(const s
     return it->second;
 }
 
+const ExpressionMapEntry* PlaybackContext::articulationInEffect(const InstrumentTrackId& trackId, const staff_idx_t firstStaffIdx,
+                                                                const int tick) const
+{
+    const ExpressionMap* map = expressionMap(trackId);
+    if (!map) {
+        return nullptr;
+    }
+
+    if (const std::optional<ArticulationMark> latched = latchedArticulationMark(firstStaffIdx, tick)) {
+        if (const ExpressionMapEntry* entry = map->entry(latched->entryId)) {
+            return entry;
+        }
+    }
+
+    return map->defaultEntryId.empty() ? nullptr : map->entry(map->defaultEntryId);
+}
+
 //! NOTE: marks are few, so the whole index is rebuilt on each update: a latched mark affects every following chord
 void PlaybackContext::updateLatchedArticulationMarks()
 {

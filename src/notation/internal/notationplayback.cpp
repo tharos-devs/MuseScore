@@ -195,8 +195,20 @@ void NotationPlayback::triggerControllers(const muse::mpe::ControllerChangeEvent
         part->instrumentId(Fraction::fromTicks(tick))
     };
 
+    mpe::PlaybackEventList eventList(list.begin(), list.end());
+
+    //! NOTE: on the channel of the articulation at the input position (the chord's own one, else the one in effect
+    //! there), like the notes played on a MIDI keyboard - only the channel: no keyswitch is sent for a controller.
+    //! The controllers' layer is the input position's track, and staffIdx/tick are the master score's, even from a part
+    const track_idx_t track = static_cast<track_idx_t>(list.front().layerIdx);
+    if (const std::optional<int> channel = m_playbackModel.articulationChannel(trackId, track, tick)) {
+        mpe::MidiMessagesEvent channelEvent;
+        channelEvent.channel = *channel;
+        eventList.push_back(std::move(channelEvent));
+    }
+
     const mpe::PlaybackEventsMap events {
-        { 0, mpe::PlaybackEventList(list.begin(), list.end()) }
+        { 0, std::move(eventList) }
     };
 
     mpe::PlaybackData& data = m_playbackModel.resolveTrackPlaybackData(trackId);

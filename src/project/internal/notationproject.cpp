@@ -648,6 +648,7 @@ Ret NotationProject::writeToDevice(QIODevice* device)
     MscWriter msczWriter(params);
     msczWriter.open();
 
+    refreshAudioPluginStates();
     Ret ret = writeProject(msczWriter, false);
     msczWriter.close();
 
@@ -733,6 +734,11 @@ Ret NotationProject::doSave(const muse::io::path_t& path, engraving::MscIoMode i
             maybeOutBuf = std::make_unique<Buffer>();
         }
         params.device = maybeOutBuf.get();
+
+        // Not for an autosave: reading every plugin's state (several MB for e.g. Kontakt) would stutter
+        if (!isAutosave) {
+            refreshAudioPluginStates();
+        }
 
         MscWriter msczWriter(params);
         Ret ret = writeProject(msczWriter, createThumbnail, ctx);
@@ -853,6 +859,15 @@ Ret NotationProject::doSave(const muse::io::path_t& path, engraving::MscIoMode i
 
     LOGI() << "success save file: " << targetContainerPath;
     return make_ret(Ret::Code::Ok);
+}
+
+//! NOTE: the audio settings are saved with the current state of the audio plugins: some don't report every change
+//! (e.g. Kontakt's solo/mute). Only the current project's plugins are loaded
+void NotationProject::refreshAudioPluginStates()
+{
+    if (globalContext() && globalContext()->currentProject().get() == this && playbackController()) {
+        playbackController()->refreshAudioPluginStates();
+    }
 }
 
 Ret NotationProject::makeBackup(muse::io::path_t filePath)

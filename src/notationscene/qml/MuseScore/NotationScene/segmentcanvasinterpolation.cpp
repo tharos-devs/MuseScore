@@ -39,7 +39,7 @@ std::optional<int> mu::notation::tickFromCanvasX(const System* system, double ca
     const Segment* prevSeg = nullptr;
     const Segment* nextSeg = nullptr;
     for (const Segment* seg = system->firstMeasure() ? system->firstMeasure()->first(type) : nullptr;
-         seg && seg->system() == system; seg = seg->next1(type)) {
+         seg && seg->system() == system; seg = seg->next1MM(type)) {
         if (seg->canvasX() <= canvasX) {
             prevSeg = seg;
         } else {
@@ -71,7 +71,7 @@ std::optional<double> mu::notation::canvasXFromTick(const System* system, int ti
     const Segment* prevSeg = nullptr;
     const Segment* nextSeg = nullptr;
     for (const Segment* seg = system->firstMeasure() ? system->firstMeasure()->first(type) : nullptr;
-         seg && seg->system() == system; seg = seg->next1(type)) {
+         seg && seg->system() == system; seg = seg->next1MM(type)) {
         if (seg->tick().ticks() <= tick) {
             prevSeg = seg;
         } else {

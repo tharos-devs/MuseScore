@@ -46,6 +46,11 @@
 #include "drumsetloader.h"
 #include "videoaudiodecoder.h"
 
+#include "muse_framework_config.h"
+#ifdef MUSE_MODULE_VST
+#include "vst/ivstpluginstateprovider.h"
+#endif
+
 #include "../iplaybackcontroller.h"
 #include "../iplaybackconfiguration.h"
 #include "../isoundprofilesrepository.h"
@@ -63,6 +68,9 @@ class PlaybackController : public IPlaybackController, public muse::async::Async
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<muse::tours::IToursService> tours = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
+#ifdef MUSE_MODULE_VST
+    muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
+#endif
 
 public:
     PlaybackController(const muse::modularity::ContextPtr& iocCtx);
@@ -171,6 +179,7 @@ public:
     void setMasterNotation(notation::IMasterNotationPtr masterNotation);
 
     void setIsExportingAudio(bool exporting) override;
+    void refreshAudioPluginStates() override;
 
     bool canReceiveAction(const muse::actions::ActionCode& code) const;
 

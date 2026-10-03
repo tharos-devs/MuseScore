@@ -321,7 +321,7 @@ static const Segment* lastSegmentOfSystem(const System* system)
     const Segment* last = nullptr;
     while (seg && seg->system() == system) {
         last = seg;
-        seg = seg->next1(type);
+        seg = seg->next1MM(type);
     }
     return last;
 }

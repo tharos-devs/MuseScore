@@ -400,6 +400,28 @@ std::optional<ResolvedArticulation> PlaybackModel::resolvedArticulation(track_id
     return m_playbackCtx ? m_playbackCtx->resolvedArticulation(trackIdx, tick) : std::nullopt;
 }
 
+std::optional<int> PlaybackModel::articulationChannel(const InstrumentTrackId& trackId, track_idx_t trackIdx, int tick) const
+{
+    const ExpressionMap* map = m_playbackCtx ? m_playbackCtx->expressionMap(trackId) : nullptr;
+    if (!map) {
+        return std::nullopt;
+    }
+
+    // The chord's own articulation, else (e.g. a rest) the one in effect at this position
+    const std::optional<ResolvedArticulation> resolved = m_playbackCtx->resolvedArticulation(trackIdx, tick);
+    const ExpressionMapEntry* entry = resolved ? map->entry(resolved->entryId) : nullptr;
+
+    if (!entry) {
+        const Staff* staff = m_score ? m_score->staff(track2staff(trackIdx)) : nullptr;
+        const Part* part = staff ? staff->part() : nullptr;
+        if (part && !part->staves().empty()) {
+            entry = m_playbackCtx->articulationInEffect(trackId, part->staves().front()->idx(), tick);
+        }
+    }
+
+    return entry && entry->channel ? *entry->channel : -1;
+}
+
 dynamic_level_t PlaybackModel::appliableDynamicLevel(track_idx_t trackIdx, int tick) const
 {
     if (!m_playbackCtx) {

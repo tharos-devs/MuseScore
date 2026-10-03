@@ -43,6 +43,7 @@
 
 #include "global/iglobalconfiguration.h"
 #include "context/iglobalcontext.h"
+#include "playback/iplaybackcontroller.h"
 
 namespace mu::engraving {
 class MscReader;
@@ -64,6 +65,7 @@ class NotationProject : public INotationProject, public muse::Contextable, publi
     muse::GlobalInject<INotationWritersRegister> writers;
     muse::GlobalInject<engraving::rendering::IScoreRenderer> renderer;
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<playback::IPlaybackController> playbackController = { this };
     muse::ContextInject<IProjectMigrator> migrator = { this };
 
 public:
@@ -134,6 +136,7 @@ private:
     muse::Ret doSave(const muse::io::path_t& path, engraving::MscIoMode ioMode, bool generateBackup = true, bool createThumbnail = true,
                      bool isAutosave = false, const engraving::write::WriteContext* ctx = nullptr);
     muse::Ret makeBackup(muse::io::path_t filePath);
+    void refreshAudioPluginStates();
     muse::Ret writeProject(const muse::io::path_t& path, const engraving::write::WriteContext* ctx = nullptr);
     muse::Ret writeProject(engraving::MscWriter& msczWriter, bool createThumbnail = true,
                            const engraving::write::WriteContext* ctx = nullptr);
