@@ -135,6 +135,13 @@ Item {
                     + (root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
                        ? root.hitPointsPanelMinHeight + Math.round(root.hitPointsPanelHeight / 2) : 0)
 
+    // NOTE: the height floor when docked (see VideoPanelLoader.qml's contentMinimumHeight): just the panes' own
+    // minimums - unlike implicitHeight's slack, it doesn't follow the sidebar's current height, which would
+    // make the dock grow while resizing the sidebar inside it
+    readonly property int dockedMinimumHeight: root.previewPaneMinHeight
+                                               + (root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                                                  ? root.hitPointsPanelMinHeight : 0)
+
     // NOTE: the generic "monospace" family alias doesn't reliably resolve to an
     // actual fixed-pitch font on every platform -- when it doesn't, digits with
     // different glyph widths (e.g. "1" vs "0") make the timer's rendered text

@@ -82,9 +82,9 @@ Item {
     readonly property bool hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
     readonly property bool needsWideMinimumWidth: hitPointsPanelVisible && !hitPointsPanelBelowTimeline
 
-    // NOTE: the real height floor of the content (VideoPanel.qml's implicitHeight), for the DockPanel's
+    // NOTE: the real height floor of the content (VideoPanel.qml's dockedMinimumHeight), for the DockPanel's
     // minimumHeight; 280 = its previewPaneMinHeight, until loaded
-    readonly property int contentMinimumHeight: videoPanelLoader.item ? videoPanelLoader.item.implicitHeight : 280
+    readonly property int contentMinimumHeight: videoPanelLoader.item ? videoPanelLoader.item.dockedMinimumHeight : 280
 
     // NOTE: kept loaded once it had a size: resizing a column it shares with other panels can report a 0
     // size for a moment, and unloading then would reset the panel's layout (and its minimum width)
