@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-03
+- Timeline zoom from the Measures row: click and hold on it, then drag up to zoom in or down to zoom out; the mouse wheel over that row zooms the same way. The clicked (or hovered) point stays in place. A plain click still moves the playback position.
 - VST3 instruments can now receive their MIDI on any channel (and port, when the plugin has several event inputs, e.g. not Kontakt): the current sound's line in the Mixer's Sound menu (e.g. "Kontakt 8") opens a submenu to pick it, saved with the project. Everything the track sends follows it: notes, keyswitches, MIDI CC curves, sustain, pitch bend and the MIDI keyboard.
 - An articulation map can put each articulation on its own MIDI channel (`ch=2`, or a channel alone: `ch=3 Pizzicato`), e.g. one instrument per channel in a Kontakt multi; the map editor has a "MIDI channel" field. Notes and keyswitches play on their articulation's channel, and MIDI CC curves, sustain and pitch bend go to the channel of the articulation playing at that time (the new channel gets the curves' current values on each change; pedals are released where they were pressed).
 - Notes and controllers played on the MIDI keyboard (or while entering notes) follow the articulation at the input position: the clicked note's own one, else the one in effect at a clicked rest or measure; while playing, the one at the playback position.
