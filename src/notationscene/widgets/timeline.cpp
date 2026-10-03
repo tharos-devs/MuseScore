@@ -24,6 +24,8 @@
 
 #include <QApplication>
 #include <QGraphicsTextItem>
+#include <QGuiApplication>
+#include <QPainter>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
@@ -369,6 +371,172 @@ static bool isClickableLabelItem(const QGraphicsItem* item)
     return isTrackColorStrip(item) || trackButton(item) != TrackButton::None;
 }
 
+namespace mu::notation {
+//! NOTE: the Video row, above the meta rows of both the Timeline (pictures, see Timeline::paintVideoRow())
+//! and the row labels column (its label): it isn't one of the meta rows, all of the same height, but sits
+//! in their views' top margin. Its bottom edge is a handle to drag to change its height.
+class TimelineVideoBand : public QWidget
+{
+public:
+    enum class Kind {
+        Label,
+        Pictures
+    };
+
+    TimelineVideoBand(Timeline* timeline, Kind kind, QWidget* parent)
+        : QWidget(parent), m_timeline(timeline), m_kind(kind)
+    {
+        setMouseTracking(true);
+        hide();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        const TimelineTheme& theme = m_timeline->activeTheme();
+
+        if (m_kind == Kind::Label) {
+            painter.fillRect(rect(), theme.labelsColor3);
+
+            // On the first line, like the other rows: the title, then the buttons on the right
+            const int titleWidth = static_cast<int>(buttonRect(0).left()) - 4 - 2;
+            QFontMetrics metrics(QApplication::font());
+            painter.setPen(theme.labelsColor1);
+            painter.setFont(QApplication::font());
+            painter.drawText(QRect(4, 0, titleWidth, FIRST_LINE_HEIGHT), Qt::AlignLeft | Qt::AlignVCenter,
+                             metrics.elidedText(muse::qtrc("notation/timeline", "Video"), Qt::ElideRight, titleWidth));
+            paintButtons(painter, theme);
+
+            // The handle's grip, centered at the bottom
+            QColor gripColor = theme.labelsColor1;
+            gripColor.setAlpha(140);
+            painter.setPen(gripColor);
+            const int centerX = width() / 2;
+            for (int y = height() - 5; y < height() - 1; y += 2) {
+                painter.drawLine(centerX - 8, y, centerX + 8, y);
+            }
+        } else {
+            painter.fillRect(rect(), theme.gridColor2);
+            m_timeline->paintVideoRow(&painter, height());
+        }
+
+        painter.setPen(QPen(theme.gridColor1, 2));
+        painter.drawLine(0, height() - 1, width(), height() - 1);
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() != Qt::LeftButton) {
+            return;
+        }
+
+        if (m_kind == Kind::Label) {
+            if (buttonRect(0).contains(event->position())) {
+                m_timeline->toggleVideoMute();
+                return;
+            }
+            if (buttonRect(1).contains(event->position())) {
+                m_timeline->toggleVideoSolo();
+                return;
+            }
+            if (buttonRect(2).contains(event->position())) {
+                m_timeline->chooseVideoFile();
+                return;
+            }
+        }
+
+        if (!isOnHandle(event->position())) {
+            return;
+        }
+
+        m_resizing = true;
+        m_startY = event->globalPosition().y();
+        m_startHeight = height();
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        //! NOTE: the release can be lost on the way through the QML adapter (see Timeline::mouseMoveEvent())
+        if (m_resizing && !event->buttons().testFlag(Qt::LeftButton)) {
+            mouseReleaseEvent(event);
+        }
+
+        if (m_resizing) {
+            m_timeline->setVideoRowHeight(m_startHeight + qRound(event->globalPosition().y() - m_startY), false);
+            return;
+        }
+
+        setCursor(isOnHandle(event->position()) ? Qt::SizeVerCursor : Qt::ArrowCursor);
+    }
+
+    void mouseReleaseEvent(QMouseEvent*) override
+    {
+        if (!m_resizing) {
+            return;
+        }
+
+        m_resizing = false;
+        m_timeline->setVideoRowHeight(height(), true);
+    }
+
+private:
+    static constexpr int HANDLE_HEIGHT = 6;
+    static constexpr int FIRST_LINE_HEIGHT = 20; // a regular row's
+
+    //! NOTE: Mute, Solo, Load video: where the instrument rows have Mute, Solo, Visibility
+    QRectF buttonRect(int index) const
+    {
+        const qreal x = width() - TRACK_BUTTONS_WIDTH + index * (TRACK_BUTTON_WIDTH + TRACK_BUTTON_SPACING);
+        return QRectF(x, 2, TRACK_BUTTON_WIDTH, FIRST_LINE_HEIGHT - 4);
+    }
+
+    void paintButtons(QPainter& painter, const TimelineTheme& theme)
+    {
+        const bool hasVideo = m_timeline->hasVideo();
+        const mu::project::VideoAttachmentSettings attachment
+            = hasVideo ? m_timeline->videoSettings()->attachment() : mu::project::VideoAttachmentSettings();
+        const bool forceMuted = hasVideo && m_timeline->playbackController()->isVideoForceMuted();
+
+        QFont letterFont = QApplication::font();
+        letterFont.setPixelSize(10);
+        letterFont.setBold(true);
+
+        QFont iconFont(QString::fromStdString(m_timeline->uiConfiguration()->iconsFontFamily()));
+        iconFont.setPixelSize(14);
+
+        auto paintButton = [&](int index, const QString& text, const QFont& font, bool checked, bool dimmed) {
+            const QRectF rect = buttonRect(index);
+            painter.setOpacity(dimmed ? 0.5 : 1.0);
+            painter.setPen(theme.labelsColor2);
+            painter.setBrush(checked ? m_timeline->m_defaultTrackColor : theme.labelsColor3.lighter(115));
+            painter.drawRect(rect);
+            painter.setPen(checked ? QColor(Qt::white) : theme.labelsColor1);
+            painter.setFont(font);
+            painter.drawText(rect, Qt::AlignCenter, text);
+            painter.setOpacity(1.0);
+        };
+
+        //! NOTE: same as the instrument rows' (see TRowLabels::addTrackButtons())
+        paintButton(0, muse::qtrc("notation/timeline", "M", "mute button"), letterFont,
+                    attachment.muted || forceMuted, !hasVideo || (forceMuted && !attachment.muted));
+        paintButton(1, muse::qtrc("notation/timeline", "S", "solo button"), letterFont, attachment.solo, !hasVideo);
+        paintButton(2, QChar(static_cast<char16_t>(muse::ui::IconCode::Code::OPEN_FILE)), iconFont, false, false);
+    }
+
+    bool isOnHandle(const QPointF& pos) const
+    {
+        return pos.y() >= height() - HANDLE_HEIGHT;
+    }
+
+    Timeline* m_timeline = nullptr;
+    Kind m_kind = Kind::Pictures;
+    bool m_resizing = false;
+    qreal m_startY = 0.0;
+    int m_startHeight = 0;
+};
+}
+
 void TRowLabels::addTrackButtons(int row, unsigned labelRow, int ypos, int height, bool anythingSoloed)
 {
     const TimelineTheme& theme = _timeline->activeTheme();
@@ -573,7 +741,7 @@ void TRowLabels::updateLabels(std::vector<std::pair<QString, bool> > labels, int
     //! with a few characters of name left between them
     setMinimumWidth(std::max(measureWidth + 9, TRACK_COLOR_STRIP_WIDTH + 40 + TRACK_BUTTONS_WIDTH));
     setMaximumWidth(std::max(maxWidth + 20, 70));
-    mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
+    mouseOver(mapToScene(viewport()->mapFromGlobal(QCursor::pos())));
 }
 
 //---------------------------------------------------------
@@ -584,6 +752,24 @@ void TRowLabels::resizeEvent(QResizeEvent*)
 {
     std::vector<std::pair<QString, bool> > labels = _timeline->getLabels();
     updateLabels(labels, 20);
+
+    //! NOTE: not isVisible(): the Timeline is rendered offscreen (see TimelineView), never shown
+    if (m_videoLabel && !m_videoLabel->isHidden()) {
+        m_videoLabel->setGeometry(viewport()->x(), 0, viewport()->width(), m_videoLabel->height());
+    }
+}
+
+void TRowLabels::setVideoBand(int height)
+{
+    if (!m_videoLabel) {
+        m_videoLabel = new TimelineVideoBand(_timeline, TimelineVideoBand::Kind::Label, this);
+    }
+
+    setViewportMargins(0, height, 0, 0);
+    m_videoLabel->setVisible(height > 0);
+    m_videoLabel->setGeometry(viewport()->x(), 0, viewport()->width(), height);
+    m_videoLabel->raise();
+    m_videoLabel->update();
 }
 
 //---------------------------------------------------------
@@ -616,7 +802,7 @@ void TRowLabels::mousePressEvent(QMouseEvent* event)
         }
         std::tuple<QGraphicsPixmapItem*, MouseOverValue, unsigned> tmp(nullptr, MouseOverValue::NONE, -1);
         _oldItemInfo = tmp;
-        mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
+        mouseOver(mapToScene(viewport()->mapFromGlobal(QCursor::pos())));
 
         _timeline->setCollapsed(!_timeline->collapsed());
         _timeline->updateGridView();
@@ -714,8 +900,8 @@ void TRowLabels::mouseReleaseEvent(QMouseEvent* event)
 
 void TRowLabels::leaveEvent(QEvent*)
 {
-    if (!rect().contains(mapFromGlobal(QCursor::pos()))) {
-        mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
+    if (!viewport()->rect().contains(viewport()->mapFromGlobal(QCursor::pos()))) {
+        mouseOver(mapToScene(viewport()->mapFromGlobal(QCursor::pos())));
     }
 }
 
@@ -852,7 +1038,7 @@ void TRowLabels::mouseOver(QPointF scenePt)
 
 QString TRowLabels::cursorIsOn()
 {
-    QPointF scenePos = mapToScene(mapFromGlobal(QCursor::pos()));
+    QPointF scenePos = mapToScene(viewport()->mapFromGlobal(QCursor::pos()));
     QGraphicsItem* graphicsItem = scene()->itemAt(scenePos, transform());
     if (graphicsItem) {
         auto it = _metaLabels.begin();
@@ -932,6 +1118,13 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, &Timeline::handleScroll);
     connect(_rowNames, &TRowLabels::swapMeta, this, &Timeline::swapMeta);
     connect(this, &Timeline::moved, _rowNames, &TRowLabels::mouseOver);
+
+    m_videoThumbnails = new TimelineVideoThumbnails(this);
+    m_videoBand = new TimelineVideoBand(this, TimelineVideoBand::Kind::Pictures, this);
+    m_videoRowHeight = std::clamp(configuration()->timelineVideoRowHeight(), _gridHeight, 6 * _gridHeight);
+    connect(m_videoThumbnails, &TimelineVideoThumbnails::thumbnailsChanged, m_videoBand, [this]() {
+        m_videoBand->update();
+    });
 
     initMetas();
 
@@ -1111,6 +1304,7 @@ Timeline::Timeline(QSplitter* splitter, const muse::modularity::ContextPtr& iocC
 
     configuration()->timelineRowsVisibilityChanged().onNotify(this, [this]() {
         applyMetaRowsVisibility();
+        updateVideoBand();
         updateGrid();
     });
 }
@@ -1253,8 +1447,8 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
     }
 
     int stagger = 0;
-    setMinimumHeight(_gridHeight * (numMetas + 1) + 5 + horizontalScrollBar()->height());
-    setMinimumWidth(_gridWidth * 3);
+    setMinimumHeight(_gridHeight * (numMetas + 1) + 5 + horizontalScrollBar()->height() + videoBandHeight());
+    setMinimumWidth(std::min(_gridWidth * 3, 150)); // 3 measures, not more than at the old maximum zoom
     _globalZValue = 1;
 
     m_measureStartTicks.clear();
@@ -1396,6 +1590,242 @@ void Timeline::drawGrid(int globalRows, int globalCols, int startMeasure, int en
 
     gridRows = globalRows;
     gridCols = globalCols;
+}
+
+//---------------------------------------------------------
+//   Video row
+//---------------------------------------------------------
+
+bool Timeline::hasVideo() const
+{
+    const mu::project::IProjectVideoSettingsPtr settings = videoSettings();
+    return settings && settings->attachment().isValid();
+}
+
+//! NOTE: like the Video panel's and the Mixer's Mute/Solo: one cancels the other
+void Timeline::toggleVideoMute()
+{
+    mu::project::updateVideoAttachment(videoSettings(), [](mu::project::VideoAttachmentSettings& attachment) {
+        attachment.muted = !attachment.muted;
+        if (attachment.muted) {
+            attachment.solo = false;
+        }
+    });
+}
+
+void Timeline::toggleVideoSolo()
+{
+    mu::project::updateVideoAttachment(videoSettings(), [](mu::project::VideoAttachmentSettings& attachment) {
+        attachment.solo = !attachment.solo;
+        if (attachment.solo) {
+            attachment.muted = false;
+        }
+    });
+}
+
+//! NOTE: same as choosing a file in the Video panel (see VideoPanelModel::setVideoPath())
+void Timeline::chooseVideoFile()
+{
+    const mu::project::IProjectVideoSettingsPtr settings = videoSettings();
+    if (!settings) {
+        return;
+    }
+
+    const muse::io::path_t currentPath = settings->attachment().path;
+    const std::vector<std::string> filter {
+        muse::trc("notation/timeline", "Video files") + " (*.mp4 *.mov *.m4v *.avi *.mkv *.webm)",
+        muse::trc("notation/timeline", "All files") + " (*)"
+    };
+
+    const muse::io::path_t path = interactive()->selectOpeningFileSync(muse::trc("notation/timeline", "Choose video"),
+                                                                       currentPath.empty() ? muse::io::path_t() : muse::io::dirpath(
+                                                                           currentPath),
+                                                                       filter);
+    if (path.empty()) {
+        return;
+    }
+
+    mu::project::VideoAttachmentSettings updated = settings->attachment();
+    updated.path = path;
+    //! NOTE: hit points are timed against the previous video's own footage
+    updated.hitPoints.clear();
+    settings->setAttachment(updated);
+
+    playbackConfiguration()->addRecentVideoFile(path.toQString());
+}
+
+void Timeline::onVideoSettingsChanged()
+{
+    const muse::io::path_t path = hasVideo() ? videoSettings()->attachment().path : muse::io::path_t();
+
+    if (path == m_videoPath) {
+        //! NOTE: e.g. a new offset: the pictures are filed by video time, still valid
+        m_videoBand->update();
+        return;
+    }
+
+    m_videoPath = path;
+    m_videoThumbnails->setVideo(path);
+    updateVideoBand();
+    updateGridFull();
+}
+
+int Timeline::videoBandHeight() const
+{
+    //! NOTE: shown even without a video (saying so, see paintVideoRow()), like its View menu item says
+    return configuration()->isTimelineRowVisible(TIMELINE_ROW_VIDEO) ? m_videoRowHeight : 0;
+}
+
+void Timeline::updateVideoBand()
+{
+    const int height = videoBandHeight();
+
+    setViewportMargins(0, height, 0, 0);
+    _rowNames->setVideoBand(height);
+
+    m_videoBand->setVisible(height > 0);
+    m_videoBand->setGeometry(viewport()->x(), 0, viewport()->width(), height);
+    m_videoBand->raise();
+    m_videoBand->update();
+
+    setMinimumHeight(_gridHeight * (nmetas() + 1) + 5 + horizontalScrollBar()->height() + height);
+}
+
+//! NOTE: from one row to six
+void Timeline::setVideoRowHeight(int height, bool save)
+{
+    height = std::clamp(height, _gridHeight, 6 * _gridHeight);
+    if (height != m_videoRowHeight) {
+        m_videoRowHeight = height;
+        updateVideoBand();
+    }
+
+    if (save) {
+        configuration()->setTimelineVideoRowHeight(m_videoRowHeight);
+    }
+}
+
+void Timeline::resizeEvent(QResizeEvent* event)
+{
+    QGraphicsView::resizeEvent(event);
+
+    //! NOTE: not isVisible(): the Timeline is rendered offscreen (see TimelineView), never shown
+    if (m_videoBand && !m_videoBand->isHidden()) {
+        m_videoBand->setGeometry(viewport()->x(), 0, viewport()->width(), m_videoBand->height());
+    }
+}
+
+static const QColor VIDEO_PICTURE_FRAME_COLOR(0x3B, 0x94, 0xE5);
+
+//! NOTE: the row is cut into picture-wide slots, independent of the measures: each shows the frame
+//! at its middle (any frame shown within the slot will do, see TimelineVideoThumbnails::Slot)
+void Timeline::paintVideoRow(QPainter* painter, int height)
+{
+    auto drawMessage = [this, painter, height](const QString& message) {
+        painter->save();
+        painter->resetTransform();
+        painter->setPen(activeTheme().measureMetaColor);
+        painter->setFont(QApplication::font());
+        painter->drawText(QRect(8, 0, viewport()->width() - 16, height - 2), Qt::AlignLeft | Qt::AlignVCenter, message);
+        painter->restore();
+    };
+
+    if (!hasVideo()) {
+        drawMessage(muse::qtrc("notation/timeline", "No video"));
+        return;
+    }
+
+    if (!score() || m_measureStartTicks.empty()) {
+        return;
+    }
+
+    //! NOTE: until the first pictures in view are there (it takes a few seconds for a video just opened)
+    auto drawLoading = [&drawMessage]() {
+        drawMessage(muse::qtrc("notation/timeline", "Loading…"));
+    };
+
+    const double aspect = m_videoThumbnails->aspectRatio();
+    if (aspect <= 0.0) {
+        if (m_videoThumbnails->isOpening()) {
+            drawLoading();
+        }
+        return;
+    }
+
+    const qreal pictureHeight = height - 3; // a pixel above, the separator below
+    const int wantedPixels = static_cast<int>(std::ceil(pictureHeight * qGuiApp->devicePixelRatio()));
+    const qreal slotWidth = std::max<qreal>(8.0, std::round(pictureHeight * aspect));
+    const qreal rowWidth = getWidth();
+    const int offsetMs = videoSettings()->attachment().offsetMs;
+    const double durationSecs = m_videoThumbnails->durationSecs();
+
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    const qreal right = std::min(visible.right(), rowWidth);
+
+    painter->save();
+    painter->setRenderHint(QPainter::SmoothPixmapTransform);
+    painter->translate(-visible.left(), 0); // painting in scene x
+
+    std::vector<TimelineVideoThumbnails::Slot> missing;
+    bool anyDrawn = false;
+    for (int i = std::max(0, static_cast<int>(std::floor(visible.left() / slotWidth))); i * slotWidth < right; ++i) {
+        const qreal x0 = i * slotWidth;
+        const qreal x1 = std::min(x0 + slotWidth, rowWidth);
+        const double startSecs = videoSecsAtX(x0, offsetMs);
+        const double endSecs = videoSecsAtX(x1, offsetMs);
+        if (durationSecs > 0.0 && startSecs >= durationSecs) {
+            break; // past the end of the video
+        }
+
+        const TimelineVideoThumbnails::Slot slot { (startSecs + endSecs) / 2, (endSecs - startSecs) / 2 };
+        const QImage image = m_videoThumbnails->thumbnail(slot);
+        if (image.isNull()) {
+            missing.push_back(slot);
+            continue;
+        }
+
+        // The last slot may be cut by the end of the row: so is its picture
+        const qreal shownFraction = (x1 - x0) / slotWidth;
+        const QRectF source(0, 0, image.width() * shownFraction, image.height());
+        const QRectF target(x0, 1, x1 - x0, pictureHeight);
+        painter->drawImage(target, image, source);
+        anyDrawn = true;
+
+        // A thin blue frame around each picture, to tell them apart
+        painter->setPen(QPen(VIDEO_PICTURE_FRAME_COLOR, 0.5)); // a single physical pixel on high-DPI screens
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(target.adjusted(0.25, 0.25, -0.25, -0.25));
+
+        //! NOTE: decoded for a lower row: shown enlarged until decoded again at this height
+        if (image.height() < wantedPixels * 0.8) {
+            missing.push_back(slot);
+        }
+    }
+
+    painter->restore();
+
+    if (!missing.empty()) {
+        m_videoThumbnails->request(missing, wantedPixels);
+
+        if (!anyDrawn) {
+            drawLoading();
+        }
+    }
+}
+
+//! NOTE: the video time at a Timeline x, within its measure in proportion (measures all have the
+//! same width); same conversion as mu::project::videoPositionMsForTick(), without rounding to ms
+double Timeline::videoSecsAtX(qreal x, int offsetMs) const
+{
+    const int count = static_cast<int>(m_measureStartTicks.size());
+    const int index = std::clamp(static_cast<int>(std::floor(x / _gridWidth)), 0, count - 1);
+    const double fraction = std::clamp((x - index * _gridWidth) / _gridWidth, 0.0, 1.0);
+
+    const int startTick = m_measureStartTicks[index];
+    const int endTick = index + 1 < count ? m_measureStartTicks[index + 1] : score()->endTick().ticks();
+    const int tick = startTick + static_cast<int>(std::lround(fraction * (endTick - startTick)));
+
+    return std::max(0.0, score()->utick2utime(tick) + offsetMs / 1000.0);
 }
 
 //---------------------------------------------------------
@@ -2988,8 +3418,8 @@ void Timeline::mouseReleaseEvent(QMouseEvent*)
 
 void Timeline::leaveEvent(QEvent*)
 {
-    if (!rect().contains(mapFromGlobal(QCursor::pos()))) {
-        QPointF p = mapToScene(mapFromGlobal(QCursor::pos()));
+    if (!viewport()->rect().contains(viewport()->mapFromGlobal(QCursor::pos()))) {
+        QPointF p = mapToScene(viewport()->mapFromGlobal(QCursor::pos()));
         mouseOver(p);
     }
 }
@@ -3001,9 +3431,11 @@ void Timeline::leaveEvent(QEvent*)
 void Timeline::wheelEvent(QWheelEvent* event)
 {
     QPointF scenePt = mapToScene(event->position().toPoint());
-    if (event->modifiers() == Qt::NoModifier && isOnMeasuresRow(scenePt)) {
+    const bool zoomOnMeasuresRow = event->modifiers() == Qt::NoModifier && isOnMeasuresRow(scenePt);
+    if (zoomOnMeasuresRow || event->modifiers().testFlag(Qt::ControlModifier)) {
         //! NOTE: like dragging vertically on the Measures row (see mouseMoveEvent()): up zooms in,
         //! doubles/halves every 4 wheel notches. Small (trackpad) deltas add up until they change the width.
+        //! Ctrl+wheel anywhere too (it used to change the width by 1 px a notch, far too slow up to _maxZoom).
         _wheelZoomDelta += event->angleDelta().y();
         int gridWidth = qRound(_gridWidth * std::pow(2.0, _wheelZoomDelta / 480.0));
         gridWidth = std::clamp(gridWidth, _minZoom, _maxZoom);
@@ -3017,24 +3449,7 @@ void Timeline::wheelEvent(QWheelEvent* event)
         return;
     }
 
-    if (event->modifiers().testFlag(Qt::ControlModifier)) {
-        qreal originalCursorPos = mapToScene(mapFromGlobal(QCursor::pos())).x();
-        int originalScrollValue = horizontalScrollBar()->value();
-        qreal ratio = originalCursorPos / qreal(getWidth());
-
-        if (event->angleDelta().y() > 0 && _gridWidth < _maxZoom) {
-            _gridWidth++;
-            updateGridFull();
-        } else if (event->angleDelta().y() < 0 && _gridWidth > _minZoom) {
-            _gridWidth--;
-            updateGridFull();
-        }
-
-        // Attempt to keep mouse in original spot
-        qreal newPos = qreal(getWidth()) * ratio;
-        int offset = newPos - originalCursorPos;
-        horizontalScrollBar()->setValue(originalScrollValue + offset);
-    } else if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+    if (event->modifiers().testFlag(Qt::ShiftModifier)) {
         qreal numOfSteps = qreal(event->angleDelta().y()) / 2;
         horizontalScrollBar()->setValue(horizontalScrollBar()->value() - int(numOfSteps));
     } else {
@@ -3080,7 +3495,7 @@ void Timeline::updateGrid(int startMeasure, int endMeasure)
         drawGrid(static_cast<int>(nstaves()), static_cast<int>(score()->nmeasures()), startMeasure, endMeasure);
         updateView();
         drawSelection();
-        mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
+        mouseOver(mapToScene(viewport()->mapFromGlobal(QCursor::pos())));
         _rowNames->updateLabels(getLabels(), _gridHeight);
         updatePlaybackCursor();
     }
@@ -3130,8 +3545,21 @@ void Timeline::setNotation(INotationPtr notation)
     if (m_notation && m_notation->soloMuteState()) {
         m_notation->soloMuteState()->trackSoloMuteStateChanged().disconnect(this);
     }
+    if (m_videoSettings) {
+        m_videoSettings->settingsChanged().disconnect(this);
+    }
 
     m_notation = notation;
+
+    m_videoSettings = videoSettings();
+    if (m_videoSettings) {
+        m_videoSettings->settingsChanged().onNotify(this, [this]() {
+            onVideoSettingsChanged();
+        });
+    }
+    m_videoPath = hasVideo() ? m_videoSettings->attachment().path : muse::io::path_t();
+    m_videoThumbnails->setVideo(m_videoPath);
+    updateVideoBand();
 
     //! NOTE: keeps the instrument rows' Mute/Solo buttons in sync with the Mixer
     if (m_notation && m_notation->soloMuteState()) {

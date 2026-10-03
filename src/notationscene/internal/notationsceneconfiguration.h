@@ -69,6 +69,9 @@ public:
     void setTimelineRowVisible(const std::string& rowId, bool visible) override;
     muse::async::Notification timelineRowsVisibilityChanged() const override;
 
+    int timelineVideoRowHeight() const override;
+    void setTimelineVideoRowHeight(int height) override;
+
 private:
     muse::async::Notification m_isSmoothPanningChanged;
     muse::async::Notification m_isLimitCanvasScrollAreaChanged;

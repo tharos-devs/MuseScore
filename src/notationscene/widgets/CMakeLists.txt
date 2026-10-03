@@ -57,6 +57,8 @@ target_sources(notationscene PRIVATE
     stafftextpropertiesdialog.h
     timeline.cpp
     timeline.h
+    timelinevideothumbnails.cpp
+    timelinevideothumbnails.h
     transposedialog.cpp
     transposedialog.h
     tupletdialog.cpp

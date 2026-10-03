@@ -46,6 +46,8 @@ static const Settings::Key AUTO_CLOSE_PERCUSSION_PANEL_KEY(module_name, "ui/auto
 static const Settings::Key SHOW_PERCUSSION_PANEL_SWAP_DIALOG(module_name,  "ui/showPercussionPanelPadSwapDialog");
 static const Settings::Key PERCUSSION_PANEL_MOVE_MIDI_NOTES_AND_SHORTCUTS(module_name,  "ui/percussionPanelMoveMidiNotesAndShortcuts");
 
+static const Settings::Key TIMELINE_VIDEO_ROW_HEIGHT(module_name, "ui/timeline/videoRowHeight");
+
 static Settings::Key timelineRowVisibleKey(const std::string& rowId)
 {
     return Settings::Key(module_name, "ui/timeline/rows/" + rowId + "/visible");
@@ -99,6 +101,8 @@ void NotationSceneConfiguration::init()
     settings()->valueChanged(PERCUSSION_PANEL_MOVE_MIDI_NOTES_AND_SHORTCUTS).onReceive(this, [this](const Val&) {
         m_percussionPanelMoveMidiNotesAndShortcutsChanged.notify();
     });
+
+    settings()->setDefaultValue(TIMELINE_VIDEO_ROW_HEIGHT, Val(60));
 
     for (const std::string& rowId : TIMELINE_ROW_IDS) {
         const Settings::Key key = timelineRowVisibleKey(rowId);
@@ -237,4 +241,14 @@ void NotationSceneConfiguration::setTimelineRowVisible(const std::string& rowId,
 Notification NotationSceneConfiguration::timelineRowsVisibilityChanged() const
 {
     return m_timelineRowsVisibilityChanged;
+}
+
+int NotationSceneConfiguration::timelineVideoRowHeight() const
+{
+    return settings()->value(TIMELINE_VIDEO_ROW_HEIGHT).toInt();
+}
+
+void NotationSceneConfiguration::setTimelineVideoRowHeight(int height)
+{
+    settings()->setSharedValue(TIMELINE_VIDEO_ROW_HEIGHT, Val(height));
 }
