@@ -93,6 +93,8 @@ DockPage {
     }
 
     readonly property int verticalPanelDefaultWidth: 300
+    //! NOTE: not verticalPanelDefaultWidth: the Video panel, wider, can share their column (see its sideGroupName)
+    readonly property int verticalPanelMaxWidth: root.panelMaxDimension
 
     readonly property int horizontalPanelMinHeight: 100
     readonly property int horizontalPanelMaxHeight: 520
@@ -278,7 +280,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelMaxWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -307,7 +309,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelMaxWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -336,7 +338,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelMaxWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -362,7 +364,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelMaxWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -390,7 +392,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelMaxWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -607,6 +609,7 @@ DockPage {
             title: qsTrc("appshell", "Video")
 
             height: 360
+            //! NOTE: the real floor of its content is pushed below once loaded (see onContentMinimumHeightChanged)
             minimumHeight: root.horizontalPanelMinHeight
             //! NOTE: unlike other horizontal panels (Timeline, Selection Filter), the
             //! Video panel benefits from being resized/maximized much larger when
@@ -644,6 +647,8 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            //! NOTE: at the left or right, it goes with the side panels instead (e.g. below Palettes, or tabbed with them)
+            sideGroupName: root.verticalPanelsGroup
             secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
@@ -678,19 +683,27 @@ DockPage {
                     videoPanel.contextMenuModel = contextMenuModel
                 }
 
-                //! NOTE: hitPointsPanelBelowTimeline is still at its pre-load
-                //! default here (VideoPanel.qml only loads once the panel has a
-                //! size -- see VideoPanelLoader.qml), so the first read of the real value
-                //! happens on panelReady below instead, once it's guaranteed
-                //! settled. This handler covers the value changing again later,
-                //! e.g. the user live-toggling it via the panel's own "..." menu.
+                //! NOTE: these are only defaults until contentReady (see VideoPanelLoader.qml), so the first
+                //! read of the real values happens on panelReady below instead - pushing a default could
+                //! widen (or heighten) the restored layout for good. These handlers cover the values changing
+                //! again later, e.g. the user live-toggling the sidebar via the panel's own "..." menu.
                 //! NOTE: a hidden sidebar takes no width either, so it gets the narrow floor too
                 onNeedsWideMinimumWidthChanged: {
-                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
+                    if (contentReady) {
+                        videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
+                    }
+                }
+
+                //! NOTE: stacked with other panels in a column, it could otherwise be made shorter than its picture
+                onContentMinimumHeightChanged: {
+                    if (contentReady) {
+                        videoPanel.minimumHeight = contentMinimumHeight
+                    }
                 }
 
                 onPanelReady: {
                     videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
+                    videoPanel.minimumHeight = contentMinimumHeight
                 }
 
                 Component.onDestruction: {
