@@ -154,7 +154,8 @@ private:
     enum class ViewState {
         NORMAL,
         LASSO,
-        DRAG
+        DRAG,
+        ZOOM
     };
 
     ViewState state = ViewState::NORMAL;
@@ -165,6 +166,15 @@ private:
     int _gridHeight = 20;
     int _maxZoom = 50;
     int _minZoom = 5;
+
+    //! NOTE: zoom by dragging vertically on the Measures row, anchored on the clicked point
+    bool _measuresZoomPressed { false };
+    int _zoomStartY { 0 };
+    int _zoomStartGridWidth { 0 };
+    int _zoomAnchorViewX { 0 };
+    qreal _zoomAnchorMeasures { 0.0 };
+    int _wheelZoomDelta { 0 };
+
     int _spacing = 5;
 
     TimelineTheme _lightTheme, _darkTheme;
@@ -224,6 +234,8 @@ private:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent*) override;
     void wheelEvent(QWheelEvent* event) override;
+    bool isOnMeasuresRow(const QPointF& scenePt) const;
+    void zoomAround(int gridWidth, int anchorViewX, qreal anchorMeasures);
     void leaveEvent(QEvent*) override;
     void showEvent(QShowEvent*) override;
     void changeEvent(QEvent*) override;

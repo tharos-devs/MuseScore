@@ -2553,9 +2553,14 @@ void Timeline::mousePressEvent(QMouseEvent* event)
             int bottomOfMeta = nmeta * _gridHeight + verticalScrollBar()->value();
 
             // Handle measure box clicks
-            if (measuresRowVisible()
-                && scenePt.y() > (nmeta - 1) * _gridHeight + verticalScrollBar()->value()
-                && scenePt.y() < bottomOfMeta) {
+            if (isOnMeasuresRow(scenePt)) {
+                //! NOTE: dragging vertically from here zooms (see mouseMoveEvent())
+                _measuresZoomPressed = true;
+                _zoomStartY = event->pos().y();
+                _zoomStartGridWidth = _gridWidth;
+                _zoomAnchorViewX = event->pos().x();
+                _zoomAnchorMeasures = scenePt.x() / qreal(_gridWidth);
+
                 QRectF tmp(scenePt.x(), 0, 3, nmeta * _gridHeight + nstaves() * _gridHeight);
                 QList<QGraphicsItem*> gl = scene()->items(tmp);
                 Measure* measure = nullptr;
@@ -2788,12 +2793,46 @@ void Timeline::seekSelection()
     playbackController()->seekElement(elementToSeek);
 }
 
+bool Timeline::isOnMeasuresRow(const QPointF& scenePt) const
+{
+    if (!measuresRowVisible()) {
+        return false;
+    }
+
+    int nmeta = nmetas();
+    int top = (nmeta - 1) * _gridHeight + verticalScrollBar()->value();
+    return scenePt.y() > top && scenePt.y() < top + _gridHeight;
+}
+
+//! NOTE: sets the measure width, keeping the point anchorMeasures (in measures from the
+//! score start) at the viewport x anchorViewX
+void Timeline::zoomAround(int gridWidth, int anchorViewX, qreal anchorMeasures)
+{
+    gridWidth = std::clamp(gridWidth, _minZoom, _maxZoom);
+    if (gridWidth == _gridWidth) {
+        return;
+    }
+
+    _gridWidth = gridWidth;
+    updateGridFull();
+
+    qreal anchorSceneX = mapToScene(QPoint(anchorViewX, 0)).x();
+    qreal targetSceneX = anchorMeasures * _gridWidth;
+    horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(targetSceneX - anchorSceneX));
+}
+
 //---------------------------------------------------------
 //   Timeline::mouseMoveEvent
 //---------------------------------------------------------
 
 void Timeline::mouseMoveEvent(QMouseEvent* event)
 {
+    //! NOTE: the release can be lost on the way through the QML adapter (TimelineView):
+    //! a move without the left button means the drag is over
+    if (_mousePressed && !event->buttons().testFlag(Qt::LeftButton)) {
+        mouseReleaseEvent(event);
+    }
+
     QPointF newLoc = mapToScene(event->pos());
     if (!_mousePressed) {
         if (cursorIsOn(event->pos()) == "meta") {
@@ -2806,6 +2845,21 @@ void Timeline::mouseMoveEvent(QMouseEvent* event)
         }
 
         emit moved(QPointF(-1, -1));
+        return;
+    }
+
+    if (state == ViewState::NORMAL && _measuresZoomPressed) {
+        if (std::abs(event->pos().y() - _zoomStartY) <= 2) {
+            return;
+        }
+        state = ViewState::ZOOM;
+        setCursor(Qt::SizeVerCursor);
+    }
+
+    if (state == ViewState::ZOOM) {
+        //! NOTE: up zooms in, down zooms out; doubles/halves every 100 px
+        int dy = _zoomStartY - event->pos().y();
+        zoomAround(qRound(_zoomStartGridWidth * std::pow(2.0, dy / 100.0)), _zoomAnchorViewX, _zoomAnchorMeasures);
         return;
     }
 
@@ -2852,6 +2906,7 @@ void Timeline::mouseMoveEvent(QMouseEvent* event)
 void Timeline::mouseReleaseEvent(QMouseEvent*)
 {
     _mousePressed = false;
+    _measuresZoomPressed = false;
 
     if (state == ViewState::LASSO) {
         scene()->removeItem(_selectionBox);
@@ -2921,7 +2976,7 @@ void Timeline::mouseReleaseEvent(QMouseEvent*)
                 interaction()->showItem(tlMeasure, tlStave);
             }
         }
-    } else if (state == ViewState::DRAG) {
+    } else if (state == ViewState::DRAG || state == ViewState::ZOOM) {
         setCursor(Qt::ArrowCursor);
     }
     state = ViewState::NORMAL;
@@ -2945,6 +3000,23 @@ void Timeline::leaveEvent(QEvent*)
 
 void Timeline::wheelEvent(QWheelEvent* event)
 {
+    QPointF scenePt = mapToScene(event->position().toPoint());
+    if (event->modifiers() == Qt::NoModifier && isOnMeasuresRow(scenePt)) {
+        //! NOTE: like dragging vertically on the Measures row (see mouseMoveEvent()): up zooms in,
+        //! doubles/halves every 4 wheel notches. Small (trackpad) deltas add up until they change the width.
+        _wheelZoomDelta += event->angleDelta().y();
+        int gridWidth = qRound(_gridWidth * std::pow(2.0, _wheelZoomDelta / 480.0));
+        gridWidth = std::clamp(gridWidth, _minZoom, _maxZoom);
+        if (gridWidth != _gridWidth) {
+            _wheelZoomDelta = 0;
+            zoomAround(gridWidth, event->position().toPoint().x(), scenePt.x() / qreal(_gridWidth));
+        } else if ((gridWidth == _maxZoom && _wheelZoomDelta > 0) || (gridWidth == _minZoom && _wheelZoomDelta < 0)) {
+            _wheelZoomDelta = 0; // don't pile up past the limits
+        }
+        event->accept();
+        return;
+    }
+
     if (event->modifiers().testFlag(Qt::ControlModifier)) {
         qreal originalCursorPos = mapToScene(mapFromGlobal(QCursor::pos())).x();
         int originalScrollValue = horizontalScrollBar()->value();
