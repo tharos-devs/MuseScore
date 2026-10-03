@@ -23,6 +23,11 @@
 #include <csignal>
 #include <cstdlib>
 
+#if defined(__APPLE__) || defined(__linux__)
+#include <execinfo.h>
+#include <unistd.h>
+#endif
+
 #include <QApplication>
 #include <QStyleHints>
 #include <QQuickWindow>
@@ -61,8 +66,19 @@ static void crashCallback(int signum)
     }
     LOGE() << "Oops! Application crashed with signal: [" << signum << "] " << signame << "-" << sigdescript;
 
+#if defined(__APPLE__) || defined(__linux__)
+    // The call stack, to stderr (the debugger can't always attach, e.g. some plugins refuse to run under it)
+    void* frames[128];
+    const int frameCount = backtrace(frames, 128);
+    backtrace_symbols_fd(frames, frameCount, STDERR_FILENO);
+#endif
+
     //! NOTE: not exit(): it runs atexit handlers and static destructors, which isn't safe from a signal handler - and
-    //! when the crash happens during exit() itself (e.g. in a plugin's static teardown), re-entering it can hang forever
+    //! when the crash happens during exit() itself (e.g. in a plugin's static teardown), re-entering it can hang forever.
+    //! The signal is raised again with its default action instead: the process ends right away just the same, and the
+    //! system writes its crash report (with the call stack)
+    std::signal(signum, SIG_DFL);
+    std::raise(signum);
     std::_Exit(EXIT_FAILURE);
 }
 
