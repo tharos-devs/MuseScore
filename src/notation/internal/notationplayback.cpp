@@ -23,6 +23,7 @@
 
 #include <cmath>
 
+#include "engraving/dom/chord.h"
 #include "engraving/dom/chordrest.h"
 #include "engraving/dom/factory.h"
 #include "engraving/dom/instrument.h"
@@ -178,6 +179,24 @@ void NotationPlayback::triggerCountIn(muse::midi::tick_t tick, muse::secs_t& cou
     countInDuration = muse::usecs_to_secs(durationInMicrosecs);
 }
 
+//! NOTE: the chord at a staff's position, whatever its voice (the first one found)
+static const Chord* chordAt(const Score* score, staff_idx_t staffIdx, int tick)
+{
+    const Segment* segment = score->tick2segment(Fraction::fromTicks(tick), true, SegmentType::ChordRest);
+    if (!segment) {
+        return nullptr;
+    }
+
+    for (voice_idx_t voice = 0; voice < VOICES; ++voice) {
+        const EngravingItem* item = segment->element(staff2track(staffIdx, voice));
+        if (item && item->isChord()) {
+            return toChord(item);
+        }
+    }
+
+    return nullptr;
+}
+
 void NotationPlayback::triggerControllers(const muse::mpe::ControllerChangeEventList& list, staff_idx_t staffIdx, int tick)
 {
     if (list.empty()) {
@@ -197,11 +216,11 @@ void NotationPlayback::triggerControllers(const muse::mpe::ControllerChangeEvent
 
     mpe::PlaybackEventList eventList(list.begin(), list.end());
 
-    //! NOTE: on the channel of the articulation of the selected chord (see PlaybackEventsRenderer::render),
-    //! like the notes played on a MIDI keyboard - only the channel: no keyswitch is sent for a controller
-    const ChordRest* selected = score()->inputState().cr();
-    if (selected && selected->isChord() && selected->staffIdx() == staffIdx) {
-        if (const std::optional<int> channel = m_playbackModel.articulationChannel(trackId, selected->track(), selected->tick().ticks())) {
+    //! NOTE: on the channel of the articulation of the chord at the input position (the selected one), like the
+    //! notes played on a MIDI keyboard - only the channel: no keyswitch is sent for a controller. staffIdx and
+    //! tick are those of the master score, even when played from a part
+    if (const Chord* chord = chordAt(score(), staffIdx, tick)) {
+        if (const std::optional<int> channel = m_playbackModel.articulationChannel(trackId, chord->track(), chord->tick().ticks())) {
             mpe::MidiMessagesEvent channelEvent;
             channelEvent.channel = *channel;
             eventList.push_back(std::move(channelEvent));
