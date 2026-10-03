@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-03
+- The Video panel can be docked below Palettes, Layout and Properties (or tabbed with them) in the side column, and comes back there when reopened; that column can now be made wider than 300 px. Its width is kept on relaunch (it widened back to 640 px), and the transport buttons no longer overlap the "Recently opened videos" arrow when the panel is narrow.
 - "Delete selected points" for MIDI CC curves moved from the toolbar's Automation dropdown to the staff menu's "MIDI CC" submenu (first item, also in automation mode).
 - Timeline meta rows: reordered by dragging their label (a blue line shows where), order remembered like their visibility; Measures always first, right below Video, with a collapse/expand arrow; measure separators across all meta rows; clicking a meta row moves the playback position to that measure; tempo marks show their note like in the score and aren't cut needlessly.
 - Fixed: collapsing/expanding the Timeline's meta rows (or showing/hiding one) left the instrument rows in place, under a dark empty area (stock bug); the wheel over the Measures row zooms again (and around the mouse).
