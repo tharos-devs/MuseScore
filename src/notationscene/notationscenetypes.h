@@ -35,6 +35,7 @@ enum class PercussionPanelAutoShowMode {
 //! NOTE: stable (untranslated) ids of the Timeline's meta rows, used as their
 //! persisted visibility settings keys -- the rows themselves are matched by their
 //! translated label, which can't be stored.
+inline const std::string TIMELINE_ROW_VIDEO("video");
 inline const std::string TIMELINE_ROW_TEMPO("tempo");
 inline const std::string TIMELINE_ROW_TIME_SIGNATURE("timeSignature");
 inline const std::string TIMELINE_ROW_TIMECODE("timecode");
@@ -46,6 +47,7 @@ inline const std::string TIMELINE_ROW_JUMPS_AND_MARKERS("jumpsAndMarkers");
 inline const std::string TIMELINE_ROW_MEASURES("measures");
 
 inline const std::vector<std::string> TIMELINE_ROW_IDS {
+    TIMELINE_ROW_VIDEO,
     TIMELINE_ROW_TEMPO,
     TIMELINE_ROW_TIME_SIGNATURE,
     TIMELINE_ROW_TIMECODE,

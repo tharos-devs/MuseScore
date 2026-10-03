@@ -71,5 +71,9 @@ public:
     virtual bool isTimelineRowVisible(const std::string& rowId) const = 0;
     virtual void setTimelineRowVisible(const std::string& rowId, bool visible) = 0;
     virtual muse::async::Notification timelineRowsVisibilityChanged() const = 0;
+
+    //! NOTE: in pixels, set by dragging the bottom edge of the row
+    virtual int timelineVideoRowHeight() const = 0;
+    virtual void setTimelineVideoRowHeight(int height) = 0;
 };
 }

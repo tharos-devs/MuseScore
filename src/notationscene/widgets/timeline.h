@@ -39,7 +39,10 @@
 #include "actions/iactionsdispatcher.h"
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackcontroller.h"
+#include "playback/iplaybackconfiguration.h"
 #include "notationscene/inotationsceneconfiguration.h"
+
+#include "timelinevideothumbnails.h"
 
 namespace mu::engraving {
 class Measure;
@@ -111,6 +114,13 @@ public:
 
     void updateLabels(std::vector<std::pair<QString, bool> > labels, int height);
     QString cursorIsOn();
+
+    //! NOTE: the Video row's label, above the other rows (0: hidden), see Timeline::updateVideoBand()
+    void setVideoBand(int height);
+    void updateVideoBand(); // repaints it, e.g. its Mute/Solo buttons
+
+private:
+    QWidget* m_videoLabel = nullptr;
 };
 
 struct TimelineTheme {
@@ -125,6 +135,7 @@ class Timeline : public QGraphicsView, public muse::Contextable, public muse::as
 
     muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
     muse::GlobalInject<INotationSceneConfiguration> configuration;
+    muse::GlobalInject<playback::IPlaybackConfiguration> playbackConfiguration;
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
@@ -164,7 +175,7 @@ private:
 
     int _gridWidth = 20;
     int _gridHeight = 20;
-    int _maxZoom = 50;
+    int _maxZoom = 400; // px per measure: zoomed in far enough for the Video row's pictures to be precise
     int _minZoom = 5;
 
     //! NOTE: zoom by dragging vertically on the Measures row, anchored on the clicked point
@@ -345,6 +356,27 @@ private:
     project::IProjectAudioSettingsPtr m_audioSettings;
     std::vector<QColor> m_trackColors;
     QColor m_defaultTrackColor;
+
+    //! NOTE: the Video row, see the .cpp
+    friend class TimelineVideoBand;
+    bool hasVideo() const;
+    void toggleVideoMute();
+    void toggleVideoSolo();
+    void chooseVideoFile();
+    void onVideoSettingsChanged();
+    int videoBandHeight() const;
+    void updateVideoBand();
+    void setVideoRowHeight(int height, bool save);
+    void paintVideoRow(QPainter* painter, int height);
+    double videoSecsAtX(qreal x, int offsetMs) const;
+    void resizeEvent(QResizeEvent* event) override;
+
+    TimelineVideoThumbnails* m_videoThumbnails = nullptr;
+    QWidget* m_videoBand = nullptr;
+    int m_videoRowHeight = 60;
+    project::IProjectVideoSettingsPtr m_videoSettings;
+    muse::io::path_t m_videoPath;
+
     void applyMetaRowsVisibility();
 
     bool collapsed() const { return _collapsedMeta; }
