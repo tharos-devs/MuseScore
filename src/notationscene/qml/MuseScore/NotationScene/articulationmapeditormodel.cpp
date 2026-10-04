@@ -22,6 +22,8 @@
 
 #include "articulationmapeditormodel.h"
 
+#include <algorithm>
+
 #include "articulationmapcolors.h"
 
 #include "engraving/articulationmap/articulationmapwriter.h"
@@ -558,7 +560,9 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
     emit dirtyChanged();
 }
 
-bool ArticulationMapEditorModel::writeFile(const io::path_t& path)
+//! NOTE: the tracks of the open score keep their own copy of the map, so they get the saved file right away
+//! (an articulation disabled in the editor and saved was still played until "Reload")
+bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTracks)
 {
     ArticulationMapParser::Result file;
     file.map.name = String::fromQString(m_mapName);
@@ -622,6 +626,10 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path)
 
     emit fileChanged();
     emit dirtyChanged();
+
+    if (reloadTracks) {
+        reloadTracksUsingFile(path, std::nullopt);
+    }
 
     return true;
 }
@@ -687,20 +695,47 @@ void ArticulationMapEditorModel::reloadIntoTrack()
         return;
     }
 
-    if ((m_isDirty || m_filePath.empty()) && !saveMap()) {
+    // Saved without reloading: the target track is reloaded below, together with the others using the file
+    if (m_filePath.empty()) {
+        if (!saveMapAs()) {
+            return;
+        }
+    } else if (m_isDirty && !writeFile(m_filePath, false /*reloadTracks*/)) {
         return;
     }
 
+    reloadTracksUsingFile(m_filePath, m_targetTrack);
+}
+
+//! NOTE: one undoable action for every track whose map comes from this file, plus alsoTrack (e.g. a track without
+//! a map yet, opened from its "New…" menu item, gets it attached)
+void ArticulationMapEditorModel::reloadTracksUsingFile(const io::path_t& path, const std::optional<InstrumentTrackId>& alsoTrack)
+{
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!maps || !maps->data()) {
         return;
     }
 
-    //! NOTE: a track without a map yet (the editor opened from its "New…" menu item) gets it attached
-    const bool trackHasMap = maps->data()->map(*m_targetTrack) != nullptr;
+    const String sourcePath = path.toString();
 
-    const RetVal<ByteArray> file = fileSystem()->readFile(m_filePath);
+    std::vector<InstrumentTrackId> tracks;
+    bool attachesNewMap = false;
+    for (const auto& [trackId, map] : maps->data()->maps()) {
+        if (map.sourcePath == sourcePath) {
+            tracks.push_back(trackId);
+        }
+    }
+    if (alsoTrack && std::find(tracks.cbegin(), tracks.cend(), *alsoTrack) == tracks.cend()) {
+        tracks.push_back(*alsoTrack);
+        attachesNewMap = maps->data()->map(*alsoTrack) == nullptr;
+    }
+
+    if (tracks.empty()) {
+        return;
+    }
+
+    const RetVal<ByteArray> file = fileSystem()->readFile(path);
     if (!file.ret) {
         interactive()->error(muse::trc("notation", "Cannot read the articulation map"), file.ret.text());
         return;
@@ -708,14 +743,25 @@ void ArticulationMapEditorModel::reloadIntoTrack()
 
     ArticulationMapParser::Result result = ArticulationMapParser::parse(String::fromUtf8(file.val));
     if (result.map.name.empty()) {
-        result.map.name = io::completeBasename(m_filePath).toString();
+        result.map.name = io::completeBasename(path).toString();
     }
-    result.map.sourcePath = m_filePath.toString();
+    result.map.sourcePath = sourcePath;
 
+    // An unchanged map isn't set again: saving without changes adds nothing to undo
     EditArticulationMapChanges changes;
-    changes.maps.emplace(*m_targetTrack, std::move(result.map));
-    maps->edit(changes, trackHasMap ? muse::TranslatableString("undoableAction", "Reload articulation map")
-               : muse::TranslatableString("undoableAction", "Load articulation map"));
+    for (const InstrumentTrackId& trackId : tracks) {
+        const ExpressionMap* current = maps->data()->map(trackId);
+        if (!current || !(*current == result.map)) {
+            changes.maps.emplace(trackId, result.map);
+        }
+    }
+
+    if (changes.empty()) {
+        return;
+    }
+
+    maps->edit(changes, attachesNewMap ? muse::TranslatableString("undoableAction", "Load articulation map")
+               : muse::TranslatableString("undoableAction", "Reload articulation map"));
 }
 
 // ---- header
