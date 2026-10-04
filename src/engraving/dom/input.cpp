@@ -112,6 +112,9 @@ StaffGroup InputState::staffGroup() const
 
 Fraction InputState::tick() const
 {
+    if (m_hasGridTick) {
+        return m_gridTick;
+    }
     return m_segment ? m_segment->tick() : Fraction(0, 1);
 }
 
@@ -122,6 +125,9 @@ Fraction InputState::tick() const
 ChordRest* InputState::cr() const
 {
     // _track could potentially be invalid, for instance after navigation through a frame
+    if (m_hasGridTick) {
+        return nullptr;
+    }
     return m_segment && m_track != muse::nidx ? toChordRest(m_segment->element(m_track)) : 0;
 }
 
@@ -354,6 +360,7 @@ void InputState::moveInputPos(EngravingItem* e)
         }
         m_lastSegment = m_segment;
         m_segment = s;
+        m_hasGridTick = false;
     }
 }
 
@@ -369,6 +376,7 @@ void InputState::setSegment(Segment* s)
     }
     m_segment = s;
     m_lastSegment = s;
+    m_hasGridTick = false;
 }
 
 //---------------------------------------------------------
@@ -397,6 +405,7 @@ void InputState::moveToNextInputPos()
 {
     Segment* s   = nextInputPos();
     m_lastSegment = m_segment;
+    m_hasGridTick = false;
     if (s) {
         m_segment = s;
         m_beyondScore = false;

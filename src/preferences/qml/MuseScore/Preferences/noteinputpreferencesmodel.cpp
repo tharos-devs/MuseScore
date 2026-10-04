@@ -118,6 +118,7 @@ QVariantList NoteInputPreferencesModel::noteInputMethods() const
     std::vector<std::pair<muse::rcommand::Command, Method > > noteInputCommands {
         { TOGGLE_NOTE_INPUT_BY_NOTE_NAME_COMMAND, Method::BY_NOTE_NAME },
         { TOGGLE_NOTE_INPUT_BY_DURATION_COMMAND, Method::BY_DURATION },
+        { TOGGLE_NOTE_INPUT_CARET_COMMAND, Method::CARET },
     };
 
     QVariantList methods;

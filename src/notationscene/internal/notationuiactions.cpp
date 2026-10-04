@@ -2246,6 +2246,13 @@ const UiActionList NotationUiActions::s_actions = {
              TranslatableString("action", "Toggle note input mode: input by duration"),
              IconCode::Code::DURATION_CURSOR
              ),
+    UiAction("note-input-caret",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Caret input"),
+             TranslatableString("action", "Toggle note input mode: caret input"),
+             IconCode::Code::DURATION_CURSOR
+             ),
     UiAction("note-input-rhythm",
              mu::context::UiCtxProjectOpened,
              mu::context::CTX_NOTATION_OPENED,

@@ -87,6 +87,7 @@ static const Settings::Key IS_PLAY_REPEATS_ENABLED(module_name, "application/pla
 static const Settings::Key IS_PLAY_CHORD_SYMBOLS_ENABLED(module_name, "application/playback/playChordSymbols");
 static const Settings::Key IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED(module_name,
                                                                               "application/playback/playPreviewNotesInInputByDuration");
+static const Settings::Key CARET_GRID_TICKS(module_name, "score/noteInput/caretGridTicks");
 static const Settings::Key PLAY_PREVIEW_NOTES_WITH_SCORE_DYNAMICS(module_name, "application/playback/playPreviewNotesWithScoreDynamics");
 static const Settings::Key IS_METRONOME_ENABLED(module_name, "application/playback/metronomeEnabled");
 static const Settings::Key IS_COUNT_IN_ENABLED(module_name, "application/playback/countInEnabled");
@@ -121,6 +122,7 @@ static const std::map<NoteInputMethod, std::string> NOTE_INPUT_METHOD_TO_STR {
     { NoteInputMethod::REALTIME_AUTO, "REALTIME_AUTO" },
     { NoteInputMethod::REALTIME_MANUAL, "REALTIME_MANUAL" },
     { NoteInputMethod::TIMEWISE, "TIMEWISE" },
+    { NoteInputMethod::CARET, "CARET" },
 };
 
 void NotationConfiguration::init()
@@ -320,6 +322,11 @@ void NotationConfiguration::init()
     settings()->setDefaultValue(IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED, Val(true));
     settings()->valueChanged(IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED).onReceive(nullptr, [this](const Val&) {
         m_isPlayNotesPreviewInInputByDurationChanged.notify();
+    });
+
+    settings()->setDefaultValue(CARET_GRID_TICKS, Val(mu::engraving::Constants::DIVISION / 2));
+    settings()->valueChanged(CARET_GRID_TICKS).onReceive(nullptr, [this](const Val&) {
+        m_caretGridTicksChanged.notify();
     });
 
     settings()->setDefaultValue(PLAY_PREVIEW_NOTES_WITH_SCORE_DYNAMICS, Val(true));
@@ -963,6 +970,22 @@ void NotationConfiguration::setIsPlayPreviewNotesInInputByDuration(bool play)
 muse::async::Notification NotationConfiguration::isPlayPreviewNotesInInputByDurationChanged() const
 {
     return m_isPlayNotesPreviewInInputByDurationChanged;
+}
+
+int NotationConfiguration::caretGridTicks() const
+{
+    const int ticks = settings()->value(CARET_GRID_TICKS).toInt();
+    return ticks > 0 ? ticks : mu::engraving::Constants::DIVISION / 2;
+}
+
+void NotationConfiguration::setCaretGridTicks(int ticks)
+{
+    settings()->setSharedValue(CARET_GRID_TICKS, Val(ticks));
+}
+
+muse::async::Notification NotationConfiguration::caretGridTicksChanged() const
+{
+    return m_caretGridTicksChanged;
 }
 
 bool NotationConfiguration::playPreviewNotesWithScoreDynamics() const

@@ -953,6 +953,15 @@ bool Score::getPosition(Position* pos, const PointF& p, voice_idx_t voice) const
     if (segment == 0) {
         return false;
     }
+
+    pos->hasSnappedTick = false;
+    if (noteEntryMode() && inputState().usingNoteEntryMethod(NoteEntryMethod::CARET) && !pos->beyondScore) {
+        snapToNoteInputGrid(pos, measure, pppp.x(), track + voice, x);
+        if (pos->hasSnappedTick) {
+            segment = pos->segment;
+        }
+    }
+
     //
     // TODO: restrict to reasonable values (pitch 0-127)
     //
@@ -991,6 +1000,79 @@ bool Score::getPosition(Position* pos, const PointF& p, voice_idx_t voice) const
     y         = sstaff->y() + pos->line * lineDist;
     pos->pos  = PointF(x, y) + measure->canvasPos();
     return true;
+}
+
+//---------------------------------------------------------
+//   snapToNoteInputGrid
+//    Caret input: snap the mouse to the note input ruler's
+//    grid (rhythmic grid resolution chosen by the user), including
+//    positions inside an existing chord or rest, so that any beat
+//    of the measure can be clicked directly
+//---------------------------------------------------------
+
+int Score::noteInputGridTicks(const Measure* measure, staff_idx_t staffIdx) const
+{
+    const Staff* st = staff(staffIdx);
+    if (!st || measure->isMMRest() || measure->isMeasureRepeatGroup(staffIdx)
+        || st->timeStretch(measure->tick()) != Fraction(1, 1)) {
+        return 0;
+    }
+
+    const int gridTicks = inputState().caretGridTicks();
+    return std::max(gridTicks, 0);
+}
+
+void Score::snapToNoteInputGrid(Position* pos, Measure* measure, double mouseX, track_idx_t track, double& x) const
+{
+    const int gridTicks = noteInputGridTicks(measure, pos->staffIdx);
+    if (gridTicks <= 0) {
+        return;
+    }
+
+    int bestTick = -1;
+    double bestX = 0.0;
+    double bestDist = 0.0;
+    for (int t = measure->tick().ticks(); t < measure->endTick().ticks(); t += gridTicks) {
+        const double tx = measure->xPosForTick(Fraction::fromTicks(t));
+        const double dist = std::abs(tx - mouseX);
+        if (bestTick < 0 || dist < bestDist) {
+            bestTick = t;
+            bestX = tx;
+            bestDist = dist;
+        }
+    }
+    if (bestTick < 0) {
+        return;
+    }
+
+    const Fraction tick = Fraction::fromTicks(bestTick);
+
+    // The tick may fall inside a chord/rest: it will be truncated, unless it belongs to a tuplet
+    const ChordRest* cr = findCR(tick, track);
+    if (cr && cr->tick() != tick && cr->endTick() > tick && cr->tuplet()) {
+        return;
+    }
+
+    if (Segment* seg = measure->findSegment(SegmentType::ChordRest, tick)) {
+        pos->segment = seg;
+        pos->hasSnappedTick = !seg->element(track);
+        pos->snappedTick = tick;
+        x = seg->x();
+        return;
+    }
+
+    Segment* prev = nullptr;
+    for (Segment* s = measure->first(SegmentType::ChordRest); s && s->tick() < tick; s = s->next(SegmentType::ChordRest)) {
+        prev = s;
+    }
+    if (!prev) {
+        return;
+    }
+
+    pos->segment = prev;
+    pos->hasSnappedTick = true;
+    pos->snappedTick = tick;
+    x = bestX;
 }
 
 //---------------------------------------------------------

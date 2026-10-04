@@ -118,7 +118,8 @@ static const std::map<Command, NoteInputMethod> NOTE_INPUT_COMMANDS = {
     { TOGGLE_NOTE_INPUT_REPITCH_COMMAND, NoteInputMethod::REPITCH },
     { TOGGLE_NOTE_INPUT_REALTIME_AUTO_COMMAND, NoteInputMethod::REALTIME_AUTO },
     { TOGGLE_NOTE_INPUT_REALTIME_MANUAL_COMMAND, NoteInputMethod::REALTIME_MANUAL },
-    { TOGGLE_NOTE_INPUT_TIMEWISE_COMMAND, NoteInputMethod::TIMEWISE }
+    { TOGGLE_NOTE_INPUT_TIMEWISE_COMMAND, NoteInputMethod::TIMEWISE },
+    { TOGGLE_NOTE_INPUT_CARET_COMMAND, NoteInputMethod::CARET }
 };
 
 static const std::map<Command, DurationType> DURATION_COMMANDS = {

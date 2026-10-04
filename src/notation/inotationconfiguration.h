@@ -186,6 +186,11 @@ public:
     virtual void setIsPlayPreviewNotesInInputByDuration(bool play) = 0;
     virtual muse::async::Notification isPlayPreviewNotesInInputByDurationChanged() const = 0;
 
+    // Caret input: rhythmic grid resolution of the note input ruler, in ticks
+    virtual int caretGridTicks() const = 0;
+    virtual void setCaretGridTicks(int ticks) = 0;
+    virtual muse::async::Notification caretGridTicksChanged() const = 0;
+
     virtual bool playPreviewNotesWithScoreDynamics() const = 0;
     virtual void setPlayPreviewNotesWithScoreDynamics(bool use) = 0;
     virtual muse::async::Notification playPreviewNotesWithScoreDynamicsChanged() const = 0;

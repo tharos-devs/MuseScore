@@ -275,6 +275,7 @@ public:
     void insertStaves(staff_idx_t s, staff_idx_t e);
 
     double tick2pos(Fraction) const;
+    double xPosForTick(const Fraction& tick) const;
     Segment* tick2segment(const Fraction& tick, SegmentType st = SegmentType::ChordRest);
 
     void sortStaves(std::vector<staff_idx_t>& dst);

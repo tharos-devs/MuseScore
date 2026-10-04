@@ -177,6 +177,10 @@ public:
     void setIsPlayPreviewNotesInInputByDuration(bool play) override;
     muse::async::Notification isPlayPreviewNotesInInputByDurationChanged() const override;
 
+    int caretGridTicks() const override;
+    void setCaretGridTicks(int ticks) override;
+    muse::async::Notification caretGridTicksChanged() const override;
+
     bool playPreviewNotesWithScoreDynamics() const override;
     void setPlayPreviewNotesWithScoreDynamics(bool use) override;
     muse::async::Notification playPreviewNotesWithScoreDynamicsChanged() const override;

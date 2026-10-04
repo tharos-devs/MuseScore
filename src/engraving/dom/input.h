@@ -53,7 +53,7 @@ static constexpr int VISUAL_INVALID_STRING_INDEX = -100;
 //---------------------------------------------------------
 
 enum class NoteEntryMethod : char {
-    UNKNOWN, BY_NOTE_NAME, BY_DURATION, REPITCH, RHYTHM, REALTIME_AUTO, REALTIME_MANUAL, TIMEWISE
+    UNKNOWN, BY_NOTE_NAME, BY_DURATION, REPITCH, RHYTHM, REALTIME_AUTO, REALTIME_MANUAL, TIMEWISE, CARET
 };
 
 //---------------------------------------------------------
@@ -132,6 +132,14 @@ public:
     void moveInputPos(EngravingItem* e);
     void moveToNextInputPos();
 
+    // Caret input: position on the note input grid that falls inside
+    // the chord/rest of segment(); materialized when a note is entered
+    bool hasGridTick() const { return m_hasGridTick; }
+    void setGridTick(const Fraction& tick) { m_gridTick = tick; m_hasGridTick = true; }
+    void clearGridTick() { m_hasGridTick = false; }
+    int caretGridTicks() const { return m_caretGridTicks; }
+    void setCaretGridTicks(int ticks) { m_caretGridTicks = ticks; }
+
     bool beyondScore() const { return m_beyondScore; }
     void setBeyondScore(bool val) { m_beyondScore = val; }
 
@@ -169,6 +177,10 @@ private:
     std::set<SymId> m_articulationIds;
 
     bool m_beyondScore = false;
+
+    bool m_hasGridTick = false;
+    Fraction m_gridTick;
+    int m_caretGridTicks = Constants::DIVISION / 2;
 };
 } // namespace mu::engraving
 #endif

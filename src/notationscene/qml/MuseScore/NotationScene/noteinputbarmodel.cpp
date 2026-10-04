@@ -49,6 +49,36 @@ static const ActionCode ADD_ACTION_CODE("add");
 const std::string NoteInputBarModel::CROSS_STAFF_BEAMING_SUBITEMS("cross-staff-beaming-subitems");
 const std::string NoteInputBarModel::TUPLET_SUBITEMS("tuplets-subitems");
 
+static const QString CARET_GRID_ITEM_PREFIX("caret-grid:");
+// Invisible item placed after the caret input button, which spans its cell too
+static const QString CARET_GRID_SPACER_ID("caret-grid-spacer");
+
+struct CaretGridValue {
+    DurationType type;
+    int dots;
+    IconCode::Code icon;
+    const char* title;
+};
+
+// Rhythmic grid resolutions offered for caret input, finest first
+static const std::vector<CaretGridValue> CARET_GRID_VALUES {
+    { DurationType::V_32ND, 0, IconCode::Code::NOTE_32ND, QT_TRANSLATE_NOOP("notation", "32nd note") },
+    { DurationType::V_16TH, 0, IconCode::Code::NOTE_16TH, QT_TRANSLATE_NOOP("notation", "16th note") },
+    { DurationType::V_16TH, 1, IconCode::Code::NOTE_16TH, QT_TRANSLATE_NOOP("notation", "Dotted 16th note") },
+    { DurationType::V_EIGHTH, 0, IconCode::Code::NOTE_8TH, QT_TRANSLATE_NOOP("notation", "Eighth note") },
+    { DurationType::V_EIGHTH, 1, IconCode::Code::NOTE_8TH, QT_TRANSLATE_NOOP("notation", "Dotted eighth note") },
+    { DurationType::V_QUARTER, 0, IconCode::Code::NOTE_QUARTER, QT_TRANSLATE_NOOP("notation", "Quarter note") },
+    { DurationType::V_QUARTER, 1, IconCode::Code::NOTE_QUARTER, QT_TRANSLATE_NOOP("notation", "Dotted quarter note") },
+    { DurationType::V_HALF, 0, IconCode::Code::NOTE_HALF, QT_TRANSLATE_NOOP("notation", "Half note") },
+    { DurationType::V_HALF, 1, IconCode::Code::NOTE_HALF, QT_TRANSLATE_NOOP("notation", "Dotted half note") },
+    { DurationType::V_WHOLE, 0, IconCode::Code::NOTE_WHOLE, QT_TRANSLATE_NOOP("notation", "Whole note") },
+};
+
+static int caretGridValueTicks(const CaretGridValue& value)
+{
+    return Duration(mu::engraving::DurationTypeWithDots(value.type, value.dots)).ticks().ticks();
+}
+
 NoteInputBarModel::NoteInputBarModel(QObject* parent)
     : AbstractMenuModel(parent)
 {
@@ -92,6 +122,11 @@ void NoteInputBarModel::init()
         load();
     });
 
+    configuration()->caretGridTicksChanged().onNotify(this, [this]() {
+        updateCaretGridItems();
+        emit caretGridChanged();
+    });
+
     commandsController()->isNoteInputAllowedChanged().onReceive(this, [this](bool) {
         emit isInputAllowedChanged();
     });
@@ -106,6 +141,7 @@ const muse::ui::ToolConfig& NoteInputBarModel::defaultNoteInputConfig()
         config.items = {
             { TOGGLE_NOTE_INPUT_BY_NOTE_NAME_COMMAND, true },
             { TOGGLE_NOTE_INPUT_BY_DURATION_COMMAND, true },
+            { TOGGLE_NOTE_INPUT_CARET_COMMAND, true },
             { TOGGLE_NOTE_INPUT_RHYTHM_COMMAND, false },
             { TOGGLE_NOTE_INPUT_REPITCH_COMMAND, false },
             { TOGGLE_NOTE_INPUT_REALTIME_AUTO_COMMAND, false },
@@ -187,6 +223,20 @@ void NoteInputBarModel::load()
             items << item;
         } else {
             MenuItem* item = makeCommandItem(rcommand::Command(citem.intent), QString::number(section));
+            if (rcommand::Command(citem.intent) == TOGGLE_NOTE_INPUT_CARET_COMMAND) {
+                // icon with an attached dropdown: the rhythmic grid resolution
+                item->setSubitems(makeCaretGridItems());
+                items << item;
+
+                // only a horizontal toolbar has room for a wide button
+                if (m_horizontal) {
+                    MenuItem* spacer = new MenuItem(this);
+                    spacer->setId(CARET_GRID_SPACER_ID);
+                    spacer->setSection(QString::number(section));
+                    items << spacer;
+                }
+                continue;
+            }
             items << item;
         }
     }
@@ -246,6 +296,91 @@ MenuItemList NoteInputBarModel::makeCrossStaffBeamingItems()
     };
 
     return items;
+}
+
+static const CaretGridValue* currentCaretGridValue(int ticks)
+{
+    for (const CaretGridValue& value : CARET_GRID_VALUES) {
+        if (caretGridValueTicks(value) == ticks) {
+            return &value;
+        }
+    }
+    return nullptr;
+}
+
+bool NoteInputBarModel::horizontal() const
+{
+    return m_horizontal;
+}
+
+void NoteInputBarModel::setHorizontal(bool horizontal)
+{
+    if (m_horizontal == horizontal) {
+        return;
+    }
+
+    m_horizontal = horizontal;
+    emit horizontalChanged();
+
+    load();
+}
+
+int NoteInputBarModel::caretGridIcon() const
+{
+    const CaretGridValue* value = currentCaretGridValue(configuration()->caretGridTicks());
+    return static_cast<int>(value ? value->icon : IconCode::Code::NOTE_8TH);
+}
+
+bool NoteInputBarModel::caretGridDotted() const
+{
+    const CaretGridValue* value = currentCaretGridValue(configuration()->caretGridTicks());
+    return value && value->dots > 0;
+}
+
+void NoteInputBarModel::handleMenuItem(const QString& itemId)
+{
+    if (itemId.startsWith(CARET_GRID_ITEM_PREFIX)) {
+        const int ticks = itemId.mid(CARET_GRID_ITEM_PREFIX.size()).toInt();
+        if (ticks > 0) {
+            configuration()->setCaretGridTicks(ticks);
+        }
+        return;
+    }
+
+    AbstractMenuModel::handleMenuItem(itemId);
+}
+
+MenuItemList NoteInputBarModel::makeCaretGridItems()
+{
+    const int currentTicks = configuration()->caretGridTicks();
+
+    MenuItemList items;
+    for (const CaretGridValue& value : CARET_GRID_VALUES) {
+        const int ticks = caretGridValueTicks(value);
+        MenuItem* item = new MenuItem(this);
+        item->setId(CARET_GRID_ITEM_PREFIX + QString::number(ticks));
+        item->setTitle(TranslatableString("notation", value.title));
+        item->setIcon(value.icon);
+        item->setCheckable(true);
+        item->setChecked(ticks == currentTicks);
+        items << item;
+    }
+
+    return items;
+}
+
+void NoteInputBarModel::updateCaretGridItems()
+{
+    const QString currentId = CARET_GRID_ITEM_PREFIX + QString::number(configuration()->caretGridTicks());
+
+    for (MenuItem* item : items()) {
+        if (item->subitems().empty() || !item->subitems().front()->id().startsWith(CARET_GRID_ITEM_PREFIX)) {
+            continue;
+        }
+        for (MenuItem* subitem : item->subitems()) {
+            subitem->setChecked(subitem->id() == currentId);
+        }
+    }
 }
 
 MenuItemList NoteInputBarModel::makeTupletItems()

@@ -74,6 +74,34 @@ void NotationRuler::paint(Painter* painter, const NoteInputState& state)
 
     const int inputTicks = state.tick().ticks();
     const int measureTicks = measure->tick().ticks();
+
+    // Caret input: one line per step of the chosen rhythmic grid, long lines on the beats
+    const int caretGridTicks = state.usingNoteEntryMethod(NoteEntryMethod::CARET)
+                               ? staff->score()->noteInputGridTicks(measure, state.staffIdx()) : 0;
+    if (caretGridTicks > 0) {
+        const Fraction sig = timeSig->sig();
+        const int beatTicks = TimeSigFrac(sig.numerator(), sig.denominator()).beatTicks();
+        bool caretPainted = false;
+
+        for (int t = measureTicks; t < measure->endTick().ticks(); t += caretGridTicks) {
+            LineType type = LineType::Subdivision;
+            if (t == inputTicks) {
+                type = LineType::CurrentPosition;
+                caretPainted = true;
+            } else if (beatTicks > 0 && (t - measureTicks) % beatTicks == 0) {
+                type = LineType::MainBeat;
+            }
+
+            const double lineX = measurePos.x() + measure->xPosForTick(Fraction::fromTicks(t));
+            paintLine(painter, type, PointF(lineX, lineY), spatium, state.voice());
+        }
+
+        if (!caretPainted) {
+            const double lineX = measurePos.x() + measure->xPosForTick(state.tick());
+            paintLine(painter, LineType::CurrentPosition, PointF(lineX, lineY), spatium, state.voice());
+        }
+        return;
+    }
     const int ticksBeat = mu::engraving::ticks_beat(timeSig->denominator());
     const int subdivisionTicks = ticksBeat / 2;
 
@@ -128,7 +156,8 @@ void NotationRuler::paint(Painter* painter, const NoteInputState& state)
     }
 
     if (!currentPositionPainted) {
-        const double lineX = measurePos.x() + currSegment->x();
+        const double segmentX = state.hasGridTick() ? measure->xPosForTick(state.tick()) : currSegment->x();
+        const double lineX = measurePos.x() + segmentX;
         paintLine(painter, LineType::CurrentPosition, PointF(lineX, lineY), spatium, state.voice());
     }
 }

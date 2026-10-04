@@ -24,6 +24,8 @@
 
 #include <algorithm>
 #include <iterator>
+#include <optional>
+#include <set>
 #include <tuple>
 
 #include "translation.h"
@@ -439,6 +441,10 @@ Note* NoteInput::addPitch(Transaction& tx, Score* score, NoteVal& nval, bool add
         return addPitchToChord(tx, score, nval, toChord(c), externalInputState);
     }
 
+    if (!externalInputState) {
+        materializeGridTick(tx, score);
+    }
+
     if (is.beyondScore()) {
         score->appendMeasures(1);
         is.moveToNextInputPos();
@@ -741,6 +747,22 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const PointF& pos, bool re
         return make_ret(Ret::Code::UnknownError);
     }
 
+    if (p.hasSnappedTick && p.segment->tick() != p.snappedTick) {
+        // The snapped tick falls inside a chord/rest: putNote() truncates it,
+        // and so must be done here for an insertion
+        p.segment = p.segment->measure()->undoGetSegment(SegmentType::ChordRest, p.snappedTick);
+
+        if (insert) {
+            const track_idx_t track = p.staffIdx * VOICES + score->inputState().voice();
+            ChordRest* prevCr = p.segment->nextChordRest(track, /*backwards*/ true, /*stopAtMeasureBoundary*/ true);
+            if (prevCr && prevCr->endTick() > p.snappedTick) {
+                const InputState inputStateToRestore = score->inputState(); // because truncateChordRest will alter the input state
+                truncateChordRest(tx, score, prevCr, p.snappedTick, /*fillWithRest*/ true);
+                score->inputState() = inputStateToRestore;
+            }
+        }
+    }
+
     Score* posScore = p.segment->score();
     // it is not safe to call repitchNote() if p is on a TAB staff
     bool isTablature = posScore->staff(p.staffIdx)->isTabStaff(p.segment->tick());
@@ -951,6 +973,8 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const Position& p, bool re
     }
 
     if (cr && !st->isTabStaff(cr->tick())) {
+        is.moveToNextInputPos();
+    } else if (!cr && p.hasSnappedTick && !st->isTabStaff(is.tick())) {
         is.moveToNextInputPos();
     }
 
@@ -1199,6 +1223,127 @@ void NoteInput::truncateChordRest(Transaction&, Score* score, ChordRest* cr, con
 }
 
 //---------------------------------------------------------
+//   moveInputPosOnGrid
+//---------------------------------------------------------
+
+static std::vector<Fraction> noteInputGridStops(const Score* score, const Measure* measure, track_idx_t track)
+{
+    std::set<Fraction> stops;
+    for (const Segment* s = measure->first(SegmentType::ChordRest); s; s = s->next(SegmentType::ChordRest)) {
+        if (s->enabled() && s->element(track)) {
+            stops.insert(s->tick());
+        }
+    }
+
+    const int gridTicks = score->noteInputGridTicks(measure, track2staff(track));
+    if (gridTicks > 0) {
+        for (int t = measure->tick().ticks(); t < measure->endTick().ticks(); t += gridTicks) {
+            const Fraction tick = Fraction::fromTicks(t);
+            const ChordRest* cr = score->findCR(tick, track);
+            if (cr && cr->tick() != tick && cr->endTick() > tick && cr->tuplet()) {
+                continue;
+            }
+            stops.insert(tick);
+        }
+    }
+
+    if (stops.empty()) {
+        stops.insert(measure->tick());
+    }
+
+    return std::vector<Fraction>(stops.begin(), stops.end());
+}
+
+bool NoteInput::moveInputPosOnGrid(Score* score, bool forward)
+{
+    InputState& is = score->inputState();
+    if (!is.isValid() || is.beyondScore()) {
+        return false;
+    }
+
+    const track_idx_t track = is.track();
+    const Fraction tick = is.tick();
+    Measure* measure = is.segment()->measure();
+
+    std::optional<Fraction> target;
+    std::vector<Fraction> stops = noteInputGridStops(score, measure, track);
+    if (forward) {
+        auto it = std::upper_bound(stops.begin(), stops.end(), tick);
+        if (it != stops.end()) {
+            target = *it;
+        } else if (Measure* next = measure->nextMeasure()) {
+            measure = next;
+            target = next->tick();
+        }
+    } else {
+        auto it = std::lower_bound(stops.begin(), stops.end(), tick);
+        if (it != stops.begin()) {
+            target = *std::prev(it);
+        } else if (Measure* prev = measure->prevMeasure()) {
+            measure = prev;
+            target = noteInputGridStops(score, prev, track).back();
+        }
+    }
+
+    if (!target) {
+        return false;
+    }
+
+    if (Segment* seg = measure->findSegment(SegmentType::ChordRest, *target)) {
+        is.setSegment(seg);
+        return true;
+    }
+
+    Segment* prev = nullptr;
+    for (Segment* s = measure->first(SegmentType::ChordRest); s && s->tick() < *target; s = s->next(SegmentType::ChordRest)) {
+        prev = s;
+    }
+    if (!prev) {
+        return false;
+    }
+
+    is.setSegment(prev);
+    is.setGridTick(*target);
+    return true;
+}
+
+//---------------------------------------------------------
+//   materializeGridTick
+//    Create the segment for a pending grid position, truncating
+//    the chord/rest it falls into
+//---------------------------------------------------------
+
+void NoteInput::materializeGridTick(Transaction& tx, Score* score)
+{
+    InputState& is = score->inputState();
+    if (!is.hasGridTick()) {
+        return;
+    }
+
+    const Fraction tick = is.tick();
+    Measure* measure = is.segment()->measure();
+    if (tick < measure->tick() || tick >= measure->endTick()) {
+        // stale pending position (the measure changed meanwhile): fall back to the segment
+        is.clearGridTick();
+        return;
+    }
+
+    Segment* seg = measure->undoGetSegment(SegmentType::ChordRest, tick);
+    is.setSegment(seg);
+
+    if (is.cr()) {
+        return;
+    }
+
+    ChordRest* prevCr = seg->nextChordRest(is.track(), /*backwards*/ true, /*stopAtMeasureBoundary*/ true);
+    if (prevCr && prevCr->endTick() > tick) {
+        const InputState inputStateToRestore = is; // because truncateChordRest will alter the input state
+        truncateChordRest(tx, score, prevCr, tick, /*fillWithRest*/ true);
+        is = inputStateToRestore;
+    }
+}
+
+//---------------------------------------------------------
 //   nextInputPos
 //---------------------------------------------------------
 
@@ -1281,6 +1426,8 @@ void NoteInput::addPitch(Transaction& tx, Score* score, int step, bool addFlag, 
             return;
         }
     }
+
+    materializeGridTick(tx, score);
 
     pos.segment   = is.segment();
     pos.staffIdx  = is.track() / VOICES;

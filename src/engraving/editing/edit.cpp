@@ -106,6 +106,7 @@
 #include "editmeasures.h"
 #include "editnote.h"
 #include "editpagelocks.h"
+#include "noteinput.h"
 #include "editpart.h"
 #include "editproperty.h"
 #include "editrehearsalmark.h"
@@ -2615,6 +2616,10 @@ void Score::enterRest(const TDuration& d, InputState* externalInputState)
         is.moveToNextInputPos();
     }
 
+    if (!externalInputState) {
+        NoteInput::materializeGridTick(transactionManager()->currentOrDummyTransaction(), this);
+    }
+
     expandVoice(is.segment(), is.track());
 
     if (!is.cr()) {
@@ -2628,7 +2633,7 @@ void Score::enterRest(const TDuration& d, InputState* externalInputState)
                 d.fraction(), DirectionV::AUTO, /* forceAccidental */ false, is.articulationIds(), /* rhythmic */ false,
                 externalInputState);
     is.moveToNextInputPos();
-    if (!is.noteEntryMode() || is.usingNoteEntryMethod(NoteEntryMethod::BY_NOTE_NAME)) {
+    if (!is.noteEntryMode() || is.usingNoteEntryMethod(NoteEntryMethod::BY_NOTE_NAME) || is.usingNoteEntryMethod(NoteEntryMethod::CARET)) {
         is.setRest(false);  // continue with normal note entry
     }
 }

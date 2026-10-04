@@ -49,6 +49,8 @@ Item {
 
     NoteInputBarModel {
         id: noteInputModel
+
+        horizontal: root.orientation === Qt.Horizontal
     }
 
     QtObject {
@@ -115,8 +117,21 @@ Item {
 
             readonly property MenuItem item: Boolean(itemModel) ? itemModel.item : null
             readonly property bool hasMenu: Boolean(item) && item.subitems.length !== 0
+            // A command with an attached dropdown: the click runs the command, the arrow opens the menu
+            readonly property bool isSplit: hasMenu && item.id !== ""
+            // The caret input button also spans the following (invisible) spacer cell,
+            // to show the grid resolution next to its icon
+            readonly property bool isSpacer: Boolean(item) && item.id === "caret-grid-spacer"
+            readonly property bool isWide: isSplit && gridView.isHorizontal
 
-            width: gridView.cellWidth
+            visible: !isSpacer
+
+            readonly property int wideWidth: 50
+            readonly property int spannedWidth: gridView.cellWidth * 2 + gridView.columnSpacing
+
+            // centered over the two spanned cells
+            x: isWide ? (spannedWidth - wideWidth) / 2 : 0
+            width: isWide ? wideWidth : gridView.cellWidth
             height: gridView.cellWidth
 
             enabled: noteInputModel.isInputAllowed
@@ -124,8 +139,56 @@ Item {
             accentButton: (Boolean(item) && item.checked) || menuLoader.isMenuOpened
             transparent: !accentButton
 
-            icon: Boolean(item) ? item.icon : IconCode.NONE
+            icon: Boolean(item) && !isWide ? item.icon : IconCode.NONE
             iconFont: ui.theme.toolbarIconsFont
+
+            contentItem: isWide ? caretContentComponent : null
+
+            Component {
+                id: caretContentComponent
+
+                Item {
+                    implicitWidth: btn.width
+                    implicitHeight: btn.height
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 7
+                        spacing: 3
+
+                        // the caret
+                        Rectangle {
+                            id: caretLine
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 1
+                            height: 22
+                            color: ui.theme.fontPrimaryColor
+                        }
+
+                        // the rhythmic grid resolution
+                        // aligned with the bottom of the caret (the notehead glyph descends below its baseline)
+                        StyledIconLabel {
+                            anchors.baseline: caretLine.bottom
+                            anchors.baselineOffset: -3
+                            iconCode: noteInputModel.caretGridIcon
+                            font.family: ui.theme.toolbarIconsFont.family
+                            font.pixelSize: 10
+                        }
+
+                        Rectangle {
+                            anchors.bottom: caretLine.bottom
+                            anchors.bottomMargin: 1
+                            visible: noteInputModel.caretGridDotted
+                            width: 2
+                            height: 2
+                            radius: 1
+                            color: ui.theme.fontPrimaryColor
+                        }
+                    }
+                }
+            }
 
             toolTipTitle: Boolean(item) ? item.title : ""
             toolTipDescription: Boolean(item) ? item.description : ""
@@ -136,7 +199,7 @@ Item {
             navigation.order: Boolean(itemModel) ? itemModel.order : 0
             isClickOnKeyNavTriggered: false
             navigation.onTriggered: {
-                if (btn.hasMenu) {
+                if (btn.hasMenu && !btn.isSplit) {
                     toggleMenuOpened()
                 } else {
                     handleMenuItem()
@@ -152,7 +215,7 @@ Item {
             }
 
             onClicked: {
-                if (btn.hasMenu) {
+                if (btn.hasMenu && !btn.isSplit) {
                     toggleMenuOpened()
                 } else {
                     handleMenuItem()
@@ -166,6 +229,33 @@ Item {
                 }
 
                 btn.toggleMenuOpened()
+            }
+
+            StyledIconLabel {
+                anchors.right: parent.right
+                anchors.bottom: btn.isWide ? undefined : parent.bottom
+                anchors.verticalCenter: btn.isWide ? parent.verticalCenter : undefined
+                anchors.rightMargin: btn.isWide ? 3 : 1
+                anchors.bottomMargin: 1
+
+                visible: btn.isSplit
+                iconCode: IconCode.SMALL_ARROW_DOWN
+                font.family: ui.theme.iconsFont.family
+                // full size like other dropdown arrows, smaller in the single-cell (vertical toolbar) variant
+                font.pixelSize: btn.isWide ? ui.theme.iconsFont.pixelSize : 10
+                opacity: arrowMouseArea.containsMouse || menuLoader.isMenuOpened ? 1.0 : 0.7
+
+                MouseArea {
+                    id: arrowMouseArea
+
+                    anchors.fill: parent
+                    anchors.margins: -3
+
+                    enabled: btn.isSplit && btn.enabled
+                    hoverEnabled: true
+
+                    onClicked: btn.toggleMenuOpened()
+                }
             }
 
             StyledMenuLoader {

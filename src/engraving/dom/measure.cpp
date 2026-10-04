@@ -546,6 +546,41 @@ double Measure::tick2pos(Fraction tck) const
 }
 
 //---------------------------------------------------------
+//   xPosForTick
+///    x position (relative to the measure) of a tick inside it:
+///    linear interpolation between its chord/rest segments
+//---------------------------------------------------------
+
+double Measure::xPosForTick(const Fraction& tick) const
+{
+    const Segment* prev = nullptr;
+    for (const Segment* s = first(SegmentType::ChordRest); s; s = s->next(SegmentType::ChordRest)) {
+        if (!s->enabled()) {
+            continue;
+        }
+        if (s->tick() == tick) {
+            return s->x();
+        }
+        if (s->tick() > tick) {
+            if (!prev) {
+                return s->x();
+            }
+            return prev->x() + (s->x() - prev->x()) * (tick - prev->tick()).toDouble() / (s->tick() - prev->tick()).toDouble();
+        }
+        prev = s;
+    }
+
+    if (!prev) {
+        return 0.0;
+    }
+    const Fraction endTick = this->endTick();
+    if (endTick <= prev->tick()) {
+        return prev->x();
+    }
+    return prev->x() + (width() - prev->x()) * (tick - prev->tick()).toDouble() / (endTick - prev->tick()).toDouble();
+}
+
+//---------------------------------------------------------
 //   showsMeasureNumberInAutoMode
 ///    Whether the measure will show measure number(s) when MeasureNumberMode is set to AUTO
 //---------------------------------------------------------
