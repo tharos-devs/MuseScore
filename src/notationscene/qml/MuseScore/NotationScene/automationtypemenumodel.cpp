@@ -69,6 +69,32 @@ QString AutomationTypeMenuModel::currentTitle() const
     return QString();
 }
 
+muse::ui::IconCode::Code AutomationTypeMenuModel::automationTypeIcon(AutomationType type)
+{
+    using Code = muse::ui::IconCode::Code;
+
+    switch (type) {
+    case AutomationType::Dynamics: return Code::DYNAMIC_FORTE;
+    case AutomationType::Tempo: return Code::NOTE_HEAD_QUARTER;
+    case AutomationType::Volume: return Code::AUDIO;
+    case AutomationType::Pan: return Code::NO_BREAK;
+    case AutomationType::MidiCC: return Code::AUTOMATION;
+    case AutomationType::Unknown: break;
+    }
+
+    return Code::AUTOMATION;
+}
+
+int AutomationTypeMenuModel::currentIcon() const
+{
+    return static_cast<int>(automationTypeIcon(notationConfiguration()->currentAutomationType()));
+}
+
+QString AutomationTypeMenuModel::currentIconSuffix() const
+{
+    return notationConfiguration()->currentAutomationType() == AutomationType::Tempo ? QStringLiteral("=") : QString();
+}
+
 void AutomationTypeMenuModel::updateItems()
 {
     // AbstractMenuModel::setItems() doesn't delete the items it's replacing (unlike
@@ -76,13 +102,19 @@ void AutomationTypeMenuModel::updateItems()
     // each open leaks the previous batch.
     qDeleteAll(items());
 
+    MenuItem* midiCcMenu = makeMidiCcMenu();
+    if (midiCcMenu) {
+        midiCcMenu->setIcon(automationTypeIcon(AutomationType::MidiCC));
+        midiCcMenu->setCheckable(true);
+    }
+
     setItems({
         makeAutomationTypeItem(AutomationType::Dynamics, "dynamics", TranslatableString::untranslatable("Dynamics")),
         makeAutomationTypeItem(AutomationType::Tempo, "tempo", TranslatableString::untranslatable("Tempo")),
         makeAutomationTypeItem(AutomationType::Volume, "volume", TranslatableString::untranslatable("Volume")),
         makeAutomationTypeItem(AutomationType::Pan, "pan", TranslatableString::untranslatable("Pan")),
         makeSeparator(),
-        makeMidiCcMenu(),
+        midiCcMenu,
     });
 }
 
@@ -110,6 +142,11 @@ MenuItem* AutomationTypeMenuModel::makeAutomationTypeItem(AutomationType type, c
     query.addParam("type", muse::Val(queryTypeParam));
     item->setCommandQuery(query);
 
+    // A checkable item with an icon: the menu shows the checkmark in front of the icon
+    item->setIcon(automationTypeIcon(type));
+    // the command has no icon color: an empty one keeps the theme's (instead of black)
+    item->setIconColor(QString());
+    item->setCheckable(true);
     item->setChecked(notationConfiguration()->currentAutomationType() == type);
 
     return item;

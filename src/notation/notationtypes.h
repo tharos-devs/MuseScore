@@ -94,6 +94,13 @@ using GuitarBendType = mu::engraving::GuitarBendType;
 using Pid = mu::engraving::Pid;
 using VoiceAssignment = mu::engraving::VoiceAssignment;
 
+// The editors grouped under the toolbar Expression button
+enum class ExpressionEditor : int {
+    NoteOffsets = 0,
+    NoteVelocities,
+    Articulations
+};
+
 enum class DragMode : unsigned char
 {
     BothXY = 0,

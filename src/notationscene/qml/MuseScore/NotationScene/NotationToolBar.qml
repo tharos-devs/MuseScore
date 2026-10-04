@@ -43,11 +43,17 @@ StyledToolBarView {
         Component.onCompleted: automationTypeMenuModel.init()
     }
 
+    ExpressionMenuModel {
+        id: expressionMenuModel
+
+        Component.onCompleted: expressionMenuModel.init()
+    }
+
     model: toolBarModel
 
     // "toggle-automation" is marked ToolBarItemType.USER_TYPE (see notationtoolbarmodel.cpp) so it
     // stays a normal item in the model's own order (keeping it correctly positioned between
-    // "toggle-mixer" and "toggle-note-offset-editor" - the two were fighting for that spot when
+    // "toggle-mixer" and the Expression button - the two were fighting for that spot when
     // automation was instead rendered as a separate sibling appended after this whole view), while
     // still getting its own delegate: a SplitButton whose dropdown arrow picks the automation type
     // directly, instead of a plain toggle-only button.
@@ -58,18 +64,59 @@ StyledToolBarView {
 
         //! NOTE: USER_TYPE + 1, see notationtoolbarmodel.cpp
         if (type === ToolBarItemType.USER_TYPE + 1) {
-            return articulationMapButtonComponent
+            return expressionButtonComponent
         }
 
         return null
     }
 
+    // Groups the note offset, note velocity and articulation editors: the dropdown shows/hides
+    // each of them (they can be combined), the button toggles the last one checked there
     Component {
-        id: articulationMapButtonComponent
+        id: expressionButtonComponent
 
-        StyledToolBarItem {
-            iconFont: Qt.font({ family: ui.theme.toolbarIconsFont.family,
-                                pixelSize: Math.round(ui.theme.toolbarIconsFont.pixelSize * 0.8) })
+        SplitButton {
+            id: expressionControl
+
+            property var itemData
+
+            icon: expressionMenuModel.currentIcon
+            // The articulation glyph is drawn larger than the others by the icon font
+            iconFont: expressionMenuModel.currentIconIsLarge
+                      ? Qt.font({ family: ui.theme.iconsFont.family, pixelSize: Math.round(ui.theme.iconsFont.pixelSize * 0.8) })
+                      : ui.theme.iconsFont
+            text: Boolean(itemData) && itemData.showTitle ? expressionMenuModel.currentTitle : ""
+            textWidth: Math.ceil(expressionTitleMetrics.advanceWidth)
+            checked: Boolean(itemData) && itemData.checked
+            enabled: Boolean(itemData) ? itemData.enabled : false
+
+            // Sized for the longest name, so the button keeps its width whatever editor it shows
+            TextMetrics {
+                id: expressionTitleMetrics
+                font: ui.theme.bodyFont
+                text: expressionMenuModel.titles.reduce(function(longest, title) {
+                    return title.length > longest.length ? title : longest
+                }, "")
+            }
+
+            toolTipTitle: Boolean(itemData) ? itemData.title + " \u2013 " + expressionMenuModel.currentTitle : ""
+            toolTipDescription: Boolean(itemData) ? itemData.description : ""
+
+            menuItems: expressionMenuModel.items
+
+            onClicked: {
+                if (Boolean(itemData)) {
+                    itemData.activate()
+                }
+            }
+
+            onHandleMenuItem: function(itemId) {
+                expressionMenuModel.handleMenuItem(itemId)
+            }
+
+            onAboutToOpenMenu: {
+                expressionMenuModel.init()
+            }
         }
     }
 
@@ -81,7 +128,9 @@ StyledToolBarView {
 
             property var itemData
 
-            icon: Boolean(itemData) ? itemData.icon : IconCode.NONE
+            // The current automation type's icon ("=" after the note for a tempo)
+            icon: automationTypeMenuModel.currentIcon
+            iconSuffix: automationTypeMenuModel.currentIconSuffix
             // Shows which curve is being edited, in the space the "Automation" title would take
             // (so the button never changes size - a longer name is cut off)
             text: Boolean(itemData) && itemData.showTitle ? automationTypeMenuModel.currentTitle : ""

@@ -529,6 +529,21 @@ muse::async::Notification NotationConfigurationStub::isPlayPreviewNotesInInputBy
     return n;
 }
 
+int NotationConfigurationStub::currentExpressionEditor() const
+{
+    return 0;
+}
+
+void NotationConfigurationStub::setCurrentExpressionEditor(int)
+{
+}
+
+muse::async::Notification NotationConfigurationStub::currentExpressionEditorChanged() const
+{
+    static muse::async::Notification n;
+    return n;
+}
+
 int NotationConfigurationStub::caretGridTicks() const
 {
     return 240;

@@ -295,6 +295,8 @@ private:
     void toggleNoteOffsetEditor();
     void toggleNoteVelocityEditor();
     void toggleArticulationMapEditor();
+    void toggleExpressionEditor();
+    muse::Ret toggleAutomationType(const muse::rcommand::Params& params);
     void subscribeToEditModes(const IMasterNotationPtr& masterNotation);
     void resetNoteOffsets();
     void resetNoteVelocities();

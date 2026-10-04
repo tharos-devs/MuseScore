@@ -1220,4 +1220,8 @@
     <key>grace-note-bend</key>
     <seq>Ctrl+Alt+B</seq>
     </SC>
+  <SC>
+    <key>toggle-record-midicc</key>
+    <seq>Shift+R</seq>
+    </SC>
   </Shortcuts>

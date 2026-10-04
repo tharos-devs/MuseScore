@@ -88,6 +88,7 @@ static const Settings::Key IS_PLAY_CHORD_SYMBOLS_ENABLED(module_name, "applicati
 static const Settings::Key IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED(module_name,
                                                                               "application/playback/playPreviewNotesInInputByDuration");
 static const Settings::Key CARET_GRID_TICKS(module_name, "score/noteInput/caretGridTicks");
+static const Settings::Key CURRENT_EXPRESSION_EDITOR(module_name, "notation/expression/currentEditor");
 static const Settings::Key PLAY_PREVIEW_NOTES_WITH_SCORE_DYNAMICS(module_name, "application/playback/playPreviewNotesWithScoreDynamics");
 static const Settings::Key IS_METRONOME_ENABLED(module_name, "application/playback/metronomeEnabled");
 static const Settings::Key IS_COUNT_IN_ENABLED(module_name, "application/playback/countInEnabled");
@@ -322,6 +323,11 @@ void NotationConfiguration::init()
     settings()->setDefaultValue(IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED, Val(true));
     settings()->valueChanged(IS_PLAY_PREVIEW_NOTES_IN_INPUT_BY_DURATION_ENABLED).onReceive(nullptr, [this](const Val&) {
         m_isPlayNotesPreviewInInputByDurationChanged.notify();
+    });
+
+    settings()->setDefaultValue(CURRENT_EXPRESSION_EDITOR, Val(static_cast<int>(ExpressionEditor::NoteOffsets)));
+    settings()->valueChanged(CURRENT_EXPRESSION_EDITOR).onReceive(nullptr, [this](const Val&) {
+        m_currentExpressionEditorChanged.notify();
     });
 
     settings()->setDefaultValue(CARET_GRID_TICKS, Val(mu::engraving::Constants::DIVISION / 2));
@@ -970,6 +976,26 @@ void NotationConfiguration::setIsPlayPreviewNotesInInputByDuration(bool play)
 muse::async::Notification NotationConfiguration::isPlayPreviewNotesInInputByDurationChanged() const
 {
     return m_isPlayNotesPreviewInInputByDurationChanged;
+}
+
+int NotationConfiguration::currentExpressionEditor() const
+{
+    // an unknown value (hand-edited settings, newer build) falls back to the first editor
+    const int editor = settings()->value(CURRENT_EXPRESSION_EDITOR).toInt();
+    if (editor < static_cast<int>(ExpressionEditor::NoteOffsets) || editor > static_cast<int>(ExpressionEditor::Articulations)) {
+        return static_cast<int>(ExpressionEditor::NoteOffsets);
+    }
+    return editor;
+}
+
+void NotationConfiguration::setCurrentExpressionEditor(int editor)
+{
+    settings()->setSharedValue(CURRENT_EXPRESSION_EDITOR, Val(editor));
+}
+
+muse::async::Notification NotationConfiguration::currentExpressionEditorChanged() const
+{
+    return m_currentExpressionEditorChanged;
 }
 
 int NotationConfiguration::caretGridTicks() const

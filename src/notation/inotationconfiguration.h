@@ -186,6 +186,11 @@ public:
     virtual void setIsPlayPreviewNotesInInputByDuration(bool play) = 0;
     virtual muse::async::Notification isPlayPreviewNotesInInputByDurationChanged() const = 0;
 
+    // Toolbar Expression button: the editor it shows and toggles (see ExpressionEditor)
+    virtual int currentExpressionEditor() const = 0;
+    virtual void setCurrentExpressionEditor(int editor) = 0;
+    virtual muse::async::Notification currentExpressionEditorChanged() const = 0;
+
     // Caret input: rhythmic grid resolution of the note input ruler, in ticks
     virtual int caretGridTicks() const = 0;
     virtual void setCaretGridTicks(int ticks) = 0;

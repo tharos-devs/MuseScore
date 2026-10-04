@@ -3023,6 +3023,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::ARTICULATION, rcommand::Checkable::Yes)
     },
     CommandInfo {
+        TOGGLE_EXPRESSION_EDITOR_COMMAND,
+        TranslatableString("action", "Expression"),
+        TranslatableString("action", "Show/hide the expression editor chosen in the dropdown"),
+        InputSchema(),
+        Decoration(IconCode::Code::CLOCK, rcommand::Checkable::Yes)
+    },
+    CommandInfo {
         RESET_NOTE_OFFSETS_COMMAND,
         TranslatableString("action", "Reset note offsets"),
         TranslatableString("action", "Reset note offsets"),
@@ -3059,6 +3066,14 @@ static const std::vector<CommandInfo> s_commandInfos = {
             { "cc", Arg(DataType::Integer, u"MIDI CC number for midicc (asks for one when omitted)", Val(0), Val(127)) },
         }),
         Decoration(rcommand::Checkable::Yes)
+    },
+    CommandInfo {
+        TOGGLE_AUTOMATION_TYPE_COMMAND,
+        TranslatableString::untranslatable("Toggle automation type"),
+        TranslatableString::untranslatable("Show this automation type, or turn automation off if it is already shown"),
+        InputSchema({
+            { "type", Arg(DataType::String, u"Automation type (dynamics, tempo, volume, pan)") },
+        }),
     },
 
     // screen commands
