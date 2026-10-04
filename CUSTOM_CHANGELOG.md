@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-04
+- New "Caret input" note input mode (key C outside note input): the toolbar durations only choose the duration and A–G enter notes at the caret. The mouse places notes on a rhythmic grid, anywhere in the measure (also inside a longer note or rest, which is cut there), and Left/Right move the caret along that grid. The grid (32nd to whole note, dotted values included) is picked from the mode's toolbar button, which shows it; the note input ruler shows one line per grid step, long ones on the beats.
+
 ### 2026-10-03
 - The Video panel can be docked below Palettes, Layout and Properties (or tabbed with them) in the side column, and comes back there when reopened; that column can now be made wider than 300 px. Its width is kept on relaunch (it widened back to 640 px), and the transport buttons no longer overlap the "Recently opened videos" arrow when the panel is narrow.
 - Fixed: dragging a panel over another one showed the wrong drop zones when that panel wasn't at its default place (side by side instead of above/below), or lower in its column (no "above" zone) - stock bug.
