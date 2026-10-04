@@ -576,9 +576,12 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
     const ExpressionMapEntry* lastPlaced = lastPlacedIt != m_lastPlacedEntryIdByTrack.end() ? map->entry(lastPlacedIt->second) : nullptr;
     if (lastPlaced) {
         // With its folders, e.g. "Long > Con vibrato" (entry ids are stored that way, see ArticulationMapParser)
+        // Neither checkable nor checked, and in italics: it is a shortcut, not a second copy of the
+        // articulation listed (and checked) below
         QAction* lastPlacedAction = menu.addAction(lastPlaced->id.toQString());
-        lastPlacedAction->setCheckable(true);
-        lastPlacedAction->setChecked(lastPlaced->id == entry.entryId);
+        QFont font = lastPlacedAction->font();
+        font.setItalic(true);
+        lastPlacedAction->setFont(font);
 
         const muse::String entryId = lastPlaced->id;
         QObject::connect(lastPlacedAction, &QAction::triggered, [placeArticulation, entryId]() {
