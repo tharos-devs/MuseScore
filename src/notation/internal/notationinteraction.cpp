@@ -3515,7 +3515,8 @@ std::vector<NotationInteraction::ShadowNoteParams> NotationInteraction::previewN
         if (is.beyondScore()) {
             params.position.pos = PointF(measure->ldata()->bbox().width() + score()->style().spatium(), y) + measurePos;
         } else {
-            params.position.pos = PointF(segment->x(), y) + measurePos;
+            const double x = is.hasGridTick() ? measure->xPosForTick(tick) : segment->x();
+            params.position.pos = PointF(x, y) + measurePos;
         }
 
         result.push_back(params);

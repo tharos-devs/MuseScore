@@ -279,6 +279,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::DURATION_CURSOR, rcommand::Checkable::Yes)
     },
     CommandInfo{
+        TOGGLE_NOTE_INPUT_CARET_COMMAND,
+        TranslatableString("action", "Caret input"),
+        TranslatableString("action", "Toggle note input mode: caret input"),
+        InputSchema(),
+        Decoration(IconCode::Code::DURATION_CURSOR, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
         TOGGLE_NOTE_INPUT_RHYTHM_COMMAND,
         TranslatableString("action", "Rhythm only (not pitch)"),
         TranslatableString("action", "Toggle note input mode: rhythm only (not pitch)"),

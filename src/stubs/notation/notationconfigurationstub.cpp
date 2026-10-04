@@ -529,6 +529,21 @@ muse::async::Notification NotationConfigurationStub::isPlayPreviewNotesInInputBy
     return n;
 }
 
+int NotationConfigurationStub::caretGridTicks() const
+{
+    return 240;
+}
+
+void NotationConfigurationStub::setCaretGridTicks(int)
+{
+}
+
+muse::async::Notification NotationConfigurationStub::caretGridTicksChanged() const
+{
+    static muse::async::Notification n;
+    return n;
+}
+
 bool NotationConfigurationStub::playPreviewNotesWithScoreDynamics() const
 {
     return false;

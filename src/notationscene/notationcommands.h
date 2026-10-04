@@ -114,6 +114,7 @@ inline static const muse::rcommand::Command TOGGLE_NOTE_INPUT_REALTIME_AUTO_COMM
 inline static const muse::rcommand::Command TOGGLE_NOTE_INPUT_REALTIME_MANUAL_COMMAND(
     "command://notation/toggle-note-input-realtime-manual");
 inline static const muse::rcommand::Command TOGGLE_NOTE_INPUT_TIMEWISE_COMMAND("command://notation/toggle-note-input-timewise");
+inline static const muse::rcommand::Command TOGGLE_NOTE_INPUT_CARET_COMMAND("command://notation/toggle-note-input-caret");
 inline static const muse::rcommand::Command TOGGLE_INSERT_MODE_COMMAND("command://notation/toggle-insert-mode");
 inline static const muse::rcommand::Command REALTIME_ADVANCE_COMMAND("command://notation/realtime-advance");
 

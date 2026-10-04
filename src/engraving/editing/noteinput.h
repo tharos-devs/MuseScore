@@ -87,6 +87,11 @@ public:
 
     static void nextInputPos(Transaction& tx, Score* score, const ChordRest* cr, bool doSelect);
 
+    // Caret input: step the input position along the note input grid
+    // (returns false when not applicable, e.g. at the end of the score)
+    static bool moveInputPosOnGrid(Score* score, bool forward);
+    static void materializeGridTick(Transaction& tx, Score* score);
+
     // Command entry points
     static void addPitch(Transaction& tx, Score* score, const NoteInputParams& params, bool addFlag, bool insert);
     static void addPitch(Transaction& tx, Score* score, int step, bool addFlag, bool insert);

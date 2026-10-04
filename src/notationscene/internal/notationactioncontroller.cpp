@@ -219,6 +219,7 @@ void NotationActionController::init()
     registerNoteInputCommand(TOGGLE_NOTE_INPUT_REALTIME_AUTO_COMMAND, NoteInputMethod::REALTIME_AUTO);
     registerNoteInputCommand(TOGGLE_NOTE_INPUT_REALTIME_MANUAL_COMMAND, NoteInputMethod::REALTIME_MANUAL);
     registerNoteInputCommand(TOGGLE_NOTE_INPUT_TIMEWISE_COMMAND, NoteInputMethod::TIMEWISE);
+    registerNoteInputCommand(TOGGLE_NOTE_INPUT_CARET_COMMAND, NoteInputMethod::CARET);
     registerCommand(TOGGLE_INSERT_MODE_COMMAND, [this]() { toggleNoteInputInsert(); }, &NotationActionController::isNotEditingElement);
 
     registerCommand(REALTIME_ADVANCE_COMMAND, &Controller::realtimeAdvance);
@@ -750,6 +751,7 @@ void NotationActionController::init()
             { "note-input-realtime-auto", TOGGLE_NOTE_INPUT_REALTIME_AUTO_COMMAND, {} },
             { "note-input-realtime-manual", TOGGLE_NOTE_INPUT_REALTIME_MANUAL_COMMAND, {} },
             { "note-input-timewise", TOGGLE_NOTE_INPUT_TIMEWISE_COMMAND, {} },
+            { "note-input-caret", TOGGLE_NOTE_INPUT_CARET_COMMAND, {} },
             { "realtime-advance", REALTIME_ADVANCE_COMMAND, {} },
             { "note-longa", SET_DURATION_LONGA_COMMAND, {} },
             { "note-breve", SET_DURATION_BREVE_COMMAND, {} },
@@ -1486,6 +1488,13 @@ muse::Ret NotationActionController::addNote(const muse::rcommand::Params& params
 
 void NotationActionController::addNote(NoteName note, NoteAddingMode mode)
 {
+    // Outside note input, C starts the caret input mode (without entering a note);
+    // once in note input, it enters a C as usual
+    if (note == NoteName::C && mode == NoteAddingMode::NextChord && !isNoteInputMode()) {
+        toggleNoteInput(NoteInputMethod::CARET);
+        return;
+    }
+
     NoteInputParams params;
     const bool addFlag = mode == NoteAddingMode::CurrentChord;
     bool ok = mu::engraving::NoteInput::resolveNoteInputParams(currentNotationScore(), static_cast<int>(note), addFlag, params);
@@ -2241,6 +2250,9 @@ muse::Ret NotationActionController::moveWithRet(MoveDirection direction, bool qu
             interaction->nudge(direction, quickly);
         } else if (selectedElement && selectedElement->hasGrips() && interaction->isGripEditStarted()) {
             interaction->nudgeAnchors(direction);
+        } else if (!quickly && noteInput->isNoteInputMode() && noteInput->usingNoteInputMethod(NoteInputMethod::CARET)
+                   && noteInput->moveInputPosOnGrid(direction == MoveDirection::Right)) {
+            return muse::make_ok();
         } else {
             if (interaction->selection()->isNone() && !state.beyondScore()) {
                 interaction->select(SelectionTarget::FirstItem);

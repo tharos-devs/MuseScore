@@ -60,6 +60,7 @@ TranslatableString nameOfNoteInputMethod(NoteInputMethod method)
     case NoteInputMethod::REALTIME_AUTO:    return TranslatableString("noteInputMethod", "Metronome real-time input mode");
     case NoteInputMethod::REALTIME_MANUAL:  return TranslatableString("noteInputMethod", "Pedal real-time input mode");
     case NoteInputMethod::TIMEWISE:         return TranslatableString("noteInputMethod", "Insert mode (grow measures)");
+    case NoteInputMethod::CARET:            return TranslatableString("noteInputMethod", "Caret input mode");
         // No default case. We want a compiler warning if an enum value is not handled here.
     }
 
@@ -80,6 +81,13 @@ NotationNoteInput::NotationNoteInput(const IGetScore* getScore, INotationInterac
                                      , const modularity::ContextPtr& iocCtx)
     : muse::Contextable(iocCtx), m_getScore(getScore), m_interaction(interaction), m_undoStack(undoStack)
 {
+    configuration()->caretGridTicksChanged().onNotify(this, [this]() {
+        if (score()) {
+            score()->inputState().setCaretGridTicks(configuration()->caretGridTicks());
+            notifyAboutStateChanged();
+        }
+    });
+
     m_interaction->selectionChanged().onNotify(this, [this]() {
         if (!isNoteInputMode()) {
             updateInputState();
@@ -134,6 +142,7 @@ void NotationNoteInput::startNoteInput(NoteInputMethod method, bool focusNotatio
 
     is.setRest(false);
     is.setNoteEntryMode(true);
+    is.setCaretGridTicks(configuration()->caretGridTicks());
 
     const Staff* staff = score()->staff(is.track() / VOICES);
 
@@ -656,6 +665,23 @@ void NotationNoteInput::moveInputNotes(bool up, PitchMode mode)
     }
 
     setInputNotes(notes);
+}
+
+bool NotationNoteInput::moveInputPosOnGrid(bool forward)
+{
+    TRACEFUNC;
+
+    if (!NoteInput::moveInputPosOnGrid(score(), forward)) {
+        return false;
+    }
+
+    notifyAboutStateChanged();
+
+    if (ChordRest* cr = score()->inputState().segment()->cr(score()->inputState().track())) {
+        m_interaction->showItem(cr);
+    }
+
+    return true;
 }
 
 void NotationNoteInput::setRestMode(bool rest)

@@ -167,6 +167,10 @@ struct Position {
     int fret = INVALID_FRET_INDEX;
     PointF pos;
     bool beyondScore = false;
+    // Caret input: tick snapped to the note input grid, which may fall
+    // inside the ChordRest of `segment` (the segment starting at or before it)
+    bool hasSnappedTick = false;
+    Fraction snappedTick;
 };
 
 struct ShowAnchors {
@@ -642,6 +646,8 @@ public:
                            double preferredSpacingFactor = 1.0) const;
 
     bool getPosition(Position* pos, const PointF&, voice_idx_t voice) const;
+    void snapToNoteInputGrid(Position* pos, Measure* measure, double mouseX, track_idx_t track, double& x) const;
+    int noteInputGridTicks(const Measure* measure, staff_idx_t staffIdx) const;
 
     void cmdDeleteTuplet(Tuplet*, bool replaceWithRest);
 

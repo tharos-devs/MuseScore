@@ -32,6 +32,7 @@
 #include "context/iglobalcontext.h"
 #include "ui/iuistate.h"
 #include "notationscene/inotationcommandscontroller.h"
+#include "notation/inotationconfiguration.h"
 
 namespace mu::notation {
 class NoteInputBarModel : public muse::uicomponents::AbstractMenuModel, public QQmlParserStatus
@@ -41,11 +42,15 @@ class NoteInputBarModel : public muse::uicomponents::AbstractMenuModel, public Q
     QML_ELEMENT;
 
     Q_PROPERTY(bool isInputAllowed READ isInputAllowed NOTIFY isInputAllowedChanged)
+    Q_PROPERTY(int caretGridIcon READ caretGridIcon NOTIFY caretGridChanged)
+    Q_PROPERTY(bool caretGridDotted READ caretGridDotted NOTIFY caretGridChanged)
+    Q_PROPERTY(bool horizontal READ horizontal WRITE setHorizontal NOTIFY horizontalChanged)
 
     muse::GlobalInject<muse::rcommand::ICommandsRegister> commandsRegister;
     muse::ContextInject<muse::ui::IUiState> uiState = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<INotationCommandsController> commandsController = { this };
+    muse::GlobalInject<INotationConfiguration> configuration;
 
 public:
     explicit NoteInputBarModel(QObject* parent = nullptr);
@@ -54,6 +59,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     bool isInputAllowed() const;
+    int caretGridIcon() const;
+    bool caretGridDotted() const;
+    bool horizontal() const;
+    void setHorizontal(bool horizontal);
+
+    Q_INVOKABLE void handleMenuItem(const QString& itemId) override;
 
     static const muse::ui::ToolConfig& defaultNoteInputConfig();
 
@@ -68,6 +79,8 @@ public:
 
 signals:
     void isInputAllowedChanged();
+    void caretGridChanged();
+    void horizontalChanged();
 
 private:
     enum NoteInputRoles {
@@ -86,6 +99,10 @@ private:
 
     muse::uicomponents::MenuItemList makeCrossStaffBeamingItems();
     muse::uicomponents::MenuItemList makeTupletItems();
+    muse::uicomponents::MenuItemList makeCaretGridItems();
+    void updateCaretGridItems();
+
+    bool m_horizontal = true;
     muse::uicomponents::MenuItemList makeAddItems();
     muse::uicomponents::MenuItemList makeNotesItems();
     muse::uicomponents::MenuItemList makeIntervalsItems();

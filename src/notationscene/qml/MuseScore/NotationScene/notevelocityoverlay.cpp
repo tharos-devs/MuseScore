@@ -144,7 +144,7 @@ void NoteVelocityOverlay::paint(QPainter* painter)
     }
 
     // Only the bar actually being dragged gets a live numeric readout, to keep the staff
-    // uncluttered the rest of the time (matches Dorico's convention for its velocity lane).
+    // uncluttered the rest of the time.
     if (m_pressed && m_activeRectIndex >= 0 && m_activeRectIndex < m_rects.size()) {
         paintValueLabel(painter, m_rects.at(m_activeRectIndex));
     }
