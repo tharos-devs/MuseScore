@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-04
+- Articulation maps: playing technique texts from the palette ("pizz.", "sul pont.", "col legno", "mute"…) now select the articulation named after them (`Pizzicato`, `SulPonticello`, `ColLegno`, `Mute`…) until the next one ("arco", "normal"), also for notes played on the MIDI keyboard. `ARTICULATION_MAP_REFERENCE.md` lists every score sign and playing technique the articulation lane recognizes, with the exact name to give the articulation.
 - Palettes, Properties, Layout and the other side panels are back at a fixed width (300px): since the Video panel could join them, their column could widen by itself. The Video panel fits that column (narrower buttons, sidebar always below the timeline at the side); tabbed with them it takes their width, anywhere else it stays resizable.
 - Keyswitch converter (`tools/keyswitch-converter/keyswitch-converter.html`, outside MuseScore): converts Studio One sound variations (.keyswitch) into articulation maps, a few files or whole folders at once. A single page opened in any browser on Mac or Windows; nothing is installed nor sent anywhere.
 - Toolbar: the Automation dropdown shows an icon for each type, and the button shows the current one ("♩=" for tempo). A new Expression button replaces the Note offset, Note velocities and Articulations buttons: its dropdown shows or hides each of these editors (they can be combined), and the last one shown is the one the button toggles.
