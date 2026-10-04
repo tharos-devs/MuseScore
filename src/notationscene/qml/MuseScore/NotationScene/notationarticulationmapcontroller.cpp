@@ -264,11 +264,10 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
                 continue;
             }
 
+            // Nothing resolved (a map without a default, before the first mark): still a note a mark can be
+            // placed on, like a rest - it plays no articulation yet
             const std::optional<ResolvedArticulation> resolved = playback->resolvedArticulation(masterChord->track(),
                                                                                                 masterChord->tick().ticks());
-            if (!resolved) {
-                continue;
-            }
 
             if (!map) {
                 data.trackId = makeInstrumentTrackId(masterChord);
@@ -282,8 +281,10 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
             entry.chord = chord;
             entry.masterChord = masterChord;
             entry.canvasX = chord->canvasX();
-            entry.entryId = resolved->entryId;
-            entry.source = resolved->source;
+            if (resolved) {
+                entry.entryId = resolved->entryId;
+                entry.source = resolved->source;
+            }
             if (masterChord->eid().isValid()) {
                 entry.mark = mapData->mark(masterChord->eid());
             }
@@ -344,8 +345,11 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     // or at the start of the system the next one, if it's one that was already in effect
     using Source = ResolvedArticulation::Source;
     const auto staysInEffect = [](const ChordEntry& entry) {
+        if (entry.entryId.empty()) {
+            return false;
+        }
         if (entry.chord->isRest()) {
-            return entry.mark.has_value() || !entry.entryId.empty();
+            return true;
         }
         if (entry.source == Source::Alias) {
             return false;
@@ -406,8 +410,8 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
             lines.push_back({ toN(entry.canvasX), toN(nextX), color });
         }
 
-        // A rest without a mark only continues the line
-        if (entry.chord->isRest() && !entry.mark) {
+        // A rest without a mark only continues the line, a note with no articulation yet has nothing to show
+        if ((entry.chord->isRest() && !entry.mark) || entry.entryId.empty()) {
             continue;
         }
 
