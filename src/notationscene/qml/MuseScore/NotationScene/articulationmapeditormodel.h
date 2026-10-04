@@ -138,6 +138,7 @@ public:
     //! NOTE: set when opened from a Mixer track, see reloadIntoTrack
     Q_INVOKABLE void setTargetTrack(const QString& partId, const QString& instrumentId);
     //! NOTE: saves the changes if needed, then loads the file into the track, like the Mixer's "Reload"
+    //! (saving alone already reloads it into the tracks of the open score that use this file)
     Q_INVOKABLE void reloadIntoTrack();
 
     Q_INVOKABLE void addArticulation();
@@ -198,7 +199,8 @@ private:
 
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
-    bool writeFile(const muse::io::path_t& path);
+    bool writeFile(const muse::io::path_t& path, bool reloadTracks = true);
+    void reloadTracksUsingFile(const muse::io::path_t& path, const std::optional<engraving::InstrumentTrackId>& alsoTrack);
     muse::io::path_t mapsDir() const;
 
     void confirmDiscardChanges(std::function<void()> proceed);
