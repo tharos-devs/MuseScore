@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-04
+- Keyswitch converter (`tools/keyswitch-converter/keyswitch-converter.html`, outside MuseScore): converts Studio One sound variations (.keyswitch) into articulation maps, a few files or whole folders at once. A single page opened in any browser on Mac or Windows; nothing is installed nor sent anywhere.
 - Toolbar: the Automation dropdown shows an icon for each type, and the button shows the current one ("♩=" for tempo). A new Expression button replaces the Note offset, Note velocities and Articulations buttons: its dropdown shows or hides each of these editors (they can be combined), and the last one shown is the one the button toggles.
 - Shortcuts: Shift+R toggles Record MIDI CC; new "Automation: Dynamics/Tempo/Volume/Pan" actions (show that curve, or turn automation off when it's the one shown) to assign your own shortcuts to.
 - New "Caret input" note input mode (key C outside note input): the toolbar durations only choose the duration and A–G enter notes at the caret. The mouse places notes on a rhythmic grid, anywhere in the measure (also inside a longer note or rest, which is cut there), and Left/Right move the caret along that grid. The grid (32nd to whole note, dotted values included) is picked from the mode's toolbar button, which shows it; the note input ruler shows one line per grid step, long ones on the beats.
