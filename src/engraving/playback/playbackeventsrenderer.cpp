@@ -123,7 +123,10 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
     }
 
     if (!entry) {
-        entry = map->entryForArticulations(ctx.commonArticulations);
+        //! NOTE: a playing technique ("pizz.", "sul pont."...) lasts until the next one ("arco", "normal"...)
+        const mpe::ArticulationType techniqueType
+            = ctx.playbackCtx->playingTechniqueArticulation(chord->track(), ctx.nominalPositionStartTick + ctx.positionTickOffset);
+        entry = map->entryForArticulations(ctx.commonArticulations, techniqueType);
         source = ResolvedArticulation::Source::Alias;
     }
 

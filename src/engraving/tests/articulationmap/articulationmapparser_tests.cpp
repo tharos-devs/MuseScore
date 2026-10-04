@@ -256,3 +256,37 @@ TEST_F(ArticulationMapParser_Tests, Parse_Channels_SpacesAndDuplicates)
     ASSERT_TRUE(legato);
     EXPECT_EQ(legato->channel, 1);
 }
+
+TEST_F(ArticulationMapParser_Tests, EntryForArticulations_PlayingTechnique)
+{
+    // [GIVEN] A map with articulations named like score articulations and playing techniques
+    const ExpressionMap map = ArticulationMapParser::parse(u"*C0 Legato\n"
+                                                           u"D0 Staccato\n"
+                                                           u"E0 Strings > Pizzicato\n"
+                                                           u"F0 Sul Ponticello\n"
+                                                           u"G0 Never = Undefined\n").map;
+
+    const mpe::ArticulationMap noArticulations;
+
+    // [THEN] The playing technique in effect selects its entry, wherever it is nested
+    const ExpressionMapEntry* pizz = map.entryForArticulations(noArticulations, mpe::ArticulationType::Pizzicato);
+    ASSERT_TRUE(pizz);
+    EXPECT_EQ(pizz->id, u"Strings > Pizzicato");
+
+    const ExpressionMapEntry* sulPont = map.entryForArticulations(noArticulations, mpe::ArticulationType::SulPont);
+    ASSERT_TRUE(sulPont);
+    EXPECT_EQ(sulPont->id, u"Sul Ponticello");
+
+    // [THEN] No technique selects nothing, even an entry aliased "Undefined"
+    EXPECT_FALSE(map.entryForArticulations(noArticulations));
+
+    // [THEN] A score articulation and a technique: the first matching entry of the map wins
+    mpe::ArticulationMap staccato;
+    staccato.emplace(mpe::ArticulationType::Staccato,
+                     mpe::ArticulationAppliedData(mpe::ArticulationMeta(mpe::ArticulationType::Staccato, {}, 0, 1000), 0,
+                                                  mpe::HUNDRED_PERCENT));
+
+    const ExpressionMapEntry* both = map.entryForArticulations(staccato, mpe::ArticulationType::Pizzicato);
+    ASSERT_TRUE(both);
+    EXPECT_EQ(both->id, u"Staccato");
+}

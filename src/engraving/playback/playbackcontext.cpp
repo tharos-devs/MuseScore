@@ -131,6 +131,13 @@ std::pair<mpe::timestamp_t, PlayingTechniqueType> PlaybackContext::playingTechni
     return std::make_pair(timestampFromTicks(m_score, it->first), it->second);
 }
 
+mpe::ArticulationType PlaybackContext::playingTechniqueArticulation(const track_idx_t trackIdx, const int nominalPositionTick) const
+{
+    // "arco", "normal"... map to Standard: never matched, or an entry aliased "Standard" would select everything
+    const mpe::ArticulationType type = articulationFromPlayTechType(playingTechnique(trackIdx, nominalPositionTick).second);
+    return type == mpe::ArticulationType::Standard ? mpe::ArticulationType::Undefined : type;
+}
+
 muse::mpe::timestamp_t PlaybackContext::findPlayingTechniqueTimestamp(const track_idx_t trackIdx, PlayingTechniqueType type,
                                                                       const int startFromTick) const
 {
@@ -898,6 +905,14 @@ const ExpressionMapEntry* PlaybackContext::articulationInEffect(const Instrument
     const ExpressionMap* map = expressionMap(trackId);
     if (!map) {
         return nullptr;
+    }
+
+    const int utick = m_score->repeatList().tick2utick(tick);
+    const mpe::ArticulationType technique = playingTechniqueArticulation(staff2track(firstStaffIdx), utick);
+    if (technique != mpe::ArticulationType::Undefined) {
+        if (const ExpressionMapEntry* entry = map->entryForArticulations({}, technique)) {
+            return entry;
+        }
     }
 
     if (const std::optional<ArticulationMark> latched = latchedArticulationMark(firstStaffIdx, tick)) {
