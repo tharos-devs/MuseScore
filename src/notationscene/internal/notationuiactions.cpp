@@ -58,6 +58,10 @@ static const ActionCode SHOW_IRREGULAR_CODE("show-irregular");
 
 static const ActionCode TOGGLE_CONCERT_PITCH_CODE("concert-pitch");
 static const ActionCode TOGGLE_AUTOMATION_CODE("toggle-automation");
+static const ActionCode TOGGLE_AUTOMATION_DYNAMICS_CODE("toggle-automation-dynamics");
+static const ActionCode TOGGLE_AUTOMATION_TEMPO_CODE("toggle-automation-tempo");
+static const ActionCode TOGGLE_AUTOMATION_VOLUME_CODE("toggle-automation-volume");
+static const ActionCode TOGGLE_AUTOMATION_PAN_CODE("toggle-automation-pan");
 static const ActionCode TOGGLE_NOTE_OFFSET_EDITOR_CODE("toggle-note-offset-editor");
 static const ActionCode TOGGLE_NOTE_VELOCITY_EDITOR_CODE("toggle-note-velocity-editor");
 static const ActionCode TOGGLE_ARTICULATION_MAP_EDITOR_CODE("toggle-articulation-map-editor");
@@ -2730,6 +2734,34 @@ const UiActionList NotationUiActions::s_actions = {
              TranslatableString("action", "Toggle automation"),
              IconCode::Code::AUTOMATION,
              Checkable::Yes
+             ),
+    UiAction(TOGGLE_AUTOMATION_DYNAMICS_CODE,
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Automation: Dynamics"),
+             TranslatableString("action", "Show the dynamics automation, or turn automation off if it is shown"),
+             IconCode::Code::DYNAMIC_FORTE
+             ),
+    UiAction(TOGGLE_AUTOMATION_TEMPO_CODE,
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Automation: Tempo"),
+             TranslatableString("action", "Show the tempo automation, or turn automation off if it is shown"),
+             IconCode::Code::NOTE_HEAD_QUARTER
+             ),
+    UiAction(TOGGLE_AUTOMATION_VOLUME_CODE,
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Automation: Volume"),
+             TranslatableString("action", "Show the volume automation, or turn automation off if it is shown"),
+             IconCode::Code::AUDIO
+             ),
+    UiAction(TOGGLE_AUTOMATION_PAN_CODE,
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Automation: Pan"),
+             TranslatableString("action", "Show the pan automation, or turn automation off if it is shown"),
+             IconCode::Code::NO_BREAK
              ),
     UiAction(TOGGLE_NOTE_OFFSET_EDITOR_CODE,
              mu::context::UiCtxProjectOpened,

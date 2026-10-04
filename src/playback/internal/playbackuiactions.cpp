@@ -168,6 +168,14 @@ const UiActionList PlaybackUiActions::s_settingsActions = {
              IconCode::Code::PAN_SCORE,
              Checkable::Yes
              ),
+    UiAction("toggle-record-midicc",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_FOCUSED,
+             TranslatableString("action", "Record MIDI CC"),
+             TranslatableString("action", "Toggle recording the MIDI CCs received from the MIDI input device"),
+             IconCode::Code::RECORD_FILL,
+             Checkable::Yes
+             ),
     UiAction("countin",
              mu::context::UiCtxAny,
              mu::context::CTX_ANY,

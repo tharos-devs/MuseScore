@@ -102,6 +102,7 @@ void PlaybackCommandsController::init()
             { "toggle-hear-playback-when-editing", HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND, {} },
             { "pan", PAN_TOGGLE_COMMAND, {} },
             { "countin", COUNTIN_TOGGLE_COMMAND, {} },
+            { "toggle-record-midicc", MIDI_CC_RECORD_TOGGLE_COMMAND, {} },
             { "reload-playback-cache", RELOAD_PLAYBACK_CACHE_COMMAND, {} },
             { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },
             { "toggle-mixer-section", TOGGLE_MIXER_SECTION_COMMAND, mixerSectionToggle },

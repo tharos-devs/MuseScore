@@ -104,6 +104,16 @@ using Controller = NotationActionController;
 using Interaction = INotationInteraction;
 using ViewController = INotationViewController;
 
+// an action always sending the same automation type
+static rcommand::Convertor automationTypeParam(const char* type)
+{
+    return [type](const rcommand::Command& command, const ActionData&) {
+        rcommand::CommandQuery query(command);
+        query.addParam("type", Val(type));
+        return query;
+    };
+}
+
 // tuplet options convertor
 static muse::rcommand::CommandQuery tupletOptions(const rcommand::Command& command, const ActionData& args)
 {
@@ -612,11 +622,13 @@ void NotationActionController::init()
 
     registerCommand(TOGGLE_AUTOMATION_COMMAND, &Controller::toggleAutomation);
     registerCommandWithParams(SELECT_AUTOMATION_TYPE_COMMAND, &Controller::selectAutomationType);
+    registerCommandWithParams(TOGGLE_AUTOMATION_TYPE_COMMAND, &Controller::toggleAutomationType);
     registerCommand(DELETE_MIDI_CC_POINTS_COMMAND, &Controller::deleteAutomationPointsInSelection);
     registerCommand(DELETE_AUTOMATION_POINTS_COMMAND, &Controller::deleteAutomationPointsInSelection);
     registerCommand(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, &Controller::toggleNoteOffsetEditor);
     registerCommand(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, &Controller::toggleNoteVelocityEditor);
     registerCommand(TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::toggleArticulationMapEditor);
+    registerCommand(TOGGLE_EXPRESSION_EDITOR_COMMAND, &Controller::toggleExpressionEditor);
     registerCommand(RESET_NOTE_OFFSETS_COMMAND, &Controller::resetNoteOffsets);
     registerCommand(RESET_NOTE_VELOCITIES_COMMAND, &Controller::resetNoteVelocities);
 
@@ -1094,6 +1106,10 @@ void NotationActionController::init()
             { "scoop", ADD_SCOOP_COMMAND, {} },
             { "hammer-on-pull-off", ADD_HAMMER_ON_PULL_OFF_COMMAND, {} },
             { "toggle-automation", TOGGLE_AUTOMATION_COMMAND, {} },
+            { "toggle-automation-dynamics", TOGGLE_AUTOMATION_TYPE_COMMAND, automationTypeParam("dynamics") },
+            { "toggle-automation-tempo", TOGGLE_AUTOMATION_TYPE_COMMAND, automationTypeParam("tempo") },
+            { "toggle-automation-volume", TOGGLE_AUTOMATION_TYPE_COMMAND, automationTypeParam("volume") },
+            { "toggle-automation-pan", TOGGLE_AUTOMATION_TYPE_COMMAND, automationTypeParam("pan") },
             { "toggle-note-offset-editor", TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, {} },
             { "toggle-note-velocity-editor", TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, {} },
             { "toggle-articulation-map-editor", TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, {} },
@@ -3578,6 +3594,11 @@ void NotationActionController::toggleNoteOffsetEditor()
 
     const bool isEnabled = masterNotation->noteOffsets()->isEditModeEnabled();
     masterNotation->noteOffsets()->setEditModeEnabled(!isEnabled);
+
+    // Showing it makes it the editor of the toolbar Expression button
+    if (!isEnabled) {
+        configuration()->setCurrentExpressionEditor(static_cast<int>(ExpressionEditor::NoteOffsets));
+    }
 }
 
 void NotationActionController::toggleNoteVelocityEditor()
@@ -3591,6 +3612,11 @@ void NotationActionController::toggleNoteVelocityEditor()
 
     const bool isEnabled = masterNotation->noteVelocity()->isEditModeEnabled();
     masterNotation->noteVelocity()->setEditModeEnabled(!isEnabled);
+
+    // Showing it makes it the editor of the toolbar Expression button
+    if (!isEnabled) {
+        configuration()->setCurrentExpressionEditor(static_cast<int>(ExpressionEditor::NoteVelocities));
+    }
 }
 
 void NotationActionController::toggleArticulationMapEditor()
@@ -3604,6 +3630,23 @@ void NotationActionController::toggleArticulationMapEditor()
 
     const bool isEnabled = masterNotation->articulationMaps()->isOverlayEnabled();
     masterNotation->articulationMaps()->setOverlayEnabled(!isEnabled);
+
+    // Showing it makes it the editor of the toolbar Expression button
+    if (!isEnabled) {
+        configuration()->setCurrentExpressionEditor(static_cast<int>(ExpressionEditor::Articulations));
+    }
+}
+
+void NotationActionController::toggleExpressionEditor()
+{
+    switch (static_cast<ExpressionEditor>(configuration()->currentExpressionEditor())) {
+    case ExpressionEditor::NoteOffsets: toggleNoteOffsetEditor();
+        break;
+    case ExpressionEditor::NoteVelocities: toggleNoteVelocityEditor();
+        break;
+    case ExpressionEditor::Articulations: toggleArticulationMapEditor();
+        break;
+    }
 }
 
 void NotationActionController::resetNoteOffsets()
@@ -3782,6 +3825,34 @@ muse::Ret NotationActionController::selectAutomationType(const muse::rcommand::P
     enableAutomationMode();
 
     return muse::make_ok();
+}
+
+muse::Ret NotationActionController::toggleAutomationType(const muse::rcommand::Params& params)
+{
+    IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (!masterNotation) {
+        return muse::make_ok();
+    }
+
+    static const std::map<std::string, mu::engraving::AutomationType> TYPES {
+        { "dynamics", mu::engraving::AutomationType::Dynamics },
+        { "tempo", mu::engraving::AutomationType::Tempo },
+        { "volume", mu::engraving::AutomationType::Volume },
+        { "pan", mu::engraving::AutomationType::Pan },
+    };
+
+    const std::string type = params.at("type").toString();
+    const auto it = TYPES.find(type);
+    if (it == TYPES.end()) {
+        return muse::make_ok();
+    }
+
+    if (masterNotation->automation()->isAutomationModeEnabled() && configuration()->currentAutomationType() == it->second) {
+        masterNotation->automation()->setAutomationModeEnabled(false);
+        return muse::make_ok();
+    }
+
+    return selectAutomationType(params);
 }
 
 void NotationActionController::selectAutomationMidiCc(int controller)

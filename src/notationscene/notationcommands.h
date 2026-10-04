@@ -499,9 +499,13 @@ inline static const muse::rcommand::Command TOGGLE_AUTOMATION_COMMAND("command:/
 inline static const muse::rcommand::Command DELETE_MIDI_CC_POINTS_COMMAND("command://notation/automation-midicc-delete-points");
 inline static const muse::rcommand::Command DELETE_AUTOMATION_POINTS_COMMAND("command://notation/automation-delete-points");
 inline static const muse::rcommand::Command SELECT_AUTOMATION_TYPE_COMMAND("command://notation/select-automation-type"); // with params
+// shows that automation type, or turns automation off if it's the one already shown (with params)
+inline static const muse::rcommand::Command TOGGLE_AUTOMATION_TYPE_COMMAND("command://notation/toggle-automation-type");
 inline static const muse::rcommand::Command TOGGLE_NOTE_OFFSET_EDITOR_COMMAND("command://notation/toggle-note-offset-editor");
 inline static const muse::rcommand::Command TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND("command://notation/toggle-note-velocity-editor");
 inline static const muse::rcommand::Command TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND("command://notation/toggle-articulation-map-editor");
+// toggles the editor currently shown by the toolbar Expression button
+inline static const muse::rcommand::Command TOGGLE_EXPRESSION_EDITOR_COMMAND("command://notation/toggle-expression-editor");
 inline static const muse::rcommand::Command RESET_NOTE_OFFSETS_COMMAND("command://notation/reset-note-offsets");
 inline static const muse::rcommand::Command RESET_NOTE_VELOCITIES_COMMAND("command://notation/reset-note-velocities");
 

@@ -169,6 +169,10 @@ public:
     MOCK_METHOD(void, setIsPlayPreviewNotesInInputByDuration, (bool), (override));
     MOCK_METHOD(muse::async::Notification, isPlayPreviewNotesInInputByDurationChanged, (), (const, override));
 
+    MOCK_METHOD(int, currentExpressionEditor, (), (const, override));
+    MOCK_METHOD(void, setCurrentExpressionEditor, (int), (override));
+    MOCK_METHOD(muse::async::Notification, currentExpressionEditorChanged, (), (const, override));
+
     MOCK_METHOD(int, caretGridTicks, (), (const, override));
     MOCK_METHOD(void, setCaretGridTicks, (int), (override));
     MOCK_METHOD(muse::async::Notification, caretGridTicksChanged, (), (const, override));

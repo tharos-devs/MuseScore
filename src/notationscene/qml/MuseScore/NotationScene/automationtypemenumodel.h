@@ -45,6 +45,8 @@ class AutomationTypeMenuModel : public muse::uicomponents::AbstractMenuModel
     QML_ELEMENT;
 
     Q_PROPERTY(QString currentTitle READ currentTitle NOTIFY currentTitleChanged)
+    Q_PROPERTY(int currentIcon READ currentIcon NOTIFY currentTitleChanged)
+    Q_PROPERTY(QString currentIconSuffix READ currentIconSuffix NOTIFY currentTitleChanged)
 
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
@@ -55,6 +57,10 @@ public:
     //! NOTE: the name of the curve currently shown, e.g. "Tempo", "Expression" or "CC21"
     QString currentTitle() const;
 
+    //! NOTE: the icon of the current automation type, and the text drawn right after it ("=" for a tempo)
+    int currentIcon() const;
+    QString currentIconSuffix() const;
+
 signals:
     void currentTitleChanged();
 
@@ -63,5 +69,6 @@ private:
     muse::uicomponents::MenuItem* makeMidiCcMenu();
     muse::uicomponents::MenuItem* makeAutomationTypeItem(mu::engraving::AutomationType type, const std::string& queryTypeParam,
                                                          const muse::TranslatableString& title);
+    static muse::ui::IconCode::Code automationTypeIcon(mu::engraving::AutomationType type);
 };
 }

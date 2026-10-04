@@ -32,7 +32,8 @@ using namespace mu::notation;
 using namespace muse::uicomponents;
 using namespace muse::actions;
 
-static constexpr int ARTICULATION_MAP_ITEM_TYPE = ToolBarItemType::USER_TYPE + 1;
+// a SplitButton grouping the note offset, note velocity and articulation editors
+static constexpr int EXPRESSION_ITEM_TYPE = ToolBarItemType::USER_TYPE + 1;
 
 void NotationToolBarModel::load()
 {
@@ -47,9 +48,7 @@ void NotationToolBarModel::load()
         appshell::DOCK_TOGGLE_MIXER_COMMAND,
         appshell::DOCK_TOGGLE_VIDEO_PANEL_COMMAND,
         TOGGLE_AUTOMATION_COMMAND,
-        TOGGLE_NOTE_OFFSET_EDITOR_COMMAND,
-        TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND,
-        TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND
+        TOGGLE_EXPRESSION_EDITOR_COMMAND
     };
 
     ToolBarItemList items;
@@ -71,10 +70,8 @@ void NotationToolBarModel::load()
             item->setType(ToolBarItemType::USER_TYPE);
         }
 
-        // Its glyph is drawn larger than the others by the icon font - a delegate of its own
-        // (see NotationToolBar.qml) scales it down, without changing the shared toolbar item
-        if (command == TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND) {
-            item->setType(static_cast<ToolBarItemType::Type>(ARTICULATION_MAP_ITEM_TYPE));
+        if (command == TOGGLE_EXPRESSION_EDITOR_COMMAND) {
+            item->setType(static_cast<ToolBarItemType::Type>(EXPRESSION_ITEM_TYPE));
         }
 
         items << item;

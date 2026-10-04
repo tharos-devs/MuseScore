@@ -184,6 +184,10 @@ public:
     void setIsPlayPreviewNotesInInputByDuration(bool play) override;
     muse::async::Notification isPlayPreviewNotesInInputByDurationChanged() const override;
 
+    int currentExpressionEditor() const override;
+    void setCurrentExpressionEditor(int editor) override;
+    muse::async::Notification currentExpressionEditorChanged() const override;
+
     int caretGridTicks() const override;
     void setCaretGridTicks(int ticks) override;
     muse::async::Notification caretGridTicksChanged() const override;
@@ -284,6 +288,7 @@ private:
     muse::async::Notification m_isPlayChordSymbolsChanged;
     muse::async::Notification m_isPlayNotesPreviewInInputByDurationChanged;
     muse::async::Notification m_caretGridTicksChanged;
+    muse::async::Notification m_currentExpressionEditorChanged;
     muse::async::Notification m_playPreviewNotesWithScoreDynamicsChanged;
     muse::async::Notification m_isMetronomeEnabledChanged;
     muse::ValCh<bool> m_midiInputUseWrittenPitch;
