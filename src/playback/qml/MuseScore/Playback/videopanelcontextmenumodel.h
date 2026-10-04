@@ -56,6 +56,11 @@ class VideoPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
     Q_PROPERTY(
         bool hitPointsPanelBelowTimeline READ hitPointsPanelBelowTimeline WRITE setHitPointsPanelBelowTimeline NOTIFY hitPointsPanelBelowTimelineChanged)
 
+    //! NOTE Whether the sidebar has to stay below the timeline (the panel is docked at the left or right of the score,
+    //! too narrow for it beside the video): "Right" is disabled then
+    Q_PROPERTY(
+        bool hitPointsPanelPlacementLocked READ hitPointsPanelPlacementLocked WRITE setHitPointsPanelPlacementLocked NOTIFY hitPointsPanelPlacementLockedChanged)
+
     //! NOTE Whether the hit-points sidebar is currently shown at all -- fed in
     //! from VideoPanel.qml, same reasoning as hitPointsPanelBelowTimeline
     //! above. Flips the "Sidebar > Show/Hide" item's label, same pattern as
@@ -102,6 +107,9 @@ public:
     bool hitPointsPanelBelowTimeline() const;
     void setHitPointsPanelBelowTimeline(bool belowTimeline);
 
+    bool hitPointsPanelPlacementLocked() const;
+    void setHitPointsPanelPlacementLocked(bool locked);
+
     bool hitPointsPanelVisible() const;
     void setHitPointsPanelVisible(bool visible);
 
@@ -127,6 +135,7 @@ signals:
     //! toggle -- clicking the option that's already active is a no-op).
     void setHitPointsPanelBelowTimelineRequested(bool belowTimeline);
     void hitPointsPanelBelowTimelineChanged();
+    void hitPointsPanelPlacementLockedChanged();
     void toggleHitPointsPanelVisibleRequested();
     void hitPointsPanelVisibleChanged();
 
@@ -150,6 +159,7 @@ private:
     bool m_floating = false;
     bool m_isFullScreen = false;
     bool m_hitPointsPanelBelowTimeline = false;
+    bool m_hitPointsPanelPlacementLocked = false;
     bool m_hitPointsPanelVisible = true;
     bool m_timelineVisible = true;
     bool m_controlsVisible = true;
