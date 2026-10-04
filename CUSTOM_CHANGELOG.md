@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-04
+- Fixed (Windows): a score could not be saved, neither a new one nor an existing one: after choosing "On your computer" in the save location dialog, the file dialog never appeared (upstream bug since its file dialogs became asynchronous). File > Open had the same flaw.
 - Fixed: an articulation map saved in the editor (e.g. an articulation disabled) kept playing its former version until reloaded into the track. Saving now reloads it into every track of the score that uses that file.
 - Articulation maps: playing technique texts from the palette ("pizz.", "sul pont.", "col legno", "mute"…) now select the articulation named after them (`Pizzicato`, `SulPonticello`, `ColLegno`, `Mute`…) until the next one ("arco", "normal"), also for notes played on the MIDI keyboard. `ARTICULATION_MAP_REFERENCE.md` lists every score sign and playing technique the articulation lane recognizes, with the exact name to give the articulation.
 - Palettes, Properties, Layout and the other side panels are back at a fixed width (300px): since the Video panel could join them, their column could widen by itself. The Video panel fits that column (narrower buttons, sidebar always below the timeline at the side); tabbed with them it takes their width, anywhere else it stays resizable.
