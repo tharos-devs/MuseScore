@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keyswitch Converter</title>
+<!--
+  Converts Studio One sound variation files (.keyswitch) into MuseScore articulation maps (.txt).
+  Self-contained: open this file in a browser (Mac or Windows), nothing is installed or sent anywhere.
+
+  Studio One                         Articulation map
+  <Music.KeySwitchList name="X">     @name X  (+ @middlec C3: note names as in Studio One, C3 = 60)
+  folder="1" / nested Attributes     "Folder > Sub > Name"
+  activation="note24|note36"         C0C1   (chained messages)
+  note24.1                           C0v1   (velocity)
+  cc32.20                            cc32=20
+  ch0                                ch=1   (channels 1-16; alone it is the line's code)
+  pitch="24" (no activation)         C0
+  color="FFRRGGBB"                   color=#rrggbb
+  <Attributes x:id="score" defaultVariation="N"/>   '*' on the articulation whose id is N
+-->
+<style>
+:root {
+    --bg: #f4f4f6; --panel: #ffffff; --text: #1d1d22; --muted: #6b6b76; --border: #d9d9e0;
+    --accent: #2f6fe0; --accent-text: #ffffff; --warn: #a15c00; --error: #c0392b; --ok: #2e7d32;
+    --code-bg: #f0f0f3; --drop: #e8effc;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1b1b1f; --panel: #26262b; --text: #e8e8ec; --muted: #9a9aa5; --border: #3a3a42;
+        --accent: #5b8ff0; --accent-text: #ffffff; --warn: #e0a040; --error: #ef6b5f; --ok: #6cc070;
+        --code-bg: #1f1f24; --drop: #24304a;
+    }
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+p.lead { margin: 0 0 16px; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.drop {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 22px; text-align: center; color: var(--muted);
+    transition: background .15s, border-color .15s;
+}
+.drop.over { background: var(--drop); border-color: var(--accent); color: var(--text); }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+button, label.button {
+    font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=file] { display: none; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+.summary .spacer { flex: 1; }
+.layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+ul.files { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+ul.files li { padding: 7px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+ul.files li:hover { background: var(--code-bg); }
+ul.files li.selected { border-color: var(--accent); }
+ul.files .path { color: var(--muted); font-size: 12px; word-break: break-all; }
+ul.files .stats { font-size: 12px; }
+.warn { color: var(--warn); }
+.error { color: var(--error); }
+.ok { color: var(--ok); }
+pre {
+    margin: 0; padding: 12px; background: var(--code-bg); border-radius: 6px; overflow: auto; max-height: 60vh;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre;
+}
+.messages { margin: 0 0 8px; padding-left: 18px; font-size: 12px; }
+.empty { color: var(--muted); text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<main>
+    <h1>Keyswitch Converter</h1>
+    <p class="lead">Studio One sound variations (<code>.keyswitch</code>) → MuseScore articulation maps (<code>.txt</code>).
+        Everything runs in this page: no file leaves your computer.</p>
+
+    <div class="panel">
+        <div class="drop" id="drop">
+            Drop <code>.keyswitch</code> files or folders here
+            <div class="buttons">
+                <label class="button" for="pickFiles">Choose files…</label>
+                <label class="button" for="pickFolder">Choose a folder…</label>
+            </div>
+            <input type="file" id="pickFiles" accept=".keyswitch" multiple>
+            <input type="file" id="pickFolder" webkitdirectory multiple>
+        </div>
+    </div>
+
+    <div class="panel" id="results" hidden>
+        <div class="summary">
+            <span id="summaryText"></span>
+            <span class="spacer"></span>
+            <button id="clear">Clear</button>
+            <button class="primary" id="download">Download</button>
+        </div>
+        <div class="layout">
+            <ul class="files" id="fileList"></ul>
+            <div>
+                <ul class="messages" id="messages"></ul>
+                <pre id="preview"></pre>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Conversion
+// ---------------------------------------------------------------------------
+
+const MIDDLE_C_OCTAVE = 3; // C3 = 60, as in Studio One and the articulation maps' default
+const DEFAULT_VELOCITY = 100; // the articulation maps' default keyswitch velocity
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+// Same as ArticulationMapWriter::noteName()
+function noteName(pitch) {
+    const pitchClass = ((pitch % 12) + 12) % 12;
+    const octave = (pitch - pitchClass - 60) / 12 + MIDDLE_C_OCTAVE;
+    return NOTE_NAMES[pitchClass] + octave;
+}
+
+// Characters with a meaning in an articulation map line: ';' starts a comment, '=' the score
+// articulation list, '>' a submenu
+function cleanName(name) {
+    return name.replace(/;/g, ",").replace(/=/g, "-").replace(/>/g, "›").replace(/\s+/g, " ").trim();
+}
+
+// "note24|note36.1|cc32.20|ch0" -> { code: "C0C1v1cc32=20", channel: 1, warnings }
+function convertActivation(activation) {
+    let code = "";
+    let channel = null;
+    const warnings = [];
+
+    for (const token of activation.split("|").map(t => t.trim()).filter(Boolean)) {
+        let m;
+        if ((m = /^note(\d+)(?:\.(\d+))?$/i.exec(token))) {
+            const pitch = Number(m[1]);
+            if (pitch > 127) {
+                warnings.push(`note out of range: "${token}"`);
+                continue;
+            }
+            code += noteName(pitch);
+            if (m[2] !== undefined) {
+                const velocity = Math.min(127, Math.max(1, Number(m[2])));
+                if (velocity !== DEFAULT_VELOCITY) {
+                    code += "v" + velocity;
+                }
+            }
+        } else if ((m = /^cc(\d+)\.(\d+)$/i.exec(token))) {
+            const number = Number(m[1]);
+            const value = Number(m[2]);
+            if (number > 127 || value > 127) {
+                warnings.push(`controller out of range: "${token}"`);
+                continue;
+            }
+            code += `cc${number}=${value}`;
+        } else if ((m = /^ch(\d+)$/i.exec(token))) {
+            const ch = Number(m[1]) + 1; // 0-based in Studio One
+            if (ch > 16) {
+                warnings.push(`channel out of range: "${token}"`);
+                continue;
+            }
+            channel = ch;
+        } else {
+            warnings.push(`unknown trigger "${token}" ignored`);
+        }
+    }
+
+    return { code, channel, warnings };
+}
+
+function elementChildren(element) {
+    return Array.from(element.childNodes).filter(node => node.nodeType === 1);
+}
+
+function convertKeyswitch(text, fileName) {
+    const warnings = [];
+
+    text = text.replace(/^﻿/, "");
+
+    // A trailing <Attributes x:id="score" defaultVariation="N"/> uses an undeclared XML prefix,
+    // which strict XML parsers reject: read it, then drop the prefixed attributes
+    let defaultId = null;
+    const defaultMatch = /\bdefaultVariation\s*=\s*"(\d+)"/.exec(text);
+    if (defaultMatch) {
+        defaultId = defaultMatch[1];
+    }
+    text = text.replace(/\s[A-Za-z_][\w.-]*:[\w.-]+\s*=\s*"[^"]*"/g, "");
+
+    const doc = new DOMParser().parseFromString(text, "application/xml");
+    const parseError = doc.getElementsByTagName("parsererror")[0];
+    if (parseError) {
+        return { error: "not a valid XML file", warnings };
+    }
+
+    const root = doc.documentElement;
+    if (!root || root.nodeName !== "Music.KeySwitchList") {
+        return { error: "not a Studio One sound variation file", warnings };
+    }
+
+    const mapName = (root.getAttribute("name") || fileName.replace(/\.keyswitch$/i, "")).trim();
+    const lines = [];
+    const usedLabels = new Map(); // label -> count
+    let renamed = 0;
+    let defaultFound = false;
+
+    function walk(element, path) {
+        for (const child of elementChildren(element)) {
+            if (child.nodeName !== "Attributes") {
+                continue;
+            }
+
+            const name = cleanName(child.getAttribute("name") || "");
+            const isFolder = child.getAttribute("folder") === "1" || elementChildren(child).length > 0;
+
+            if (isFolder) {
+                walk(child, name ? path.concat(name) : path);
+                continue;
+            }
+
+            if (!name) {
+                continue; // e.g. the defaultVariation element
+            }
+
+            let activation = child.getAttribute("activation");
+            if (!activation && child.hasAttribute("pitch")) {
+                activation = "note" + child.getAttribute("pitch"); // older files: the keyswitch note only
+            }
+
+            let label = path.concat(name).join(" > ");
+            if (!activation) {
+                warnings.push(`"${label}" has no trigger: skipped`);
+                continue;
+            }
+
+            const result = convertActivation(activation);
+            for (const w of result.warnings) {
+                warnings.push(`"${label}": ${w}`);
+            }
+
+            if (!result.code && result.channel === null) {
+                warnings.push(`"${label}" has no usable trigger: skipped`);
+                continue;
+            }
+
+            // Labels must be unique in an articulation map
+            const count = (usedLabels.get(label) || 0) + 1;
+            usedLabels.set(label, count);
+            if (count > 1) {
+                let n = count;
+                while (usedLabels.has(`${label} (${n})`)) {
+                    ++n;
+                }
+                label = `${label} (${n})`;
+                usedLabels.set(label, 1);
+                ++renamed;
+            }
+
+            const isDefault = defaultId !== null && child.getAttribute("id") === defaultId && !defaultFound;
+            defaultFound = defaultFound || isDefault;
+
+            const channel = result.channel !== null ? `ch=${result.channel}` : "";
+            const code = result.code || channel; // a channel alone is the line's code
+            let line = (isDefault ? "*" : "") + code + " " + label;
+            if (result.code && channel) {
+                line += " " + channel;
+            }
+
+            const color = /^[0-9a-f]{8}$/i.exec(child.getAttribute("color") || "");
+            if (color) {
+                line += " color=#" + color[0].slice(2).toLowerCase();
+            }
+
+            lines.push(line);
+        }
+    }
+
+    walk(root, []);
+
+    if (renamed > 0) {
+        warnings.push(`${renamed} articulation(s) with the same name as another one renamed "… (2)", "… (3)"…`);
+    }
+
+    if (lines.length === 0) {
+        return { error: "no articulation found", warnings, mapName };
+    }
+
+    const header = [
+        `; Converted from the Studio One sound variations "${fileName}"`,
+        `@name ${cleanName(mapName)}`,
+        `@middlec C${MIDDLE_C_OCTAVE}`,
+        "",
+    ];
+
+    return { text: header.concat(lines).join("\n") + "\n", count: lines.length, warnings, mapName };
+}
+
+// ---------------------------------------------------------------------------
+// ZIP (stored, no compression: the maps are small text files)
+// ---------------------------------------------------------------------------
+
+const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; ++n) {
+        let c = n;
+        for (let k = 0; k < 8; ++k) {
+            c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+
+function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; ++i) {
+        crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(entries) { // [{ path, text }]
+    const encoder = new TextEncoder();
+    const now = new Date();
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+    const parts = [];
+    const central = [];
+    let offset = 0;
+
+    for (const entry of entries) {
+        const name = encoder.encode(entry.path);
+        const data = encoder.encode(entry.text);
+        const crc = crc32(data);
+
+        const local = new DataView(new ArrayBuffer(30));
+        local.setUint32(0, 0x04034b50, true);
+        local.setUint16(4, 20, true);
+        local.setUint16(6, 0x0800, true); // UTF-8 names
+        local.setUint16(8, 0, true); // stored
+        local.setUint16(10, dosTime, true);
+        local.setUint16(12, dosDate, true);
+        local.setUint32(14, crc, true);
+        local.setUint32(18, data.length, true);
+        local.setUint32(22, data.length, true);
+        local.setUint16(26, name.length, true);
+        local.setUint16(28, 0, true);
+        parts.push(local.buffer, name, data);
+
+        const header = new DataView(new ArrayBuffer(46));
+        header.setUint32(0, 0x02014b50, true);
+        header.setUint16(4, 20, true);
+        header.setUint16(6, 20, true);
+        header.setUint16(8, 0x0800, true);
+        header.setUint16(10, 0, true);
+        header.setUint16(12, dosTime, true);
+        header.setUint16(14, dosDate, true);
+        header.setUint32(16, crc, true);
+        header.setUint32(20, data.length, true);
+        header.setUint32(24, data.length, true);
+        header.setUint16(28, name.length, true);
+        header.setUint32(42, offset, true);
+        central.push(header.buffer, name);
+
+        offset += 30 + name.length + data.length;
+    }
+
+    const centralSize = central.reduce((size, part) => size + (part.byteLength ?? part.length), 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, entries.length, true);
+    end.setUint16(10, entries.length, true);
+    end.setUint32(12, centralSize, true);
+    end.setUint32(16, offset, true);
+
+    return new Blob(parts.concat(central, [end.buffer]), { type: "application/zip" });
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+const state = { files: [], selected: -1 }; // [{ path, name, result }]
+
+const $ = id => document.getElementById(id);
+
+function escapeHtml(text) {
+    return text.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+}
+
+async function addFiles(items) { // [{ file, path }]
+    const keyswitches = items.filter(item => /\.keyswitch$/i.test(item.file.name));
+    for (const { file, path } of keyswitches) {
+        if (state.files.some(f => f.path === path)) {
+            continue;
+        }
+        const text = await file.text();
+        state.files.push({ path, name: file.name, result: convertKeyswitch(text, file.name) });
+    }
+    state.files.sort((a, b) => a.path.localeCompare(b.path));
+    if (state.selected < 0 && state.files.length > 0) {
+        state.selected = 0;
+    }
+    render();
+}
+
+function outputPath(path) {
+    return path.replace(/\.keyswitch$/i, ".txt");
+}
+
+function render() {
+    $("results").hidden = state.files.length === 0;
+
+    const converted = state.files.filter(f => f.result.text);
+    const failed = state.files.length - converted.length;
+    const articulations = converted.reduce((n, f) => n + f.result.count, 0);
+    $("summaryText").innerHTML = `${state.files.length} file(s): <span class="ok">${converted.length} converted</span>`
+        + ` (${articulations} articulations)` + (failed ? `, <span class="error">${failed} not converted</span>` : "");
+    $("download").disabled = converted.length === 0;
+    $("download").textContent = converted.length === 1 ? "Download .txt" : "Download .zip";
+
+    $("fileList").innerHTML = state.files.map((f, i) => {
+        const r = f.result;
+        const stats = r.text
+            ? `<span class="ok">${r.count} articulations</span>` + (r.warnings.length ? ` · <span class="warn">${r.warnings.length} note(s)</span>` : "")
+            : `<span class="error">${escapeHtml(r.error)}</span>`;
+        const folder = f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : "";
+        return `<li data-index="${i}" class="${i === state.selected ? "selected" : ""}">`
+            + `<div>${escapeHtml(f.name)}</div>`
+            + (folder ? `<div class="path">${escapeHtml(folder)}</div>` : "")
+            + `<div class="stats">${stats}</div></li>`;
+    }).join("");
+
+    const current = state.files[state.selected];
+    if (!current) {
+        $("messages").innerHTML = "";
+        $("preview").textContent = "";
+        return;
+    }
+    const r = current.result;
+    $("messages").innerHTML = (r.error ? [`<li class="error">${escapeHtml(r.error)}</li>`] : [])
+        .concat(r.warnings.map(w => `<li class="warn">${escapeHtml(w)}</li>`)).join("");
+    $("preview").textContent = r.text || "";
+}
+
+function download(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("download").addEventListener("click", () => {
+    const converted = state.files.filter(f => f.result.text);
+    if (converted.length === 1) {
+        const f = converted[0];
+        download(new Blob([f.result.text], { type: "text/plain" }), outputPath(f.name));
+        return;
+    }
+    download(makeZip(converted.map(f => ({ path: outputPath(f.path), text: f.result.text }))), "Articulation maps.zip");
+});
+
+$("clear").addEventListener("click", () => {
+    state.files = [];
+    state.selected = -1;
+    render();
+});
+
+$("fileList").addEventListener("click", event => {
+    const li = event.target.closest("li[data-index]");
+    if (li) {
+        state.selected = Number(li.dataset.index);
+        render();
+    }
+});
+
+$("pickFiles").addEventListener("change", event => {
+    addFiles([...event.target.files].map(file => ({ file, path: file.name })));
+    event.target.value = "";
+});
+
+$("pickFolder").addEventListener("change", event => {
+    addFiles([...event.target.files].map(file => ({ file, path: file.webkitRelativePath || file.name })));
+    event.target.value = "";
+});
+
+// Dropped folders are read recursively, keeping their structure
+function readEntry(entry, path) {
+    return new Promise(resolve => {
+        if (entry.isFile) {
+            entry.file(file => resolve([{ file, path: path + file.name }]), () => resolve([]));
+            return;
+        }
+        if (!entry.isDirectory) {
+            resolve([]);
+            return;
+        }
+        const reader = entry.createReader();
+        const all = [];
+        const readBatch = () => reader.readEntries(async entries => {
+            if (entries.length === 0) {
+                const nested = await Promise.all(all.map(e => readEntry(e, path + entry.name + "/")));
+                resolve(nested.flat());
+                return;
+            }
+            all.push(...entries);
+            readBatch(); // readEntries returns at most 100 entries at a time
+        }, () => resolve([]));
+        readBatch();
+    });
+}
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach(type => drop.addEventListener(type, event => {
+    event.preventDefault();
+    drop.classList.add("over");
+}));
+["dragleave", "drop"].forEach(type => drop.addEventListener(type, () => drop.classList.remove("over")));
+drop.addEventListener("drop", async event => {
+    event.preventDefault();
+    const entries = [...event.dataTransfer.items].map(item => item.webkitGetAsEntry && item.webkitGetAsEntry()).filter(Boolean);
+    if (entries.length > 0) {
+        const files = await Promise.all(entries.map(entry => readEntry(entry, "")));
+        addFiles(files.flat());
+    } else {
+        addFiles([...event.dataTransfer.files].map(file => ({ file, path: file.name })));
+    }
+});
+</script>
+</body>
+</html>
