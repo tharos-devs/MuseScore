@@ -74,16 +74,21 @@ struct ExpressionMap {
         return nullptr;
     }
 
-    //! NOTE: entry order is the priority order when a chord has several score articulations
-    const ExpressionMapEntry* entryForArticulations(const muse::mpe::ArticulationMap& articulations) const
+    //! NOTE: entry order is the priority order when a chord has several score articulations.
+    //! playingTechnique: the staff's playing technique in effect (e.g. "pizz."), checked like a score articulation
+    const ExpressionMapEntry* entryForArticulations(const muse::mpe::ArticulationMap& articulations,
+                                                    muse::mpe::ArticulationType playingTechnique = muse::mpe::ArticulationType::Undefined)
+    const
     {
+        const bool hasTechnique = playingTechnique != muse::mpe::ArticulationType::Undefined;
+
         for (const ExpressionMapEntry& e : entries) {
             if (e.disabled) {
                 continue;
             }
 
             for (const muse::mpe::ArticulationType type : e.aliases) {
-                if (articulations.contains(type)) {
+                if (articulations.contains(type) || (hasTechnique && type == playingTechnique)) {
                     return &e;
                 }
             }
