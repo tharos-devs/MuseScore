@@ -47,15 +47,23 @@ Item {
     // narrow left/right column). Handled in two stages instead of a single
     // floor: below previewPaneFullControlsWidth the right (zoom) cluster
     // hides itself entirely (buttonRow's own visibility binding) rather than
-    // overlapping the transport controls; below previewPaneMinWidth -- left
+    // overlapping the transport controls; below buttonRowMinWidth -- left
     // + center clusters only, once zoom is already hidden -- even that isn't
     // safe, so this is enforced as a hard floor instead (leftPane's own
-    // SplitView.minimumWidth below), since there's nothing left to hide past
-    // that point and the transport icons would start painting over Load.
+    // SplitView.minimumWidth below, previewPaneMinWidth), since there's nothing
+    // left to hide past that point and the transport icons would start painting
+    // over Load.
     // NOTE: whenever a button is added to/removed from any of the three
-    // clusters, both thresholds below need revisiting -- neither updates
-    // itself.
-    readonly property int previewPaneMinWidth: 320
+    // clusters, the thresholds below need revisiting -- none updates itself.
+    // NOTE: the button row's floor (buttonRowMinWidth) plus the pane's content margins: 300px panels -
+    // the side panels' width - fit it, with their chrome
+    readonly property int previewPaneMinWidth: root.buttonRowMinWidth + 2 * root.contentMargin
+    // NOTE: Load+Recent (30 + 4 + 22) + 12 + the 6 centered buttons (6 x 30 + 5 x 4), with the narrow spacing
+    // (see buttonSpacing)
+    readonly property int buttonRowMinWidth: 268
+    // NOTE: below this width (the same buttons with the regular spacing), the buttons get closer together
+    readonly property int buttonRowRoomyWidth: 292
+    readonly property int buttonSpacing: buttonRow.width >= root.buttonRowRoomyWidth ? 8 : 4
     // NOTE: sized for left cluster (Load+Recent, ~60) + centered cluster (#,
     // M, Rewind, Play, Stop, Loop, ~220) + right cluster (zoom out/value/
     // presets-dropdown/zoom in, ~108) + content margins and slack for
@@ -94,6 +102,11 @@ Item {
     //! (a narrow left/right dock especially benefits from the sidebar below,
     //! since there's no room for it beside the video at that width).
     property bool hitPointsPanelBelowTimeline: false
+    //! NOTE: docked at the left or right of the score (see VideoPanelLoader.qml): the sidebar always goes below
+    //! the timeline there, whatever was chosen - the user's choice stays for the other places
+    property bool dockedAtSide: false
+    //! NOTE: where the sidebar actually is - the layout follows this, not hitPointsPanelBelowTimeline
+    readonly property bool sidebarBelow: root.hitPointsPanelBelowTimeline || root.dockedAtSide
     property bool timelineVisible: true
     property bool controlsVisible: true
     readonly property int timelineZoomMax: 10
@@ -123,7 +136,7 @@ Item {
     // moved below the timeline instead, it no longer adds to the WIDTH floor
     // at all -- previewPaneMinWidth alone is enough, same as when it's hidden.
     implicitWidth: root.previewPaneMinWidth
-                   + (!root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                   + (!root.sidebarBelow && root.hitPointsPanelVisible
                       ? root.hitPointsPanelMinWidth + Math.round(root.hitPointsPanelWidth / 2) : 0)
 
     // NOTE: mirrors implicitWidth above, but for the HEIGHT floor -- only
@@ -132,14 +145,14 @@ Item {
     // two panes share the same height and width is the only axis that needs a
     // reserved floor.
     implicitHeight: root.previewPaneMinHeight
-                    + (root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                    + (root.sidebarBelow && root.hitPointsPanelVisible
                        ? root.hitPointsPanelMinHeight + Math.round(root.hitPointsPanelHeight / 2) : 0)
 
     // NOTE: the height floor when docked (see VideoPanelLoader.qml's contentMinimumHeight): just the panes' own
     // minimums - unlike implicitHeight's slack, it doesn't follow the sidebar's current height, which would
     // make the dock grow while resizing the sidebar inside it
     readonly property int dockedMinimumHeight: root.previewPaneMinHeight
-                                               + (root.hitPointsPanelBelowTimeline && root.hitPointsPanelVisible
+                                               + (root.sidebarBelow && root.hitPointsPanelVisible
                                                   ? root.hitPointsPanelMinHeight : 0)
 
     // NOTE: the generic "monospace" family alias doesn't reliably resolve to an
@@ -658,7 +671,7 @@ Item {
         id: contentSplitView
 
         anchors.fill: parent
-        orientation: root.hitPointsPanelBelowTimeline ? Qt.Vertical : Qt.Horizontal
+        orientation: root.sidebarBelow ? Qt.Vertical : Qt.Horizontal
 
         handle: Rectangle {
             id: resizingHandle
@@ -683,7 +696,7 @@ Item {
                         return
                     }
 
-                    if (root.hitPointsPanelBelowTimeline) {
+                    if (root.sidebarBelow) {
                         if (hitPointsPanel.height > 0) {
                             root.hitPointsPanelHeight = hitPointsPanel.height
                             videoModel.setHitPointsPanelHeight(hitPointsPanel.height)
@@ -1048,7 +1061,7 @@ Item {
 
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: root.buttonSpacing
 
                     // NOTE: hides this whole cluster once the row is too narrow
                     // even for just the left+center clusters (the zoom cluster
@@ -1056,7 +1069,7 @@ Item {
                     // previewPaneFullControlsWidth threshold) -- there's nothing
                     // left to trim after this, so this is the last line of
                     // defense against the transport cluster overlapping Load.
-                    visible: buttonRow.width >= root.previewPaneMinWidth
+                    visible: buttonRow.width >= root.buttonRowMinWidth
 
                     FilePicker {
                         id: filePicker
@@ -1126,7 +1139,7 @@ Item {
                 RowLayout {
                     x: Math.max((parent.width - width) / 2, fileButtons.visible ? fileButtons.width + 12 : 0)
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: root.buttonSpacing
 
                     FlatButton {
                         Layout.preferredWidth: 30
@@ -1885,7 +1898,7 @@ Item {
             // mode -- in vertical (below-the-timeline) mode leftPane is the one
             // that should get the leftover space instead, so this must be false
             // there or the two panes would both claim the fill role.
-            SplitView.fillHeight: !root.hitPointsPanelBelowTimeline
+            SplitView.fillHeight: !root.sidebarBelow
 
             SplitView.preferredHeight: Math.min(root.hitPointsPanelHeight,
                                                  Math.max(root.hitPointsPanelMinHeight, contentSplitView.height - leftPane.SplitView.minimumHeight))

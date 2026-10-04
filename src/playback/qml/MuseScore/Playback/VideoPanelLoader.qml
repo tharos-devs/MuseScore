@@ -77,7 +77,14 @@ Item {
     // panel to a narrow left/right column practical. Read from
     // videoPanelLoader.item directly (rather than only via the contextMenuModel
     // copy above) since this needs to be usable even before that model exists.
-    readonly property bool hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
+    // NOTE: where the sidebar actually is (see dockedAtSide), not only the user's choice
+    readonly property bool hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.sidebarBelow : false
+
+    // NOTE: docked at the left or right of the score (set by NotationPage.qml): too narrow for the sidebar
+    // beside the video, it always goes below the timeline there
+    property bool dockedAtSide: false
+    onDockedAtSideChanged: updateLoadedItem()
+
     // NOTE: same reason - a hidden sidebar doesn't take any width either, wherever it's placed
     readonly property bool hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
     readonly property bool needsWideMinimumWidth: hitPointsPanelVisible && !hitPointsPanelBelowTimeline
@@ -139,7 +146,8 @@ Item {
         // this model has no layout of its own, same reasoning as
         // screenAvailableGeometry() needing this file to reach into the real
         // window rather than owning that logic itself.
-        hitPointsPanelBelowTimeline: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelBelowTimeline : false
+        hitPointsPanelBelowTimeline: root.hitPointsPanelBelowTimeline
+        hitPointsPanelPlacementLocked: root.dockedAtSide
         hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
         timelineVisible: videoPanelLoader.item ? videoPanelLoader.item.timelineVisible : true
         controlsVisible: videoPanelLoader.item ? videoPanelLoader.item.controlsVisible : true
@@ -217,6 +225,7 @@ Item {
 
         videoPanelLoader.item.navigationSection = root.navigationSection
         videoPanelLoader.item.contentNavigationPanelOrderStart = root.contentNavigationPanelOrderStart
+        videoPanelLoader.item.dockedAtSide = root.dockedAtSide
     }
 
     onNavigationSectionChanged: updateLoadedItem()

@@ -127,6 +127,23 @@ void VideoPanelContextMenuModel::setHitPointsPanelBelowTimeline(bool belowTimeli
     updateItems();
 }
 
+bool VideoPanelContextMenuModel::hitPointsPanelPlacementLocked() const
+{
+    return m_hitPointsPanelPlacementLocked;
+}
+
+void VideoPanelContextMenuModel::setHitPointsPanelPlacementLocked(bool locked)
+{
+    if (m_hitPointsPanelPlacementLocked == locked) {
+        return;
+    }
+
+    m_hitPointsPanelPlacementLocked = locked;
+    emit hitPointsPanelPlacementLockedChanged();
+
+    updateItems();
+}
+
 bool VideoPanelContextMenuModel::hitPointsPanelVisible() const
 {
     return m_hitPointsPanelVisible;
@@ -213,7 +230,8 @@ void VideoPanelContextMenuModel::updateItems()
 
     MenuItem* rightItem = new MenuItem(rightAction, this);
     rightItem->setId("video-panel-hitpoints-right");
-    rightItem->setState(UiActionState::make_enabled(!m_hitPointsPanelBelowTimeline));
+    rightItem->setState(m_hitPointsPanelPlacementLocked ? UiActionState::make_disabled()
+                        : UiActionState::make_enabled(!m_hitPointsPanelBelowTimeline));
 
     UiAction downAction;
     downAction.title = TranslatableString("playback", "Down");

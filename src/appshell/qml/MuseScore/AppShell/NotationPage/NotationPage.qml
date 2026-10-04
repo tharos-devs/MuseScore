@@ -23,6 +23,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 
 import Muse.Ui
 import Muse.UiComponents
@@ -93,8 +94,6 @@ DockPage {
     }
 
     readonly property int verticalPanelDefaultWidth: 300
-    //! NOTE: not verticalPanelDefaultWidth: the Video panel, wider, can share their column (see its sideGroupName)
-    readonly property int verticalPanelMaxWidth: root.panelMaxDimension
 
     readonly property int horizontalPanelMinHeight: 100
     readonly property int horizontalPanelMaxHeight: 520
@@ -280,7 +279,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelMaxWidth
+            maximumWidth: root.verticalPanelDefaultWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -309,7 +308,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelMaxWidth
+            maximumWidth: root.verticalPanelDefaultWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -338,7 +337,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelMaxWidth
+            maximumWidth: root.verticalPanelDefaultWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -364,7 +363,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelMaxWidth
+            maximumWidth: root.verticalPanelDefaultWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -392,7 +391,7 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelMaxWidth
+            maximumWidth: root.verticalPanelDefaultWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -627,7 +626,9 @@ DockPage {
             //! longer eats into the width budget -- the floor drops to roughly the
             //! preview+transport column's own minimum (VideoPanel.qml's
             //! previewPaneMinWidth) plus the same chrome margin.
-            //! NOTE: 340 here is the narrower, stacked-layout floor -- the smaller
+            //! NOTE: the side panels' fixed width: docked in their column, it fits without widening it (the
+            //! sidebar always goes below the timeline there, see dockedAtSide below)
+            //! NOTE: 300 here is the narrower, stacked-layout floor -- the smaller
             //! of the two possible floors. The wider 640 floor for the non-stacked
             //! layout can't be bound declaratively at this level -- like
             //! contextMenuModel below, it depends on videoPanelLoaderInstance's
@@ -642,8 +643,8 @@ DockPage {
             //! minimum that exceeds its current size -- so defaulting to 640 would
             //! immediately blow up a persisted width narrower than that (e.g. one
             //! saved under the stacked layout) the instant this panel is restored
-            //! and loaded, well before the real 340 floor gets pushed down.
-            minimumWidth: 340
+            //! and loaded, well before the real 300 floor gets pushed down.
+            minimumWidth: root.verticalPanelDefaultWidth
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
@@ -681,6 +682,58 @@ DockPage {
                 // Component.onCompleted below in this same file).
                 Component.onCompleted: {
                     videoPanel.contextMenuModel = contextMenuModel
+                    Qt.callLater(updateDockPlacement)
+                }
+
+                //! NOTE: whether it's docked at the left or right of the score - the framework only knows the declared
+                //! location (see DockPageView::actualLocation()), so this compares the geometries the same way - and
+                //! whether it's tabbed with the side panels. A move to or from the side, or into or out of their tabs,
+                //! always changes the panel's size (or floating state, or window)
+                //! NOTE: tabbed with the side panels (same group), it gets their fixed width: the group gets the
+                //! constraints of the dock that applied them last, so its maximum width could become the whole
+                //! column's. Anywhere else, alone at a side included, it stays resizable (stacked below them in a
+                //! group of its own, their column stays at their width anyway)
+                function updateDockPlacement() {
+                    //! NOTE: first, and every time: no geometry needed (e.g. restored as a tab not shown, with no size),
+                    //! and the maximum width outlives this content when the panel is closed - reopened elsewhere,
+                    //! it must not keep the tabbed one
+                    const sidePanels = [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel ]
+                    const tabbedWithSidePanels = sidePanels.some(panel => videoPanel.isInSameFrame(panel))
+                    videoPanel.maximumWidth = tabbedWithSidePanels ? root.verticalPanelDefaultWidth : root.panelMaxDimension
+
+                    if (videoPanel.floating || Window.window !== notationView.Window.window) {
+                        dockedAtSide = false
+                        return
+                    }
+
+                    //! NOTE: no size (for a moment while resizing its column, or as a tab not shown): nothing to
+                    //! compare, it stays where it was - flipping would push the wide floor for that moment
+                    if (width <= 0 || height <= 0) {
+                        return
+                    }
+
+                    //! NOTE: beside the score, not only past its left/right edge: a bottom panel may span further
+                    const pos = mapToItem(notationView, 0, 0)
+                    const besideVertically = pos.y < notationView.height && pos.y + height > 0
+                    dockedAtSide = besideVertically && (pos.x + width <= 1 || pos.x >= notationView.width - 1)
+                }
+
+                readonly property var hostWindow: Window.window
+                onHostWindowChanged: Qt.callLater(updateDockPlacement)
+                onWidthChanged: Qt.callLater(updateDockPlacement)
+                onHeightChanged: Qt.callLater(updateDockPlacement)
+                onFloatingChanged: Qt.callLater(updateDockPlacement)
+
+                Connections {
+                    target: notationView
+
+                    function onWidthChanged() {
+                        Qt.callLater(videoPanelLoaderInstance.updateDockPlacement)
+                    }
+
+                    function onHeightChanged() {
+                        Qt.callLater(videoPanelLoaderInstance.updateDockPlacement)
+                    }
                 }
 
                 //! NOTE: these are only defaults until contentReady (see VideoPanelLoader.qml), so the first
@@ -690,7 +743,7 @@ DockPage {
                 //! NOTE: a hidden sidebar takes no width either, so it gets the narrow floor too
                 onNeedsWideMinimumWidthChanged: {
                     if (contentReady) {
-                        videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
+                        videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : root.verticalPanelDefaultWidth
                     }
                 }
 
@@ -702,7 +755,10 @@ DockPage {
                 }
 
                 onPanelReady: {
-                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : 340
+                    //! NOTE: right away, not later: restored at the side with the sidebar chosen beside the video,
+                    //! the wide floor would widen the side panels' column for a moment
+                    updateDockPlacement()
+                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : root.verticalPanelDefaultWidth
                     videoPanel.minimumHeight = contentMinimumHeight
                 }
 
