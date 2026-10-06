@@ -298,71 +298,71 @@ Item {
                         }
                     }
 
-                    //! NOTE: one slot for both, so the buttons before stay in columns whatever the track has, and the
-                    //! articulation map's button comes right after the Sound one without an instrument window
+                    //! NOTE: fixed slots, so the buttons stay in columns whatever the track has
                     Item {
-                        width: 20 * 2 + buttonsRow.spacing
+                        width: 20
                         height: 20
 
-                        Row {
-                            spacing: buttonsRow.spacing
+                        FlatButton {
+                            width: 20
+                            height: 20
 
-                            FlatButton {
-                                width: 20
-                                height: 20
+                            visible: rowItem.hasArticulationMap
 
-                                visible: rowItem.soundItem ? rowItem.soundItem.hasNativeEditorSupport : false
+                            transparent: true
+                            icon: IconCode.ARTICULATION
 
-                                transparent: true
-                                icon: IconCode.PLUGIN
+                            navigation.panel: navPanel
+                            navigation.name: "ArticulationMapButton" + rowItem.index
+                            navigation.row: rowItem.index + 1
+                            navigation.column: 4
+                            navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
-                                navigation.panel: navPanel
-                                navigation.name: "EditorButton" + rowItem.index
-                                navigation.row: rowItem.index + 1
-                                navigation.column: 4
-                                navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
+                            onClicked: {
+                                rowItem.channelItem.handleArticulationMapMenuItem("editArticulationMap")
+                            }
 
-                                onClicked: {
-                                    rowItem.soundItem.requestToLaunchNativeEditorView()
+                            //! NOTE: right click: the Mixer's "Articulation map" menu
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.RightButton
+
+                                onClicked: function(mouse) {
+                                    articulationMapMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.articulationMapMenuItems())
                                 }
                             }
 
-                            FlatButton {
-                                width: 20
-                                height: 20
+                            ContextMenuLoader {
+                                id: articulationMapMenu
 
-                                visible: rowItem.hasArticulationMap
-
-                                transparent: true
-                                icon: IconCode.ARTICULATION
-
-                                navigation.panel: navPanel
-                                navigation.name: "ArticulationMapButton" + rowItem.index
-                                navigation.row: rowItem.index + 1
-                                navigation.column: 5
-                                navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
-
-                                onClicked: {
-                                    rowItem.channelItem.handleArticulationMapMenuItem("editArticulationMap")
+                                onHandleMenuItem: function(itemId) {
+                                    rowItem.channelItem.handleArticulationMapMenuItem(itemId)
                                 }
+                            }
+                        }
+                    }
 
-                                //! NOTE: right click: the Mixer's "Articulation map" menu
-                                MouseArea {
-                                    anchors.fill: parent
-                                    acceptedButtons: Qt.RightButton
+                    Item {
+                        width: 20
+                        height: 20
 
-                                    onClicked: function(mouse) {
-                                        articulationMapMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.articulationMapMenuItems())
-                                    }
-                                }
+                        FlatButton {
+                            width: 20
+                            height: 20
 
-                                ContextMenuLoader {
-                                    id: articulationMapMenu
+                            visible: rowItem.soundItem ? rowItem.soundItem.hasNativeEditorSupport : false
 
-                                    onHandleMenuItem: function(itemId) {
-                                        rowItem.channelItem.handleArticulationMapMenuItem(itemId)
-                                    }
-                                }
+                            transparent: true
+                            icon: IconCode.PLUGIN
+
+                            navigation.panel: navPanel
+                            navigation.name: "EditorButton" + rowItem.index
+                            navigation.row: rowItem.index + 1
+                            navigation.column: 5
+                            navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
+
+                            onClicked: {
+                                rowItem.soundItem.requestToLaunchNativeEditorView()
                             }
                         }
                     }
