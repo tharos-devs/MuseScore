@@ -22,6 +22,9 @@
 
 #pragma once
 
+#include <QObject>
+#include <QString>
+
 #include "iopenprojectscenario.h"
 
 #include <QString>
@@ -104,6 +107,8 @@ private:
     muse::async::Promise<muse::Ret> runIfNotBusy(BusyStatus status, const std::function<muse::async::Promise<muse::Ret>()>& flow);
 
     muse::async::Promise<muse::RetVal<INotationProjectPtr> > loadProject(const muse::io::path_t& filePath);
+    void openLoadingWindow(const QString& projectName);
+    void closeLoadingWindow();
     muse::async::Promise<muse::Ret> loadWithFallback(const std::shared_ptr<INotationProject>& project, const muse::io::path_t& loadPath,
                                                      const std::string& format);
 
@@ -144,5 +149,9 @@ private:
 
     ProjectBeingDownloaded m_projectBeingDownloaded;
     muse::async::Notification m_projectBeingDownloadedChanged;
+
+    QString m_loadingProjectName;
+    //! NOTE: the timers' context: they don't fire once this is destroyed
+    QObject m_timerContext;
 };
 }

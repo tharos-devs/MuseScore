@@ -48,6 +48,11 @@ using namespace mu::notation;
 using namespace muse;
 using muse::async::Promise;
 
+//! NOTE: see ProjectLoadingDialog.qml
+static const Uri PROJECT_LOADING_URI("musescore://playback/projectloading");
+//! NOTE: lets the loading window be drawn before the loading blocks the application
+static constexpr int LOADING_WINDOW_DRAW_MS = 50;
+
 bool OpenProjectScenario::isBusy(BusyStatus status) const
 {
     return m_busyStatuses.contains(status);
@@ -340,7 +345,19 @@ Promise<Ret> OpenProjectScenario::openProject(const muse::io::path_t& givenPath,
         }
 
         //! Step 6. Open project in the current window
-        return doOpenProject(actualPath);
+        //! NOTE: the loading window (see openLoadingWindow()) is shown first, then the loading starts once
+        //! it has been drawn
+        openLoadingWindow(io::completeBasename(actualPath).toQString());
+
+        return async::make_promise<Ret>([this, actualPath](auto resolve) {
+            QTimer::singleShot(LOADING_WINDOW_DRAW_MS, &m_timerContext, [this, actualPath, resolve]() {
+                doOpenProject(actualPath).onResolve(this, [resolve](const Ret& ret) {
+                    (void)resolve(ret);
+                });
+            });
+
+            return Promise<Ret>::dummy_result();
+        });
     });
 }
 
@@ -353,6 +370,8 @@ Promise<RetVal<INotationProjectPtr> > OpenProjectScenario::loadProject(const mus
         return resolvedPromise(RetVal<INotationProjectPtr>(make_ret(Ret::Code::InternalError)));
     }
 
+    openLoadingWindow(io::completeBasename(filePath).toQString());
+
     const bool hasUnsavedChanges = projectAutoSaver()->projectHasUnsavedChanges(filePath);
 
     const muse::io::path_t loadPath = hasUnsavedChanges ? projectAutoSaver()->projectAutoSavePath(filePath) : filePath;
@@ -361,6 +380,7 @@ Promise<RetVal<INotationProjectPtr> > OpenProjectScenario::loadProject(const mus
     return loadWithFallback(project, loadPath, format)
            .then<RetVal<INotationProjectPtr> >(this, [this, project, filePath, hasUnsavedChanges](const Ret& result, auto resolve) {
         if (!result) {
+            closeLoadingWindow();
             return resolve(RetVal<INotationProjectPtr>(result));
         }
 
@@ -379,6 +399,29 @@ Promise<RetVal<INotationProjectPtr> > OpenProjectScenario::loadProject(const mus
     });
 }
 
+//! NOTE: a window says what's loading until the project is really ready (it closes itself, see
+//! ProjectLoadingModel): a project's loading can block the application for a while (e.g. VST3 instruments
+//! restoring their state)
+void OpenProjectScenario::openLoadingWindow(const QString& projectName)
+{
+    m_loadingProjectName = projectName;
+
+    if (interactive()->isOpened(PROJECT_LOADING_URI).val) {
+        return;
+    }
+
+    UriQuery query(PROJECT_LOADING_URI);
+    query.addParam("projectName", Val(projectName.toStdString()));
+    interactive()->open(query);
+}
+
+void OpenProjectScenario::closeLoadingWindow()
+{
+    if (interactive()->isOpened(PROJECT_LOADING_URI).val) {
+        interactive()->close(PROJECT_LOADING_URI);
+    }
+}
+
 Promise<Ret> OpenProjectScenario::loadWithFallback(const std::shared_ptr<INotationProject>& project,
                                                    const muse::io::path_t& loadPath,
                                                    const std::string& format)
@@ -389,11 +432,16 @@ Promise<Ret> OpenProjectScenario::loadWithFallback(const std::shared_ptr<INotati
         return resolvedPromise(result);
     }
 
+    //! NOTE: the error's questions must not open behind it
+    closeLoadingWindow();
+
     return shouldRetryLoadAfterError(result, loadPath)
-           .then<Ret>(this, [project, loadPath, format, result](bool forceLoad, auto resolve) {
+           .then<Ret>(this, [this, project, loadPath, format, result](bool forceLoad, auto resolve) {
         if (!forceLoad) {
             return resolve(result);
         }
+
+        openLoadingWindow(m_loadingProjectName);
 
         OpenParams params;
         params.forceMode = forceLoad;

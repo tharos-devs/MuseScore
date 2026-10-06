@@ -738,7 +738,8 @@ DockPage {
                     const tabbedWithSidePanels = sidePanels.some(panel => videoPanel.isInSameFrame(panel))
                     videoPanel.maximumWidth = tabbedWithSidePanels ? root.verticalPanelDefaultWidth : root.panelMaxDimension
 
-                    if (videoPanel.floating || Window.window !== notationView.Window.window) {
+                    //! NOTE: no score view yet (e.g. while a project opens): not docked beside it
+                    if (videoPanel.floating || !notationView || Window.window !== notationView.Window.window) {
                         dockedAtSide = false
                         return
                     }
