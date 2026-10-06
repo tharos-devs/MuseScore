@@ -98,8 +98,6 @@ static const Settings::Key AUX_CHANNELS_VISIBLE(moduleName, "playback/mixer/auxC
 static const Settings::Key AUX_CHANNELS_VISIBLE_MIGRATED(moduleName, "playback/mixer/auxChannelsVisibleMigratedFromPerIndex");
 
 static const Settings::Key MIXER_CONDENSED_VIEW_ENABLED(moduleName, "playback/mixer/condensedViewEnabled");
-static const Settings::Key MIXER_ZOOM(moduleName, "playback/mixer/zoom");
-static const Settings::Key TRACK_LIST_ZOOM(moduleName, "playback/trackList/zoom");
 
 //! NOTE: the per-index "auxChannel<N>Visible" keys these replace (used up until this
 //! feature); kept only so migrateAuxChannelsVisibleSetting() can read a user's old
@@ -209,16 +207,6 @@ void PlaybackConfiguration::init()
     settings()->setDefaultValue(MIXER_CONDENSED_VIEW_ENABLED, Val(false));
     settings()->valueChanged(MIXER_CONDENSED_VIEW_ENABLED).onReceive(this, [this](const Val& val) {
         m_isMixerCondensedViewEnabledChanged.send(val.toBool());
-    });
-
-    settings()->setDefaultValue(MIXER_ZOOM, Val(1.0));
-    settings()->valueChanged(MIXER_ZOOM).onReceive(this, [this](const Val& val) {
-        m_mixerZoomChanged.send(val.toDouble());
-    });
-
-    settings()->setDefaultValue(TRACK_LIST_ZOOM, Val(1.0));
-    settings()->valueChanged(TRACK_LIST_ZOOM).onReceive(this, [this](const Val& val) {
-        m_trackListZoomChanged.send(val.toDouble());
     });
 
     settings()->setDefaultValue(ONLINE_SOUNDS_SHOW_ERROR, Val(true));
@@ -435,36 +423,6 @@ void PlaybackConfiguration::setMixerCondensedViewEnabled(bool enabled)
 muse::async::Channel<bool> PlaybackConfiguration::isMixerCondensedViewEnabledChanged() const
 {
     return m_isMixerCondensedViewEnabledChanged;
-}
-
-double PlaybackConfiguration::mixerZoom() const
-{
-    return settings()->value(MIXER_ZOOM).toDouble();
-}
-
-void PlaybackConfiguration::setMixerZoom(double zoom)
-{
-    settings()->setSharedValue(MIXER_ZOOM, Val(zoom));
-}
-
-muse::async::Channel<double> PlaybackConfiguration::mixerZoomChanged() const
-{
-    return m_mixerZoomChanged;
-}
-
-double PlaybackConfiguration::trackListZoom() const
-{
-    return settings()->value(TRACK_LIST_ZOOM).toDouble();
-}
-
-void PlaybackConfiguration::setTrackListZoom(double zoom)
-{
-    settings()->setSharedValue(TRACK_LIST_ZOOM, Val(zoom));
-}
-
-muse::async::Channel<double> PlaybackConfiguration::trackListZoomChanged() const
-{
-    return m_trackListZoomChanged;
 }
 
 gain_t PlaybackConfiguration::defaultAuxSendValue(aux_channel_idx_t index, AudioSourceType sourceType,

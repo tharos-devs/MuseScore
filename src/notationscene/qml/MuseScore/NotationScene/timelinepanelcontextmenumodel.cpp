@@ -25,6 +25,8 @@
 #include "actions/actiontypes.h"
 #include "types/translatablestring.h"
 
+#include "uicomponents/qml/Muse/UiComponents/panelzoom.h"
+
 #include "notationscenetypes.h"
 
 using namespace mu::notation;
@@ -64,7 +66,7 @@ void TimelinePanelContextMenuModel::load()
         viewItems << makeRowItem(title, rowId);
     }
 
-    setItems({ makeMenu(TranslatableString("notation", "View"), viewItems) });
+    setItems({ makeMenu(TranslatableString("notation", "View"), viewItems), makeSeparator(), PanelZoom::makeZoomMenu(this) });
 
     configuration()->timelineRowsVisibilityChanged().onNotify(this, [this]() {
         updateRowItems();
@@ -73,6 +75,19 @@ void TimelinePanelContextMenuModel::load()
 
 void TimelinePanelContextMenuModel::handleMenuItem(const QString& itemId)
 {
+    if (itemId == PanelZoom::ZOOM_IN_ID) {
+        emit zoomStepRequested(+1);
+        return;
+    }
+    if (itemId == PanelZoom::ZOOM_OUT_ID) {
+        emit zoomStepRequested(-1);
+        return;
+    }
+    if (itemId == PanelZoom::RESET_ZOOM_ID) {
+        emit resetZoomRequested();
+        return;
+    }
+
     MenuItem& item = findItem(itemId);
     if (item.action().code == TOGGLE_ROW_CODE) {
         const std::string rowId = itemId.toStdString();

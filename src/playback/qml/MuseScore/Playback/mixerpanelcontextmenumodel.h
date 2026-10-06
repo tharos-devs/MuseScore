@@ -25,14 +25,14 @@
 #include <QVariantMap>
 
 #include "actions/actionable.h"
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
+#include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
 
 #include "playback/iplaybackconfiguration.h"
 
 #include "playback/playbacktypes.h"
 
 namespace mu::playback {
-class MixerPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel, public muse::actions::Actionable
+class MixerPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel, public muse::actions::Actionable
 {
     Q_OBJECT
 
@@ -48,11 +48,6 @@ class MixerPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel,
     Q_PROPERTY(bool titleSectionVisible READ titleSectionVisible NOTIFY titleSectionVisibleChanged)
 
     Q_PROPERTY(bool condensedViewEnabled READ condensedViewEnabled NOTIFY condensedViewEnabledChanged)
-
-    //! NOTE: scale factor applied to the whole channel strip area by MixerPanel.qml
-    //! (a plain Qt Quick `scale`, so none of the sections need to know about it).
-    //! Persisted, changed through the "Zoom in"/"Zoom out"/"Reset zoom" menu items.
-    Q_PROPERTY(qreal zoom READ zoom NOTIFY zoomChanged)
 
     //! NOTE Full screen only makes sense once this panel is its own floating
     //! window -- when docked, "full screen" would apply to the whole MuseScore
@@ -89,8 +84,6 @@ public:
 
     bool condensedViewEnabled() const;
 
-    qreal zoom() const;
-
     bool floating() const;
     void setFloating(bool floating);
 
@@ -124,8 +117,6 @@ signals:
     void titleSectionVisibleChanged();
 
     void condensedViewEnabledChanged();
-
-    void zoomChanged();
 
     void floatingChanged();
     void isFullScreenChanged();

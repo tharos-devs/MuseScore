@@ -36,6 +36,8 @@ Rectangle {
     property NavigationSection navigationSection: null
     property int navigationOrderStart: 1
 
+    property alias contextMenuModel: contextMenuModel
+
     color: ui.theme.backgroundPrimaryColor
 
     onVisibleChanged: {
@@ -53,79 +55,95 @@ Rectangle {
         id: popupController
     }
 
+    PropertiesPanelContextMenuModel {
+        id: contextMenuModel
+
+        Component.onCompleted: {
+            contextMenuModel.load()
+        }
+    }
+
     onNotationViewChanged: {
         popupController.setNotationView(root.notationView)
     }
 
-    StyledListView {
-        id: sectionList
+    ZoomContainer {
         anchors.fill: parent
 
-        topMargin: 12
-        bottomMargin: 12
+        zoom: contextMenuModel.zoom
 
-        spacing: 12
+        StyledListView {
+            id: sectionList
 
-        interactive: !popupController.isAnyPopupOpen
+            anchors.fill: parent
 
-        function ensureContentVisible(invisibleContentHeight) {
-            if (sectionList.contentY + invisibleContentHeight > 0) {
-                sectionList.contentY += invisibleContentHeight
-            } else {
-                sectionList.contentY = 0
-            }
-        }
+            topMargin: 12
+            bottomMargin: 12
 
-        Behavior on contentY {
-            NumberAnimation { duration: 250 }
-        }
+            spacing: 12
 
-        model: PropertiesPanelListModel {
-            id: propertiesPanelListModel
-        }
+            interactive: !popupController.isAnyPopupOpen
 
-        onContentHeightChanged: {
-            returnToBounds()
-
-            if (contentHeight > cacheBuffer) {
-                cacheBuffer = contentHeight
-            }
-        }
-
-        onContentYChanged: {
-            popupController.repositionPopupIfNeed()
-        }
-
-        delegate: Column {
-            id: delegateItem
-
-            required property PropertiesPanelAbstractModel propertiesPanelSectionModel
-            required property int index
-
-            width: ListView.view.width
-            spacing: sectionList.spacing
-
-            property var navigationPanel: _item.navigationPanel
-
-            SeparatorLine {
-                visible: delegateItem.index !== 0
+            function ensureContentVisible(invisibleContentHeight) {
+                if (sectionList.contentY + invisibleContentHeight > 0) {
+                    sectionList.contentY += invisibleContentHeight
+                } else {
+                    sectionList.contentY = 0
+                }
             }
 
-            PropertiesPanelSectionDelegate {
-                id: _item
+            Behavior on contentY {
+                NumberAnimation { duration: 250 }
+            }
 
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                anchors.right: parent.right
-                anchors.rightMargin: 12
+            model: PropertiesPanelListModel {
+                id: propertiesPanelListModel
+            }
 
-                sectionModel: delegateItem.propertiesPanelSectionModel
-                anchorItem: root
-                navigationPanel.section: root.navigationSection
-                navigationPanel.order: root.navigationOrderStart + delegateItem.index
+            onContentHeightChanged: {
+                returnToBounds()
 
-                onEnsureContentVisibleRequested: function(invisibleContentHeight) {
-                    sectionList.ensureContentVisible(invisibleContentHeight)
+                if (contentHeight > cacheBuffer) {
+                    cacheBuffer = contentHeight
+                }
+            }
+
+            onContentYChanged: {
+                popupController.repositionPopupIfNeed()
+            }
+
+            delegate: Column {
+                id: delegateItem
+
+                required property PropertiesPanelAbstractModel propertiesPanelSectionModel
+                required property int index
+
+                width: ListView.view.width
+                spacing: sectionList.spacing
+
+                property var navigationPanel: _item.navigationPanel
+
+                SeparatorLine {
+                    visible: delegateItem.index !== 0
+                }
+
+                PropertiesPanelSectionDelegate {
+                    id: _item
+
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+
+                    sectionModel: delegateItem.propertiesPanelSectionModel
+                    anchorItem: root
+                    navigationPanel.section: root.navigationSection
+                    navigationPanel.order: root.navigationOrderStart + delegateItem.index
+
+                    //! NOTE: in the panel's coordinates: the list's are zoomed
+                    onEnsureContentVisibleRequested: function(invisibleContentHeight) {
+                        sectionList.ensureContentVisible(invisibleContentHeight / contextMenuModel.zoom)
+                    }
                 }
             }
         }

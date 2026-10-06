@@ -32,13 +32,13 @@ using namespace muse::ui;
 using namespace muse::uicomponents;
 
 PalettesPanelContextMenuModel::PalettesPanelContextMenuModel(QObject* parent)
-    : AbstractMenuModel(parent)
+    : ZoomableMenuModel(muse::Settings::Key("palette", "palette/panelZoom"), 1.0, parent)
 {
 }
 
 void PalettesPanelContextMenuModel::load()
 {
-    AbstractMenuModel::load();
+    ZoomableMenuModel::load();
 
     commandsController()->expandCollapseAllRequested().onReceive(this, [this](bool expand) {
         emit expandCollapseAllRequested(expand);
@@ -51,6 +51,8 @@ void PalettesPanelContextMenuModel::load()
         makeSeparator(),
         makeMenuItem(PALETTE_EXPAND_ALL_COMMAND),
         makeMenuItem(PALETTE_COLLAPSE_ALL_COMMAND),
+        makeSeparator(),
+        makeZoomMenu(),
     };
 
     setItems(items);

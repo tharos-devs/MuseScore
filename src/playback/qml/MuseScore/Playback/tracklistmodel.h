@@ -56,6 +56,11 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     Q_PROPERTY(bool globalMuteEngaged READ globalMuteEngaged NOTIFY globalMuteEngagedChanged)
     Q_PROPERTY(bool globalSoloEngaged READ globalSoloEngaged NOTIFY globalSoloEngagedChanged)
 
+    //! NOTE: whether a row of the list has an articulation map / a sound with a window: the rows' columns for them
+    //! only take room when one does
+    Q_PROPERTY(bool hasArticulationMapColumn READ hasArticulationMapColumn NOTIFY columnsChanged)
+    Q_PROPERTY(bool hasEditorColumn READ hasEditorColumn NOTIFY columnsChanged)
+
     QML_ELEMENT
 
     muse::ContextInject<IPlaybackController> controller = { this };
@@ -78,6 +83,9 @@ public:
     bool globalMuteEngaged() const;
     bool globalSoloEngaged() const;
 
+    bool hasArticulationMapColumn() const;
+    bool hasEditorColumn() const;
+
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -86,6 +94,7 @@ signals:
     void rowCountChanged();
     void globalMuteEngagedChanged();
     void globalSoloEngagedChanged();
+    void columnsChanged();
 
 private:
     enum Roles {
@@ -125,6 +134,7 @@ private:
     bool updateRowState(Row& row) const;
     void updateRowStates();
     void updateColors();
+    void updateColumns();
     GlobalMuteSoloToggle::Channels channels() const;
 
     int rowOf(const engraving::InstrumentTrackId& instrumentTrackId) const;
@@ -141,6 +151,10 @@ private:
     bool m_rebuildRequired = false;
 
     GlobalMuteSoloToggle m_globalMuteSolo;
+
+    //! NOTE: see updateColumns()
+    bool m_hasArticulationMapColumn = false;
+    bool m_hasEditorColumn = false;
 
     notation::INotationPtr m_notation;
     //! NOTE: the master's, when m_notation is a part's: articulation maps are edited on its undo stack

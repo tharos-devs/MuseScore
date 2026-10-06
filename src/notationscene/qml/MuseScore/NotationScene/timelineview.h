@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <QImage>
 #include <QTimer>
 #include <qqmlintegration.h>
@@ -33,6 +35,8 @@
 #include "async/asyncable.h"
 
 namespace mu::notation {
+class TimelineAdapter;
+
 class TimelineView : public muse::uicomponents::WidgetView, public muse::Contextable, public muse::async::Asyncable
 {
     Q_OBJECT
@@ -43,6 +47,10 @@ class TimelineView : public muse::uicomponents::WidgetView, public muse::Context
 public:
     explicit TimelineView(QQuickItem* parent = nullptr);
 
+    //! NOTE: the measure width, see TimelinePanelContextMenuModel
+    Q_INVOKABLE void stepZoom(int direction);
+    Q_INVOKABLE void resetZoom();
+
 private slots:
     void doDraw();
 
@@ -51,6 +59,7 @@ private:
     void paint(QPainter* painter) override;
     void componentComplete() override;
 
+    std::shared_ptr<TimelineAdapter> m_timeline;
     qreal m_dpr = 1.0; // device pixel ratio
     QImage m_image;
     QTimer m_drawTimer;

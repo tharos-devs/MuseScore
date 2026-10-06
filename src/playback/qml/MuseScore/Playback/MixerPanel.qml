@@ -228,30 +228,22 @@ ColumnLayout {
         }
     }
 
-    //! NOTE: the Mixer's Zoom in/out menu items scale the whole channel strip area
-    //! as one block (Qt Quick `scale`, anchored top-left), so none of the sections
-    //! below need to know about zoom at all. The flickable is given this container's
-    //! size divided by the zoom, so once scaled back up it exactly fills it; its
-    //! implicitHeight is multiplied back here so the panel's auto-fit-to-content
-    //! height (resizePanelToContentHeight) follows the zoomed size.
-    Item {
+    //! NOTE: the Mixer's zoom scales the whole channel strip area as one block, so none of the sections below
+    //! need to know about it. The flickable's implicitHeight is multiplied back here so the panel's
+    //! auto-fit-to-content height (resizePanelToContentHeight) follows the zoomed size.
+    ZoomContainer {
         id: zoomContainer
 
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        implicitHeight: flickable.implicitHeight * flickable.scale
-
-        clip: true
+        zoom: contextMenuModel.zoom
+        implicitHeight: flickable.implicitHeight * zoom
 
         StyledFlickable {
             id: flickable
 
-            width: zoomContainer.width / scale
-            height: zoomContainer.height / scale
-
-            scale: contextMenuModel.zoom > 0 ? contextMenuModel.zoom : 1
-            transformOrigin: Item.TopLeft
+            anchors.fill: parent
 
             //! NOTE: + channelItemWidth reserves the master channel's own slot at the
             //! tail end -- master's delegate is excluded from contentColumn's normal

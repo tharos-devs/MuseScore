@@ -3163,6 +3163,24 @@ void Timeline::zoomAround(int gridWidth, int anchorViewX, qreal anchorMeasures)
     horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(targetSceneX - anchorSceneX));
 }
 
+//! NOTE: like 2 notches of the wheel on the Measures row (x√2)
+void Timeline::stepZoom(int direction)
+{
+    zoomAroundCenter(qRound(_gridWidth * std::pow(2.0, direction * 0.5)));
+}
+
+void Timeline::resetZoom()
+{
+    zoomAroundCenter(DEFAULT_GRID_WIDTH);
+}
+
+void Timeline::zoomAroundCenter(int gridWidth)
+{
+    const int centerX = viewport()->width() / 2;
+    const qreal anchorMeasures = mapToScene(QPoint(centerX, 0)).x() / qreal(_gridWidth);
+    zoomAround(gridWidth, centerX, anchorMeasures);
+}
+
 //---------------------------------------------------------
 //   Timeline::mouseMoveEvent
 //---------------------------------------------------------

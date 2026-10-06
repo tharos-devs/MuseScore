@@ -25,10 +25,10 @@
 #include <QVariantMap>
 
 #include "actions/actionable.h"
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
+#include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
 
 namespace mu::playback {
-class VideoPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel, public muse::actions::Actionable
+class VideoPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel, public muse::actions::Actionable
 {
     Q_OBJECT
 

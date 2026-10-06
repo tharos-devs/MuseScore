@@ -60,22 +60,15 @@ Item {
         enabled: root.visible
     }
 
-    //! NOTE: zoomed like the Mixer (see MixerPanel.qml's zoomContainer): the list is scaled as one block,
-    //! sized so that once scaled it exactly fills this container
-    Item {
-        id: zoomContainer
-
+    ZoomContainer {
         anchors.fill: parent
-        clip: true
+
+        zoom: contextMenuModel.zoom
 
         StyledListView {
             id: listView
 
-            width: zoomContainer.width / scale
-            height: zoomContainer.height / scale
-
-            scale: contextMenuModel.zoom > 0 ? contextMenuModel.zoom : 1
-            transformOrigin: Item.TopLeft
+            anchors.fill: parent
 
             model: trackListModel
 
@@ -106,14 +99,26 @@ Item {
                         navigationColumnStart: 0
                     }
 
-                    //! NOTE: the rows' visibility, sound, editor and articulation map columns
+                    //! NOTE: the rows' visibility, sound, articulation map and editor columns
                     Repeater {
-                        model: 4
+                        model: 2
 
                         Item {
                             width: 20
                             height: 20
                         }
+                    }
+
+                    Item {
+                        width: 20
+                        height: 20
+                        visible: trackListModel.hasArticulationMapColumn
+                    }
+
+                    Item {
+                        width: 20
+                        height: 20
+                        visible: trackListModel.hasEditorColumn
                     }
                 }
 
@@ -298,10 +303,12 @@ Item {
                         }
                     }
 
-                    //! NOTE: fixed slots, so the buttons stay in columns whatever the track has
+                    //! NOTE: fixed slots, so the buttons stay in columns whatever the track has; a column no track
+                    //! of the list uses takes no room
                     Item {
                         width: 20
                         height: 20
+                        visible: trackListModel.hasArticulationMapColumn
 
                         FlatButton {
                             width: 20
@@ -345,6 +352,7 @@ Item {
                     Item {
                         width: 20
                         height: 20
+                        visible: trackListModel.hasEditorColumn
 
                         FlatButton {
                             width: 20

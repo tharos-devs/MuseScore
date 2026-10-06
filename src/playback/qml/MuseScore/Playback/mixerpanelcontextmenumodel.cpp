@@ -32,8 +32,6 @@
 
 #include "playback/playbackcommands.h"
 
-#include "panelzoom.h"
-
 using namespace mu;
 using namespace mu::playback;
 using namespace muse;
@@ -44,9 +42,6 @@ using namespace muse::audio;
 
 static const QString VIEW_MENU_ID("view-menu");
 static const ActionCode TOGGLE_FULL_SCREEN_ACTION("mixer-panel-toggle-fullscreen");
-static const ActionCode ZOOM_IN_ACTION("mixer-panel-zoom-in");
-static const ActionCode ZOOM_OUT_ACTION("mixer-panel-zoom-out");
-static const ActionCode ZOOM_RESET_ACTION("mixer-panel-zoom-reset");
 
 static TranslatableString mixerSectionTitle(MixerSectionType type)
 {
@@ -67,8 +62,9 @@ static TranslatableString mixerSectionTitle(MixerSectionType type)
     return {};
 }
 
+//! NOTE: its zoom applies to the whole channel strip area (see MixerPanel.qml)
 MixerPanelContextMenuModel::MixerPanelContextMenuModel(QObject* parent)
-    : AbstractMenuModel(parent)
+    : ZoomableMenuModel(muse::Settings::Key("playback", "playback/mixer/zoom"), 1.0, parent)
 {
 }
 
@@ -127,11 +123,6 @@ bool MixerPanelContextMenuModel::condensedViewEnabled() const
     return configuration()->isMixerCondensedViewEnabled();
 }
 
-qreal MixerPanelContextMenuModel::zoom() const
-{
-    return PanelZoom::clamped(configuration()->mixerZoom());
-}
-
 bool MixerPanelContextMenuModel::floating() const
 {
     return m_floating;
@@ -188,21 +179,10 @@ QVariantMap MixerPanelContextMenuModel::screenAvailableGeometry(int windowX, int
 
 void MixerPanelContextMenuModel::load()
 {
-    AbstractMenuModel::load();
+    ZoomableMenuModel::load();
 
     dispatcher()->reg(this, TOGGLE_FULL_SCREEN_ACTION, [this]() {
         emit toggleFullScreenRequested();
-    });
-
-    dispatcher()->reg(this, ZOOM_IN_ACTION, [this]() { configuration()->setMixerZoom(PanelZoom::stepped(zoom(), +1)); });
-    dispatcher()->reg(this, ZOOM_OUT_ACTION, [this]() { configuration()->setMixerZoom(PanelZoom::stepped(zoom(), -1)); });
-    dispatcher()->reg(this, ZOOM_RESET_ACTION, [this]() { configuration()->setMixerZoom(1.0); });
-
-    configuration()->mixerZoomChanged().onReceive(this, [this](double) {
-        emit zoomChanged();
-
-        //! NOTE: rebuilt so Zoom in/out get disabled at the limits
-        updateItems();
     });
 
     configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool newVisibilityValue) {
@@ -403,7 +383,7 @@ void MixerPanelContextMenuModel::updateItems()
     items << makeMenu(TranslatableString("playback", "View"), viewMenuItems, VIEW_MENU_ID);
 
     items << makeSeparator();
-    items << PanelZoom::menuItems(this, zoom(), ZOOM_IN_ACTION, ZOOM_OUT_ACTION, ZOOM_RESET_ACTION);
+    items << makeZoomMenu();
 
     setItems(items);
 }

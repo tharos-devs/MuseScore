@@ -231,7 +231,8 @@ void PropertiesPanelPopupController::closePopupIfNeed(const QPointF& mouseGlobal
             return QRectF();
         }
 
-        return QRectF(item->mapToGlobal(QPoint(0, 0)), item->size());
+        //! NOTE: as shown, also when its panel's content is zoomed (scaled)
+        return QRectF(item->mapToGlobal(QPointF(0, 0)), item->mapToGlobal(QPointF(item->width(), item->height())));
     };
 
     QRectF globalVisualControlRect = globalRect(m_visualControl);

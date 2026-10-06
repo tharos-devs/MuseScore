@@ -20,16 +20,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "tracklistcontextmenumodel.h"
+#include "propertiespanelcontextmenumodel.h"
 
-using namespace mu::playback;
+using namespace mu::propertiespanel;
 
-TrackListContextMenuModel::TrackListContextMenuModel(QObject* parent)
-    : ZoomableMenuModel(muse::Settings::Key("playback", "playback/trackList/zoom"), 0.9, parent)
+PropertiesPanelContextMenuModel::PropertiesPanelContextMenuModel(QObject* parent)
+    : ZoomableMenuModel(muse::Settings::Key("propertiespanel", "propertiespanel/panelZoom"), 1.0, parent)
 {
 }
 
-void TrackListContextMenuModel::load()
+void PropertiesPanelContextMenuModel::load()
 {
     ZoomableMenuModel::load();
 

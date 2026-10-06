@@ -20,18 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "tracklistcontextmenumodel.h"
+#pragma once
 
-using namespace mu::playback;
+#include <qqmlintegration.h>
 
-TrackListContextMenuModel::TrackListContextMenuModel(QObject* parent)
-    : ZoomableMenuModel(muse::Settings::Key("playback", "playback/trackList/zoom"), 0.9, parent)
+#include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
+
+namespace mu::propertiespanel {
+//! NOTE: the Properties panel's "…" menu: its zoom
+class PropertiesPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel
 {
-}
+    Q_OBJECT
+    QML_ELEMENT
 
-void TrackListContextMenuModel::load()
-{
-    ZoomableMenuModel::load();
+public:
+    explicit PropertiesPanelContextMenuModel(QObject* parent = nullptr);
 
-    setItems({ makeZoomMenu() });
+    Q_INVOKABLE void load() override;
+};
 }

@@ -41,13 +41,13 @@ static const ActionCode TOGGLE_TIMELINE_VISIBLE_ACTION("video-panel-toggle-timel
 static const ActionCode TOGGLE_CONTROLS_VISIBLE_ACTION("video-panel-toggle-controls-visible");
 
 VideoPanelContextMenuModel::VideoPanelContextMenuModel(QObject* parent)
-    : AbstractMenuModel(parent)
+    : ZoomableMenuModel(muse::Settings::Key("playback", "playback/videoPanel/zoom"), 1.0, parent)
 {
 }
 
 void VideoPanelContextMenuModel::load()
 {
-    AbstractMenuModel::load();
+    ZoomableMenuModel::load();
 
     dispatcher()->reg(this, TOGGLE_FULL_SCREEN_ACTION, [this]() {
         emit toggleFullScreenRequested();
@@ -295,6 +295,9 @@ void VideoPanelContextMenuModel::updateItems()
 
         items << fullScreenItem;
     }
+
+    items << makeSeparator();
+    items << makeZoomMenu();
 
     setItems(items);
 }

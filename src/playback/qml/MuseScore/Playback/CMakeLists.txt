@@ -58,8 +58,6 @@ qt_add_qml_module(playback_qml
         onlinesoundsstatusmodel.h
         outputresourceitem.cpp
         outputresourceitem.h
-        panelzoom.cpp
-        panelzoom.h
         playbackloadingmodel.cpp
         playbackloadingmodel.h
         playbacktoolbarmodel.cpp
