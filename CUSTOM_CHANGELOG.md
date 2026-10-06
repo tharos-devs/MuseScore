@@ -4,6 +4,12 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-06
+- Audio exports now sound as heard: they go through the Master channel (its Gain, effects, fader and mute), and Volume/Pan automation curves (tracks and Master) are followed — they were frozen at their value at the start (stock bug). A Master fader at -6 dB now gives a 6 dB quieter export.
+- "MP4 video (attached video)" export: an "Audio format" list — AAC or MP3 (lossy, with the bit rate) and ALAC or FLAC (lossless, 16 or 24 bits, 16 bits dithered), all in the .mp4, kept in sync to the sample. MP3 is exported at 160 kbit/s or more, and Apple's apps (QuickTime…) don't play an MP3 track in an MP4 (VLC and Windows do).
+- Fixed: the MP3, WAV, FLAC and OGG audio writers ignored the export's options, so the attached video's audio could be missing from an export using them.
+- Video panel: the picture follows the output latency measured by the audio driver (its buffers and the device's own latency), instead of an estimate of one buffer, on macOS.
+
 ### 2026-10-04
 - Fixed (Windows): a score could not be saved, neither a new one nor an existing one: after choosing "On your computer" in the save location dialog, the file dialog never appeared (upstream bug since its file dialogs became asynchronous). File > Open had the same flaw.
 - Fixed: an articulation map saved in the editor (e.g. an articulation disabled) kept playing its former version until reloaded into the track. Saving now reloads it into every track of the score that uses that file.
