@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-06
+- Opening a project now shows a small window (titled with the file name) saying "Loading…" and, for VST3 instruments and effects, the plugin being loaded ("3/12 <plugin name>", out of the project's VST3 plugins). It closes by itself once the project is really ready. VST3 plugins are now loaded and restored one after the other with short pauses in between, so the application no longer freezes in one long block (a project with 8 big sample players went from a 12 s freeze to pauses of 2 s at most), and the window keeps showing progress.
+- Fixed: a VST3 plugin could, in rare timing, store its default state in the project instead of the saved one while the project was opening.
 - New "Track list" panel (View > Track list): one line per instrument with its color (click: Edit color / Reset color), a small level meter, Mute, Solo, show/hide, the Mixer's Sound menu, the VST3 instrument's window and its articulation map (click: edit; right click: the Mixer's Articulation map menu). A bar on top holds global Mute/Solo, like the Mixer's. It docks with the side panels (or in the secondary window), and its "…" menu has Zoom in/out/Reset zoom. For an instrument that changes in the score (e.g. flute to piccolo), Mute, Solo and color apply to all of its instruments.
 - Fixed: undoing a Mixer color change did nothing once the Mixer had been closed in between.
 - Fixed: changing a sound in one place could put back an aux send level changed meanwhile in the Mixer; the Mixer now also follows aux sends changed elsewhere.
