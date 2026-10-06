@@ -189,6 +189,7 @@ void InputResourceItem::setParams(const audio::AudioInputParams& newParams)
     emit titleChanged();
     emit isBlankChanged();
     emit isActiveChanged();
+    emit hasNativeEditorSupportChanged();
 }
 
 void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
@@ -204,6 +205,7 @@ void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
     emit titleChanged();
     emit isBlankChanged();
     emit isActiveChanged();
+    emit hasNativeEditorSupportChanged();
     emit inputParamsChanged();
 
     requestToLaunchNativeEditorView();

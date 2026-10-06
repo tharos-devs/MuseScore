@@ -141,6 +141,7 @@ void OutputResourceItem::setParams(const audio::AudioFxParams& params)
 
     if (resourceChanged) {
         emit titleChanged();
+        emit hasNativeEditorSupportChanged();
     }
 
     if (blankChanged) {
