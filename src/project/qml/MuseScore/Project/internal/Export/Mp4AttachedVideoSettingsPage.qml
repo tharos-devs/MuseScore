@@ -20,6 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import QtQuick
+import QtQuick.Layouts
 
 import Muse.UiComponents
 import MuseScore.Project
@@ -31,13 +32,37 @@ ExportSettingsPage {
 
     isExportAvailable: root.isAvailable
 
+    ExportOptionItem {
+        id: audioFormatLabel
+        visible: root.isAvailable
+        text: qsTrc("project/export", "Audio format:")
+
+        StyledDropdown {
+            Layout.preferredWidth: 264
+
+            navigation.name: "AudioFormatsDropdown"
+            navigation.panel: root.navigationPanel
+            navigation.row: root.navigationOrder
+            navigation.accessible.name: audioFormatLabel.text + " " + currentText
+
+            model: root.model ? root.model.availableAttachedVideoAudioFormats : []
+
+            currentIndex: root.model ? indexOfValue(root.model.attachedVideoAudioFormat) : -1
+
+            onActivated: function(index, value) {
+                root.model.attachedVideoAudioFormat = value
+            }
+        }
+    }
+
     AudioSettings {
         visible: root.isAvailable
 
         model: root.model
         navigationPanel: root.navigationPanel
         navigationOrderStart: root.navigationOrder
-        showBitRateControl: true
+        // Lossless: the bits per sample instead (the sample format control)
+        showBitRateControl: root.model ? !root.model.isAttachedVideoAudioLossless : true
 
         // The video's audio is what this export is about: always included (the Mixer can still mute it)
         showIncludeVideoAudioControl: false

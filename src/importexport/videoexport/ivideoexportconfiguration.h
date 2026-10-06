@@ -64,6 +64,13 @@ public:
 
     virtual const AttachedVideo& attachedVideo() const = 0;
     virtual void setAttachedVideo(const AttachedVideo& video) = 0;
+
+    virtual AttachedVideoAudioFormat attachedVideoAudioFormat() const = 0;
+    virtual void setAttachedVideoAudioFormat(AttachedVideoAudioFormat format) = 0;
+
+    //! NOTE The lossless formats' bits per sample: 16 or 24
+    virtual int attachedVideoAudioBitsPerSample() const = 0;
+    virtual void setAttachedVideoAudioBitsPerSample(int bits) = 0;
 };
 }
 

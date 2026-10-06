@@ -28,8 +28,11 @@ using namespace muse;
 using namespace muse::audio;
 using namespace mu::iex::audioexport;
 
-Ret WaveWriter::write(notation::INotationPtr notation, io::IODevice& destinationDevice, const Options&)
+Ret WaveWriter::write(notation::INotationPtr notation, io::IODevice& destinationDevice, const Options& options)
 {
+    const AudioSampleFormat sampleFormat = static_cast<AudioSampleFormat>(
+        muse::value(options, OptionKey::AUDIO_SAMPLE_FORMAT, Val(static_cast<int>(configuration()->exportWavSampleFormat()))).toInt());
+
     const SoundTrackFormat format {
         SoundTrackType::WAV,
         {
@@ -37,9 +40,9 @@ Ret WaveWriter::write(notation::INotationPtr notation, io::IODevice& destination
             configuration()->exportBufferSize(),
             2 /* audioChannelsNumber */
         },
-        configuration()->exportWavSampleFormat(),
+        sampleFormat,
         0 /* bitRate */
     };
 
-    return doWriteAndWait(notation, destinationDevice, format);
+    return doWriteAndWait(notation, destinationDevice, format, options);
 }

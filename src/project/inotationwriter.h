@@ -59,6 +59,11 @@ public:
         //! tracks (e.g. the attached video's audio) are always included
         AUDIO_DURATION_SEC,
         INCLUDE_SOUND_TRACKS,
+
+        //! NOTE WAV: the sample format (muse::audio::AudioSampleFormat), instead of the configured one
+        AUDIO_SAMPLE_FORMAT,
+        //! NOTE MP3: the bit rate (kbit/s), instead of the configured one
+        AUDIO_BIT_RATE,
     };
 
     using Options = std::map<OptionKey, muse::Val>;

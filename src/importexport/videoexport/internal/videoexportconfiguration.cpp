@@ -21,7 +21,13 @@
  */
 #include "videoexportconfiguration.h"
 
+#include "settings.h"
+
+using namespace muse;
 using namespace mu::iex::videoexport;
+
+static const Settings::Key ATTACHED_VIDEO_AUDIO_FORMAT_KEY("iex_videoexport", "export/video/attachedVideoAudioFormat");
+static const Settings::Key ATTACHED_VIDEO_AUDIO_BITS_KEY("iex_videoexport", "export/video/attachedVideoAudioBitsPerSample");
 
 static const ViewMode DEFAULT_VIEW_MODE = ViewMode::PageFull;
 static const bool DEFAULT_SHOW_PIANO = false;
@@ -32,6 +38,12 @@ static const double DEFAULT_LEADING_SEC = 3.0;
 static const double DEFAULT_TRAILING_SECONDS = 3.0;
 
 static const std::vector<std::string> AVAILABLE_RESOLUTIONS = { "2160p", "1440p", "1080p" };
+
+void VideoExportConfiguration::init()
+{
+    settings()->setDefaultValue(ATTACHED_VIDEO_AUDIO_FORMAT_KEY, Val(static_cast<int>(AttachedVideoAudioFormat::Aac)));
+    settings()->setDefaultValue(ATTACHED_VIDEO_AUDIO_BITS_KEY, Val(24));
+}
 
 ViewMode VideoExportConfiguration::viewMode() const
 {
@@ -126,4 +138,28 @@ const AttachedVideo& VideoExportConfiguration::attachedVideo() const
 void VideoExportConfiguration::setAttachedVideo(const AttachedVideo& video)
 {
     m_attachedVideo = video;
+}
+
+AttachedVideoAudioFormat VideoExportConfiguration::attachedVideoAudioFormat() const
+{
+    const int format = settings()->value(ATTACHED_VIDEO_AUDIO_FORMAT_KEY).toInt();
+    if (format < static_cast<int>(AttachedVideoAudioFormat::Aac) || format > static_cast<int>(AttachedVideoAudioFormat::Flac)) {
+        return AttachedVideoAudioFormat::Aac;
+    }
+    return static_cast<AttachedVideoAudioFormat>(format);
+}
+
+void VideoExportConfiguration::setAttachedVideoAudioFormat(AttachedVideoAudioFormat format)
+{
+    settings()->setSharedValue(ATTACHED_VIDEO_AUDIO_FORMAT_KEY, Val(static_cast<int>(format)));
+}
+
+int VideoExportConfiguration::attachedVideoAudioBitsPerSample() const
+{
+    return settings()->value(ATTACHED_VIDEO_AUDIO_BITS_KEY).toInt() == 16 ? 16 : 24;
+}
+
+void VideoExportConfiguration::setAttachedVideoAudioBitsPerSample(int bits)
+{
+    settings()->setSharedValue(ATTACHED_VIDEO_AUDIO_BITS_KEY, Val(bits == 16 ? 16 : 24));
 }

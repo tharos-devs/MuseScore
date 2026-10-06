@@ -28,7 +28,7 @@ using namespace muse;
 using namespace muse::audio;
 using namespace mu::iex::audioexport;
 
-Ret Mp3Writer::write(notation::INotationPtr notation, io::IODevice& destinationDevice, const Options&)
+Ret Mp3Writer::write(notation::INotationPtr notation, io::IODevice& destinationDevice, const Options& options)
 {
     const SoundTrackFormat format {
         SoundTrackType::MP3,
@@ -38,8 +38,8 @@ Ret Mp3Writer::write(notation::INotationPtr notation, io::IODevice& destinationD
             2 /* audioChannelsNumber */
         },
         AudioSampleFormat::Undefined,
-        configuration()->exportMp3Bitrate()
+        muse::value(options, OptionKey::AUDIO_BIT_RATE, Val(configuration()->exportMp3Bitrate())).toInt()
     };
 
-    return doWriteAndWait(notation, destinationDevice, format);
+    return doWriteAndWait(notation, destinationDevice, format, options);
 }

@@ -42,6 +42,14 @@ enum class VideoSource {
     AttachedVideo
 };
 
+//! NOTE The audio of the attached video's export, in its MP4: lossy (with a bit rate) or lossless (16 or 24 bits)
+enum class AttachedVideoAudioFormat {
+    Aac,
+    Mp3,
+    Alac,
+    Flac,
+};
+
 //! NOTE The video to export for VideoSource::AttachedVideo (video position = score position + offset)
 struct AttachedVideo {
     std::string path; // UTF-8

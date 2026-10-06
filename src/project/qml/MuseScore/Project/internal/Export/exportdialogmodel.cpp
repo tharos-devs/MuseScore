@@ -312,6 +312,11 @@ bool ExportDialogModel::isIndexValid(int index) const
     return index >= 0 && index < m_notations.size();
 }
 
+bool ExportDialogModel::isAttachedVideoSelected() const
+{
+    return m_selectedExportType.id == ATTACHED_VIDEO_EXPORT_TYPE_ID;
+}
+
 bool ExportDialogModel::isFormatSelected(const QString& formatSuffix) const
 {
     IF_ASSERT_FAILED(!m_selectedExportType.suffixes.empty()) {
@@ -777,6 +782,52 @@ void ExportDialogModel::setIncludeVideoAudio(bool include)
     emit includeVideoAudioChanged();
 }
 
+QVariantList ExportDialogModel::availableAttachedVideoAudioFormats() const
+{
+    using Format = iex::videoexport::AttachedVideoAudioFormat;
+
+    const std::vector<std::pair<Format, QString> > formats {
+        { Format::Aac, muse::qtrc("project/export", "AAC (lossy)") },
+        { Format::Mp3, muse::qtrc("project/export", "MP3 (lossy)") },
+        { Format::Alac, muse::qtrc("project/export", "ALAC (lossless)") },
+        { Format::Flac, muse::qtrc("project/export", "FLAC (lossless)") },
+    };
+
+    QVariantList result;
+    for (const auto& [format, text] : formats) {
+        QVariantMap obj;
+        obj["text"] = text;
+        obj["value"] = static_cast<int>(format);
+        result << obj;
+    }
+    return result;
+}
+
+int ExportDialogModel::attachedVideoAudioFormat() const
+{
+    return videoExportConfiguration() ? static_cast<int>(videoExportConfiguration()->attachedVideoAudioFormat()) : 0;
+}
+
+void ExportDialogModel::setAttachedVideoAudioFormat(int format)
+{
+    if (!videoExportConfiguration() || format == attachedVideoAudioFormat()) {
+        return;
+    }
+
+    videoExportConfiguration()->setAttachedVideoAudioFormat(static_cast<iex::videoexport::AttachedVideoAudioFormat>(format));
+
+    emit attachedVideoAudioFormatChanged();
+    emit availableSampleFormatsChanged();
+    emit selectedSampleFormatChanged();
+}
+
+bool ExportDialogModel::isAttachedVideoAudioLossless() const
+{
+    using Format = iex::videoexport::AttachedVideoAudioFormat;
+    const auto format = static_cast<Format>(attachedVideoAudioFormat());
+    return format == Format::Alac || format == Format::Flac;
+}
+
 QList<int> ExportDialogModel::availableSampleRates() const
 {
     const std::vector<int>& rates = audioExportConfiguration()->availableSampleRates();
@@ -1040,10 +1091,13 @@ QVariantList ExportDialogModel::availableSampleFormats() const
 {
     std::vector<muse::audio::AudioSampleFormat> formats;
 
-    if (isFormatSelected("wav")) {
+    if (isAttachedVideoSelected()) {
+        if (isAttachedVideoAudioLossless()) {
+            formats = { muse::audio::AudioSampleFormat::Int16, muse::audio::AudioSampleFormat::Int24 };
+        }
+    } else if (isFormatSelected("wav")) {
         formats = audioExportConfiguration()->availableWavSampleFormats();
-    }
-    if (isFormatSelected("flac")) {
+    } else if (isFormatSelected("flac")) {
         formats = audioExportConfiguration()->availableFlacSampleFormats();
     }
 
@@ -1059,6 +1113,13 @@ QVariantList ExportDialogModel::availableSampleFormats() const
 
 int ExportDialogModel::selectedSampleFormat() const
 {
+    if (isAttachedVideoSelected()) {
+        if (isAttachedVideoAudioLossless() && videoExportConfiguration()) {
+            return static_cast<int>(videoExportConfiguration()->attachedVideoAudioBitsPerSample() == 16
+                                    ? muse::audio::AudioSampleFormat::Int16 : muse::audio::AudioSampleFormat::Int24);
+        }
+        return static_cast<int>(muse::audio::AudioSampleFormat::Undefined);
+    }
     if (isFormatSelected("wav")) {
         return static_cast<int>(audioExportConfiguration()->exportWavSampleFormat());
     }
@@ -1071,7 +1132,13 @@ int ExportDialogModel::selectedSampleFormat() const
 void ExportDialogModel::setSelectedSampleFormat(int format)
 {
     const auto audioFormat = static_cast<muse::audio::AudioSampleFormat>(format);
-    if (isFormatSelected("wav")) {
+    if (isAttachedVideoSelected()) {
+        const int bits = audioFormat == muse::audio::AudioSampleFormat::Int16 ? 16 : 24;
+        if (!videoExportConfiguration() || bits == videoExportConfiguration()->attachedVideoAudioBitsPerSample()) {
+            return;
+        }
+        videoExportConfiguration()->setAttachedVideoAudioBitsPerSample(bits);
+    } else if (isFormatSelected("wav")) {
         if (audioFormat == audioExportConfiguration()->exportWavSampleFormat()) {
             return;
         }
