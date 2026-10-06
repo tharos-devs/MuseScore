@@ -37,6 +37,10 @@ qt_add_qml_module(playback_qml
         auxsenditem.h
         auxsenditemlistmodel.cpp
         auxsenditemlistmodel.h
+        channelcolorchange.cpp
+        channelcolorchange.h
+        globalmutesolotoggle.cpp
+        globalmutesolotoggle.h
         inputresourceitem.cpp
         inputresourceitem.h
         midiinputactivitymodel.cpp
@@ -54,6 +58,8 @@ qt_add_qml_module(playback_qml
         onlinesoundsstatusmodel.h
         outputresourceitem.cpp
         outputresourceitem.h
+        panelzoom.cpp
+        panelzoom.h
         playbackloadingmodel.cpp
         playbackloadingmodel.h
         playbacktoolbarmodel.cpp
@@ -62,6 +68,10 @@ qt_add_qml_module(playback_qml
         soundflagsettingsmodel.h
         soundprofilesmodel.cpp
         soundprofilesmodel.h
+        tracklistcontextmenumodel.cpp
+        tracklistcontextmenumodel.h
+        tracklistmodel.cpp
+        tracklistmodel.h
         videopanelcontextmenumodel.cpp
         videopanelcontextmenumodel.h
         videopanelmodel.cpp
@@ -70,7 +80,10 @@ qt_add_qml_module(playback_qml
         MidiInputActivityIndicator.qml
         internal/AudioProcessingProgressBar.qml
         internal/AudioResourceControl.qml
+        internal/AudioResourceMenuLoader.qml
         internal/AuxSendControl.qml
+        internal/ChannelMuteSoloButtons.qml
+        internal/GlobalMuteSoloButtons.qml
         internal/KnobControl.qml
         internal/KnobDragValueTooltip.qml
         internal/MeasureAndBeatFields.qml
@@ -101,6 +114,7 @@ qt_add_qml_module(playback_qml
         PlaybackToolBar.qml
         SoundFlagPopup.qml
         SoundProfilesDialog.qml
+        TrackListPanel.qml
         VideoPanelLoader.qml
         VideoPanel.qml
     IMPORTS

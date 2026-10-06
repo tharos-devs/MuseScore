@@ -96,6 +96,10 @@ public:
     void setMixerZoom(double zoom) override;
     muse::async::Channel<double> mixerZoomChanged() const override;
 
+    double trackListZoom() const override;
+    void setTrackListZoom(double zoom) override;
+    muse::async::Channel<double> trackListZoomChanged() const override;
+
     muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                             const muse::String& instrumentSoundId) const override;
 
@@ -144,6 +148,7 @@ private:
     muse::async::Channel<MixerSectionType, bool> m_isMixerSectionVisibleChanged;
     muse::async::Channel<bool> m_isMixerCondensedViewEnabledChanged;
     muse::async::Channel<double> m_mixerZoomChanged;
+    muse::async::Channel<double> m_trackListZoomChanged;
 
     muse::async::Channel<bool> m_muteHiddenInstrumentsChanged;
 };

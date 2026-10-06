@@ -311,6 +311,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(DOCK_TOGGLE_MIXER_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND),
         makeMenuItem(DOCK_TOGGLE_VIDEO_PANEL_COMMAND),
+        makeMenuItem(DOCK_TOGGLE_TRACK_LIST_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PERCUSSION_COMMAND),
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
         makeMenuItem(OPEN_ARTICULATION_MAP_EDITOR_COMMAND),

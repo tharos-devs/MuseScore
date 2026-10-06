@@ -224,6 +224,13 @@ const UiActionList ApplicationUiActions::m_actions = {
              IconCode::Code::VIDEO,
              ui::Checkable::Yes
              ),
+    UiAction("toggle-track-list",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Track &list"),
+             TranslatableString("action", "Show/hide track list"),
+             ui::Checkable::Yes
+             ),
     //! NOTE: not checkable here: the View menu shows the command's checked state
     UiAction("toggle-secondary-window",
              mu::context::UiCtxProjectOpened,
@@ -445,6 +452,7 @@ const QMap<ActionCode, DockName>& ApplicationUiActions::toggleDockActions()
         { "toggle-mixer", MIXER_PANEL_NAME },
         { "toggle-piano-keyboard", PIANO_KEYBOARD_PANEL_NAME },
         { "toggle-video-panel", VIDEO_PANEL_NAME },
+        { "toggle-track-list", TRACK_LIST_PANEL_NAME },
         { TOGGLE_PERCUSSION_PANEL_ACTION_CODE, PERCUSSION_PANEL_NAME },
 
         { "toggle-statusbar", NOTATION_STATUSBAR_NAME },

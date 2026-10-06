@@ -65,6 +65,7 @@ static const std::map<rcommand::Command, DockName> s_dockToggleCommands = {
     { DOCK_TOGGLE_PERCUSSION_COMMAND, PERCUSSION_PANEL_NAME },
     { DOCK_TOGGLE_STATUSBAR_COMMAND, NOTATION_STATUSBAR_NAME },
     { DOCK_TOGGLE_VIDEO_PANEL_COMMAND, VIDEO_PANEL_NAME },
+    { DOCK_TOGGLE_TRACK_LIST_COMMAND, TRACK_LIST_PANEL_NAME },
 };
 
 void AppshellCommandsController::preInit()
@@ -135,6 +136,7 @@ void AppshellCommandsController::init()
             { "toggle-percussion-panel", DOCK_TOGGLE_PERCUSSION_COMMAND, {} },
             { "toggle-statusbar", DOCK_TOGGLE_STATUSBAR_COMMAND, {} },
             { "toggle-video-panel", DOCK_TOGGLE_VIDEO_PANEL_COMMAND, {} },
+            { "toggle-track-list", DOCK_TOGGLE_TRACK_LIST_COMMAND, {} },
             { "toggle-secondary-window", DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND, {} },
         };
 

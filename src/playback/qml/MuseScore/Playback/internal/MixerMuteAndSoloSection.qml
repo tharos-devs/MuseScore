@@ -33,47 +33,19 @@ MixerPanelSection {
 
     //! NOTE: replaces the plain header label (blank for this section) with global Mute/Solo
     //! toggles, visually identical to the per-channel ones below - see
-    //! MixerPanelModel::toggleGlobalMute()/toggleGlobalSolo() for the remember/restore logic
+    //! GlobalMuteSoloToggle for the remember/restore logic
     headerComponent: Component {
         Item {
             width: root.headerWidth
             height: root.headerHeight
 
-            Row {
+            GlobalMuteSoloButtons {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
 
                 spacing: 6
 
-                FlatToggleButton {
-                    height: 20
-                    width: 20
-
-                    icon: IconCode.MUTE
-                    checked: root.model.globalMuteEngaged
-
-                    toolTipTitle: qsTrc("playback", "Toggle mutes")
-                    toolTipDescription: qsTrc("playback", "Disable all active mutes; click again to restore them")
-
-                    onToggled: {
-                        root.model.toggleGlobalMute()
-                    }
-                }
-
-                FlatToggleButton {
-                    height: 20
-                    width: 20
-
-                    icon: IconCode.SOLO
-                    checked: root.model.globalSoloEngaged
-
-                    toolTipTitle: qsTrc("playback", "Toggle solos")
-                    toolTipDescription: qsTrc("playback", "Disable all active solos; click again to restore them")
-
-                    onToggled: {
-                        root.model.toggleGlobalSolo()
-                    }
-                }
+                model: root.model
             }
         }
     }
@@ -109,85 +81,44 @@ MixerPanelSection {
             opacity: 0.5
         }
 
-        Row {
+        ChannelMuteSoloButtons {
             id: muteSoloRow
 
             anchors.horizontalCenter: parent.horizontalCenter
 
             spacing: 6
 
-            FlatToggleButton {
-                id: muteButton
+            channelItem: content.channelItem
 
-                height: 20
-                width: 20
+            navigationPanel: content.channelItem.panel
+            muteNavigationRow: root.navigationRowStart
+            muteNavigationColumn: 0
+            soloNavigationRow: root.navigationRowStart + 1
+            soloNavigationColumn: 0
+            accessibleName: content.accessibleName
 
-                icon: IconCode.MUTE
-                checked: content.channelItem.muted
+            onNavigateControlIndexChanged: function(index) {
+                root.navigateControlIndexChanged(index)
+            }
 
-                // TODO: not use `enabled` for this, but present visually in some other way
-                enabled: !(content.channelItem.muted && content.channelItem.forceMute)
-
-                navigation.name: "MuteButton"
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart
-                navigation.accessible.name: content.accessibleName + " " + qsTrc("playback", "Mute")
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                onToggled: {
-                    //! NOTE: applies to the whole current selection when the clicked
-                    //! channel is itself part of it (same "clicked-and-selected drags/
-                    //! affects the whole selection, otherwise just this one" idiom as
-                    //! the multi-select drag reorder and "add channel for selected
-                    //! tracks" actions elsewhere in this file's siblings)
-                    if (content.channelItem.selected) {
-                        root.model.setMutedForSelectedChannels(!checked)
-                    } else {
-                        content.channelItem.muted = !checked
-                    }
+            //! NOTE: applies to the whole current selection when the clicked
+            //! channel is itself part of it (same "clicked-and-selected drags/
+            //! affects the whole selection, otherwise just this one" idiom as
+            //! the multi-select drag reorder and "add channel for selected
+            //! tracks" actions elsewhere in this file's siblings)
+            onMuteToggled: function(muted) {
+                if (content.channelItem.selected) {
+                    root.model.setMutedForSelectedChannels(muted)
+                } else {
+                    content.channelItem.muted = muted
                 }
             }
 
-            FlatToggleButton {
-                id: soloButton
-
-                height: 20
-                width: 20
-
-                icon: IconCode.SOLO
-                checked: content.channelItem.solo
-
-                //! NOTE: solo is only meaningful for a "group" bus (soloing it, or a track
-                //! that feeds it, correctly isolates them together - see
-                //! PlaybackController::updateSoloMuteStates()) - a regular send/return aux
-                //! bus is left disabled here, same as before, since there's no well-defined
-                //! standard behavior for "solo through a send" (see AuxSendItem/DAW research)
-                enabled: (content.channelItem.type !== MixerChannelItem.Aux || content.channelItem.isGroupBus)
-                         && (!content.channelItem.muted || content.channelItem.forceMute)
-                visible: content.channelItem.type !== MixerChannelItem.Master && content.channelItem.type !== MixerChannelItem.Metronome
-
-                navigation.name: "SoloButton"
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart + 1
-                navigation.accessible.name: content.accessibleName + " " + qsTrc("playback", "Solo")
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                onToggled: {
-                    //! NOTE: same "clicked-and-selected applies to the whole
-                    //! selection" idiom as the Mute button above
-                    if (content.channelItem.selected) {
-                        root.model.setSoloForSelectedChannels(!content.channelItem.solo)
-                    } else {
-                        content.channelItem.solo = !content.channelItem.solo
-                    }
+            onSoloToggled: function(solo) {
+                if (content.channelItem.selected) {
+                    root.model.setSoloForSelectedChannels(solo)
+                } else {
+                    content.channelItem.solo = solo
                 }
             }
         }

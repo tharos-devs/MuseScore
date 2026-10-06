@@ -81,6 +81,7 @@ public:
     Q_INVOKABLE QString timelinePanelName() const;
     Q_INVOKABLE QString percussionPanelName() const;
     Q_INVOKABLE QString videoPanelName() const;
+    Q_INVOKABLE QString trackListPanelName() const;
 
     Q_INVOKABLE QString statusBarName() const;
 

@@ -193,6 +193,11 @@ QString NotationPageModel::videoPanelName() const
     return VIDEO_PANEL_NAME;
 }
 
+QString NotationPageModel::trackListPanelName() const
+{
+    return TRACK_LIST_PANEL_NAME;
+}
+
 QString NotationPageModel::statusBarName() const
 {
     return NOTATION_STATUSBAR_NAME;

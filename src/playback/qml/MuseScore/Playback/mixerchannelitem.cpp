@@ -29,6 +29,7 @@
 #include "log.h"
 
 #include "notation/imasternotation.h" // IWYU pragma: keep
+#include "notation/inotationarticulationmaps.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationplayback.h"
 
@@ -159,6 +160,17 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
         //!      reset, same idea as the mutedChanged one above.
         resetAudioChannelsVolumePressure();
     });
+
+    //! NOTE: some channels (notably aux buses) don't reliably receive a final silence value from the engine once
+    //! playback stops, leaving their meters stuck at their last non-zero reading - force them back to silence.
+    //! From here, for every channel, whether its signal subscription is resolved yet or not
+    if (parent) {
+        playbackController()->isPlayingChanged().onReceive(this, [this](bool playing) {
+            if (!playing) {
+                resetAudioChannelsVolumePressure();
+            }
+        });
+    }
 }
 
 MixerChannelItem::~MixerChannelItem()
@@ -458,6 +470,105 @@ void MixerChannelItem::removeBlankSlotsFromEnd(size_t count)
     }
 }
 
+void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& instrumentTrackId)
+{
+    setInstrumentTrackId(instrumentTrackId);
+    loadSoloMuteState(playbackController()->trackSoloMuteState(instrumentTrackId));
+
+    playback()->params(m_trackId)
+    .onResolve(this, [this, instrumentTrackId](const TrackParams& params) {
+        const project::INotationProjectPtr project = context()->currentProject();
+        if (!project) {
+            return;
+        }
+
+        loadInputParams(params.source);
+
+        AudioOutputParams outParams = project->audioSettings()->trackOutputParams(instrumentTrackId);
+        outParams.fxChain = params.fxChain;
+        outParams.auxSends = params.auxSends;
+        outParams.setControl(params.control);
+
+        //! NOTE: unlike muted (set above via setControl(), which reflects the engine's
+        //! own control params - already correctly pushed by
+        //! PlaybackController::updateSoloMuteStates() before this resolves), solo has no
+        //! engine-side representation at all (see ControlParams - no solo field) and
+        //! IProjectAudioSettings::trackOutputParams() never tracks it either, so
+        //! outParams.solo would otherwise always be left at its default false here. Its
+        //! one real source of truth is INotationSoloMuteState - without this, every
+        //! panel rebuild (e.g. right after reopening a saved project) would
+        //! silently clobber the correctly-restored Solo button back to unchecked.
+        outParams.solo = playbackController()->trackSoloMuteState(instrumentTrackId).solo;
+
+        //! NOTE: forceMute isn't tracked by IProjectAudioSettings either (it's a purely
+        //! live, computed value - see updateSoloMuteStates()), so it would otherwise
+        //! always be left at its default false here too. Without this, right after
+        //! reopening a project with another track soloed, this track's Mute button would
+        //! show checked (muted=true, correctly reflecting the engine's already-applied
+        //! force-mute via setControl() above) but ENABLED instead of disabled - looking
+        //! and behaving like a real manual mute the user must click off themselves,
+        //! instead of the intended "greyed out because something else is soloed" look
+        //! that clears itself once the solo is lifted (see ChannelMuteSoloButtons.qml).
+        outParams.forceMute = playbackController()->isTrackForceMuted(instrumentTrackId);
+
+        loadOutputParams(outParams);
+        emit outputParamsReceived();
+    })
+    .onReject(this, [](int errCode, std::string text) {
+        LOGE() << "unable to get track output parameters, error code: " << errCode << ", " << text;
+    });
+
+    subscribeOnTrackAudioSignalChanges();
+
+    connect(this, &MixerChannelItem::inputParamsChanged, this, [this](const AudioInputParams& params) {
+        playback()->setSourceParams(m_trackId, params);
+    });
+
+    connect(this, &MixerChannelItem::controlParamsChanged, this, [this](const AudioOutputParams& params) {
+        playback()->setControlParams(m_trackId, params.control());
+
+        //! NOTE Only persist volume/balance/gain here; solo/mute/forceMute are owned by
+        //! INotationSoloMuteState and must not be echoed back into the saved output params.
+        const project::INotationProjectPtr project = context()->currentProject();
+        if (!project) {
+            return;
+        }
+
+        AudioOutputParams outParams = project->audioSettings()->trackOutputParams(m_instrumentTrackId);
+        outParams.volume = params.volume;
+        outParams.balance = params.balance;
+        outParams.gain = params.gain;
+        project->audioSettings()->setTrackOutputParams(m_instrumentTrackId, outParams);
+    });
+
+    connect(this, &MixerChannelItem::fxChainParamsChanged, this, [this](const AudioOutputParams& params) {
+        playback()->setFxChainParams(m_trackId, params.fxChain);
+    });
+
+    connect(this, &MixerChannelItem::auxSendsParamsChanged, this, [this](const AudioOutputParams& params) {
+        playback()->setAuxSendsParams(m_trackId, params.auxSends);
+    });
+
+    connect(this, &MixerChannelItem::soloMuteStateChanged, this,
+            [this](const notation::INotationSoloMuteState::SoloMuteState& state) {
+        playbackController()->setTrackSoloMuteState(m_instrumentTrackId, state);
+    });
+
+    //! NOTE: a sound or aux sends changed by another panel (or this one's own change, echoed back: a no-op)
+    playback()->sourceParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioSourceParams& params) {
+        if (trackId == m_trackId) {
+            loadInputParams(params);
+        }
+    });
+
+    playback()->auxSendsParamsChanged().onReceive(this, [this](const TrackId trackId, const AuxSendsParams& auxSends) {
+        if (trackId == m_trackId && m_outputParamsLoaded) {
+            loadAuxSendItems(auxSends);
+            emit outputParamsReceived();
+        }
+    });
+}
+
 void MixerChannelItem::loadInputParams(const AudioInputParams& newParams)
 {
     if (m_outputOnly) {
@@ -653,6 +764,18 @@ void MixerChannelItem::loadMuteForceMuteState(bool muted, bool forceMute)
         m_outParams.forceMute = forceMute;
         emit forceMuteChanged();
     }
+}
+
+void MixerChannelItem::subscribeOnTrackAudioSignalChanges()
+{
+    playback()->signalChanges(m_trackId)
+    .onResolve(this, [this](AudioSignalChanges signalChanges) {
+        subscribeOnAudioSignalChanges(signalChanges);
+    })
+    .onReject(this, [this](int errCode, std::string text) {
+        LOGE() << "unable to subscribe on audio signal changes of track " << m_trackId << ", error code: " << errCode
+               << ", " << text;
+    });
 }
 
 void MixerChannelItem::subscribeOnAudioSignalChanges(AudioSignalChanges& audioSignalChanges)
@@ -900,6 +1023,66 @@ void MixerChannelItem::setSelected(bool selected)
 
     m_selected = selected;
     emit selectedChanged();
+}
+
+QString MixerChannelItem::articulationMapName() const
+{
+    const project::INotationProjectPtr project = context()->currentProject();
+    const notation::INotationArticulationMapsPtr maps = project && project->masterNotation()
+                                                        ? project->masterNotation()->articulationMaps() : nullptr;
+    const notation::ExpressionMap* map = maps && maps->data() ? maps->data()->map(m_instrumentTrackId) : nullptr;
+    if (!map) {
+        return QString();
+    }
+
+    return map->name.empty() ? QString("") : map->name.toQString();
+}
+
+static const std::map<QString, std::string> ARTICULATION_MAP_COMMANDS {
+    { "newArticulationMap", "command://notation/articulation-map-new" },
+    { "loadArticulationMap", "command://notation/articulation-map-load" },
+    { "editArticulationMap", "command://notation/articulation-map-edit" },
+    { "reloadArticulationMap", "command://notation/articulation-map-reload" },
+    { "removeArticulationMap", "command://notation/articulation-map-remove" },
+};
+
+QVariantList MixerChannelItem::articulationMapMenuItems() const
+{
+    const QString mapName = articulationMapName();
+    const bool hasMap = !mapName.isNull();
+
+    auto item = [](const QString& id, const QString& title, bool enabled = true) {
+        return QVariantMap { { "id", id }, { "title", title }, { "enabled", enabled } };
+    };
+
+    const QString nameTitle = hasMap ? (mapName.isEmpty() ? muse::qtrc("playback", "Untitled articulation map") : mapName)
+                              : muse::qtrc("playback", "No articulation map");
+
+    return {
+        item("articulationMapName", nameTitle, false),
+        QVariantMap(),
+        item("newArticulationMap", muse::qtrc("playback", "New…")),
+        item("loadArticulationMap", muse::qtrc("playback", "Load…")),
+        item("editArticulationMap", muse::qtrc("playback", "Edit…"), hasMap),
+        item("reloadArticulationMap", muse::qtrc("playback", "Reload"), hasMap),
+        QVariantMap(),
+        item("removeArticulationMap", muse::qtrc("playback", "Remove"), hasMap),
+    };
+}
+
+bool MixerChannelItem::handleArticulationMapMenuItem(const QString& itemId) const
+{
+    const auto it = ARTICULATION_MAP_COMMANDS.find(itemId);
+    if (it == ARTICULATION_MAP_COMMANDS.end()) {
+        return false;
+    }
+
+    muse::rcommand::CommandQuery query(it->second);
+    query.addParam("partId", muse::Val(std::to_string(m_instrumentTrackId.partId.toUint64())));
+    query.addParam("instrumentId", muse::Val(m_instrumentTrackId.instrumentId.toStdString()));
+    commandDispatcher()->dispatch(query);
+
+    return true;
 }
 
 mu::notation::INotationPlaybackPtr MixerChannelItem::notationPlayback() const
