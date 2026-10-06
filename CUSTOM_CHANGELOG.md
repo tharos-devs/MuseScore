@@ -5,6 +5,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-06
+- New "Track list" panel (View > Track list): one line per instrument with its color (click: Edit color / Reset color), a small level meter, Mute, Solo, show/hide, the Mixer's Sound menu, the VST3 instrument's window and its articulation map (click: edit; right click: the Mixer's Articulation map menu). A bar on top holds global Mute/Solo, like the Mixer's. It docks with the side panels (or in the secondary window), and its "…" menu has Zoom in/out/Reset zoom. For an instrument that changes in the score (e.g. flute to piccolo), Mute, Solo and color apply to all of its instruments.
+- Fixed: undoing a Mixer color change did nothing once the Mixer had been closed in between.
+- Fixed: changing a sound in one place could put back an aux send level changed meanwhile in the Mixer; the Mixer now also follows aux sends changed elsewhere.
 - Audio exports now sound as heard: they go through the Master channel (its Gain, effects, fader and mute), and Volume/Pan automation curves (tracks and Master) are followed — they were frozen at their value at the start (stock bug). A Master fader at -6 dB now gives a 6 dB quieter export.
 - "MP4 video (attached video)" export: an "Audio format" list — AAC or MP3 (lossy, with the bit rate) and ALAC or FLAC (lossless, 16 or 24 bits, 16 bits dithered), all in the .mp4, kept in sync to the sample. MP3 is exported at 160 kbit/s or more, and Apple's apps (QuickTime…) don't play an MP3 track in an MP4 (VLC and Windows do).
 - Fixed: the MP3, WAV, FLAC and OGG audio writers ignored the export's options, so the attached video's audio could be missing from an export using them.
