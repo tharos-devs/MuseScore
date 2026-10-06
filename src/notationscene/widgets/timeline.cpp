@@ -30,7 +30,6 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
-#include <QTextDocument>
 
 #include <algorithm>
 #include <cmath>
@@ -64,6 +63,7 @@
 #include "notation/inotationplayback.h"
 #include "notation/inotationselection.h"
 #include "notation/inotationundostack.h" // IWYU pragma: keep
+#include "notation/utilities/partutilities.h"
 
 #include "log.h"
 
@@ -4084,24 +4084,10 @@ void Timeline::updateDefaultTrackColor()
 //   Timeline::partLabel
 //---------------------------------------------------------
 
-//! NOTE: the same name as the Layout panel shows (see PartTreeItem): the part name, which
-//! includes the instrument's number and transposition (e.g. "Horn in F 1"), and for the
-//! combined part of "Enable stave sharing" the parts it combines ("Horn in F 1-2", see
-//! SharedPart::partName()). Falls back to the instrument's long name, then its name.
+//! NOTE: see PartUtilities::displayName()
 QString Timeline::partLabel(Part* part) const
 {
-    QTextDocument doc;
-    doc.setHtml(part->partName());
-    QString partName = doc.toPlainText().simplified();
-    if (partName.isEmpty()) {
-        doc.setHtml(part->longName());
-        partName = doc.toPlainText().simplified();
-    }
-    if (partName.isEmpty()) {
-        partName = part->instrumentName();
-    }
-
-    return partName;
+    return PartUtilities::displayName(part);
 }
 
 //---------------------------------------------------------

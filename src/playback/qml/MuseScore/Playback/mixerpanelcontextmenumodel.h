@@ -159,9 +159,6 @@ private:
 
     void setViewMenuItemChecked(const muse::rcommand::CommandQuery& query, bool checked);
 
-    void stepZoom(int direction);
-    muse::uicomponents::MenuItem* buildZoomItem(const muse::TranslatableString& title, const muse::actions::ActionCode& code, bool enabled);
-
     void updateItems();
 
     bool m_floating = false;

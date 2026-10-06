@@ -34,6 +34,11 @@ Canvas {
 
     property bool showRuler: false
 
+    //! NOTE: the Mixer's size by default; smaller for a compact meter (e.g. the Track list's rows)
+    property real meterLength: 140
+    property real meterThickness: 6
+    property int overloadLength: 4
+
     property bool isClipping: currentVolumePressure >= maxDisplayedVolumePressure
 
     width: root.showRuler ? prv.indicatorWidth + 20 : prv.indicatorWidth
@@ -43,10 +48,10 @@ Canvas {
         id: prv
 
         property var gradient: null
-        readonly property int overloadHeight: 4
+        readonly property int overloadHeight: root.overloadLength
 
-        readonly property real indicatorHeight: 140
-        readonly property real indicatorWidth: 6
+        readonly property real indicatorHeight: root.meterLength
+        readonly property real indicatorWidth: root.meterThickness
 
         // value ranges
         readonly property int fullValueRangeLength: root.maxDisplayedVolumePressure - root.minDisplayedVolumePressure

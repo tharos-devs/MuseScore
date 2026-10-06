@@ -32,6 +32,7 @@
 #include "modularity/ioc.h"
 #include "actions/iactionsdispatcher.h"
 #include "context/iglobalcontext.h"
+#include "rcommand/icommanddispatcher.h"
 #include "interactive/iinteractive.h"
 #include "iplaybackconfiguration.h"
 #include "iplaybackcontroller.h"
@@ -39,6 +40,7 @@
 #include "ui/qml/Muse/Ui/navigationpanel.h"
 
 #include "audio/common/audiotypes.h"
+#include "audio/main/iplayback.h"
 #include "project/iprojectaudiosettings.h"
 #include "inputresourceitem.h"
 #include "outputresourceitem.h"
@@ -100,6 +102,8 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
+    muse::ContextInject<muse::audio::IPlayback> playback = { this };
 
 public:
     enum class Type {
@@ -165,6 +169,16 @@ public:
 
     void updateHasAutomationFlags();
 
+    //! NOTE: articulation maps drive keyswitch/CC articulation changes of third-party VST instruments.
+    //! The name is null without a map (empty for an untitled one)
+    QString articulationMapName() const;
+
+    //! NOTE: the "Articulation map" menu of this track (Mixer, Track list): its name, then the staff context
+    //! menu's articulation map commands (see NotationActionController). To rebuild on each show: the map has no
+    //! change signal. handleArticulationMapMenuItem() returns false for an item that isn't one of them
+    Q_INVOKABLE QVariantList articulationMapMenuItems() const;
+    Q_INVOKABLE bool handleArticulationMapMenuItem(const QString& itemId) const;
+
     void setOutputResourceItemCount(size_t count);
     void setAuxSendItemCount(size_t count);
 
@@ -179,6 +193,12 @@ public:
     //! as any other FX chain edit (add/remove/replace).
     Q_INVOKABLE void moveOutputResourceItem(int fromIndex, int toIndex);
 
+    //! NOTE: an instrument channel's link to its engine track, the same in every panel showing one (Mixer, Track
+    //! list): loads its params, sends its own changes to the engine (persisting volume/balance/gain, and solo/mute
+    //! to the notation's state), and follows what the engine gets from elsewhere (sound, aux sends): one panel's
+    //! change can't be undone by another's stale copy. outputParamsReceived() fires whenever its output params are in
+    void bindInstrumentTrack(const engraving::InstrumentTrackId& instrumentTrackId);
+
     void loadInputParams(const project::AudioInputParams& newParams);
     void loadOutputParams(const project::AudioOutputParams& newParams);
     void loadSoloMuteState(const notation::INotationSoloMuteState::SoloMuteState& newState);
@@ -190,6 +210,8 @@ public:
     void loadMuteForceMuteState(bool muted, bool forceMute);
 
     void subscribeOnAudioSignalChanges(muse::audio::AudioSignalChanges& audioSignalChanges);
+    //! NOTE: the same, for this channel's own track (not the master's, see IPlayback::masterSignalChanges())
+    void subscribeOnTrackAudioSignalChanges();
     void subscribeOnAutomatedControlParamsChanges(muse::audio::AutomatedControlParamsChanges& changes);
 
     bool outputOnly() const;
@@ -296,6 +318,9 @@ signals:
     //! is AuxSendItem::NO_BUS when the slot was previously blank - MixerPanelModel
     //! needs it (captured before the reassignment happens) to make this undoable.
     void auxSendReassignedByUser(muse::audio::aux_channel_idx_t oldBusIndex, muse::audio::aux_channel_idx_t newBusIndex);
+
+    //! NOTE: see bindInstrumentTrack()
+    void outputParamsReceived();
 
     //! NOTE: fired by the end*Change() methods above once a bracketed gesture actually
     //! changed the value - MixerPanelModel listens to make these undoable.

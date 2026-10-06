@@ -136,26 +136,10 @@ MixerPanelSection {
                 })
 
                 items.push({})
-                let hasMap = root.model.hasArticulationMap(content.channelItem)
-                let mapName = hasMap ? root.model.articulationMapName(content.channelItem) : ""
                 items.push({
                     id: "articulationMapMenu",
                     title: qsTrc("playback", "Articulation map"),
-                    subitems: [
-                        {
-                            id: "articulationMapName",
-                            title: hasMap ? (mapName.length > 0 ? mapName : qsTrc("playback", "Untitled articulation map"))
-                                          : qsTrc("playback", "No articulation map"),
-                            enabled: false
-                        },
-                        {},
-                        { id: "newArticulationMap", title: qsTrc("playback", "New…") },
-                        { id: "loadArticulationMap", title: qsTrc("playback", "Load…") },
-                        { id: "editArticulationMap", title: qsTrc("playback", "Edit…"), enabled: hasMap },
-                        { id: "reloadArticulationMap", title: qsTrc("playback", "Reload"), enabled: hasMap },
-                        {},
-                        { id: "removeArticulationMap", title: qsTrc("playback", "Remove"), enabled: hasMap }
-                    ]
+                    subitems: content.channelItem.articulationMapMenuItems()
                 })
             }
 
@@ -492,18 +476,10 @@ MixerPanelSection {
                     root.model.addFxChannelForSelectedTracks()
                 } else if (itemId === "addGroupChannelForSelectedTracks") {
                     root.model.addGroupChannelForSelectedTracks()
-                } else if (itemId === "newArticulationMap") {
-                    root.model.newArticulationMap(content.channelItem)
-                } else if (itemId === "loadArticulationMap") {
-                    root.model.loadArticulationMap(content.channelItem)
-                } else if (itemId === "editArticulationMap") {
-                    root.model.editArticulationMap(content.channelItem)
-                } else if (itemId === "reloadArticulationMap") {
-                    root.model.reloadArticulationMap(content.channelItem)
-                } else if (itemId === "removeArticulationMap") {
-                    root.model.removeArticulationMap(content.channelItem)
                 } else if (itemId === "deleteChannel") {
                     root.model.deleteAuxChannel(content.channelItem)
+                } else {
+                    content.channelItem.handleArticulationMapMenuItem(itemId)
                 }
             }
         }

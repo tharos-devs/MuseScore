@@ -455,16 +455,10 @@ Item {
                     }
                 }
 
-                StyledMenuLoader {
+                AudioResourceMenuLoader {
                     id: menuLoader
 
-                    isSearchable: true
-
-                    onHandleMenuItem: function(itemId) {
-                        if (root.resourceItemModel) {
-                            Qt.callLater(root.resourceItemModel.handleMenuItem, itemId)
-                        }
-                    }
+                    resourceItemModel: root.resourceItemModel
 
                     onOpened: {
                         root.resourcePickingActive = true
@@ -475,17 +469,8 @@ Item {
                     }
                 }
 
-                Connections {
-                    target: root.resourceItemModel
-                    function onAvailableResourceListResolved(resources) {
-                        menuLoader.toggleOpened(resources)
-                    }
-                }
-
                 onClicked: {
-                    if (root.resourceItemModel) {
-                        root.resourceItemModel.requestAvailableResources()
-                    }
+                    menuLoader.requestOpen()
                 }
             }
         }

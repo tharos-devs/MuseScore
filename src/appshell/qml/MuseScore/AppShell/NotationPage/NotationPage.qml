@@ -409,6 +409,43 @@ DockPage {
                 navigationOrderStart: undoHistoryPanel.contentNavigationPanelOrderStart
             }
         },
+
+        DockPanel {
+            id: trackListPanel
+
+            objectName: root.pageModel.trackListPanelName()
+            title: qsTrc("appshell", "Track list")
+
+            navigationSection: root.navigationPanelSec(trackListPanel.location)
+
+            width: root.verticalPanelDefaultWidth
+            minimumWidth: root.verticalPanelDefaultWidth
+            maximumWidth: root.verticalPanelDefaultWidth
+
+            minimumHeight: root.panelMinDimension
+            maximumHeight: root.panelMaxDimension
+
+            groupName: root.verticalPanelsGroup
+            secondaryWindowAllowed: true
+
+            //! NOTE: hidden by default
+            visible: false
+
+            dropDestinations: root.verticalPanelDropDestinations
+
+            TrackListPanel {
+                navigationSection: trackListPanel.navigationSection
+                contentNavigationPanelOrderStart: trackListPanel.contentNavigationPanelOrderStart
+
+                Component.onCompleted: {
+                    trackListPanel.contextMenuModel = contextMenuModel
+                }
+
+                Component.onDestruction: {
+                    trackListPanel.contextMenuModel = null
+                }
+            }
+        },
         
         // =============================================
         // Horizontal Panels
@@ -697,7 +734,7 @@ DockPage {
                     //! NOTE: first, and every time: no geometry needed (e.g. restored as a tab not shown, with no size),
                     //! and the maximum width outlives this content when the panel is closed - reopened elsewhere,
                     //! it must not keep the tabbed one
-                    const sidePanels = [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel ]
+                    const sidePanels = [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel, trackListPanel ]
                     const tabbedWithSidePanels = sidePanels.some(panel => videoPanel.isInSameFrame(panel))
                     videoPanel.maximumWidth = tabbedWithSidePanels ? root.verticalPanelDefaultWidth : root.panelMaxDimension
 

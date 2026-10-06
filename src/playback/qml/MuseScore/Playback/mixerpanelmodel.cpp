@@ -37,7 +37,6 @@
 #include "notation/inotation.h"
 #include "notation/inotationsolomutestate.h"
 #include "notation/inotationautomation.h"
-#include "notation/inotationarticulationmaps.h"
 #include "notation/inotationparts.h"
 #include "notation/inotationplayback.h"
 
@@ -51,14 +50,6 @@ using namespace mu::notation;
 using namespace mu::project;
 
 static constexpr int INVALID_INDEX = -1;
-
-//! NOTE: an item can read muted() == true purely because some OTHER item's solo force-muted
-//! it (see MixerChannelItem::loadMuteForceMuteState()) - that's not a real per-channel mute
-//! the user asked for, so the global Mute button must ignore it
-static bool isExplicitlyMuted(const MixerChannelItem* item)
-{
-    return item->muted() && !item->forceMute();
-}
 
 MixerPanelModel::MixerPanelModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
@@ -195,49 +186,22 @@ void MixerPanelModel::resetColorForSelectedChannels()
 
 void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName)
 {
-    QList<std::pair<muse::audio::TrackId, QColor> > oldColors;
+    std::vector<ChannelColorChange::Target> targets;
 
-    for (MixerChannelItem* item : m_mixerChannelList) {
-        if (!item->selected() || item->color() == color) {
+    for (const MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+        if (!item->selected()) {
             continue;
         }
 
-        oldColors.push_back({ item->trackId(), item->color() });
-        item->setColor(color);
+        if (item->type() == MixerChannelItem::Type::Aux) {
+            targets.push_back({ InstrumentTrackId(), item->auxBusIndex() });
+        } else {
+            targets.push_back({ item->instrumentTrackId(), std::nullopt });
+        }
     }
 
-    if (oldColors.isEmpty()) {
-        return;
-    }
-
-    IProjectUndoStackPtr undoStack = projectUndoStack();
-    if (!undoStack) {
-        return;
-    }
-
-    QPointer<MixerPanelModel> guard(this);
-
-    undoStack->push(actionName, [guard, oldColors, color]() {
-        if (!guard) {
-            return;
-        }
-
-        for (const auto& pair : oldColors) {
-            if (MixerChannelItem* item = guard->findChannelItem(pair.first)) {
-                item->setColor(color);
-            }
-        }
-    }, [guard, oldColors]() {
-        if (!guard) {
-            return;
-        }
-
-        for (const auto& pair : oldColors) {
-            if (MixerChannelItem* item = guard->findChannelItem(pair.first)) {
-                item->setColor(pair.second);
-            }
-        }
-    });
+    //! NOTE: the items pick the new colors up from the audio settings (see setupConnections())
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
 }
 
 template<typename T>
@@ -755,83 +719,44 @@ void MixerPanelModel::requestNewAuxBusForSelectedTracks(bool isGroupBus)
     }
 }
 
-//! NOTE: live - true whenever ANY channel (any type except Metronome) is currently muted,
-//! not just right after toggleGlobalMute() runs. So muting a single channel via its own
-//! per-channel button lights up the global button too (see connectGlobalMuteSoloAggregate()).
-bool MixerPanelModel::globalMuteEngaged() const
+//! NOTE: every channel type except Metronome
+GlobalMuteSoloToggle::Channels MixerPanelModel::globalMuteSoloChannels() const
 {
-    for (const MixerChannelItem* item : m_mixerChannelList) {
-        if (item->type() != MixerChannelItem::Type::Metronome && isExplicitlyMuted(item)) {
-            return true;
+    GlobalMuteSoloToggle::Channels channels;
+    for (MixerChannelItem* item : m_mixerChannelList) {
+        if (item->type() != MixerChannelItem::Type::Metronome) {
+            channels.push_back(item);
         }
     }
 
-    return false;
+    return channels;
+}
+
+//! NOTE: live - true whenever ANY channel is currently muted, not just right after toggleGlobalMute() runs.
+//! So muting a single channel via its own per-channel button lights up the global button too (see
+//! connectGlobalMuteSoloAggregate()).
+bool MixerPanelModel::globalMuteEngaged() const
+{
+    return GlobalMuteSoloToggle::muteEngaged(globalMuteSoloChannels());
 }
 
 bool MixerPanelModel::globalSoloEngaged() const
 {
-    for (const MixerChannelItem* item : m_mixerChannelList) {
-        if (item->type() != MixerChannelItem::Type::Metronome && item->solo()) {
-            return true;
-        }
-    }
-
-    return false;
+    return GlobalMuteSoloToggle::soloEngaged(globalMuteSoloChannels());
 }
 
 void MixerPanelModel::toggleGlobalMute()
 {
-    //! NOTE: branches on whether a capture is pending, NOT on globalMuteEngaged() - that
-    //! getter is live (see its own doc comment) and can turn back true from a channel muted
-    //! manually in between the two clicks (e.g. via its own per-channel button). Branching on
-    //! it directly would make THIS click capture that unrelated channel instead of restoring
-    //! the originally-captured set, permanently losing the latter. A pending capture always
-    //! takes priority: it is only ever cleared by actually restoring it.
-    if (!m_mutedTrackIdsBeforeGlobalMute.isEmpty()) {
-        for (const TrackId& trackId : std::as_const(m_mutedTrackIdsBeforeGlobalMute)) {
-            if (MixerChannelItem* item = findChannelItem(trackId)) {
-                item->setMuted(true);
-            }
-        }
-        m_mutedTrackIdsBeforeGlobalMute.clear();
-    } else {
-        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
-            if (item->type() == MixerChannelItem::Type::Metronome || !isExplicitlyMuted(item)) {
-                continue;
-            }
+    m_globalMuteSolo.toggleMute(globalMuteSoloChannels());
 
-            m_mutedTrackIdsBeforeGlobalMute.push_back(item->trackId());
-            item->setMuted(false);
-        }
-    }
-
-    //! NOTE: each setMuted() call above already triggers globalMuteEngagedChanged() via
+    //! NOTE: each setMuted() call already triggers globalMuteEngagedChanged() via
     //! connectGlobalMuteSoloAggregate() - this covers the no-op case (nothing to mute/restore)
-    //! where the loop above made no calls at all
     emit globalMuteEngagedChanged();
 }
 
 void MixerPanelModel::toggleGlobalSolo()
 {
-    //! NOTE: see the matching NOTE in toggleGlobalMute() - same pending-capture priority
-    if (!m_soloedTrackIdsBeforeGlobalSolo.isEmpty()) {
-        for (const TrackId& trackId : std::as_const(m_soloedTrackIdsBeforeGlobalSolo)) {
-            if (MixerChannelItem* item = findChannelItem(trackId)) {
-                item->setSolo(true);
-            }
-        }
-        m_soloedTrackIdsBeforeGlobalSolo.clear();
-    } else {
-        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
-            if (item->type() == MixerChannelItem::Type::Metronome || !item->solo()) {
-                continue;
-            }
-
-            m_soloedTrackIdsBeforeGlobalSolo.push_back(item->trackId());
-            item->setSolo(false);
-        }
-    }
+    m_globalMuteSolo.toggleSolo(globalMuteSoloChannels());
 
     emit globalSoloEngagedChanged();
 }
@@ -842,9 +767,9 @@ void MixerPanelModel::connectGlobalMuteSoloAggregate(MixerChannelItem* item)
         emit globalMuteEngagedChanged();
     });
 
-    //! NOTE: isExplicitlyMuted() depends on forceMute too - e.g. soloing one channel
+    //! NOTE: the global mute state depends on forceMute too - e.g. soloing one channel
     //! force-mutes every other one without changing their own muted flag, which must NOT
-    //! light up the global Mute button (see isExplicitlyMuted())
+    //! light up the global Mute button (see GlobalMuteSoloToggle::muteEngaged())
     connect(item, &MixerChannelItem::forceMuteChanged, this, [this]() {
         emit globalMuteEngagedChanged();
     });
@@ -1240,8 +1165,7 @@ QList<MixerChannelItem*> MixerPanelModel::clear()
 
     //! NOTE: same reasoning - a remembered mute/solo snapshot would otherwise reference
     //! trackIds from the channel list that no longer exists
-    m_mutedTrackIdsBeforeGlobalMute.clear();
-    m_soloedTrackIdsBeforeGlobalSolo.clear();
+    m_globalMuteSolo.clear();
     emit globalMuteEngagedChanged();
     emit globalSoloEngagedChanged();
 
@@ -1250,19 +1174,6 @@ QList<MixerChannelItem*> MixerPanelModel::clear()
 
 void MixerPanelModel::setupConnections()
 {
-    controller()->isPlayingChanged().onReceive(this, [this](bool playing) {
-        if (playing) {
-            return;
-        }
-
-        //! NOTE: some channels (notably aux buses) don't reliably receive a final
-        //! silence value from the engine once playback stops, leaving their meters
-        //! stuck at their last non-zero reading - force them all back to silence here
-        for (MixerChannelItem* item : m_mixerChannelList) {
-            item->resetAudioChannelsVolumePressure();
-        }
-    });
-
     audioSettings()->auxSoloMuteStateChanged().onReceive(
         this, [this](const aux_channel_idx_t index,
                      notation::INotationSoloMuteState::SoloMuteState newSoloMuteState) {
@@ -1320,16 +1231,7 @@ void MixerPanelModel::setupConnections()
         }
     });
 
-    playback()->sourceParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioSourceParams& params) {
-        //! NOTE The video's sound track has no selectable input (its source params are internal)
-        if (trackId == controller()->videoTrackId()) {
-            return;
-        }
-
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->loadInputParams(params);
-        }
-    });
+    //! NOTE: an instrument channel follows its own sound and aux sends, see MixerChannelItem::bindInstrumentTrack()
 
     playback()->fxChainParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioFxChain& params) {
         if (MixerChannelItem* item = findChannelItem(trackId)) {
@@ -1379,25 +1281,25 @@ void MixerPanelModel::setupConnections()
         });
     }
 
-    //! NOTE: a track's color can also be changed from outside the Mixer (the Timeline's
-    //! label color strips) - pick it up. setColor() persists it back, but that's a no-op
-    //! here since the value is already the saved one.
+    //! NOTE: the instrument tracks' and aux buses' colors are changed through the audio settings, from the Mixer
+    //! itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
     if (audioSettings()) {
         audioSettings()->settingsChanged().onNotify(this, [this]() {
             for (MixerChannelItem* item : m_mixerChannelList) {
-                if (item->type() != MixerChannelItem::Type::PrimaryInstrument
-                    && item->type() != MixerChannelItem::Type::SecondaryInstrument) {
-                    continue;
+                std::optional<QColor> color;
+
+                if (item->type() == MixerChannelItem::Type::Aux) {
+                    color = audioSettings()->auxOutputParams(item->auxBusIndex()).color;
+                } else if (item->type() == MixerChannelItem::Type::PrimaryInstrument
+                           || item->type() == MixerChannelItem::Type::SecondaryInstrument) {
+                    const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
+                    if (audioSettings()->trackHasExistingOutputParams(trackId)) {
+                        color = audioSettings()->trackOutputParams(trackId).color;
+                    }
                 }
 
-                const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
-                if (!audioSettings()->trackHasExistingOutputParams(trackId)) {
-                    continue;
-                }
-
-                const QColor color = audioSettings()->trackOutputParams(trackId).color;
-                if (item->color() != color) {
-                    item->setColor(color);
+                if (color && item->color() != *color) {
+                    item->setColor(*color);
                 }
             }
         }, Asyncable::Mode::SetReplace);
@@ -1699,48 +1601,12 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
     }
 
     MixerChannelItem* item = new MixerChannelItem(this, type, false /*outputOnly*/, trackId);
-    item->setInstrumentTrackId(instrumentTrackId);
     item->setPanelSection(m_navigationSection);
-    item->loadSoloMuteState(controller()->trackSoloMuteState(instrumentTrackId));
+    item->bindInstrumentTrack(instrumentTrackId);
 
-    playback()->params(trackId)
-    .onResolve(this, [this, trackId, instrumentTrackId](const TrackParams& params) {
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->loadInputParams(params.source);
-
-            AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentTrackId);
-            outParams.fxChain = params.fxChain;
-            outParams.auxSends = params.auxSends;
-            outParams.setControl(params.control);
-
-            //! NOTE: unlike muted (set above via setControl(), which reflects the engine's
-            //! own control params - already correctly pushed by
-            //! PlaybackController::updateSoloMuteStates() before this resolves), solo has no
-            //! engine-side representation at all (see ControlParams - no solo field) and
-            //! IProjectAudioSettings::trackOutputParams() never tracks it either, so
-            //! outParams.solo would otherwise always be left at its default false here. Its
-            //! one real source of truth is INotationSoloMuteState - without this, every
-            //! Mixer-panel rebuild (e.g. right after reopening a saved project) would
-            //! silently clobber the correctly-restored Solo button back to unchecked.
-            outParams.solo = controller()->trackSoloMuteState(instrumentTrackId).solo;
-
-            //! NOTE: forceMute isn't tracked by IProjectAudioSettings either (it's a purely
-            //! live, computed value - see updateSoloMuteStates()), so it would otherwise
-            //! always be left at its default false here too. Without this, right after
-            //! reopening a project with another track soloed, this track's Mute button would
-            //! show checked (muted=true, correctly reflecting the engine's already-applied
-            //! force-mute via setControl() above) but ENABLED instead of disabled - looking
-            //! and behaving like a real manual mute the user must click off themselves,
-            //! instead of the intended "greyed out because something else is soloed" look
-            //! that clears itself once the solo is lifted (see MixerMuteAndSoloSection.qml).
-            outParams.forceMute = controller()->isTrackForceMuted(instrumentTrackId);
-
-            loadOutputParams(item, outParams);
-        }
-    })
-    .onReject(this, [](int errCode, std::string text) {
-        LOGE() << "unable to get track output parameters, error code: " << errCode
-               << ", " << text;
+    connect(item, &MixerChannelItem::outputParamsReceived, this, [this]() {
+        updateOutputResourceItemCount();
+        updateAuxSendItemCount();
     });
 
     playback()->trackName(trackId)
@@ -1754,17 +1620,6 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         }
     });
 
-    playback()->signalChanges(trackId)
-    .onResolve(this, [this, trackId](AudioSignalChanges signalChanges) {
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->subscribeOnAudioSignalChanges(signalChanges);
-        }
-    })
-    .onReject(this, [](int errCode, std::string text) {
-        LOGE() << "unable to subscribe on audio signal changes from mixer channel, error code: " << errCode
-               << ", " << text;
-    });
-
     playback()->automatedControlParamsChanges(trackId)
     .onResolve(this, [this, trackId](AutomatedControlParamsChanges changes) {
         if (MixerChannelItem* item = findChannelItem(trackId)) {
@@ -1776,41 +1631,12 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
                << ", " << text;
     });
 
-    connect(item, &MixerChannelItem::inputParamsChanged, this, [this, trackId](const AudioInputParams& params) {
-        playback()->setSourceParams(trackId, params);
-    });
-
-    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId, instrumentTrackId](const AudioOutputParams& params) {
-        playback()->setControlParams(trackId, params.control());
-
-        //! NOTE Only persist volume/balance/gain here; solo/mute/forceMute are owned by
-        //! INotationSoloMuteState and must not be echoed back into the saved output params.
-        AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentTrackId);
-        outParams.volume = params.volume;
-        outParams.balance = params.balance;
-        outParams.gain = params.gain;
-        audioSettings()->setTrackOutputParams(instrumentTrackId, outParams);
-    });
-
-    connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+    connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this]() {
         updateOutputResourceItemCount();
-        playback()->setFxChainParams(trackId, params.fxChain);
     });
 
-    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
-        playback()->setAuxSendsParams(trackId, params.auxSends);
+    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this]() {
         updateAuxSendItemCount();
-    });
-
-    connect(item, &MixerChannelItem::soloMuteStateChanged, this,
-            [this, instrumentTrackId](const notation::INotationSoloMuteState::SoloMuteState& state) {
-        controller()->setTrackSoloMuteState(instrumentTrackId, state);
-    });
-
-    connect(item, &MixerChannelItem::colorChanged, this, [this, item, instrumentTrackId]() {
-        AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentTrackId);
-        outParams.color = item->color();
-        audioSettings()->setTrackOutputParams(instrumentTrackId, outParams);
     });
 
     //! NOTE: fans a user-picked aux-send bus out to every OTHER selected instrument
@@ -1938,16 +1764,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
 
     loadOutputParams(item, outParams);
 
-    playback()->signalChanges(trackId)
-    .onResolve(this, [this, trackId](AudioSignalChanges signalChanges) {
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->subscribeOnAudioSignalChanges(signalChanges);
-        }
-    })
-    .onReject(this, [](int errCode, std::string text) {
-        LOGE() << "unable to subscribe on audio signal changes from mixer channel, error code: " << errCode
-               << ", " << text;
-    });
+    item->subscribeOnTrackAudioSignalChanges();
 
     connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId, index](const AudioOutputParams& params) {
         playback()->setControlParams(trackId, params.control());
@@ -1972,12 +1789,6 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         audioSettings()->setAuxSoloMuteState(index, state);
     });
 
-    connect(item, &MixerChannelItem::colorChanged, this, [this, item, index]() {
-        AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
-        outParams.color = item->color();
-        audioSettings()->setAuxOutputParams(index, outParams);
-    });
-
     connectGlobalMuteSoloAggregate(item);
     connectContinuousChangeUndo(item);
 
@@ -1994,16 +1805,7 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
     loadVideoMuteState(item);
     loadOutputParams(item, controller()->videoOutputParams());
 
-    playback()->signalChanges(trackId)
-    .onResolve(this, [this, trackId](AudioSignalChanges signalChanges) {
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->subscribeOnAudioSignalChanges(signalChanges);
-        }
-    })
-    .onReject(this, [](int errCode, std::string text) {
-        LOGE() << "unable to subscribe on audio signal changes from the video channel, error code: " << errCode
-               << ", " << text;
-    });
+    item->subscribeOnTrackAudioSignalChanges();
 
     connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
         //! NOTE The engine's mute is always the live effective one (force-mute included), whatever the item shows
@@ -2215,70 +2017,6 @@ IProjectUndoStackPtr MixerPanelModel::projectUndoStack() const
 INotationPlaybackPtr MixerPanelModel::notationPlayback() const
 {
     return currentProject() ? currentProject()->masterNotation()->playback() : nullptr;
-}
-
-static mu::notation::INotationArticulationMapsPtr articulationMapsOf(const project::INotationProjectPtr& project)
-{
-    return project && project->masterNotation() ? project->masterNotation()->articulationMaps() : nullptr;
-}
-
-bool MixerPanelModel::hasArticulationMap(MixerChannelItem* channelItem) const
-{
-    return !articulationMapName(channelItem).isNull();
-}
-
-QString MixerPanelModel::articulationMapName(MixerChannelItem* channelItem) const
-{
-    const notation::INotationArticulationMapsPtr maps = articulationMapsOf(currentProject());
-    if (!channelItem || !maps || !maps->data()) {
-        return QString();
-    }
-
-    const notation::ExpressionMap* map = maps->data()->map(channelItem->instrumentTrackId());
-    if (!map) {
-        return QString();
-    }
-
-    return map->name.empty() ? QString("") : map->name.toQString();
-}
-
-//! NOTE: the same commands as the staff context menu's (see NotationActionController)
-void MixerPanelModel::dispatchArticulationMapCommand(const std::string& command, MixerChannelItem* channelItem)
-{
-    if (!channelItem) {
-        return;
-    }
-
-    const engraving::InstrumentTrackId& trackId = channelItem->instrumentTrackId();
-    muse::rcommand::CommandQuery query(command);
-    query.addParam("partId", muse::Val(std::to_string(trackId.partId.toUint64())));
-    query.addParam("instrumentId", muse::Val(trackId.instrumentId.toStdString()));
-    commandDispatcher()->dispatch(query);
-}
-
-void MixerPanelModel::newArticulationMap(MixerChannelItem* channelItem)
-{
-    dispatchArticulationMapCommand("command://notation/articulation-map-new", channelItem);
-}
-
-void MixerPanelModel::loadArticulationMap(MixerChannelItem* channelItem)
-{
-    dispatchArticulationMapCommand("command://notation/articulation-map-load", channelItem);
-}
-
-void MixerPanelModel::reloadArticulationMap(MixerChannelItem* channelItem)
-{
-    dispatchArticulationMapCommand("command://notation/articulation-map-reload", channelItem);
-}
-
-void MixerPanelModel::editArticulationMap(MixerChannelItem* channelItem)
-{
-    dispatchArticulationMapCommand("command://notation/articulation-map-edit", channelItem);
-}
-
-void MixerPanelModel::removeArticulationMap(MixerChannelItem* channelItem)
-{
-    dispatchArticulationMapCommand("command://notation/articulation-map-remove", channelItem);
 }
 
 INotationPartsPtr MixerPanelModel::masterNotationParts() const

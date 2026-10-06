@@ -35,7 +35,6 @@
 #include "async/asyncable.h"
 #include "audio/main/iplayback.h"
 #include "context/iglobalcontext.h"
-#include "rcommand/icommanddispatcher.h"
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
@@ -44,6 +43,8 @@
 #include "ui/qml/Muse/Ui/navigationsection.h"
 
 #include "iplaybackcontroller.h"
+#include "channelcolorchange.h"
+#include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
 
 namespace mu::playback {
@@ -68,7 +69,6 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
     muse::ContextInject<IPlaybackController> controller = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 
 public:
     explicit MixerPanelModel(QObject* parent = nullptr);
@@ -139,15 +139,6 @@ public:
     Q_INVOKABLE void toggleGlobalMute();
     Q_INVOKABLE void toggleGlobalSolo();
 
-    //! NOTE: articulation maps drive keyswitch/CC articulation changes of third-party VST instruments
-    Q_INVOKABLE bool hasArticulationMap(mu::playback::MixerChannelItem* channelItem) const;
-    Q_INVOKABLE QString articulationMapName(mu::playback::MixerChannelItem* channelItem) const;
-    Q_INVOKABLE void newArticulationMap(mu::playback::MixerChannelItem* channelItem);
-    Q_INVOKABLE void loadArticulationMap(mu::playback::MixerChannelItem* channelItem);
-    Q_INVOKABLE void reloadArticulationMap(mu::playback::MixerChannelItem* channelItem);
-    Q_INVOKABLE void removeArticulationMap(mu::playback::MixerChannelItem* channelItem);
-    Q_INVOKABLE void editArticulationMap(mu::playback::MixerChannelItem* channelItem);
-
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -193,10 +184,8 @@ private:
 
     void onVideoAttachmentChanged();
     //! NOTE: shared by setColorForSelectedChannels()/resetColorForSelectedChannels() -
-    //! applies color to every currently-selected channel and pushes a single undo
-    //! command for the whole batch, keyed by each channel's stable trackId() rather
-    //! than a raw MixerChannelItem* (which the undo/redo closures might otherwise
-    //! outlive - see the QPointer<MixerPanelModel> guard in the .cpp).
+    //! applies color to every currently-selected channel as a single undo command (see
+    //! ChannelColorChange)
     void applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName);
     //! NOTE: captures every currently-selected instrument track, then requests a new
     //! aux bus of the given type - the actual assignment happens later, once
@@ -226,6 +215,7 @@ private:
     //! NOTE: keeps the global Mute/Solo header buttons' checked state live - see
     //! globalMuteEngaged()/globalSoloEngaged()
     void connectGlobalMuteSoloAggregate(MixerChannelItem* item);
+    GlobalMuteSoloToggle::Channels globalMuteSoloChannels() const;
 
     //! NOTE: makes every channel's volume/balance/gain/aux-send-level bracketed
     //! gestures (see MixerChannelItem::beginVolumeChange() et al.) undoable - called
@@ -235,8 +225,7 @@ private:
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem
     //! setter with the old/new value, looked up fresh by trackId() at undo/redo time
-    //! (never a captured MixerChannelItem* - see applyColorToSelectedChannels()'s own
-    //! NOTE on why).
+    //! (never a captured MixerChannelItem*, which the undo/redo closures might outlive).
     template<typename T>
     void pushChannelFieldUndoCommand(const muse::audio::TrackId& trackId, const muse::TranslatableString& actionName,
                                      void (MixerChannelItem::* setter)(T), T oldValue, T newValue);
@@ -248,7 +237,6 @@ private:
     project::AudioOutputParams effectiveMasterOutputParams() const;
 
     project::INotationProjectPtr currentProject() const;
-    void dispatchArticulationMapCommand(const std::string& command, MixerChannelItem* channelItem);
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectVideoSettingsPtr videoSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;
@@ -263,8 +251,7 @@ private:
 
     int m_selectionAnchorIndex = -1;
 
-    QList<muse::audio::TrackId> m_mutedTrackIdsBeforeGlobalMute;
-    QList<muse::audio::TrackId> m_soloedTrackIdsBeforeGlobalSolo;
+    GlobalMuteSoloToggle m_globalMuteSolo;
 
     //! NOTE: instrument tracks to assign to the next aux bus of m_pendingAuxAssignIsGroupBus's
     //! type once it actually resolves via onTrackAdded() - addNewAuxBus()/addNewGroupBus()
