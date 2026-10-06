@@ -33,9 +33,12 @@
 #include "engraving/dom/score.h"
 #include "engraving/dom/utils.h"
 
+#include "notation/imasternotation.h"
 #include "notation/inotation.h"
+#include "project/inotationproject.h"
 #include "project/iprojectvideosettings.h"
 
+using namespace mu;
 using namespace mu::playback;
 using namespace mu::project;
 

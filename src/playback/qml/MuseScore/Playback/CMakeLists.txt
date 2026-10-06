@@ -64,6 +64,8 @@ qt_add_qml_module(playback_qml
         playbackloadingmodel.h
         playbacktoolbarmodel.cpp
         playbacktoolbarmodel.h
+        projectloadingmodel.cpp
+        projectloadingmodel.h
         soundflagsettingsmodel.cpp
         soundflagsettingsmodel.h
         soundprofilesmodel.cpp
@@ -112,6 +114,7 @@ qt_add_qml_module(playback_qml
         OnlineSoundsStatusView.qml
         PlaybackLoadingInfo.qml
         PlaybackToolBar.qml
+        ProjectLoadingDialog.qml
         SoundFlagPopup.qml
         SoundProfilesDialog.qml
         TrackListPanel.qml
