@@ -76,15 +76,18 @@ Item {
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
                 width: ListView.view.width
-                height: 32
+                height: 32 + videoRow.height
                 z: 2
 
                 color: ui.theme.backgroundSecondaryColor
 
                 Row {
+                    id: globalButtonsRow
+
+                    height: 32
                     anchors.right: parent.right
                     anchors.rightMargin: 4
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.top: parent.top
 
                     spacing: 4
 
@@ -123,7 +126,179 @@ Item {
                 }
 
                 SeparatorLine {
-                    anchors.bottom: parent.bottom
+                    anchors.top: globalButtonsRow.bottom
+                }
+
+                //! NOTE: the video's row, first: its buttons in the parts' columns (Load video in the visibility one)
+                Rectangle {
+                    id: videoRow
+
+                    readonly property MixerChannelItem channelItem: trackListModel.videoChannelItem
+                    readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
+
+                    anchors.top: globalButtonsRow.bottom
+                    width: parent.width
+                    height: channelItem ? 28 : 0
+                    visible: Boolean(channelItem)
+
+                    color: ui.theme.backgroundPrimaryColor
+
+                    Rectangle {
+                        id: videoColorStrip
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        width: 8
+                        height: 20
+                        radius: 2
+
+                        color: videoRow.trackColor
+
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -2
+
+                            onClicked: function(mouse) {
+                                videoColorMenu.show(Qt.point(mouse.x, mouse.y))
+                            }
+                        }
+
+                        ContextMenuLoader {
+                            id: videoColorMenu
+
+                            items: [
+                                { id: "editColor", title: qsTrc("playback", "Edit color…") },
+                                { id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: videoRow.channelItem ? videoRow.channelItem.hasCustomColor : false }
+                            ]
+
+                            onHandleMenuItem: function(itemId) {
+                                if (itemId === "editColor") {
+                                    videoColorPickerModel.selectColor(videoRow.trackColor, false)
+                                } else if (itemId === "resetColor") {
+                                    trackListModel.resetVideoColor()
+                                }
+                            }
+                        }
+
+                        ColorPickerModel {
+                            id: videoColorPickerModel
+
+                            onColorSelected: function(color) {
+                                trackListModel.setVideoColor(color)
+                            }
+                        }
+                    }
+
+                    Row {
+                        id: videoMeter
+
+                        anchors.left: videoColorStrip.right
+                        anchors.leftMargin: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        spacing: 1
+
+                        VolumePressureMeter {
+                            meterLength: 18
+                            meterThickness: 3
+                            overloadLength: 2
+                            currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.leftChannelPressure : -60
+                        }
+
+                        VolumePressureMeter {
+                            meterLength: 18
+                            meterThickness: 3
+                            overloadLength: 2
+                            currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.rightChannelPressure : -60
+                        }
+                    }
+
+                    StyledTextLabel {
+                        anchors.left: videoMeter.right
+                        anchors.leftMargin: 6
+                        anchors.right: videoButtonsRow.left
+                        anchors.rightMargin: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        horizontalAlignment: Text.AlignLeft
+                        text: trackListModel.hasVideo ? qsTrc("playback", "Video") : qsTrc("playback", "No video")
+                        opacity: trackListModel.hasVideo ? 1 : 0.5
+                    }
+
+                    Row {
+                        id: videoButtonsRow
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        spacing: 4
+
+                        ChannelMuteSoloButtons {
+                            spacing: 4
+
+                            enabled: trackListModel.hasVideo
+                            channelItem: videoRow.channelItem
+
+                            navigationPanel: navPanel
+                            navigationName: "VideoRow"
+                            muteNavigationRow: 1
+                            muteNavigationColumn: 0
+                            soloNavigationRow: 1
+                            soloNavigationColumn: 1
+                            accessibleName: qsTrc("playback", "Video")
+
+                            onMuteToggled: function(muted) {
+                                videoRow.channelItem.muted = muted
+                            }
+
+                            onSoloToggled: function(solo) {
+                                videoRow.channelItem.solo = solo
+                            }
+                        }
+
+                        FlatButton {
+                            width: 20
+                            height: 20
+
+                            transparent: true
+                            icon: IconCode.OPEN_FILE
+
+                            navigation.panel: navPanel
+                            navigation.name: "LoadVideoButton"
+                            navigation.row: 1
+                            navigation.column: 2
+                            navigation.accessible.name: qsTrc("playback", "Load video")
+
+                            onClicked: {
+                                trackListModel.chooseVideoFile()
+                            }
+                        }
+
+                        //! NOTE: the parts' sound, articulation map and editor columns
+                        Item {
+                            width: 20
+                            height: 20
+                        }
+
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: trackListModel.hasArticulationMapColumn
+                        }
+
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: trackListModel.hasEditorColumn
+                        }
+                    }
+
+                    SeparatorLine {
+                        anchors.bottom: parent.bottom
+                    }
                 }
             }
 
@@ -134,6 +309,9 @@ Item {
                 required property MixerChannelItem channelItem
                 required property bool partVisible
                 required property bool hasArticulationMap
+                required property bool isVstInstrument
+                required property bool articulationMapEditorOpened
+                required property bool instrumentEditorOpened
 
                 readonly property InputResourceItem soundItem: channelItem ? channelItem.inputResourceItem : null
                 readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
@@ -243,9 +421,9 @@ Item {
 
                         navigationPanel: navPanel
                         navigationName: "Row" + rowItem.index
-                        muteNavigationRow: rowItem.index + 1
+                        muteNavigationRow: rowItem.index + 2
                         muteNavigationColumn: 0
-                        soloNavigationRow: rowItem.index + 1
+                        soloNavigationRow: rowItem.index + 2
                         soloNavigationColumn: 1
                         accessibleName: rowItem.channelItem.title
 
@@ -267,7 +445,7 @@ Item {
 
                         navigation.panel: navPanel
                         navigation.name: "VisibilityButton" + rowItem.index
-                        navigation.row: rowItem.index + 1
+                        navigation.row: rowItem.index + 2
                         navigation.column: 2
                         navigation.accessible.name: rowItem.channelItem.title + " " + (rowItem.partVisible ? qsTrc("playback", "Hide instrument") : qsTrc("playback", "Show instrument"))
 
@@ -288,7 +466,7 @@ Item {
 
                         navigation.panel: navPanel
                         navigation.name: "SoundButton" + rowItem.index
-                        navigation.row: rowItem.index + 1
+                        navigation.row: rowItem.index + 2
                         navigation.column: 3
                         navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
 
@@ -314,19 +492,25 @@ Item {
                             width: 20
                             height: 20
 
-                            visible: rowItem.hasArticulationMap
+                            //! NOTE: a VST instrument without a map has it too, looking disabled, for its right click menu
+                            visible: rowItem.hasArticulationMap || rowItem.isVstInstrument
+                            opacity: rowItem.hasArticulationMap || rowItem.articulationMapEditorOpened ? 1 : ui.theme.itemOpacityDisabled
 
                             transparent: true
                             icon: IconCode.ARTICULATION
+                            //! NOTE: colored while the track's editor is open
+                            iconColor: rowItem.articulationMapEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
 
                             navigation.panel: navPanel
                             navigation.name: "ArticulationMapButton" + rowItem.index
-                            navigation.row: rowItem.index + 1
+                            navigation.row: rowItem.index + 2
                             navigation.column: 4
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
                             onClicked: {
-                                rowItem.channelItem.handleArticulationMapMenuItem("editArticulationMap")
+                                if (rowItem.hasArticulationMap) {
+                                    rowItem.channelItem.handleArticulationMapMenuItem("editArticulationMap")
+                                }
                             }
 
                             //! NOTE: right click: the Mixer's "Articulation map" menu
@@ -362,10 +546,12 @@ Item {
 
                             transparent: true
                             icon: IconCode.PLUGIN
+                            //! NOTE: colored while the instrument's window is open
+                            iconColor: rowItem.instrumentEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
 
                             navigation.panel: navPanel
                             navigation.name: "EditorButton" + rowItem.index
-                            navigation.row: rowItem.index + 1
+                            navigation.row: rowItem.index + 2
                             navigation.column: 5
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
 

@@ -233,6 +233,20 @@ StyledDialogView {
                 }
             }
 
+            //! NOTE: the target track's VST instrument window, colored while it's open
+            FlatButton {
+                visible: editorModel.hasInstrumentEditor
+
+                transparent: true
+                icon: IconCode.PLUGIN
+                iconColor: editorModel.instrumentEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
+                toolTipTitle: qsTrc("playback", "Open instrument window")
+
+                onClicked: {
+                    editorModel.openInstrumentEditor()
+                }
+            }
+
             Item { Layout.fillWidth: true }
         }
 
@@ -348,6 +362,11 @@ StyledDialogView {
                                 onPressed: function(mouse) {
                                     editorModel.selectedRow = rowItem.index
                                     pressPoint = Qt.point(mouse.x, mouse.y)
+
+                                    //! NOTE: clicking an articulation lets you hear it on the track's instrument
+                                    if (mouse.button === Qt.LeftButton) {
+                                        editorModel.sendArticulation(rowItem.index)
+                                    }
                                 }
 
                                 onPositionChanged: function(mouse) {

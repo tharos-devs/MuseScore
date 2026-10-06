@@ -28,7 +28,10 @@
 
 #include "engraving/articulationmap/articulationmapwriter.h"
 #include "notation/imasternotation.h"
+#include "notation/inotationplayback.h"
 #include "notation/inotationarticulationmaps.h"
+#include "project/inotationproject.h"
+#include "project/iprojectaudiosettings.h"
 #include "global/io/fileinfo.h"
 #include "translation.h"
 #include "log.h"
@@ -685,8 +688,120 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
         return;
     }
 
+    const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
     emit targetTrackChanged();
+
+    if (!subscribed) {
+        //! NOTE: the track's sound changed, or its window was opened/closed (from here or elsewhere)
+        playbackController()->trackAdded().onReceive(this, [this](muse::audio::TrackId) {
+            updateInstrumentEditorState();
+        });
+        playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
+            updateInstrumentEditorState();
+        });
+        if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
+            project->audioSettings()->trackInputParamsChanged().onReceive(this, [this](const engraving::InstrumentTrackId&) {
+                updateInstrumentEditorState();
+            });
+        }
+#ifdef MUSE_MODULE_VST
+        if (vstPluginStateProvider()) {
+            vstPluginStateProvider()->editorsOpenedChanged().onNotify(this, [this]() {
+                updateInstrumentEditorState();
+            });
+        }
+#endif
+    }
+
+    updateInstrumentEditorState();
+}
+
+std::optional<ArticulationMapEditorModel::InstrumentEditorTarget> ArticulationMapEditorModel::instrumentEditorTarget() const
+{
+    const project::INotationProjectPtr project = globalContext()->currentProject();
+    if (!m_targetTrack || !project || !project->audioSettings()) {
+        return std::nullopt;
+    }
+
+    const audio::AudioInputParams& params = project->audioSettings()->trackInputParams(*m_targetTrack);
+    if (params.type() != audio::AudioSourceType::Vsti || !audio::hasNativeEditorSupport(params.resourceMeta)) {
+        return std::nullopt;
+    }
+
+    const playback::IPlaybackController::InstrumentTrackIdMap& trackIds = playbackController()->instrumentTrackIdMap();
+    auto it = trackIds.find(*m_targetTrack);
+    if (it == trackIds.end()) {
+        return std::nullopt;
+    }
+
+    return InstrumentEditorTarget { it->second, params.resourceMeta.id };
+}
+
+void ArticulationMapEditorModel::updateInstrumentEditorState()
+{
+    const std::optional<InstrumentEditorTarget> target = instrumentEditorTarget();
+    const bool hasEditor = target.has_value();
+    bool opened = false;
+#ifdef MUSE_MODULE_VST
+    opened = target && vstPluginStateProvider() && vstPluginStateProvider()->isInstrumentEditorOpened(target->resourceId, target->trackId);
+#endif
+
+    if (hasEditor == m_hasInstrumentEditor && opened == m_instrumentEditorOpened) {
+        return;
+    }
+
+    m_hasInstrumentEditor = hasEditor;
+    m_instrumentEditorOpened = opened;
+    emit instrumentEditorChanged();
+}
+
+bool ArticulationMapEditorModel::hasInstrumentEditor() const
+{
+    return m_hasInstrumentEditor;
+}
+
+bool ArticulationMapEditorModel::instrumentEditorOpened() const
+{
+    return m_instrumentEditorOpened;
+}
+
+void ArticulationMapEditorModel::sendArticulation(int row)
+{
+    const Node* node = nodeAt(row);
+    if (!node || node->isFolder || (node->messages.empty() && !node->channel) || !instrumentEditorTarget()) {
+        return;
+    }
+
+    const project::INotationProjectPtr project = globalContext()->currentProject();
+    if (!project || !project->masterNotation() || playbackController()->isPlaying()) {
+        return;
+    }
+
+    mpe::MidiMessagesEvent event;
+    event.messages = node->messages;
+    event.channel = node->channel.value_or(-1);
+
+    project->masterNotation()->playback()->triggerMidiMessages(*m_targetTrack, event);
+}
+
+void ArticulationMapEditorModel::openInstrumentEditor()
+{
+    const std::optional<InstrumentEditorTarget> target = instrumentEditorTarget();
+    if (!target) {
+        return;
+    }
+
+    actions::ActionQuery query("action://vst/instrument_editor");
+    query.addParam("trackId", Val(target->trackId));
+    query.addParam("resourceId", Val(target->resourceId));
+    actionsDispatcher()->dispatch(query);
+
+    //! NOTE: same as the Mixer's (see MixerChannelItem::openEditor()): a plugin may change its state without
+    //! reporting it once its window is open
+    if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
+        project->audioSettings()->markAsChanged();
+    }
 }
 
 void ArticulationMapEditorModel::reloadIntoTrack()

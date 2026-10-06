@@ -91,6 +91,10 @@ void NotationPlaybackStub::triggerControllers(const muse::mpe::ControllerChangeE
 {
 }
 
+void NotationPlaybackStub::triggerMidiMessages(const engraving::InstrumentTrackId&, const muse::mpe::MidiMessagesEvent&)
+{
+}
+
 InstrumentTrackIdSet NotationPlaybackStub::existingTrackIdSet() const
 {
     return engraving::InstrumentTrackIdSet();

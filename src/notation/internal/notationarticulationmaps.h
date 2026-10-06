@@ -21,6 +21,8 @@
  */
 #pragma once
 
+#include <set>
+
 #include "../inotationarticulationmaps.h"
 #include "../inotationundostack.h"
 
@@ -38,6 +40,10 @@ public:
     void setOverlayEnabled(bool enabled) override;
     muse::async::Notification overlayEnabledChanged() const override;
 
+    bool isEditorOpened(const engraving::InstrumentTrackId& trackId) const override;
+    void setEditorOpened(const engraving::InstrumentTrackId& trackId, bool opened) override;
+    muse::async::Notification editorsOpenedChanged() const override;
+
     ArticulationMapDataConstPtr data() const override;
     void edit(const EditArticulationMapChanges& changes, const muse::TranslatableString& actionName) override;
 
@@ -48,5 +54,7 @@ private:
     engraving::MasterScore* m_masterScore = nullptr;
     bool m_isOverlayEnabled = false;
     muse::async::Notification m_overlayEnabledChanged;
+    std::set<engraving::InstrumentTrackId> m_openedEditors;
+    muse::async::Notification m_editorsOpenedChanged;
 };
 }

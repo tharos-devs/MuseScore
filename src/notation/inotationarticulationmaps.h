@@ -46,6 +46,12 @@ public:
     virtual void setOverlayEnabled(bool enabled) = 0;
     virtual muse::async::Notification overlayEnabledChanged() const = 0;
 
+    //! NOTE: the tracks whose articulation map editor is open, for the buttons opening it
+    //! (see NotationActionController::openArticulationMapEditor())
+    virtual bool isEditorOpened(const engraving::InstrumentTrackId& trackId) const = 0;
+    virtual void setEditorOpened(const engraving::InstrumentTrackId& trackId, bool opened) = 0;
+    virtual muse::async::Notification editorsOpenedChanged() const = 0;
+
     virtual ArticulationMapDataConstPtr data() const = 0;
 
     //! NOTE: undoable

@@ -60,6 +60,7 @@ public:
                                bool flushSound) override;
     void triggerMetronome(muse::midi::tick_t tick) override;
     void triggerCountIn(muse::midi::tick_t tick, muse::secs_t& countInDuration) override;
+    void triggerMidiMessages(const engraving::InstrumentTrackId& trackId, const muse::mpe::MidiMessagesEvent& event) override;
     void triggerControllers(const muse::mpe::ControllerChangeEventList& list, engraving::staff_idx_t staffIdx, int tick) override;
 
     engraving::InstrumentTrackIdSet existingTrackIdSet() const override;

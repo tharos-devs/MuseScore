@@ -2905,7 +2905,7 @@ muse::Ret NotationActionController::newArticulationMap(const muse::rcommand::Par
     uri.addParam("partId", muse::Val(std::to_string(trackId->partId.toUint64())));
     uri.addParam("instrumentId", muse::Val(trackId->instrumentId.toStdString()));
 
-    interactive()->open(uri);
+    openArticulationMapEditor(*trackId, uri);
     return muse::make_ok();
 }
 
@@ -3021,8 +3021,51 @@ muse::Ret NotationActionController::editArticulationMap(const muse::rcommand::Pa
     uri.addParam("partId", muse::Val(std::to_string(trackId->partId.toUint64())));
     uri.addParam("instrumentId", muse::Val(trackId->instrumentId.toStdString()));
 
-    interactive()->open(uri);
+    openArticulationMapEditor(*trackId, uri);
     return muse::make_ok();
+}
+
+//! NOTE: one editor per track: asked again (New…, Edit…, from anywhere), the open one comes to the front instead.
+//! The track's articulation maps know it's open, for the buttons opening it
+void NotationActionController::openArticulationMapEditor(const mu::engraving::InstrumentTrackId& trackId, const muse::UriQuery& uri)
+{
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (!masterNotation) {
+        return;
+    }
+
+    auto it = m_articulationMapEditors.find(trackId);
+    if (it != m_articulationMapEditors.end() && interactive()->isOpened(it->second.uri).val) {
+        interactive()->raise(it->second.uri);
+        return;
+    }
+
+    //! NOTE: the closing of a previous editor of the track may only be reported after this opening
+    const int openingId = ++m_lastArticulationMapEditorOpeningId;
+    m_articulationMapEditors[trackId] = { uri, openingId };
+
+    const std::weak_ptr<INotationArticulationMaps> weakMaps = masterNotation->articulationMaps();
+    if (const INotationArticulationMapsPtr maps = weakMaps.lock()) {
+        maps->setEditorOpened(trackId, true);
+    }
+
+    auto onClosed = [this, trackId, openingId, weakMaps]() {
+        auto editorIt = m_articulationMapEditors.find(trackId);
+        if (editorIt == m_articulationMapEditors.end() || editorIt->second.openingId != openingId) {
+            return;
+        }
+
+        m_articulationMapEditors.erase(editorIt);
+        if (const INotationArticulationMapsPtr maps = weakMaps.lock()) {
+            maps->setEditorOpened(trackId, false);
+        }
+    };
+
+    interactive()->open(uri).onResolve(this, [onClosed](const muse::Val&) {
+        onClosed();
+    }).onReject(this, [onClosed](int, const std::string&) {
+        onClosed();
+    });
 }
 
 muse::Ret NotationActionController::removeArticulationMap(const muse::rcommand::Params& params)

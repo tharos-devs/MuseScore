@@ -39,6 +39,8 @@
 #include "engraving/dom/tempotimeline.h"
 #include "engraving/dom/utils.h"
 
+#include "containers.h"
+
 #include "notationerrors.h"
 
 #include "log.h"
@@ -209,6 +211,20 @@ void NotationPlayback::triggerControllers(const muse::mpe::ControllerChangeEvent
 
     const mpe::PlaybackEventsMap events {
         { 0, std::move(eventList) }
+    };
+
+    mpe::PlaybackData& data = m_playbackModel.resolveTrackPlaybackData(trackId);
+    data.offStream.send(events, false /*flushOffstream*/);
+}
+
+void NotationPlayback::triggerMidiMessages(const InstrumentTrackId& trackId, const mpe::MidiMessagesEvent& event)
+{
+    if (!muse::contains(m_playbackModel.existingTrackIdSet(), trackId)) {
+        return;
+    }
+
+    const mpe::PlaybackEventsMap events {
+        { 0, { event } }
     };
 
     mpe::PlaybackData& data = m_playbackModel.resolveTrackPlaybackData(trackId);

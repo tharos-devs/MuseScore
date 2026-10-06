@@ -22,6 +22,8 @@
 
 #include "notationarticulationmaps.h"
 
+#include "containers.h"
+
 #include "engraving/dom/masterscore.h"
 
 #include "log.h"
@@ -51,6 +53,24 @@ void NotationArticulationMaps::setOverlayEnabled(bool enabled)
 muse::async::Notification NotationArticulationMaps::overlayEnabledChanged() const
 {
     return m_overlayEnabledChanged;
+}
+
+bool NotationArticulationMaps::isEditorOpened(const engraving::InstrumentTrackId& trackId) const
+{
+    return muse::contains(m_openedEditors, trackId);
+}
+
+void NotationArticulationMaps::setEditorOpened(const engraving::InstrumentTrackId& trackId, bool opened)
+{
+    const bool changed = opened ? m_openedEditors.insert(trackId).second : m_openedEditors.erase(trackId) > 0;
+    if (changed) {
+        m_editorsOpenedChanged.notify();
+    }
+}
+
+muse::async::Notification NotationArticulationMaps::editorsOpenedChanged() const
+{
+    return m_editorsOpenedChanged;
 }
 
 ArticulationMapDataConstPtr NotationArticulationMaps::data() const

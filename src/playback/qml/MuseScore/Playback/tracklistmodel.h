@@ -31,11 +31,19 @@
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
 
+#include "muse_framework_config.h"
+#ifdef MUSE_MODULE_VST
+#include "vst/ivstpluginstateprovider.h"
+#endif
+
 #include "context/iglobalcontext.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
+#include "project/iprojectvideosettings.h"
+#include "interactive/iinteractive.h"
 
 #include "iplaybackcontroller.h"
+#include "iplaybackconfiguration.h"
 #include "channelcolorchange.h"
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
@@ -56,15 +64,25 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     Q_PROPERTY(bool globalMuteEngaged READ globalMuteEngaged NOTIFY globalMuteEngagedChanged)
     Q_PROPERTY(bool globalSoloEngaged READ globalSoloEngaged NOTIFY globalSoloEngagedChanged)
 
-    //! NOTE: whether a row of the list has an articulation map / a sound with a window: the rows' columns for them
-    //! only take room when one does
+    //! NOTE: whether a row of the list has an articulation map button (a VST instrument or a map) / a sound with a
+    //! window: the rows' columns for them only take room when one does
     Q_PROPERTY(bool hasArticulationMapColumn READ hasArticulationMapColumn NOTIFY columnsChanged)
     Q_PROPERTY(bool hasEditorColumn READ hasEditorColumn NOTIFY columnsChanged)
+
+    //! NOTE: the Video row, above the parts' rows: the Mixer's Video channel (its mute/solo are the video
+    //! attachment's, shared with the Video panel and the Timeline), there even without a video, to load one
+    Q_PROPERTY(MixerChannelItem * videoChannelItem READ videoChannelItem NOTIFY videoChannelItemChanged)
+    Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY hasVideoChanged)
 
     QML_ELEMENT
 
     muse::ContextInject<IPlaybackController> controller = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<muse::IInteractive> interactive = { this };
+    muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
+#ifdef MUSE_MODULE_VST
+    muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
+#endif
 
 public:
     explicit TrackListModel(QObject* parent = nullptr);
@@ -86,6 +104,14 @@ public:
     bool hasArticulationMapColumn() const;
     bool hasEditorColumn() const;
 
+    MixerChannelItem* videoChannelItem() const;
+    bool hasVideo() const;
+
+    //! NOTE: same as the Timeline's Video row "Load video" (see Timeline::chooseVideoFile())
+    Q_INVOKABLE void chooseVideoFile();
+    Q_INVOKABLE void setVideoColor(const QColor& color);
+    Q_INVOKABLE void resetVideoColor();
+
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -95,12 +121,17 @@ signals:
     void globalMuteEngagedChanged();
     void globalSoloEngagedChanged();
     void columnsChanged();
+    void videoChannelItemChanged();
+    void hasVideoChanged();
 
 private:
     enum Roles {
         ChannelItemRole = Qt::UserRole + 1,
         PartVisibleRole,
-        HasArticulationMapRole
+        HasArticulationMapRole,
+        IsVstInstrumentRole,
+        ArticulationMapEditorOpenedRole,
+        InstrumentEditorOpenedRole
     };
 
     //! NOTE: a part's tracks: its first instrument's, whose sound, instrument window and articulation map the row
@@ -118,6 +149,11 @@ private:
         MixerChannelItem* item = nullptr;
         bool partVisible = true;
         bool hasArticulationMap = false;
+        //! NOTE: the articulation map button is there for a VST instrument even without a map, for its menu
+        bool isVstInstrument = false;
+        //! NOTE: whether the track's windows are open: their buttons are colored then
+        bool articulationMapEditorOpened = false;
+        bool instrumentEditorOpened = false;
         //! NOTE: what the title is made of, to only rebuild it when it changes (see updateRowState())
         muse::String titleSource;
     };
@@ -126,6 +162,7 @@ private:
     void componentComplete() override;
 
     void onCurrentNotationChanged();
+    bool isInstrumentEditorOpened(const Row& row) const;
     void subscribeOnUndoStack(const notation::INotationPtr& notation);
     void scheduleReload();
     void reload();
@@ -135,6 +172,9 @@ private:
     void updateRowStates();
     void updateColors();
     void updateColumns();
+    void rebuildVideoChannelItem();
+    void loadVideoMuteState();
+    void loadVideoColor();
     GlobalMuteSoloToggle::Channels channels() const;
 
     int rowOf(const engraving::InstrumentTrackId& instrumentTrackId) const;
@@ -145,6 +185,7 @@ private:
     notation::INotationPtr currentNotation() const;
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;
+    project::IProjectVideoSettingsPtr videoSettings() const;
 
     QList<Row> m_rows;
     bool m_reloadScheduled = false;
@@ -160,5 +201,10 @@ private:
     //! NOTE: the master's, when m_notation is a part's: articulation maps are edited on its undo stack
     notation::INotationPtr m_masterNotation;
     project::IProjectAudioSettingsPtr m_audioSettings;
+    notation::INotationArticulationMapsPtr m_articulationMaps;
+    project::IProjectVideoSettingsPtr m_videoSettings;
+
+    MixerChannelItem* m_videoChannelItem = nullptr;
+    bool m_hasVideo = false;
 };
 }

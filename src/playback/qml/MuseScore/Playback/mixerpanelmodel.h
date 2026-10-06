@@ -79,6 +79,9 @@ public:
     Q_INVOKABLE void selectChannel(mu::playback::MixerChannelItem* item, bool extendSelection, bool rangeSelection);
     Q_INVOKABLE void setColorForSelectedChannels(const QColor& color);
     Q_INVOKABLE void resetColorForSelectedChannels();
+    //! NOTE: like the Track list's Video row (not undoable, like the video's other output params)
+    Q_INVOKABLE void setVideoColor(const QColor& color);
+    Q_INVOKABLE void resetVideoColor();
     Q_INVOKABLE void clearSelection();
 
     //! NOTE: same "apply to every currently-selected channel" idiom as

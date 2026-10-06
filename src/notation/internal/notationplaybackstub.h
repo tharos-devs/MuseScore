@@ -47,6 +47,7 @@ public:
     void triggerMetronome(muse::midi::tick_t tick) override;
     void triggerCountIn(muse::midi::tick_t tick, muse::secs_t& countInDuration) override;
     void triggerControllers(const muse::mpe::ControllerChangeEventList& list, notation::staff_idx_t staffIdx, int tick) override;
+    void triggerMidiMessages(const engraving::InstrumentTrackId& trackId, const muse::mpe::MidiMessagesEvent& event) override;
 
     engraving::InstrumentTrackIdSet existingTrackIdSet() const override;
     muse::async::Channel<engraving::InstrumentTrackId> trackAdded() const override;

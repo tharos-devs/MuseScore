@@ -37,7 +37,14 @@
 #include "global/iglobalconfiguration.h"
 #include "global/io/ifilesystem.h"
 #include "interactive/iinteractive.h"
+#include "actions/iactionsdispatcher.h"
 #include "context/iglobalcontext.h"
+#include "playback/iplaybackcontroller.h"
+
+#include "muse_framework_config.h"
+#ifdef MUSE_MODULE_VST
+#include "vst/ivstpluginstateprovider.h"
+#endif
 
 #include "engraving/articulationmap/articulationmapparser.h"
 
@@ -53,6 +60,9 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QString fileName READ fileName NOTIFY fileChanged)
     Q_PROPERTY(bool isDirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(bool canReloadIntoTrack READ canReloadIntoTrack NOTIFY targetTrackChanged)
+    //! NOTE: the target track's VST instrument window: whether it has one, and whether it's open
+    Q_PROPERTY(bool hasInstrumentEditor READ hasInstrumentEditor NOTIFY instrumentEditorChanged)
+    Q_PROPERTY(bool instrumentEditorOpened READ instrumentEditorOpened NOTIFY instrumentEditorChanged)
 
     Q_PROPERTY(QString mapName READ mapName WRITE setMapName NOTIFY headerChanged)
     Q_PROPERTY(int middleCOctave READ middleCOctave WRITE setMiddleCOctave NOTIFY headerChanged)
@@ -74,6 +84,11 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
 
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<playback::IPlaybackController> playbackController = { this };
+    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
+#ifdef MUSE_MODULE_VST
+    muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
+#endif
     muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
 
@@ -103,6 +118,8 @@ public:
     QString fileName() const;
     bool isDirty() const;
     bool canReloadIntoTrack() const;
+    bool hasInstrumentEditor() const;
+    bool instrumentEditorOpened() const;
 
     QString mapName() const;
     void setMapName(const QString& name);
@@ -140,6 +157,11 @@ public:
     //! NOTE: saves the changes if needed, then loads the file into the track, like the Mixer's "Reload"
     //! (saving alone already reloads it into the tracks of the open score that use this file)
     Q_INVOKABLE void reloadIntoTrack();
+    //! NOTE: like the Mixer's and the Track list's button (comes to the front if already open)
+    Q_INVOKABLE void openInstrumentEditor();
+    //! NOTE: sends the row's articulation (its messages and channel, as edited) to the target track's VST instrument,
+    //! to hear it - only while playback is stopped
+    Q_INVOKABLE void sendArticulation(int row);
 
     Q_INVOKABLE void addArticulation();
     Q_INVOKABLE void addFolder();
@@ -174,6 +196,7 @@ signals:
     void headerChanged();
     void selectionChanged();
     void targetTrackChanged();
+    void instrumentEditorChanged();
     void closeAccepted();
 
 private:
@@ -196,6 +219,13 @@ private:
         Node* node = nullptr;
         int depth = 0;
     };
+
+    struct InstrumentEditorTarget {
+        muse::audio::TrackId trackId = -1;
+        muse::audio::AudioResourceId resourceId;
+    };
+    std::optional<InstrumentEditorTarget> instrumentEditorTarget() const;
+    void updateInstrumentEditorState();
 
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
@@ -228,6 +258,8 @@ private:
     const Node* m_selectedNode = nullptr;
 
     std::optional<engraving::InstrumentTrackId> m_targetTrack;
+    bool m_hasInstrumentEditor = false;
+    bool m_instrumentEditorOpened = false;
 
     muse::io::path_t m_filePath;
     QString m_mapName;

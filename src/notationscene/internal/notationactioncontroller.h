@@ -231,6 +231,7 @@ private:
     muse::Ret reloadArticulationMap(const muse::rcommand::Params& params);
     muse::Ret removeArticulationMap(const muse::rcommand::Params& params);
     void loadArticulationMapFile(const engraving::InstrumentTrackId& trackId, const muse::io::path_t& path, bool isReload);
+    void openArticulationMapEditor(const engraving::InstrumentTrackId& trackId, const muse::UriQuery& uri);
     void openTupletOtherDialog();
     void openStaffTextPropertiesDialog();
     void openMeasurePropertiesDialog();
@@ -354,5 +355,13 @@ private:
     //! lazily create a document's tracking state (see track()'s own NOTE on why that
     //! shouldn't normally happen, but stays a safe no-op fallback if it ever does).
     mutable NotationUndoRedoCoordinator m_undoRedoCoordinator;
+
+    //! NOTE: the open articulation map editors, one per track (see openArticulationMapEditor())
+    struct OpenArticulationMapEditor {
+        muse::UriQuery uri;
+        int openingId = 0;
+    };
+    std::map<engraving::InstrumentTrackId, OpenArticulationMapEditor> m_articulationMapEditors;
+    int m_lastArticulationMapEditorOpeningId = 0;
 };
 }

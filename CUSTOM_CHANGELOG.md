@@ -5,6 +5,11 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-06
+- Track list: the articulation map button shows for every VST3 instrument, dimmed without a map (its right click menu still offers New…/Load…). The articulation map editor only opens once per track (clicked again, the open one comes to the front), and the articulation map and instrument window buttons are colored while their window is open.
+- Track list: a "Video" line first, below the top bar: color (Edit color / Reset color, also in the Mixer's Video channel menu now), level meter, Mute, Solo (the video's, shared with the Video panel, the Mixer and the Timeline) and a button to choose the video file; "No video" without one.
+- Articulation map editor: a button right of "Track delay" opens the track's VST3 instrument window (colored while it's open), and clicking an articulation sends its keyswitches/CCs (as edited, even unsaved) to the instrument, to hear it - while playback is stopped.
+- A VST3 plugin's window now closes when the plugin is removed, wherever it was opened from (Mixer, Track list, articulation map editor); replaced by another plugin (another instrument for the track, another effect in the slot), the new one's window opens instead.
+- Fixed: the application crashed on quit (since 2026-10-04): objects of the audio engine destroyed after its thread had stopped stayed subscribed to its channels.
 - Panels' "…" menu: a "Zoom" submenu (Zoom +, Zoom -, Reset zoom) in the Mixer, Track list, Video, Palettes, Layout and Properties (which gets a "…" menu), from 50% to 200%, remembered per panel; the Track list is one step smaller by default (90%). In the Timeline, it changes the measures' width (it was only possible with the mouse).
 - Track list and Video panels at a side: resizable, unless tabbed or stacked with Palettes, Layout, Properties, Selection filter or History (then 300 px like them). The Track list's articulation map / instrument window columns only take room when a track uses them.
 - Fixed: reopening a project with the Video panel at a side could widen its column for good. Menus and popups opened from a zoomed panel open at their button.

@@ -29,11 +29,14 @@
 #include "async/notifylist.h"
 #include "containers.h"
 #include "log.h"
+#include "translation.h"
+#include "io/path.h"
 
 #include "engraving/dom/part.h"
 #include "engraving/dom/sharedpart.h"
 
 #include "notation/imasternotation.h"
+#include "notation/inotationarticulationmaps.h"
 #include "notation/inotation.h"
 #include "notation/inotationparts.h"
 #include "notation/inotationsolomutestate.h"
@@ -63,6 +66,10 @@ TrackListModel::~TrackListModel()
         row.item->setParent(nullptr);
         items.push_back(row.item);
     }
+    if (m_videoChannelItem) {
+        m_videoChannelItem->setParent(nullptr);
+        items.push_back(m_videoChannelItem);
+    }
 
     QMetaObject::invokeMethod(qApp, [items]() {
         for (MixerChannelItem* item : items) {
@@ -77,12 +84,23 @@ void TrackListModel::componentComplete()
         scheduleReload();
     });
 
+    //! NOTE: the video's sound track comes and goes with the video (and once its audio is decoded)
     controller()->trackAdded().onReceive(this, [this](const TrackId) {
         scheduleReload();
+        if (m_videoChannelItem && m_videoChannelItem->trackId() != controller()->videoTrackId()) {
+            rebuildVideoChannelItem();
+        }
     });
 
     controller()->trackRemoved().onReceive(this, [this](const TrackId) {
         scheduleReload();
+        if (m_videoChannelItem && m_videoChannelItem->trackId() != controller()->videoTrackId()) {
+            rebuildVideoChannelItem();
+        }
+    });
+
+    controller()->videoMuteStateChanged().onReceive(this, [this](bool, bool) {
+        loadVideoMuteState();
     });
 
     //! NOTE: the live mute (with the one forced by another track's solo), see the Mixer's
@@ -97,6 +115,14 @@ void TrackListModel::componentComplete()
     context()->currentNotationChanged().onNotify(this, [this]() {
         onCurrentNotationChanged();
     });
+
+#ifdef MUSE_MODULE_VST
+    if (vstPluginStateProvider()) {
+        vstPluginStateProvider()->editorsOpenedChanged().onNotify(this, [this]() {
+            updateRowStates();
+        });
+    }
+#endif
 
     onCurrentNotationChanged();
 }
@@ -120,9 +146,19 @@ void TrackListModel::onCurrentNotationChanged()
         m_audioSettings->settingsChanged().disconnect(this);
     }
 
+    if (m_articulationMaps) {
+        m_articulationMaps->editorsOpenedChanged().disconnect(this);
+    }
+
+    if (m_videoSettings) {
+        m_videoSettings->settingsChanged().disconnect(this);
+    }
+
     m_notation = currentNotation();
     m_masterNotation = nullptr;
     m_audioSettings = audioSettings();
+    m_articulationMaps = m_notation ? m_notation->masterNotation()->articulationMaps() : nullptr;
+    m_videoSettings = videoSettings();
 
     //! NOTE: even with the same tracks, the solo/mute states are the new notation's
     m_rebuildRequired = true;
@@ -151,6 +187,28 @@ void TrackListModel::onCurrentNotationChanged()
             });
         }
     }
+
+    if (m_articulationMaps) {
+        m_articulationMaps->editorsOpenedChanged().onNotify(this, [this]() {
+            updateRowStates();
+        });
+    }
+
+    if (m_videoSettings) {
+        //! NOTE: a video loaded/removed, its mute/solo changed (here, in the Video panel, the Mixer or the Timeline)
+        m_videoSettings->settingsChanged().onNotify(this, [this]() {
+            const bool hasVideo = m_videoSettings->attachment().isValid();
+            if (m_hasVideo != hasVideo) {
+                m_hasVideo = hasVideo;
+                emit hasVideoChanged();
+            }
+            loadVideoMuteState();
+        });
+    }
+
+    m_hasVideo = m_videoSettings && m_videoSettings->attachment().isValid();
+    emit hasVideoChanged();
+    rebuildVideoChannelItem();
 
     if (m_audioSettings) {
         //! NOTE: a color changed from the Mixer, the Timeline or here
@@ -288,7 +346,11 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
     connect(item, &MixerChannelItem::mutedChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::forceMuteChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::soloChanged, this, &TrackListModel::globalSoloEngagedChanged);
-    connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, &TrackListModel::updateColumns);
+    //! NOTE: the sound changed: whether it's a VST instrument (articulation map button) and has a window
+    connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
+        updateRowStates();
+        updateColumns();
+    });
 
     //! NOTE: the row is the whole part: its other instruments' tracks follow its mute and solo
     const std::vector<InstrumentTrackId> otherTrackIds = tracks.otherInstrumentTrackIds;
@@ -304,7 +366,20 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
     return item;
 }
 
-//! NOTE: whether the row's visibility or articulation map changed (its title has no role of its own)
+bool TrackListModel::isInstrumentEditorOpened(const Row& row) const
+{
+#ifdef MUSE_MODULE_VST
+    const InputResourceItem* sound = row.item->inputResourceItem();
+    return sound && vstPluginStateProvider()
+           && vstPluginStateProvider()->isInstrumentEditorOpened(sound->params().resourceMeta.id, row.tracks.trackId);
+#else
+    UNUSED(row);
+    return false;
+#endif
+}
+
+//! NOTE: whether the row's visibility, articulation map, sound type or open windows changed (its title has no role
+//! of its own)
 bool TrackListModel::updateRowState(Row& row) const
 {
     const Part* part = m_notation ? m_notation->parts()->part(row.tracks.instrumentTrackId.partId) : nullptr;
@@ -320,13 +395,21 @@ bool TrackListModel::updateRowState(Row& row) const
     const Part* shownPart = visibilityPart(row);
     const bool partVisible = shownPart && shownPart->show();
     const bool hasArticulationMap = !row.item->articulationMapName().isNull();
+    const InputResourceItem* sound = row.item->inputResourceItem();
+    const bool isVstInstrument = sound && sound->params().type() == AudioSourceType::Vsti;
+    const bool articulationMapEditorOpened = m_articulationMaps && m_articulationMaps->isEditorOpened(row.tracks.instrumentTrackId);
+    const bool instrumentEditorOpened = isInstrumentEditorOpened(row);
 
-    if (row.partVisible == partVisible && row.hasArticulationMap == hasArticulationMap) {
+    if (row.partVisible == partVisible && row.hasArticulationMap == hasArticulationMap && row.isVstInstrument == isVstInstrument
+        && row.articulationMapEditorOpened == articulationMapEditorOpened && row.instrumentEditorOpened == instrumentEditorOpened) {
         return false;
     }
 
     row.partVisible = partVisible;
     row.hasArticulationMap = hasArticulationMap;
+    row.isVstInstrument = isVstInstrument;
+    row.articulationMapEditorOpened = articulationMapEditorOpened;
+    row.instrumentEditorOpened = instrumentEditorOpened;
     return true;
 }
 
@@ -336,7 +419,8 @@ void TrackListModel::updateRowStates()
     for (int i = 0; i < m_rows.size(); ++i) {
         if (updateRowState(m_rows[i])) {
             const QModelIndex modelIndex = index(i);
-            emit dataChanged(modelIndex, modelIndex, { PartVisibleRole, HasArticulationMapRole });
+            emit dataChanged(modelIndex, modelIndex, { PartVisibleRole, HasArticulationMapRole, IsVstInstrumentRole,
+                                                       ArticulationMapEditorOpenedRole, InstrumentEditorOpenedRole });
             changed = true;
         }
     }
@@ -350,7 +434,7 @@ void TrackListModel::updateRowStates()
 void TrackListModel::updateColumns()
 {
     const bool hasArticulationMapColumn = std::any_of(m_rows.cbegin(), m_rows.cend(), [](const Row& row) {
-        return row.hasArticulationMap;
+        return row.hasArticulationMap || row.isVstInstrument;
     });
     const bool hasEditorColumn = std::any_of(m_rows.cbegin(), m_rows.cend(), [](const Row& row) {
         return row.item->inputResourceItem() && row.item->inputResourceItem()->hasNativeEditorSupport();
@@ -387,6 +471,116 @@ void TrackListModel::updateColors()
             row.item->setColor(settings->trackOutputParams(row.tracks.instrumentTrackId).color);
         }
     }
+
+    loadVideoColor();
+}
+
+MixerChannelItem* TrackListModel::videoChannelItem() const
+{
+    return m_videoChannelItem;
+}
+
+bool TrackListModel::hasVideo() const
+{
+    return m_hasVideo;
+}
+
+//! NOTE: like the Mixer's Video channel (see MixerPanelModel::buildVideoChannelItem()), for its mute, solo, color
+//! and level only: its mute/solo go to the video attachment, which PlaybackController applies to the engine
+void TrackListModel::rebuildVideoChannelItem()
+{
+    MixerChannelItem* oldItem = m_videoChannelItem;
+
+    const TrackId trackId = controller()->videoTrackId();
+    m_videoChannelItem = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, trackId);
+    m_videoChannelItem->setTitle(muse::qtrc("playback", "Video"));
+    if (trackId != INVALID_TRACK_ID) {
+        m_videoChannelItem->subscribeOnTrackAudioSignalChanges();
+    }
+
+    loadVideoMuteState();
+    loadVideoColor();
+
+    connect(m_videoChannelItem, &MixerChannelItem::soloMuteStateChanged, this,
+            [this](const INotationSoloMuteState::SoloMuteState& state) {
+        updateVideoAttachment(videoSettings(), [&state](VideoAttachmentSettings& attachment) {
+            attachment.muted = state.solo ? false : state.mute;
+            attachment.solo = state.solo;
+        });
+    });
+
+    emit videoChannelItemChanged();
+
+    //! NOTE: only once the view has released it
+    if (oldItem) {
+        oldItem->disconnect(this);
+        oldItem->deleteLater();
+    }
+}
+
+//! NOTE: the effective mute includes the live force-mute (another track soloed), like the Mixer's
+void TrackListModel::loadVideoMuteState()
+{
+    const IProjectVideoSettingsPtr settings = videoSettings();
+    if (!m_videoChannelItem || !settings) {
+        return;
+    }
+
+    const VideoAttachmentSettings& attachment = settings->attachment();
+    m_videoChannelItem->loadSoloMuteState({ attachment.muted, attachment.solo });
+
+    const bool forceMute = controller()->isVideoForceMuted();
+    m_videoChannelItem->loadMuteForceMuteState((attachment.muted && !attachment.solo) || forceMute, forceMute);
+}
+
+void TrackListModel::loadVideoColor()
+{
+    if (m_videoChannelItem && audioSettings()) {
+        m_videoChannelItem->setColor(controller()->videoOutputParams().color);
+    }
+}
+
+//! NOTE: not undoable, like the other video output params (volume, pan...) changed from the Mixer
+void TrackListModel::setVideoColor(const QColor& color)
+{
+    AudioOutputParams params = controller()->videoOutputParams();
+    params.color = color;
+    controller()->setVideoOutputParams(params);
+    loadVideoColor();
+}
+
+void TrackListModel::resetVideoColor()
+{
+    setVideoColor(QColor());
+}
+
+void TrackListModel::chooseVideoFile()
+{
+    const IProjectVideoSettingsPtr settings = videoSettings();
+    if (!settings) {
+        return;
+    }
+
+    const io::path_t currentPath = settings->attachment().path;
+    const std::vector<std::string> filter {
+        muse::trc("playback", "Video files") + " (*.mp4 *.mov *.m4v *.avi *.mkv *.webm)",
+        muse::trc("playback", "All files") + " (*)"
+    };
+
+    const io::path_t path = interactive()->selectOpeningFileSync(muse::trc("playback", "Choose video"),
+                                                                 currentPath.empty() ? io::path_t() : io::dirpath(currentPath),
+                                                                 filter);
+    if (path.empty()) {
+        return;
+    }
+
+    VideoAttachmentSettings updated = settings->attachment();
+    updated.path = path;
+    //! NOTE: hit points are timed against the previous video's own footage
+    updated.hitPoints.clear();
+    settings->setAttachment(updated);
+
+    playbackConfiguration()->addRecentVideoFile(path.toQString());
 }
 
 //! NOTE: with "Enable stave sharing", the combined part is the one shown (the parts it combines are hidden, see
@@ -494,6 +688,9 @@ QVariant TrackListModel::data(const QModelIndex& index, int role) const
     case ChannelItemRole: return QVariant::fromValue(row.item);
     case PartVisibleRole: return row.partVisible;
     case HasArticulationMapRole: return row.hasArticulationMap;
+    case IsVstInstrumentRole: return row.isVstInstrument;
+    case ArticulationMapEditorOpenedRole: return row.articulationMapEditorOpened;
+    case InstrumentEditorOpenedRole: return row.instrumentEditorOpened;
     }
 
     return QVariant();
@@ -509,7 +706,10 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
     static const QHash<int, QByteArray> roles {
         { ChannelItemRole, "channelItem" },
         { PartVisibleRole, "partVisible" },
-        { HasArticulationMapRole, "hasArticulationMap" }
+        { HasArticulationMapRole, "hasArticulationMap" },
+        { IsVstInstrumentRole, "isVstInstrument" },
+        { ArticulationMapEditorOpenedRole, "articulationMapEditorOpened" },
+        { InstrumentEditorOpenedRole, "instrumentEditorOpened" }
     };
 
     return roles;
@@ -524,6 +724,12 @@ IProjectAudioSettingsPtr TrackListModel::audioSettings() const
 {
     const INotationProjectPtr project = context()->currentProject();
     return project ? project->audioSettings() : nullptr;
+}
+
+IProjectVideoSettingsPtr TrackListModel::videoSettings() const
+{
+    const INotationProjectPtr project = context()->currentProject();
+    return project ? project->videoSettings() : nullptr;
 }
 
 IProjectUndoStackPtr TrackListModel::projectUndoStack() const

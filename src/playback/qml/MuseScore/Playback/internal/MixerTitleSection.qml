@@ -64,9 +64,11 @@ MixerPanelSection {
 
         //! NOTE: channels whose title color/selection can be customized
         readonly property bool isColorable: content.isInstrument || channelItem.type === MixerChannelItem.Aux
+        //! NOTE: the video's color menu applies to it alone (it can't be selected), see MixerPanelModel::setVideoColor()
+        readonly property bool isVideo: channelItem.type === MixerChannelItem.Video
 
         function resolveLabelColor() {
-            if (content.isColorable && channelItem.hasCustomColor) {
+            if ((content.isColorable || content.isVideo) && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 
@@ -95,6 +97,11 @@ MixerPanelSection {
         //! NOTE: per-channel-type context menu items
         function buildContextMenuItems() {
             let items = []
+
+            if (content.isVideo) {
+                items.push({ id: "editColor", title: qsTrc("playback", "Edit color…") })
+                items.push({ id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: content.channelItem.hasCustomColor })
+            }
 
             if (content.isColorable) {
                 items.push({ id: "editColor", title: qsTrc("playback", "Edit color…") })
@@ -419,6 +426,14 @@ MixerPanelSection {
                 //! NOTE: isColorable already covers Aux channels (see its definition above),
                 //! so this single guard also gates the FX/Group/rename/delete context menu -
                 //! no separate isAux-only branch is needed here
+                if (content.isVideo) {
+                    if (mouse.button === Qt.RightButton) {
+                        contextMenuLoader.items = content.buildContextMenuItems()
+                        contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
+                    }
+                    return
+                }
+
                 if (!content.isColorable) {
                     return
                 }
@@ -450,6 +465,10 @@ MixerPanelSection {
             id: colorPickerModel
 
             onColorSelected: function(color) {
+                if (content.isVideo) {
+                    root.model.setVideoColor(color)
+                    return
+                }
                 root.model.setColorForSelectedChannels(color)
                 root.model.clearSelection()
             }
@@ -464,6 +483,10 @@ MixerPanelSection {
                 if (itemId === "editColor") {
                     colorPickerModel.selectColor(content.labelColor, false)
                 } else if (itemId === "resetColor") {
+                    if (content.isVideo) {
+                        root.model.resetVideoColor()
+                        return
+                    }
                     root.model.resetColorForSelectedChannels()
                     root.model.clearSelection()
                 } else if (itemId === "renameAux") {

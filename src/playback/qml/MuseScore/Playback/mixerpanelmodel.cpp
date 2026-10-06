@@ -184,6 +184,19 @@ void MixerPanelModel::resetColorForSelectedChannels()
     applyColorToSelectedChannels(QColor(), muse::TranslatableString("undoableAction", "Reset Mixer channel color"));
 }
 
+//! NOTE: the Video channel picks it up from the audio settings, like the other channels' colors
+void MixerPanelModel::setVideoColor(const QColor& color)
+{
+    AudioOutputParams params = controller()->videoOutputParams();
+    params.color = color;
+    controller()->setVideoOutputParams(params);
+}
+
+void MixerPanelModel::resetVideoColor()
+{
+    setVideoColor(QColor());
+}
+
 void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName)
 {
     std::vector<ChannelColorChange::Target> targets;
@@ -1281,8 +1294,8 @@ void MixerPanelModel::setupConnections()
         });
     }
 
-    //! NOTE: the instrument tracks' and aux buses' colors are changed through the audio settings, from the Mixer
-    //! itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
+    //! NOTE: the instrument tracks', aux buses' and video's colors are changed through the audio settings, from the
+    //! Mixer itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
     if (audioSettings()) {
         audioSettings()->settingsChanged().onNotify(this, [this]() {
             for (MixerChannelItem* item : m_mixerChannelList) {
@@ -1296,6 +1309,9 @@ void MixerPanelModel::setupConnections()
                     if (audioSettings()->trackHasExistingOutputParams(trackId)) {
                         color = audioSettings()->trackOutputParams(trackId).color;
                     }
+                } else if (item->type() == MixerChannelItem::Type::Video) {
+                    //! NOTE: e.g. changed from the Track list's Video row
+                    color = controller()->videoOutputParams().color;
                 }
 
                 if (color && item->color() != *color) {

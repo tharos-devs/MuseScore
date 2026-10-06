@@ -63,6 +63,8 @@ public:
     virtual void triggerMetronome(muse::midi::tick_t tick) = 0;
     virtual void triggerCountIn(muse::midi::tick_t tick, muse::secs_t& countInDuration) = 0;
     virtual void triggerControllers(const muse::mpe::ControllerChangeEventList& list, engraving::staff_idx_t staffIdx, int tick) = 0;
+    //! NOTE: sent right away to the track's instrument, while playback is stopped (e.g. an articulation's keyswitches)
+    virtual void triggerMidiMessages(const engraving::InstrumentTrackId& trackId, const muse::mpe::MidiMessagesEvent& event) = 0;
 
     virtual engraving::InstrumentTrackIdSet existingTrackIdSet() const = 0;
     virtual muse::async::Channel<engraving::InstrumentTrackId> trackAdded() const = 0;
