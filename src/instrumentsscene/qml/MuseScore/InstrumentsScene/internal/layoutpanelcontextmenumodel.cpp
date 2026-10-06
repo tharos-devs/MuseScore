@@ -45,7 +45,7 @@ static const ActionCode COLLAPSE_ALL_CODE("collapse-all-instruments");
 static const QString ORDERING_MENU_ID("ordering-menu");
 
 LayoutPanelContextMenuModel::LayoutPanelContextMenuModel(QObject* parent)
-    : AbstractMenuModel(parent)
+    : ZoomableMenuModel(muse::Settings::Key("instrumentsscene", "instrumentsscene/layoutPanelZoom"), 1.0, parent)
 {
 }
 
@@ -60,6 +60,10 @@ void LayoutPanelContextMenuModel::load()
 
 void LayoutPanelContextMenuModel::handleMenuItem(const QString& itemId)
 {
+    if (handleZoomMenuItem(itemId)) {
+        return;
+    }
+
     if (itemId == EXPAND_ALL_CODE) {
         emit expandCollapseAllRequested(true);
     } else if (itemId == COLLAPSE_ALL_CODE) {
@@ -76,7 +80,8 @@ void LayoutPanelContextMenuModel::updateMenu()
     m_masterNotation = globalContext()->currentMasterNotation();
 
     if (!m_masterNotation || !notation) {
-        clear();
+        //! NOTE: the zoom still applies without a score
+        setItems({ makeZoomMenu() });
     } else if (m_masterNotation->notation() == notation) {
         buildMenu(true);
     } else {
@@ -123,7 +128,9 @@ void LayoutPanelContextMenuModel::buildMenu(bool includeInstrumentsOrdering)
 
     items.append({
         createExpandCollapseAllItem(false),
-        createExpandCollapseAllItem(true)
+        createExpandCollapseAllItem(true),
+        makeSeparator(),
+        makeZoomMenu()
     });
 
     setItems(items);

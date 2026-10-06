@@ -22,13 +22,13 @@
 
 #pragma once
 
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
+#include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
 
 #include "modularity/ioc.h"
 #include "internal/ipalettecommandscontroller.h"
 
 namespace mu::palette {
-class PalettesPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel
+class PalettesPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel
 {
     Q_OBJECT
 

@@ -54,6 +54,8 @@ qt_add_qml_module(propertiespanel_qml
         propertiespanelmodelfactory.h
         modelwithvoiceandpositionoptions.cpp
         modelwithvoiceandpositionoptions.h
+        propertiespanelcontextmenumodel.cpp
+        propertiespanelcontextmenumodel.h
         propertiespanelpopupcontrollermodel.cpp
         propertiespanelpopupcontrollermodel.h
         measures/measuressettingsmodel.cpp

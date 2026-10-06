@@ -36,7 +36,9 @@ class TranslatableString;
 namespace mu::notation {
 //! NOTE: the Timeline panel's "..." menu: a View submenu to show/hide each meta row,
 //! persisted through INotationSceneConfiguration (shared with the Timeline's own
-//! right-click menu on the row labels, so both always agree).
+//! right-click menu on the row labels, so both always agree), and the panels' Zoom
+//! submenu (see PanelZoom), which changes the measure width here (the Timeline zooms
+//! horizontally, with the mouse otherwise).
 class TimelinePanelContextMenuModel : public muse::uicomponents::AbstractMenuModel
 {
     Q_OBJECT
@@ -49,6 +51,10 @@ public:
 
     Q_INVOKABLE void load() override;
     Q_INVOKABLE void handleMenuItem(const QString& itemId) override;
+
+signals:
+    void zoomStepRequested(int direction);
+    void resetZoomRequested();
 
 private:
     muse::uicomponents::MenuItem* makeRowItem(const muse::TranslatableString& title, const std::string& rowId);

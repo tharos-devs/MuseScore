@@ -90,14 +90,6 @@ public:
     virtual void setMixerCondensedViewEnabled(bool enabled) = 0;
     virtual muse::async::Channel<bool> isMixerCondensedViewEnabledChanged() const = 0;
 
-    virtual double mixerZoom() const = 0;
-    virtual void setMixerZoom(double zoom) = 0;
-    virtual muse::async::Channel<double> mixerZoomChanged() const = 0;
-
-    virtual double trackListZoom() const = 0;
-    virtual void setTrackListZoom(double zoom) = 0;
-    virtual muse::async::Channel<double> trackListZoomChanged() const = 0;
-
     virtual muse::audio::gain_t defaultAuxSendValue(muse::audio::aux_channel_idx_t index, muse::audio::AudioSourceType sourceType,
                                                     const muse::String& instrumentSoundId) const = 0;
 

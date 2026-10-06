@@ -39,6 +39,9 @@ StyledListView {
 
     property alias navigation: keynavTree
 
+    //! NOTE: the zoom of the panel's content (see ZoomContainer.qml): the popups aren't zoomed
+    property real zoom: 1.0
+
     // Scroll palettes list when dragging a palette close to the list's border
     property bool itemDragged: false
 
@@ -284,7 +287,7 @@ StyledListView {
             property var control: palettePopup.control
             property var model: palettePopup.model
 
-            maxHeight: Math.min(0.75 * paletteTree.height, 500)
+            maxHeight: Math.min(0.75 * paletteTree.height * paletteTree.zoom, 500)
 
             // TODO: change settings to "hidden" model?
             cellSize: control.cellSize

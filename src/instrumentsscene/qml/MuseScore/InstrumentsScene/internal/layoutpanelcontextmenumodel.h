@@ -22,14 +22,14 @@
 
 #pragma once
 
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
+#include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
 
 #include "modularity/ioc.h"
 #include "context/iglobalcontext.h"
 #include "notation/iinstrumentsrepository.h"
 
 namespace mu::instrumentsscene {
-class LayoutPanelContextMenuModel : public muse::uicomponents::AbstractMenuModel
+class LayoutPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel
 {
     Q_OBJECT
 

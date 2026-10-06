@@ -50,6 +50,9 @@ FlatButton {
     QtObject {
         id: prv
         property bool needActiveFirstItem: false
+        //! NOTE: the panel's content may be zoomed (see ZoomContainer.qml), the popup isn't: its width in screen
+        //! pixels is the available width as shown
+        property real screenScale: 1.0
     }
 
     PropertiesPanelPopupControllerModel {
@@ -58,6 +61,9 @@ FlatButton {
 
     onClicked: {
         prv.needActiveFirstItem = root.navigation.highlight
+        if (root.width > 0) {
+            prv.screenScale = (root.mapToItem(null, root.width, 0).x - root.mapToItem(null, 0, 0).x) / root.width
+        }
         popupLoader.toggleOpened()
     }
 
@@ -80,7 +86,7 @@ FlatButton {
             contentData: Loader {
                 id: contentLoader
 
-                width: root.popupAvailableWidth - 2 * popup.margins
+                width: root.popupAvailableWidth * prv.screenScale - 2 * popup.margins
                 height: implicitHeight
 
                 sourceComponent: root.popupContent
@@ -119,9 +125,9 @@ FlatButton {
                     return
                 }
 
-                var buttonGlobalPos = root.mapToItem(root.anchorItem, Qt.point(0, 0))
+                //! NOTE: in the anchor item's coordinates (the panel's), also when the panel's content is zoomed
                 var popupHeight = contentHeight + padding * 2 + margins * 2
-                var buttonBottom = buttonGlobalPos.y + root.height
+                var buttonBottom = root.mapToItem(root.anchorItem, Qt.point(0, root.height)).y
                 var spaceBelow = root.anchorItem.height - buttonBottom
                 if (spaceBelow > popupHeight) {
                     return

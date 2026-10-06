@@ -22,6 +22,8 @@
 
 #include "tracklistmodel.h"
 
+#include <algorithm>
+
 #include <QCoreApplication>
 
 #include "async/notifylist.h"
@@ -269,6 +271,7 @@ void TrackListModel::reload()
     emit rowCountChanged();
     emit globalMuteEngagedChanged();
     emit globalSoloEngagedChanged();
+    updateColumns();
 
     //! NOTE: only once the views have released the delegates showing them
     for (MixerChannelItem* item : oldItems) {
@@ -285,6 +288,7 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
     connect(item, &MixerChannelItem::mutedChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::forceMuteChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::soloChanged, this, &TrackListModel::globalSoloEngagedChanged);
+    connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, &TrackListModel::updateColumns);
 
     //! NOTE: the row is the whole part: its other instruments' tracks follow its mute and solo
     const std::vector<InstrumentTrackId> otherTrackIds = tracks.otherInstrumentTrackIds;
@@ -328,12 +332,47 @@ bool TrackListModel::updateRowState(Row& row) const
 
 void TrackListModel::updateRowStates()
 {
+    bool changed = false;
     for (int i = 0; i < m_rows.size(); ++i) {
         if (updateRowState(m_rows[i])) {
             const QModelIndex modelIndex = index(i);
             emit dataChanged(modelIndex, modelIndex, { PartVisibleRole, HasArticulationMapRole });
+            changed = true;
         }
     }
+
+    if (changed) {
+        updateColumns();
+    }
+}
+
+//! NOTE: kept rather than computed on each read: every row's delegate reads them
+void TrackListModel::updateColumns()
+{
+    const bool hasArticulationMapColumn = std::any_of(m_rows.cbegin(), m_rows.cend(), [](const Row& row) {
+        return row.hasArticulationMap;
+    });
+    const bool hasEditorColumn = std::any_of(m_rows.cbegin(), m_rows.cend(), [](const Row& row) {
+        return row.item->inputResourceItem() && row.item->inputResourceItem()->hasNativeEditorSupport();
+    });
+
+    if (hasArticulationMapColumn == m_hasArticulationMapColumn && hasEditorColumn == m_hasEditorColumn) {
+        return;
+    }
+
+    m_hasArticulationMapColumn = hasArticulationMapColumn;
+    m_hasEditorColumn = hasEditorColumn;
+    emit columnsChanged();
+}
+
+bool TrackListModel::hasArticulationMapColumn() const
+{
+    return m_hasArticulationMapColumn;
+}
+
+bool TrackListModel::hasEditorColumn() const
+{
+    return m_hasEditorColumn;
 }
 
 void TrackListModel::updateColors()

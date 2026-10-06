@@ -91,7 +91,9 @@ Item {
 
     // NOTE: the real height floor of the content (VideoPanel.qml's dockedMinimumHeight), for the DockPanel's
     // minimumHeight; 280 = its previewPaneMinHeight, until loaded
-    readonly property int contentMinimumHeight: videoPanelLoader.item ? videoPanelLoader.item.dockedMinimumHeight : 280
+    //! NOTE: the "…" menu's zoom, applied to the content: its minimum sizes follow it
+    readonly property real contentZoom: contextMenuModel.zoom
+    readonly property int contentMinimumHeight: Math.ceil((videoPanelLoader.item ? videoPanelLoader.item.dockedMinimumHeight : 280) * contentZoom)
 
     // NOTE: kept loaded once it had a size: resizing a column it shares with other panels can report a 0
     // size for a moment, and unloading then would reset the panel's layout (and its minimum width)
@@ -231,18 +233,24 @@ Item {
     onNavigationSectionChanged: updateLoadedItem()
     onContentNavigationPanelOrderStartChanged: updateLoadedItem()
 
-    Loader {
-        id: videoPanelLoader
-
+    ZoomContainer {
         anchors.fill: parent
-        active: root.shouldLoadPanel
-        //! NOTE: synchronous: an asynchronous load could stay stuck in Loader.Loading for good when
-        //! the panel was restored open along with a score, leaving it empty until hidden and shown
-        //! again. It stays lazy: QtMultimedia is only loaded once the panel is actually shown
-        source: root.shouldLoadPanel ? "VideoPanel.qml" : ""
 
-        onLoaded: {
-            root.updateLoadedItem()
+        zoom: root.contentZoom
+
+        Loader {
+            id: videoPanelLoader
+
+            anchors.fill: parent
+            active: root.shouldLoadPanel
+            //! NOTE: synchronous: an asynchronous load could stay stuck in Loader.Loading for good when
+            //! the panel was restored open along with a score, leaving it empty until hidden and shown
+            //! again. It stays lazy: QtMultimedia is only loaded once the panel is actually shown
+            source: root.shouldLoadPanel ? "VideoPanel.qml" : ""
+
+            onLoaded: {
+                root.updateLoadedItem()
+            }
         }
     }
 

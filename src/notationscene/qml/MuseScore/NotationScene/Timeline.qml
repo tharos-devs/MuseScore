@@ -42,6 +42,14 @@ Item {
 
     TimelinePanelContextMenuModel {
         id: contextMenuModel
+
+        onZoomStepRequested: function(direction) {
+            timelineView.stepZoom(direction)
+        }
+
+        onResetZoomRequested: {
+            timelineView.resetZoom()
+        }
     }
 
     Component.onCompleted: {
@@ -49,6 +57,8 @@ Item {
     }
 
     TimelineView {
+        id: timelineView
+
         anchors.fill: parent
     }
 }

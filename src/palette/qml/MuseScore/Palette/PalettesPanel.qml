@@ -69,89 +69,98 @@ Item {
         }
     }
 
-    ColumnLayout {
-        id: contentColumn
-
-        readonly property int sideMargin: 12
-
+    ZoomContainer {
         anchors.fill: parent
-        anchors.leftMargin: sideMargin
-        anchors.rightMargin: sideMargin
 
-        spacing: sideMargin
+        zoom: contextMenuModel.zoom
 
-        PalettesPanelHeader {
-            id: palettesPanelHeader
+        ColumnLayout {
+            id: contentColumn
 
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignTop
+            readonly property int sideMargin: 12
 
-            paletteProvider: root.paletteProvider
+            anchors.fill: parent
+            anchors.leftMargin: sideMargin
+            anchors.rightMargin: sideMargin
 
-            popupMaxHeight: contentColumn.height - palettesPanelHeader.height
-            popupAnchorItem: root
+            spacing: sideMargin
 
-            navigation.section: root.navigationSection
-            navigation.order: root.navigationOrderStart
+            PalettesPanelHeader {
+                id: palettesPanelHeader
 
-            onApplyCurrentPaletteElementRequested: {
-                root.applyCurrentPaletteElement()
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+
+                paletteProvider: root.paletteProvider
+
+                //! NOTE: the popups aren't zoomed: in the panel's coordinates
+                popupMaxHeight: (contentColumn.height - palettesPanelHeader.height) * contextMenuModel.zoom
+                popupAnchorItem: root
+
+                navigation.section: root.navigationSection
+                navigation.order: root.navigationOrderStart
+
+                onApplyCurrentPaletteElementRequested: {
+                    root.applyCurrentPaletteElement()
+                }
+
+                onAddCustomPaletteRequested: function(paletteName) {
+                    paletteTree.insertCustomPalette(0, paletteName)
+                }
             }
 
-            onAddCustomPaletteRequested: function(paletteName) {
-                paletteTree.insertCustomPalette(0, paletteName)
+            StyledTextLabel {
+                id: searchHint
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+
+                text: qsTrc("palette", "Start typing to search all palettes")
+                verticalAlignment: Qt.AlignTop
+                wrapMode: Text.WordWrap
+
+                visible: palettesPanelHeader.isSearchOpened && !Boolean(palettesPanelHeader.searchText)
             }
-        }
 
-        StyledTextLabel {
-            id: searchHint
+            StyledTextLabel {
+                id: notFoundHint
 
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 8
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
 
-            text: qsTrc("palette", "Start typing to search all palettes")
-            verticalAlignment: Qt.AlignTop
-            wrapMode: Text.WordWrap
+                text: qsTrc("global", "No results found")
+                verticalAlignment: Qt.AlignTop
+                wrapMode: Text.WordWrap
 
-            visible: palettesPanelHeader.isSearchOpened && !Boolean(palettesPanelHeader.searchText)
-        }
+                visible: !searchHint.visible && !paletteTree.isResultFound
+            }
 
-        StyledTextLabel {
-            id: notFoundHint
+            PaletteTree {
+                id: paletteTree
 
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 8
+                zoom: contextMenuModel.zoom
 
-            text: qsTrc("global", "No results found")
-            verticalAlignment: Qt.AlignTop
-            wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: -contentColumn.sideMargin
+                Layout.rightMargin: -contentColumn.sideMargin
 
-            visible: !searchHint.visible && !paletteTree.isResultFound
-        }
+                clip: true
+                paletteProvider: root.paletteProvider
 
-        PaletteTree {
-            id: paletteTree
+                navigation.section: root.navigationSection
+                navigation.order: palettesPanelHeader.navigation.order + 1
 
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: -contentColumn.sideMargin
-            Layout.rightMargin: -contentColumn.sideMargin
+                filter: palettesPanelHeader.searchText
+                enableAnimations: !palettesPanelHeader.isSearchFieldFocused
+                searchOpened: palettesPanelHeader.isSearchOpened
 
-            clip: true
-            paletteProvider: root.paletteProvider
-
-            navigation.section: root.navigationSection
-            navigation.order: palettesPanelHeader.navigation.order + 1
-
-            filter: palettesPanelHeader.searchText
-            enableAnimations: !palettesPanelHeader.isSearchFieldFocused
-            searchOpened: palettesPanelHeader.isSearchOpened
-
-            visible: !searchHint.visible
+                visible: !searchHint.visible
+            }
         }
     }
 }

@@ -58,6 +58,16 @@ public:
         m_msTimeline->setNotation(notation);
     }
 
+    void stepZoom(int direction)
+    {
+        m_msTimeline->stepZoom(direction);
+    }
+
+    void resetZoom()
+    {
+        m_msTimeline->resetZoom();
+    }
+
 private:
     QWidget* qWidget() override
     {
@@ -156,6 +166,7 @@ void TimelineView::componentComplete()
     WidgetView::componentComplete();
 
     auto timeline = std::make_shared<TimelineAdapter>(iocContext());
+    m_timeline = timeline;
 
     auto updateView = [this, timeline]() {
         update();
@@ -197,4 +208,18 @@ void TimelineView::componentComplete()
     setWidget(timeline);
 
     initTimeline();
+}
+
+void TimelineView::stepZoom(int direction)
+{
+    if (m_timeline) {
+        m_timeline->stepZoom(direction);
+    }
+}
+
+void TimelineView::resetZoom()
+{
+    if (m_timeline) {
+        m_timeline->resetZoom();
+    }
 }

@@ -142,6 +142,10 @@ class Timeline : public QGraphicsView, public muse::Contextable, public muse::as
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
 public:
+    //! NOTE: the measure width, from the panel's "…" menu ("Zoom" submenu)
+    void stepZoom(int direction);
+    void resetZoom();
+
     enum class ItemType {
         TYPE_UNKNOWN = 0,
         TYPE_MEASURE,
@@ -173,7 +177,8 @@ private:
 
     static constexpr int keyItemType = 15;
 
-    int _gridWidth = 20;
+    static constexpr int DEFAULT_GRID_WIDTH = 20;
+    int _gridWidth = DEFAULT_GRID_WIDTH;
     int _gridHeight = 20;
     int _maxZoom = 400; // px per measure: zoomed in far enough for the Video row's pictures to be precise
     int _minZoom = 5;
@@ -248,6 +253,7 @@ private:
     void wheelEvent(QWheelEvent* event) override;
     bool isOnMeasuresRow(const QPointF& scenePt) const;
     void zoomAround(int gridWidth, int anchorViewX, qreal anchorMeasures);
+    void zoomAroundCenter(int gridWidth);
     void leaveEvent(QEvent*) override;
     void showEvent(QShowEvent*) override;
     void changeEvent(QEvent*) override;

@@ -24,6 +24,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Window
+import QtQml.Models
 
 import Muse.Ui
 import Muse.UiComponents
@@ -125,6 +126,25 @@ DockPage {
         { "dock": root.centralDock, "dropLocation": Location.Left, "dropDistance": root.verticalPanelDefaultWidth },
         { "dock": root.centralDock, "dropLocation": Location.Right, "dropDistance": root.verticalPanelDefaultWidth }
     ]
+
+    //! NOTE: the side panels with a fixed width (verticalPanelDefaultWidth). A resizable side panel (Track list,
+    //! Video) takes their width when it's tabbed or stacked with one of them in their column: it would otherwise set
+    //! the whole column's width. Anywhere else (alone at a side, with each other, floating...), it stays resizable
+    function resizableSidePanelMaximumWidth(panel) {
+        const fixedSidePanels = [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel ]
+        const withFixedPanel = fixedSidePanels.some(other => other.visible
+                                                    && (panel.isInSameFrame(other)
+                                                        || (typeof panel.isInSameColumn === "function" && panel.isInSameColumn(other))))
+
+        return withFixedPanel ? root.verticalPanelDefaultWidth : root.panelMaxDimension
+    }
+
+    function updateResizableSidePanelsMaximumWidth() {
+        trackListPanel.maximumWidth = resizableSidePanelMaximumWidth(trackListPanel)
+        if (videoPanelLoaderInstance) {
+            videoPanelLoaderInstance.updateDockPlacement()
+        }
+    }
 
     property var notationView: null
 
@@ -350,6 +370,10 @@ DockPage {
                 navigationSection: propertiesPanel.navigationSection
                 navigationOrderStart: propertiesPanel.contentNavigationPanelOrderStart
                 notationView: root.notationView
+
+                Component.onCompleted: {
+                    propertiesPanel.contextMenuModel = contextMenuModel
+                }
             }
         },
 
@@ -420,7 +444,8 @@ DockPage {
 
             width: root.verticalPanelDefaultWidth
             minimumWidth: root.verticalPanelDefaultWidth
-            maximumWidth: root.verticalPanelDefaultWidth
+            //! NOTE: resizable, or the side panels' fixed width, see updateMaximumWidth() below
+            maximumWidth: root.panelMaxDimension
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -437,8 +462,34 @@ DockPage {
                 navigationSection: trackListPanel.navigationSection
                 contentNavigationPanelOrderStart: trackListPanel.contentNavigationPanelOrderStart
 
+                //! NOTE: like the Video panel's (see resizableSidePanelMaximumWidth()): a move always changes the
+                //! panel's size (or window)
+                function updateMaximumWidth() {
+                    trackListPanel.maximumWidth = root.resizableSidePanelMaximumWidth(trackListPanel)
+                }
+
+                readonly property var hostWindow: Window.window
+                onHostWindowChanged: Qt.callLater(updateMaximumWidth)
+                onWidthChanged: Qt.callLater(updateMaximumWidth)
+                onHeightChanged: Qt.callLater(updateMaximumWidth)
+
+                //! NOTE: also when a fixed side panel opens or closes (its column may be this one's)
+                Instantiator {
+                    model: [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel ]
+
+                    delegate: Connections {
+                        required property var modelData
+                        target: modelData
+
+                        function onVisibleChanged() {
+                            Qt.callLater(root.updateResizableSidePanelsMaximumWidth)
+                        }
+                    }
+                }
+
                 Component.onCompleted: {
                     trackListPanel.contextMenuModel = contextMenuModel
+                    updateMaximumWidth()
                 }
 
                 Component.onDestruction: {
@@ -734,19 +785,24 @@ DockPage {
                     //! NOTE: first, and every time: no geometry needed (e.g. restored as a tab not shown, with no size),
                     //! and the maximum width outlives this content when the panel is closed - reopened elsewhere,
                     //! it must not keep the tabbed one
-                    const sidePanels = [ palettesPanel, layoutPanel, propertiesPanel, selectionFilterPanel, undoHistoryPanel, trackListPanel ]
-                    const tabbedWithSidePanels = sidePanels.some(panel => videoPanel.isInSameFrame(panel))
-                    videoPanel.maximumWidth = tabbedWithSidePanels ? root.verticalPanelDefaultWidth : root.panelMaxDimension
+                    videoPanel.maximumWidth = root.resizableSidePanelMaximumWidth(videoPanel)
+                    updateMinimumWidth()
 
-                    //! NOTE: no score view yet (e.g. while a project opens): not docked beside it
-                    if (videoPanel.floating || !notationView || Window.window !== notationView.Window.window) {
-                        dockedAtSide = false
+                    //! NOTE: no score view yet (e.g. while a project opens): nothing to compare, it stays where it was
+                    if (!notationView) {
                         return
                     }
 
-                    //! NOTE: no size (for a moment while resizing its column, or as a tab not shown): nothing to
-                    //! compare, it stays where it was - flipping would push the wide floor for that moment
-                    if (width <= 0 || height <= 0) {
+                    if (videoPanel.floating || Window.window !== notationView.Window.window) {
+                        dockedAtSide = false
+                        placementKnown = true
+                        return
+                    }
+
+                    //! NOTE: no size (for a moment while resizing its column, or as a tab not shown, or the score view
+                    //! not laid out yet while a project opens): nothing to compare, it stays where it was - flipping
+                    //! would push the wide floor for that moment, and widen a side column for good
+                    if (width <= 0 || height <= 0 || notationView.width <= 0 || notationView.height <= 0) {
                         return
                     }
 
@@ -754,7 +810,14 @@ DockPage {
                     const pos = mapToItem(notationView, 0, 0)
                     const besideVertically = pos.y < notationView.height && pos.y + height > 0
                     dockedAtSide = besideVertically && (pos.x + width <= 1 || pos.x >= notationView.width - 1)
+                    //! NOTE: after dockedAtSide: the sidebar's placement (and so the floor) follows it first
+                    placementKnown = true
                 }
+
+                //! NOTE: until the placement is known (see updateDockPlacement()), the content lays out as if it weren't
+                //! at a side: its wide floor would widen a side column it's in for good (the layout is saved so)
+                property bool placementKnown: false
+                onPlacementKnownChanged: updateMinimumWidth()
 
                 readonly property var hostWindow: Window.window
                 onHostWindowChanged: Qt.callLater(updateDockPlacement)
@@ -779,11 +842,21 @@ DockPage {
                 //! widen (or heighten) the restored layout for good. These handlers cover the values changing
                 //! again later, e.g. the user live-toggling the sidebar via the panel's own "..." menu.
                 //! NOTE: a hidden sidebar takes no width either, so it gets the narrow floor too
-                onNeedsWideMinimumWidthChanged: {
+                //! NOTE: the wide floor is the content's own: it follows the panel's zoom. The narrow one is the
+                //! side panels' column width - also when the panel takes their fixed width (never above its maximum)
+                function minimumWidthFloor() {
+                    const wide = needsWideMinimumWidth && placementKnown && videoPanel.maximumWidth > root.verticalPanelDefaultWidth
+                    return wide ? Math.ceil(640 * contentZoom) : root.verticalPanelDefaultWidth
+                }
+
+                function updateMinimumWidth() {
                     if (contentReady) {
-                        videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : root.verticalPanelDefaultWidth
+                        videoPanel.minimumWidth = minimumWidthFloor()
                     }
                 }
+
+                onNeedsWideMinimumWidthChanged: updateMinimumWidth()
+                onContentZoomChanged: updateMinimumWidth()
 
                 //! NOTE: stacked with other panels in a column, it could otherwise be made shorter than its picture
                 onContentMinimumHeightChanged: {
@@ -796,7 +869,7 @@ DockPage {
                     //! NOTE: right away, not later: restored at the side with the sidebar chosen beside the video,
                     //! the wide floor would widen the side panels' column for a moment
                     updateDockPlacement()
-                    videoPanel.minimumWidth = needsWideMinimumWidth ? 640 : root.verticalPanelDefaultWidth
+                    videoPanel.minimumWidth = minimumWidthFloor()
                     videoPanel.minimumHeight = contentMinimumHeight
                 }
 
