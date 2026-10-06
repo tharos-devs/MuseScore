@@ -21,6 +21,7 @@
  */
 #include "videowriter.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include <QFile>
@@ -259,11 +260,12 @@ void VideoWriter::startVideoExport(muse::media::IVideoEncoderPtr encoder, INotat
     });
 }
 
-void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions)
+void VideoWriter::startAudioExport(INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions,
+                                   const std::string& audioWriterSuffix)
 {
-    m_audioWriter = writers()->writer("aac");
+    m_audioWriter = writers()->writer(audioWriterSuffix);
     if (!m_audioWriter) {
-        LOGE() << "aac writer not found";
+        LOGE() << audioWriterSuffix << " writer not found";
         m_audioRet = make_ret(muse::Ret::Code::InternalError);
         m_audioCompleted = true;
         return;
@@ -336,15 +338,43 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
         return make_ret(muse::Ret::Code::UnknownError, std::string("empty score"));
     }
 
-    const muse::io::path_t tempAudioPath = finalPath + ".tmp_audio.aac";
-
     Options audioOpts;
     audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
     audioOpts[OptionKey::AUDIO_DURATION_SEC] = muse::Val(scoreDurationSecs);
     audioOpts[OptionKey::INCLUDE_SOUND_TRACKS] = muse::Val(true);
 
+    //! NOTE Lossy: our own encoders' stream, copied. Lossless: rendered to PCM (32-bit float, nothing lost before
+    //! the encoding), encoded while remuxing. The encoders' priming, which their streams can't signal, is skipped
+    //! with an edit list (measured: AAC-LC by fdk-aac exactly 2048 samples, MP3 by LAME exactly 2257 = its empty
+    //! info frame 1152 + encoder delay 576 + decoder delay 529, as long as LAME keeps the sample rate: below
+    //! 160 kbit/s, it can lower it, which changes its delay - so at least 160 kbit/s)
+    using AudioEncoding = muse::media::IVideoRemuxer::Options::AudioEncoding;
+    std::string audioWriterSuffix = "aac";
+    int audioPrimingSamples = 2048;
+    AudioEncoding audioEncoding = AudioEncoding::Copy;
+
+    switch (configuration()->attachedVideoAudioFormat()) {
+    case AttachedVideoAudioFormat::Aac:
+        break;
+    case AttachedVideoAudioFormat::Mp3:
+        audioWriterSuffix = "mp3";
+        audioPrimingSamples = 2257;
+        audioOpts[OptionKey::AUDIO_BIT_RATE] = muse::Val(std::max(audioExportConfiguration()->exportMp3Bitrate(), 160));
+        break;
+    case AttachedVideoAudioFormat::Alac:
+    case AttachedVideoAudioFormat::Flac:
+        audioWriterSuffix = "wav";
+        audioPrimingSamples = 0;
+        audioEncoding = configuration()->attachedVideoAudioFormat() == AttachedVideoAudioFormat::Alac
+                        ? AudioEncoding::Alac : AudioEncoding::Flac;
+        audioOpts[OptionKey::AUDIO_SAMPLE_FORMAT] = muse::Val(static_cast<int>(muse::audio::AudioSampleFormat::Float32));
+        break;
+    }
+
+    const muse::io::path_t tempAudioPath = finalPath + ".tmp_audio." + audioWriterSuffix;
+
     const std::string audioMsg = muse::trc("iex_videoexport", "Rendering audio…");
-    startAudioExport(notation, tempAudioPath, audioOpts);
+    startAudioExport(notation, tempAudioPath, audioOpts, audioWriterSuffix);
 
     if (m_audioWriter) {
         m_audioWriter->progress()->progressChanged().onReceive(this, [this, audioMsg](int64_t current, int64_t total,
@@ -431,10 +461,9 @@ muse::Ret VideoWriter::writeAttachedVideo(INotationPtr notation, muse::io::IODev
         remuxOptions.videoStartSecs = videoStartSecs;
         remuxOptions.durationSecs = scoreDurationSecs;
 
-        //! NOTE Our AAC encoder (fdk-aac, AAC-LC in ADTS) primes 2048 samples, which ADTS can't signal: without
-        //! skipping them (edit list), the audio would be that late (measured: exactly 2048 samples)
-        constexpr int AAC_ENCODER_DELAY_SAMPLES = 2048;
-        remuxOptions.audioPrimingSecs = AAC_ENCODER_DELAY_SAMPLES / static_cast<double>(audioExportConfiguration()->exportSampleRate());
+        remuxOptions.audioPrimingSecs = audioPrimingSamples / static_cast<double>(audioExportConfiguration()->exportSampleRate());
+        remuxOptions.audioEncoding = audioEncoding;
+        remuxOptions.audioBitsPerSample = configuration()->attachedVideoAudioBitsPerSample();
 
         result = remuxer->remux(pictureSource, tempAudioPath, tempVideoPath, remuxOptions);
     }

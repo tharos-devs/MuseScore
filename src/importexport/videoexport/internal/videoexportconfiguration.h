@@ -32,6 +32,8 @@ class VideoExportConfiguration : public IVideoExportConfiguration
 public:
     VideoExportConfiguration() = default;
 
+    void init();
+
     ViewMode viewMode() const override;
     void setViewMode(std::optional<ViewMode> viewMode) override;
 
@@ -58,6 +60,12 @@ public:
 
     const AttachedVideo& attachedVideo() const override;
     void setAttachedVideo(const AttachedVideo& video) override;
+
+    AttachedVideoAudioFormat attachedVideoAudioFormat() const override;
+    void setAttachedVideoAudioFormat(AttachedVideoAudioFormat format) override;
+
+    int attachedVideoAudioBitsPerSample() const override;
+    void setAttachedVideoAudioBitsPerSample(int bits) override;
 
 private:
     std::optional<ViewMode> m_viewMode = std::nullopt;

@@ -40,6 +40,7 @@
 #include "async/asyncable.h"
 #include "media/ivideodecoderfactory.h"
 #include "audio/main/iaudioconfiguration.h"
+#include "audio/iaudiodrivercontroller.h"
 
 #include <QVideoSink>
 
@@ -84,6 +85,7 @@ class VideoFramePlayer : public QObject, public muse::async::Asyncable
 
     muse::GlobalInject<muse::media::IVideoDecoderFactory> decoderFactory;
     muse::GlobalInject<muse::audio::IAudioConfiguration> audioConfiguration;
+    muse::GlobalInject<muse::audio::IAudioDriverController> audioDriverController;
 
 public:
     explicit VideoFramePlayer(QObject* parent = nullptr);

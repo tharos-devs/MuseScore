@@ -63,7 +63,8 @@ constexpr double CLOCK_CORRECTION_RATIO = 0.1;
 constexpr double CLOCK_MAX_EXTRAPOLATION_MS = 25.0;
 
 //! NOTE Picture timing compensation: reports arrive late (half an engine cycle on average), and a frame
-//! pushed now is on screen about one refresh later, while the sound is heard one output buffer later
+//! pushed now is on screen about one refresh later, while the sound is heard after the output's latency (as
+//! measured by the driver: its buffering and the device's own latency; else, one output buffer)
 constexpr double REPORT_DELAY_MS = 8.0;
 constexpr double DISPLAY_LATENCY_MS = 16.7;
 
@@ -535,7 +536,9 @@ double VideoFramePlayer::clockMs() const
 void VideoFramePlayer::updatePictureLead()
 {
     double audioLatencyMs = 0.0;
-    if (audioConfiguration() && audioConfiguration()->sampleRate() > 0) {
+    if (audioDriverController() && audioDriverController()->outputLatencySecs() > 0.0) {
+        audioLatencyMs = 1000.0 * audioDriverController()->outputLatencySecs();
+    } else if (audioConfiguration() && audioConfiguration()->sampleRate() > 0) {
         audioLatencyMs = 1000.0 * audioConfiguration()->driverBufferSize() / audioConfiguration()->sampleRate();
     }
 
@@ -564,6 +567,9 @@ void VideoFramePlayer::onClockTick()
     if (!m_playing) {
         return;
     }
+
+    //! NOTE The measured latency is only known, and can only change, while the audio runs
+    updatePictureLead();
 
     double targetMs = std::max(0.0, clockMs() + m_pictureLeadMs);
 

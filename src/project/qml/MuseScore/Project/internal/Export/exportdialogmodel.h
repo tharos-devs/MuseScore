@@ -115,6 +115,10 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     Q_PROPERTY(bool hasAttachedVideo READ hasAttachedVideo NOTIFY includeVideoAudioChanged)
     Q_PROPERTY(bool isAttachedVideoExportAvailable READ isAttachedVideoExportAvailable CONSTANT)
     Q_PROPERTY(bool includeVideoAudio READ includeVideoAudio WRITE setIncludeVideoAudio NOTIFY includeVideoAudioChanged)
+    Q_PROPERTY(QVariantList availableAttachedVideoAudioFormats READ availableAttachedVideoAudioFormats CONSTANT)
+    Q_PROPERTY(
+        int attachedVideoAudioFormat READ attachedVideoAudioFormat WRITE setAttachedVideoAudioFormat NOTIFY attachedVideoAudioFormatChanged)
+    Q_PROPERTY(bool isAttachedVideoAudioLossless READ isAttachedVideoAudioLossless NOTIFY attachedVideoAudioFormatChanged)
     Q_PROPERTY(QString ffmpegDir READ ffmpegDir WRITE setFFmpegDir NOTIFY ffmpegDirChanged)
 
     QML_ELEMENT
@@ -252,6 +256,11 @@ public:
     bool includeVideoAudio() const;
     void setIncludeVideoAudio(bool include);
 
+    QVariantList availableAttachedVideoAudioFormats() const;
+    int attachedVideoAudioFormat() const;
+    void setAttachedVideoAudioFormat(int format);
+    bool isAttachedVideoAudioLossless() const;
+
     Q_INVOKABLE void updateExportInfo();
 
 signals:
@@ -301,6 +310,7 @@ signals:
     void ffmpegDirChanged();
 
     void includeVideoAudioChanged();
+    void attachedVideoAudioFormatChanged();
 
 private:
     void classBegin() override;
@@ -316,6 +326,7 @@ private:
     bool isIndexValid(int index) const;
 
     bool isFormatSelected(const QString& formatSuffix) const;
+    bool isAttachedVideoSelected() const;
 
     bool isMainNotation(notation::INotationPtr notation) const;
     notation::IMasterNotationPtr masterNotation() const;

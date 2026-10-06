@@ -93,7 +93,8 @@ private:
     Config makeConfig() const;
 
     void startVideoExport(muse::media::IVideoEncoderPtr encoder, notation::INotationPtr notation, const Config& cfg);
-    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions);
+    void startAudioExport(notation::INotationPtr notation, const muse::io::path_t& audioPath, const Options& audioOptions,
+                          const std::string& audioWriterSuffix = "aac");
 
     //! NOTE VideoSource::AttachedVideo: the attached video's picture as is, with the score's and the
     //! video's audio (the engine's rendering, as mixed in the Mixer) over the whole video

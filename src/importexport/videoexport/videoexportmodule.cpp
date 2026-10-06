@@ -56,6 +56,8 @@ void VideoExportModule::resolveImports()
 
 void VideoExportModule::onInit(const muse::IApplication::RunMode&)
 {
+    s_configuration->init();
+
     if (QFontDatabase::addApplicationFont(":/videoexport/internal/resources/MuseSans-Medium.ttf") == -1) {
         LOGE() << "Unable load MuseSans font: `:/videoexport/internal/resources/MuseSans-Medium.ttf`";
     }
