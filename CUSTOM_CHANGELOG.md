@@ -5,6 +5,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-06
+- Panels' "…" menu: a "Zoom" submenu (Zoom +, Zoom -, Reset zoom) in the Mixer, Track list, Video, Palettes, Layout and Properties (which gets a "…" menu), from 50% to 200%, remembered per panel; the Track list is one step smaller by default (90%). In the Timeline, it changes the measures' width (it was only possible with the mouse).
+- Track list and Video panels at a side: resizable, unless tabbed or stacked with Palettes, Layout, Properties, Selection filter or History (then 300 px like them). The Track list's articulation map / instrument window columns only take room when a track uses them.
+- Fixed: reopening a project with the Video panel at a side could widen its column for good. Menus and popups opened from a zoomed panel open at their button.
 - Fixed: the Track list's button to open a VST3 instrument's window never showed; it's now after the articulation map's button, both in their own columns.
 - Opening a project now shows a small window (titled with the file name) saying "Loading…" and, for VST3 instruments and effects, the plugin being loaded ("3/12 <plugin name>", out of the project's VST3 plugins). It closes by itself once the project is really ready. VST3 plugins are now loaded and restored one after the other with short pauses in between, so the application no longer freezes in one long block (a project with 8 big sample players went from a 12 s freeze to pauses of 2 s at most), and the window keeps showing progress.
 - Fixed: a VST3 plugin could, in rare timing, store its default state in the project instead of the saved one while the project was opening.
