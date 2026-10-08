@@ -82,8 +82,8 @@ public:
 signals:
     void chipDragged(int chipIndex, qreal deltaXN, bool completed);
     void dragCancelled(int chipIndex);
-    //! NOTE: a plain left click anywhere on the lane, chips included (it's for the note under the target marker)
-    void clicked(qreal xN, const QPointF& globalPos);
+    //! NOTE: a plain left click anywhere on the lane, chips included: xN is the chord under the target marker
+    void clicked(qreal chordXN, const QPointF& globalPos);
 
 protected:
     void hoverMoveEvent(QHoverEvent* e) override;
@@ -94,6 +94,7 @@ protected:
     void mouseUngrabEvent() override;
 
 private:
+    QRectF fullChipRectPx(const ChipData& chip) const;
     QRectF chipRectPx(const ChipData& chip) const;
     int hitTestPx(const QPointF& posPx) const;
     qreal targetChordXN(const QPointF& posPx) const;

@@ -516,8 +516,7 @@ void NotationArticulationMapController::onClicked(const SysStaffKey& key, qreal 
     }
     const StaffOverlayData& data = dataIt->second;
 
-    // The note nearest to the click, as the lane's target marker shows - also over a chip, which is only
-    // grabbed to be dragged (a chip may span over the next notes)
+    // The note under the lane's target marker (the lane chose it, see ArticulationMapOverlay::targetChordXN())
     size_t chordIndex = 0;
     const double canvasX = data.bandRect.x() + xN * data.bandRect.width();
     double bestDistance = std::numeric_limits<double>::max();
