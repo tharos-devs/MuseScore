@@ -30,6 +30,7 @@
 #include <QHoverEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRegion>
 #include <QToolTip>
 
 using namespace mu::notation;
@@ -46,6 +47,8 @@ constexpr static qreal ARTMAP_MAX_FONT_PX = 13.0;
 constexpr static qreal ARTMAP_LINE_WIDTH_PX = 2.0;
 constexpr static int ARTMAP_HOVERED_CHIP_ALPHA = 60;
 constexpr static qreal ARTMAP_TARGET_MARKER_SIZE_PX = 5.0;
+// A chord's span starts a bit before it: the mouse reaches a note's left side before its position
+constexpr static qreal ARTMAP_TARGET_LEAD_PX = 4.0;
 static const QColor ARTMAP_TARGET_MARKER_COLOR(90, 90, 90);
 
 static double artMapLuminance(const QColor& color)
@@ -153,19 +156,24 @@ void ArticulationMapOverlay::setPinnedTargetX(qreal xN)
     update();
 }
 
-//! NOTE: the same choice as the controller's click handling: the chord nearest to the mouse, also over a chip
-//! (a chip is only grabbed to be dragged)
+//! NOTE: the chord the mouse is in the span of (from it to the next one), also over a chip - so anywhere
+//! between a chip's chord and the next one is that chip's; before the first chord, the first one.
+//! A click goes to it (see mouseReleaseEvent())
 qreal ArticulationMapOverlay::targetChordXN(const QPointF& posPx) const
 {
-    const qreal posXN = posPx.x() / std::max(1.0, width());
+    const qreal posXN = (posPx.x() + ARTMAP_TARGET_LEAD_PX) / std::max(1.0, width());
+    qreal first = -1.0;
     qreal best = -1.0;
     for (const qreal xN : m_chordXNs) {
-        if (best < 0.0 || std::abs(xN - posXN) < std::abs(best - posXN)) {
+        if (first < 0.0 || xN < first) {
+            first = xN;
+        }
+        if (xN <= posXN && (best < 0.0 || xN > best)) {
             best = xN;
         }
     }
 
-    return best;
+    return best >= 0.0 ? best : first;
 }
 
 void ArticulationMapOverlay::drawTargetMarker(QPainter* painter, qreal xN) const
@@ -204,8 +212,8 @@ bool ArticulationMapOverlay::isDragging() const
 
 //! NOTE: a chip shows its whole name, cut only where the next chip starts - on consecutive changes, chips
 //! shrink (down to a colored tick); hovering doesn't change that (see updateChipTooltip()). It may span over
-//! the next notes: a click there still goes to the note under the target marker, not to the chip
-QRectF ArticulationMapOverlay::chipRectPx(const ChipData& chip) const
+//! the next notes: while one of them is the target, the chip is cut before it (see chipRectPx())
+QRectF ArticulationMapOverlay::fullChipRectPx(const ChipData& chip) const
 {
     QFont font;
     font.setPixelSize(static_cast<int>(std::clamp(height() * 0.55, ARTMAP_MIN_FONT_PX, ARTMAP_MAX_FONT_PX)));
@@ -228,11 +236,41 @@ QRectF ArticulationMapOverlay::chipRectPx(const ChipData& chip) const
     return QRectF(leftPx, ARTMAP_CHIP_V_MARGIN_PX, chipWidth, std::max(1.0, height() - 2 * ARTMAP_CHIP_V_MARGIN_PX));
 }
 
+//! NOTE: a click goes to the note under the target marker: when that's another note than the chip's own one,
+//! the chip is cut just before it, so that note shows as a free slot (a click there adds, not edits the chip)
+QRectF ArticulationMapOverlay::chipRectPx(const ChipData& chip) const
+{
+    QRectF rect = fullChipRectPx(chip);
+
+    const qreal targetXN = m_pinnedTargetXN >= 0.0 ? m_pinnedTargetXN : m_hoverTargetXN;
+    if (targetXN < 0.0 || isDragging() || std::abs(targetXN - chip.chordXN) * width() <= 0.5) {
+        return rect;
+    }
+
+    const qreal targetPx = targetXN * width();
+    if (targetPx > rect.left() && targetPx < rect.right() + ARTMAP_TARGET_MARKER_SIZE_PX) {
+        const qreal right = targetPx - ARTMAP_TARGET_MARKER_SIZE_PX - ARTMAP_CHIP_GAP_PX;
+        rect.setWidth(std::max(ARTMAP_CHIP_MIN_WIDTH_PX, right - rect.left()));
+    }
+
+    return rect;
+}
+
 void ArticulationMapOverlay::paint(QPainter* painter)
 {
     painter->setRenderHint(QPainter::Antialiasing);
 
     // No lane background: notes and ledger lines below the staff stay visible through it
+
+    // The hovered chip is see-through (see drawChip below): keep the lines out of it, so its text stays readable
+    const bool hoveredSeeThrough = m_hoveredChip >= 0 && m_hoveredChip < m_chips.size()
+                                   && !(m_pressed && m_hoveredChip == m_activeChip);
+    painter->save();
+    if (hoveredSeeThrough) {
+        QRegion clip(boundingRect().toAlignedRect());
+        clip -= QRegion(chipRectPx(m_chips.at(m_hoveredChip)).toAlignedRect());
+        painter->setClipRegion(clip);
+    }
 
     const qreal midY = height() / 2.0;
     for (const LineData& line : m_lines) {
@@ -241,6 +279,7 @@ void ArticulationMapOverlay::paint(QPainter* painter)
         painter->setPen(QPen(color, ARTMAP_LINE_WIDTH_PX, Qt::SolidLine, Qt::FlatCap));
         painter->drawLine(QPointF(line.fromXN * width(), midY), QPointF(line.toXN * width(), midY));
     }
+    painter->restore();
 
     QFont font = painter->font();
     font.setPixelSize(static_cast<int>(std::clamp(height() * 0.55, ARTMAP_MIN_FONT_PX, ARTMAP_MAX_FONT_PX)));
@@ -323,14 +362,22 @@ int ArticulationMapOverlay::hitTestPx(const QPointF& posPx) const
 
 void ArticulationMapOverlay::hoverMoveEvent(QHoverEvent* e)
 {
-    const int hit = hitTestPx(e->position());
+    // The target first: it decides whether a chip is cut before it (see chipRectPx())
     const qreal targetXN = targetChordXN(e->position());
+    const bool targetChanged = targetXN != m_hoverTargetXN;
+    m_hoverTargetXN = targetXN;
+
+    // A chip lights up only when a click edits it, i.e. when its own chord is the target (one moved earlier
+    // than its chord may span over the previous chord's span)
+    int hit = hitTestPx(e->position());
+    if (hit >= 0 && std::abs(m_chips.at(hit).chordXN - targetXN) * width() > 0.5) {
+        hit = -1;
+    }
     if (hit != m_hoveredChip) {
         hideChipTooltip();
     }
-    if (hit != m_hoveredChip || targetXN != m_hoverTargetXN) {
+    if (hit != m_hoveredChip || targetChanged) {
         m_hoveredChip = hit;
-        m_hoverTargetXN = targetXN;
         update();
     }
     if (hit >= 0 && !m_pressed) {
@@ -411,7 +458,7 @@ void ArticulationMapOverlay::mouseReleaseEvent(QMouseEvent* e)
         return;
     }
 
-    emit clicked(e->position().x() / std::max(1.0, width()), e->globalPosition());
+    emit clicked(targetChordXN(e->position()), e->globalPosition());
 }
 
 void ArticulationMapOverlay::mouseUngrabEvent()
