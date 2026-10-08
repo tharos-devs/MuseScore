@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-08
+- Articulation lane: a click goes to the note whose span the mouse is in (from that note to the next one), not to the nearest note. An articulation spanning several notes is edited by clicking anywhere over its own note's span; over a later note it covers, it's cut just before that note, which shows as a free slot where a click adds an articulation. An articulation only lights up when a click edits it, and the lane's line no longer crosses its text then.
+
 ### 2026-10-06
 - Track list: the articulation map button shows for every VST3 instrument, dimmed without a map (its right click menu still offers New…/Load…). The articulation map editor only opens once per track (clicked again, the open one comes to the front), and the articulation map and instrument window buttons are colored while their window is open.
 - Track list: a "Video" line first, below the top bar: color (Edit color / Reset color, also in the Mixer's Video channel menu now), level meter, Mute, Solo (the video's, shared with the Video panel, the Mixer and the Timeline) and a button to choose the video file; "No video" without one.
