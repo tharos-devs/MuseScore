@@ -44,6 +44,7 @@
 
 #include "iplaybackcontroller.h"
 #include "channelcolorchange.h"
+#include "channelselection.h"
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
 

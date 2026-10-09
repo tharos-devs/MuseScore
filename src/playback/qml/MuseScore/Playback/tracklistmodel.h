@@ -45,6 +45,7 @@
 #include "iplaybackcontroller.h"
 #include "iplaybackconfiguration.h"
 #include "channelcolorchange.h"
+#include "channelselection.h"
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
 
@@ -90,7 +91,15 @@ public:
 
     Q_INVOKABLE void togglePartVisible(int row);
 
-    //! NOTE: undoable, like the Mixer's "Edit color…"/"Reset color" (see ChannelColorChange)
+    //! NOTE: like the Mixer's (see ChannelSelection): a click on a row selects it alone, Cmd/Ctrl+click adds or
+    //! removes it, Shift+click selects the rows from the last clicked one
+    Q_INVOKABLE void selectRow(int row, bool toggle, bool range);
+    Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void setMutedForSelectedRows(bool muted);
+    Q_INVOKABLE void setSoloForSelectedRows(bool solo);
+
+    //! NOTE: undoable, like the Mixer's "Edit color…"/"Reset color" (see ChannelColorChange); on a selected row,
+    //! the whole selection, as one undo step
     Q_INVOKABLE void setTrackColor(int row, const QColor& color);
     Q_INVOKABLE void resetTrackColor(int row);
 
@@ -192,6 +201,7 @@ private:
     bool m_rebuildRequired = false;
 
     GlobalMuteSoloToggle m_globalMuteSolo;
+    int m_selectionAnchorIndex = -1;
 
     //! NOTE: see updateColumns()
     bool m_hasArticulationMapColumn = false;

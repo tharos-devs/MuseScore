@@ -39,6 +39,8 @@ qt_add_qml_module(playback_qml
         auxsenditemlistmodel.h
         channelcolorchange.cpp
         channelcolorchange.h
+        channelselection.cpp
+        channelselection.h
         globalmutesolotoggle.cpp
         globalmutesolotoggle.h
         inputresourceitem.cpp
