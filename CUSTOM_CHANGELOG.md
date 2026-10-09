@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-09
+- Video panel: "Clear video" in the "…" menu, like the sidebar's button (disabled without a video).
+
 ### 2026-10-08
 - Articulation lane: a click goes to the note whose span the mouse is in (from that note to the next one), not to the nearest note. An articulation spanning several notes is edited by clicking anywhere over its own note's span; over a later note it covers, it's cut just before that note, which shows as a free slot where a click adds an articulation. An articulation only lights up when a click edits it, and the lane's line no longer crosses its text then.
 
