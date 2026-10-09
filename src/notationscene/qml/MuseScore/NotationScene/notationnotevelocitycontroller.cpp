@@ -118,6 +118,12 @@ void NotationNoteVelocityController::onCurrentNotationChanged()
             if (thisScore != score()) {
                 return;
             }
+            // E.g. an undo while painting: the painted notes may be gone, the rest of the gesture is dropped
+            if (m_painting) {
+                m_paintAborted = true;
+                m_paintedVelocities.clear();
+                m_paintUnheard.reset();
+            }
             scheduleRebuild();
         }, Asyncable::Mode::SetReplace);
     }
@@ -174,14 +180,23 @@ void NotationNoteVelocityController::scheduleRebuild()
     });
 }
 
+void NotationNoteVelocityController::rebuildIfDeferredByGesture()
+{
+    // Run after the overlay's own end-of-gesture bookkeeping (it emits before resetting its state)
+    if (std::exchange(m_rebuildDeferredByGesture, false)) {
+        scheduleRebuild();
+    }
+}
+
 void NotationNoteVelocityController::rebuildAllOverlays()
 {
     for (const auto& [key, data] : m_overlaysByStaff) {
         if (data.overlay->isDragging()) {
             // Deleting an overlay that currently holds the mouse grab (mid-drag) would drop the
             // in-progress edit and risk delivering the next mouse event to a freed item - wait
-            // for the drag to finish instead of rebuilding out from under it.
-            scheduleRebuild();
+            // for the drag to finish instead of rebuilding out from under it (once, at its end:
+            // rescheduling every event loop turn until then would spin the CPU).
+            m_rebuildDeferredByGesture = true;
             return;
         }
     }
@@ -333,6 +348,13 @@ void NotationNoteVelocityController::createOverlayForStaff(const System* system,
         });
         QObject::connect(overlay, &NoteVelocityOverlay::dragCancelled, [this, key](int rectIndex) {
             onDragCancelled(key, rectIndex);
+        });
+        QObject::connect(overlay, &NoteVelocityOverlay::barsPainted, [this, key](const QPointF& fromN, const QPointF& toN,
+                                                                                 bool completed) {
+            onBarsPainted(key, fromN, toN, completed);
+        });
+        QObject::connect(overlay, &NoteVelocityOverlay::paintCancelled, [this]() {
+            onPaintCancelled();
         });
         QObject::connect(overlay, &NoteVelocityOverlay::barValueEditRequested, [this, key, overlay](int rectIndex,
                                                                                                     const QPointF& positionPx) {
@@ -527,6 +549,7 @@ void NotationNoteVelocityController::resetAuditionThrottle()
 void NotationNoteVelocityController::onDragCancelled(const SysStaffKey& key, int rectIndex)
 {
     resetAuditionThrottle();
+    rebuildIfDeferredByGesture();
 
     const auto dataIt = m_overlaysByStaff.find(key);
     IF_ASSERT_FAILED(key.isValid() && dataIt != m_overlaysByStaff.end()
@@ -564,12 +587,7 @@ void NotationNoteVelocityController::onDragCancelled(const SysStaffKey& key, int
         }
     }
 
-    for (Note* note : notesToRevert) {
-        const auto locIt = m_noteLocations.find(note);
-        if (locIt != m_noteLocations.end()) {
-            previewBarHeight(locIt->second, displayedVelocity(note));
-        }
-    }
+    revertPreviews(notesToRevert);
 }
 
 void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int rectIndex, qreal deltaYN, bool completed)
@@ -621,6 +639,7 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
     }
     if (completed) {
         resetAuditionThrottle();
+        rebuildIfDeferredByGesture();
     }
 
     // If the dragged note is part of a multi-note selection, apply the same velocity delta to
@@ -667,6 +686,117 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
     }
 
     commitVelocities(changes);
+}
+
+void NotationNoteVelocityController::onBarsPainted(const SysStaffKey& key, const QPointF& fromN, const QPointF& toN, bool completed)
+{
+    const auto dataIt = m_overlaysByStaff.find(key);
+    IF_ASSERT_FAILED(key.isValid() && dataIt != m_overlaysByStaff.end()) {
+        return;
+    }
+    const StaffOverlayData& data = dataIt->second;
+    const muse::RectF& band = data.bandRect;
+
+    m_painting = !completed;
+    if (m_paintAborted) {
+        m_paintAborted = !completed;
+        if (completed) {
+            resetAuditionThrottle();
+            rebuildIfDeferredByGesture();
+        }
+        return;
+    }
+
+    const QPointF from(band.x() + fromN.x() * band.width(), band.y() + fromN.y() * band.height());
+    const QPointF to(band.x() + toN.x() * band.width(), band.y() + toN.y() * band.height());
+    const double minX = std::min(from.x(), to.x());
+    const double maxX = std::max(from.x(), to.x());
+
+    // Every bar crossed by this stretch of the mouse's path - none skipped by a fast move - takes the velocity of
+    // the path's height at the bar (at its middle, or the nearest end of the stretch): all the notes of a chord
+    // alike, selected or not. Only this line's bars: the gesture stays on the line it started on
+    Note* lastChanged = nullptr;
+    int lastChangedVelocity = 0;
+    for (size_t i = 0; i < data.notes.size(); ++i) {
+        const NoteEntry& entry = data.notes.at(i);
+        if (!entry.note || entry.rightX < minX || entry.leftX > maxX) {
+            continue;
+        }
+
+        const double x = std::clamp((entry.leftX + entry.rightX) / 2.0, minX, maxX);
+        const double y = maxX - minX < 1e-9 ? to.y() : from.y() + (to.y() - from.y()) * (x - from.x()) / (to.x() - from.x());
+        // A note at 0 (dynamics) crossed at the bottom stays dynamics-following, like a no-op drag
+        const int pathVelocity = velocityFromCanvasY(entry.yRange, y);
+        const int currentVelocity = displayedVelocity(entry.note);
+        const int velocity = pathVelocity < MIN_DRAGGABLE_VELOCITY && currentVelocity < MIN_DRAGGABLE_VELOCITY
+                             ? currentVelocity
+                             : std::clamp(pathVelocity, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY);
+
+        const auto paintedIt = m_paintedVelocities.find(entry.note);
+        if (paintedIt != m_paintedVelocities.end() && paintedIt->second == velocity) {
+            continue;
+        }
+        m_paintedVelocities[entry.note] = velocity;
+        previewBarHeight({ key, static_cast<int>(i) }, velocity);
+        lastChanged = entry.note;
+        lastChangedVelocity = velocity;
+    }
+
+    // Every change of a note can be heard (the same value on several notes too), throttled like a drag's; the last
+    // one is always heard, on release at the latest
+    if (lastChanged) {
+        m_paintUnheard = UnheardChange { lastChanged, lastChangedVelocity };
+    }
+    if (m_paintUnheard && (completed || auditionThrottleElapsed())) {
+        auditionNote(m_paintUnheard->note, m_paintUnheard->velocity);
+        markAudition(m_paintUnheard->velocity);
+        m_paintUnheard.reset();
+    }
+
+    if (!completed) {
+        return;
+    }
+
+    resetAuditionThrottle();
+    rebuildIfDeferredByGesture();
+
+    std::vector<VelocityChange> changes;
+    for (const auto& [note, velocity] : m_paintedVelocities) {
+        changes.push_back({ note, velocity });
+    }
+    m_paintedVelocities.clear();
+    m_paintUnheard.reset();
+
+    // One undo step for the whole gesture; unchanged notes are skipped there
+    commitVelocities(withTieChains(changes));
+}
+
+void NotationNoteVelocityController::onPaintCancelled()
+{
+    resetAuditionThrottle();
+    rebuildIfDeferredByGesture();
+
+    std::vector<Note*> painted;
+    for (const auto& [note, velocity] : m_paintedVelocities) {
+        painted.push_back(note);
+    }
+    m_paintedVelocities.clear();
+    m_paintUnheard.reset();
+    m_painting = false;
+    m_paintAborted = false;
+
+    // Back to the notes' real (unchanged) values, like a cancelled drag
+    revertPreviews(painted);
+}
+
+void NotationNoteVelocityController::revertPreviews(const std::vector<Note*>& notes)
+{
+    for (Note* note : notes) {
+        const auto locIt = m_noteLocations.find(note);
+        if (locIt != m_noteLocations.end()) {
+            previewBarHeight(locIt->second, displayedVelocity(note));
+        }
+    }
 }
 
 std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::withTieChains(
