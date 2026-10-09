@@ -34,8 +34,8 @@ StyledDialogView {
         return qsTrc("notation", "Articulation map editor") + " – " + name + (editorModel.isDirty ? " *" : "")
     }
 
-    contentWidth: 880
-    contentHeight: 520
+    contentWidth: 1000 // 880 + the Score markings column
+    contentHeight: 580
 
     modal: false
     resizable: true
@@ -107,7 +107,8 @@ StyledDialogView {
         readonly property int indentWidth: 16
         readonly property int numberColumnWidth: 32
         readonly property int colorColumnWidth: 24
-        readonly property int nameColumnWidth: 260
+        readonly property int nameColumnWidth: 175
+        readonly property int scoreMarkingsColumnWidth: 205
         readonly property int sidePanelWidth: 340
 
         property int editingRow: -1
@@ -293,6 +294,15 @@ StyledDialogView {
                         }
 
                         StyledTextLabel {
+                            width: prv.scoreMarkingsColumnWidth
+                            height: parent.height
+                            horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
+                            text: qsTrc("notation", "Score markings")
+                            font: ui.theme.bodyBoldFont
+                        }
+
+                        StyledTextLabel {
                             height: parent.height
                             horizontalAlignment: Text.AlignLeft
                             text: qsTrc("notation", "Activation sequence")
@@ -352,6 +362,7 @@ StyledDialogView {
                             required property bool isDefault
                             required property bool isDisabled
                             required property bool isSelected
+                            required property var scoreMarkings
 
                             width: listView.width
                             height: prv.rowHeight
@@ -589,9 +600,28 @@ StyledDialogView {
                                     }
                                 }
 
+                                //! NOTE: an overview, the details are in the side panel; a marking an articulation
+                                //! higher in the map has too is dimmed: that one is played for it
+                                StyledTextLabel {
+                                    height: parent.height
+                                    width: prv.scoreMarkingsColumnWidth
+                                    rightPadding: 8
+                                    horizontalAlignment: Text.AlignLeft
+                                    elide: Text.ElideRight
+                                    textFormat: Text.StyledText
+                                    text: {
+                                        const dimmed = Qt.rgba(ui.theme.fontPrimaryColor.r, ui.theme.fontPrimaryColor.g,
+                                                               ui.theme.fontPrimaryColor.b, ui.theme.itemOpacityDisabled)
+                                        return rowItem.scoreMarkings.map(marking => marking.shadowed
+                                                                         ? "<font color=\"" + dimmed + "\">" + marking.name + "</font>"
+                                                                         : marking.name).join(", ")
+                                    }
+                                }
+
                                 StyledTextLabel {
                                     height: parent.height
                                     width: parent.width - prv.numberColumnWidth - prv.colorColumnWidth - prv.nameColumnWidth
+                                           - prv.scoreMarkingsColumnWidth
                                     horizontalAlignment: Text.AlignLeft
                                     elide: Text.ElideRight
                                     text: rowItem.sequence
@@ -617,6 +647,76 @@ StyledDialogView {
                         minWidth: 0
                         text: qsTrc("notation", "New folder")
                         onClicked: editorModel.addFolder()
+                    }
+
+                    //! NOTE: recolors the selected articulations (all of them without several selected) with a gradient
+                    FlatButton {
+                        minWidth: 0
+                        text: qsTrc("notation", "Colors")
+                        toolTipTitle: qsTrc("notation", "Color gradient")
+                        toolTipDescription: qsTrc("notation", "Recolors the selected articulations, or all of them, from the first one to the last one")
+                        onClicked: colorGradientsPopup.toggleOpened()
+
+                        StyledPopupView {
+                            id: colorGradientsPopup
+
+                            contentWidth: colorGradientsColumn.implicitWidth
+                            contentHeight: colorGradientsColumn.implicitHeight
+
+                            Column {
+                                id: colorGradientsColumn
+
+                                spacing: 4
+
+                                Repeater {
+                                    model: editorModel.colorGradientPreviews
+
+                                    delegate: Rectangle {
+                                        id: gradientRow
+
+                                        required property int index
+                                        required property var modelData
+
+                                        width: samplesRow.width + 12
+                                        height: samplesRow.height + 12
+                                        radius: 3
+                                        color: gradientMouseArea.containsMouse ? ui.theme.buttonColor : "transparent"
+
+                                        Row {
+                                            id: samplesRow
+
+                                            anchors.centerIn: parent
+                                            spacing: 2
+
+                                            Repeater {
+                                                model: gradientRow.modelData
+
+                                                delegate: Rectangle {
+                                                    required property color modelData
+
+                                                    width: 16
+                                                    height: 16
+                                                    radius: 2
+                                                    color: modelData
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: gradientMouseArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+
+                                            onClicked: {
+                                                editorModel.applyColorGradient(gradientRow.index)
+                                                colorGradientsPopup.close()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     FlatButton {
@@ -662,7 +762,7 @@ StyledDialogView {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 12
-                    spacing: 10
+                    spacing: 6
                     visible: prv.multipleArticulations || (editorModel.hasSelection && !editorModel.selectedIsFolder)
 
                     StyledTextLabel {
@@ -675,20 +775,30 @@ StyledDialogView {
                               : editorModel.selectedNumber + "   " + editorModel.selectedName
                     }
 
-                    CheckBox {
-                        visible: !prv.multipleArticulations
-                        text: qsTrc("notation", "Default articulation")
-                        enabled: !editorModel.selectedIsDisabled
-                        checked: editorModel.selectedIsDefault
-                        onClicked: editorModel.setSelectedIsDefault(!checked)
-                    }
+                    // side by side: room for the activation sequence below
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                    // mixed: a click disables all of them
-                    CheckBox {
-                        text: qsTrc("notation", "Disable articulation")
-                        checked: editorModel.selectedIsDisabled && !editorModel.selectedIsDisabledMixed
-                        isIndeterminate: editorModel.selectedIsDisabledMixed
-                        onClicked: editorModel.setSelectedIsDisabled(isIndeterminate || !checked)
+                        CheckBox {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            visible: !prv.multipleArticulations
+                            text: qsTrc("notation", "Default articulation")
+                            enabled: !editorModel.selectedIsDisabled
+                            checked: editorModel.selectedIsDefault
+                            onClicked: editorModel.setSelectedIsDefault(!checked)
+                        }
+
+                        // mixed: a click disables all of them
+                        CheckBox {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            text: qsTrc("notation", "Disable articulation")
+                            checked: editorModel.selectedIsDisabled && !editorModel.selectedIsDisabledMixed
+                            isIndeterminate: editorModel.selectedIsDisabledMixed
+                            onClicked: editorModel.setSelectedIsDisabled(isIndeterminate || !checked)
+                        }
                     }
 
                     RowLayout {
@@ -765,18 +875,238 @@ StyledDialogView {
                         }
                     }
 
+                    //! NOTE: what selects the articulation in the lane, without placing it there by hand
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        StyledTextLabel {
+                            horizontalAlignment: Text.AlignLeft
+                            text: qsTrc("notation", "Score markings")
+                        }
+
+                        FlatButton {
+                            id: scoreArticulationsButton
+
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+                            minWidth: 0
+
+                            text: editorModel.selectedScoreArticulationsText
+                            toolTipTitle: qsTrc("notation", "Score markings")
+                            toolTipDescription: qsTrc("notation", "The notation symbols and playing technique texts that select this articulation in the articulation lane")
+
+                            onClicked: scoreArticulationsPopup.toggleOpened()
+
+                            StyledPopupView {
+                                id: scoreArticulationsPopup
+
+                                // case and spaces ignored: "snap pizz" finds Snap Pizzicato
+                                property string filterText: ""
+
+                                function matches(name) {
+                                    const filter = filterText.replace(/\s/g, "").toLowerCase()
+                                    return filter === "" || name.toLowerCase().indexOf(filter) !== -1
+                                }
+
+                                //! NOTE: everything smaller than the editor's own controls, as one zoom
+                                readonly property real zoom: 0.9
+
+                                contentWidth: 520 * zoom
+                                contentHeight: 420 * zoom
+
+                                onOpened: {
+                                    scoreMarkingsSearchField.clear()
+                                    scoreMarkingsSearchField.ensureActiveFocus()
+                                }
+
+                                ZoomContainer {
+                                    anchors.fill: parent
+                                    zoom: scoreArticulationsPopup.zoom
+
+                                    SearchField {
+                                        id: scoreMarkingsSearchField
+
+                                        anchors.top: parent.top
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+
+                                        hint: qsTrc("notation", "Search score markings")
+
+                                        onSearchTextChanged: {
+                                            scoreArticulationsPopup.filterText = searchText
+                                        }
+                                    }
+
+                                    StyledFlickable {
+                                        id: scoreArticulationsFlickable
+
+                                        anchors.top: scoreMarkingsSearchField.bottom
+                                        anchors.topMargin: 12
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        contentHeight: scoreArticulationsColumn.implicitHeight
+                                        clip: true
+
+                                        Column {
+                                            id: scoreArticulationsColumn
+
+                                            width: scoreArticulationsFlickable.width - 12 // room for the scroll bar
+                                            spacing: 12
+
+                                            StyledTextLabel {
+                                                width: parent.width
+                                                horizontalAlignment: Text.AlignLeft
+                                                wrapMode: Text.WordWrap
+                                                text: qsTrc("notation", "By default, an articulation is selected by the score marking it's named like.")
+                                            }
+
+                                            Repeater {
+                                                model: editorModel.scoreArticulationGroups
+
+                                                delegate: Column {
+                                                    id: group
+
+                                                    required property var modelData
+
+                                                    visible: group.modelData.items.some(item => scoreArticulationsPopup.matches(item.name))
+                                                    width: scoreArticulationsColumn.width
+                                                    spacing: 6
+
+                                                    StyledTextLabel {
+                                                        horizontalAlignment: Text.AlignLeft
+                                                        font: ui.theme.bodyBoldFont
+                                                        text: group.modelData.title
+                                                    }
+
+                                                    Grid {
+                                                        columns: 2
+                                                        columnSpacing: 12
+                                                        rowSpacing: 6
+
+                                                        Repeater {
+                                                            model: group.modelData.items
+
+                                                            delegate: Row {
+                                                                id: scoreArticulationItem
+
+                                                                required property var modelData
+
+                                                                readonly property int selectionState: editorModel.selectedScoreArticulationStates[modelData.name] || 0
+
+                                                                visible: scoreArticulationsPopup.matches(modelData.name)
+
+                                                                width: (group.width - 12) / 2
+                                                                spacing: 4
+
+                                                                function toggle() {
+                                                                    editorModel.setSelectedScoreArticulation(modelData.name, selectionState !== 1)
+                                                                }
+
+                                                                CheckBox {
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    checked: scoreArticulationItem.selectionState === 1
+                                                                    isIndeterminate: scoreArticulationItem.selectionState === 2
+                                                                    onClicked: scoreArticulationItem.toggle()
+                                                                }
+
+                                                                //! NOTE: its symbol in the score, centered on its own shape (the music font's glyphs
+                                                                //! sit anywhere around the baseline) and shrunk to fit
+                                                                Item {
+                                                                    id: glyphIcon
+
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    width: 28
+                                                                    height: 22
+
+                                                                    MouseArea {
+                                                                        anchors.fill: parent
+                                                                        onClicked: scoreArticulationItem.toggle()
+                                                                    }
+
+                                                                    TextMetrics {
+                                                                        id: glyphMetrics
+
+                                                                        font.family: scoreArticulationItem.modelData.glyphFont
+                                                                        font.pixelSize: 20
+                                                                        text: scoreArticulationItem.modelData.glyph
+                                                                    }
+
+                                                                    Text {
+                                                                        id: glyphText
+
+                                                                        readonly property rect bounds: glyphMetrics.tightBoundingRect
+                                                                        readonly property real fitScale: bounds.width > 0 && bounds.height > 0
+                                                                                                         ? Math.min(1, (glyphIcon.width - 2) / bounds.width,
+                                                                                                                    (glyphIcon.height - 2) / bounds.height)
+                                                                                                         : 1
+
+                                                                        visible: scoreArticulationItem.modelData.glyph !== ""
+                                                                        font: glyphMetrics.font
+                                                                        text: scoreArticulationItem.modelData.glyph
+                                                                        color: ui.theme.fontPrimaryColor
+
+                                                                        x: glyphIcon.width / 2 - (bounds.x + bounds.width / 2)
+                                                                        y: glyphIcon.height / 2 - (baselineOffset + bounds.y + bounds.height / 2)
+
+                                                                        // a Transform has no parent: the Text by its id
+                                                                        transform: Scale {
+                                                                            origin.x: glyphText.bounds.x + glyphText.bounds.width / 2
+                                                                            origin.y: glyphText.baselineOffset + glyphText.bounds.y + glyphText.bounds.height / 2
+                                                                            xScale: glyphText.fitScale
+                                                                            yScale: glyphText.fitScale
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                StyledTextLabel {
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    width: parent.width - x
+                                                                    horizontalAlignment: Text.AlignLeft
+                                                                    elide: Text.ElideRight
+                                                                    // "SnapPizzicato" -> "Snap Pizzicato"
+                                                                    text: scoreArticulationItem.modelData.name.replace(/([a-z])([A-Z0-9])/g, "$1 $2")
+
+                                                                    MouseArea {
+                                                                        anchors.fill: parent
+                                                                        onClicked: scoreArticulationItem.toggle()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // in place of the activation sequence, shown for one articulation only
                     Item {
                         Layout.fillHeight: true
                         visible: prv.multipleArticulations
                     }
 
-                    StyledTextLabel {
-                        Layout.topMargin: 8
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 6
                         visible: !prv.multipleArticulations
-                        horizontalAlignment: Text.AlignLeft
-                        font: ui.theme.bodyBoldFont
-                        text: qsTrc("notation", "Activation sequence")
+
+                        StyledTextLabel {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                            font: ui.theme.bodyBoldFont
+                            text: qsTrc("notation", "Activation sequence")
+                        }
+
+                        FlatButton {
+                            minWidth: 0
+                            text: qsTrc("notation", "+ Add")
+                            onClicked: editorModel.addMessage()
+                        }
                     }
 
                     RowLayout {
@@ -880,12 +1210,6 @@ StyledDialogView {
                         }
                     }
 
-                    FlatButton {
-                        visible: !prv.multipleArticulations
-                        minWidth: 0
-                        text: qsTrc("notation", "+ Add")
-                        onClicked: editorModel.addMessage()
-                    }
                 }
             }
         }

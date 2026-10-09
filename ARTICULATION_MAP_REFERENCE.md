@@ -16,6 +16,9 @@ sélectionne automatiquement dans l'articulation lane.
   latched précédente > articulation par défaut (`*`).
 - Un nom absent de ce document (`Spiccato`, `Flautando`…) n'est jamais détecté seul : soit on le pose à la main dans
   la lane, soit on lui donne une liste explicite (`Spiccato = Staccato, Staccatissimo`).
+- Dans l'éditeur de map, le bouton **Score markings** du panneau de droite coche les signes qui sélectionnent
+  l'articulation (pré-coché d'après le nom) et écrit la liste explicite ; il s'applique à toutes les articulations
+  sélectionnées.
 
 ```text
 *C0       Legato Sustain                 ; défaut (pas "Legato" seul, voir ⚠️ plus bas)
