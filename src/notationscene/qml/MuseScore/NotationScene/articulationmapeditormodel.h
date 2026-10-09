@@ -68,14 +68,20 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(int middleCOctave READ middleCOctave WRITE setMiddleCOctave NOTIFY headerChanged)
     Q_PROPERTY(int keyswitchOffsetMs READ keyswitchOffsetMs WRITE setKeyswitchOffsetMs NOTIFY headerChanged)
 
+    //! NOTE: the current row, shown on the right; more rows can be selected with it (Cmd/Ctrl+click, Shift+click):
+    //! removing, moving and copying act on all of them, the articulation properties are set on all of their articulations
     Q_PROPERTY(int selectedRow READ selectedRow WRITE setSelectedRow NOTIFY selectionChanged)
+    Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectionChanged)
+    Q_PROPERTY(int selectedArticulationCount READ selectedArticulationCount NOTIFY selectionChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsFolder READ selectedIsFolder NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedName READ selectedName NOTIFY selectionChanged)
     Q_PROPERTY(int selectedNumber READ selectedNumber NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDefault READ selectedIsDefault NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDisabled READ selectedIsDisabled NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedIsDisabledMixed READ selectedIsDisabledMixed NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedHasKeyswitchOffset READ selectedHasKeyswitchOffset NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedHasKeyswitchOffsetMixed READ selectedHasKeyswitchOffsetMixed NOTIFY selectionChanged)
     Q_PROPERTY(int selectedKeyswitchOffsetMs READ selectedKeyswitchOffsetMs NOTIFY selectionChanged)
     Q_PROPERTY(int selectedNotesOffsetMs READ selectedNotesOffsetMs NOTIFY selectionChanged)
     //! NOTE: 1-16, 0 = the track's channel
@@ -130,13 +136,17 @@ public:
 
     int selectedRow() const;
     void setSelectedRow(int row);
+    int selectionCount() const;
+    int selectedArticulationCount() const;
     bool hasSelection() const;
     bool selectedIsFolder() const;
     QString selectedName() const;
     int selectedNumber() const;
     bool selectedIsDefault() const;
     bool selectedIsDisabled() const;
+    bool selectedIsDisabledMixed() const;
     bool selectedHasKeyswitchOffset() const;
+    bool selectedHasKeyswitchOffsetMixed() const;
     int selectedKeyswitchOffsetMs() const;
     int selectedNotesOffsetMs() const;
     int selectedChannel() const;
@@ -163,11 +173,16 @@ public:
     //! to hear it - only while playback is stopped
     Q_INVOKABLE void sendArticulation(int row);
 
+    //! NOTE: toggle = Cmd/Ctrl+click (adds or removes the row), extend = Shift+click (the rows from the last clicked one)
+    Q_INVOKABLE void selectRow(int row, bool toggle, bool extend);
+    Q_INVOKABLE void selectAll();
+
     Q_INVOKABLE void addArticulation();
     Q_INVOKABLE void addFolder();
     Q_INVOKABLE void removeSelected();
-    //! NOTE: duplicates the selected articulation right below it, at the same level
+    //! NOTE: duplicates the selected articulations, right below the last selected one of their folder
     Q_INVOKABLE void copySelectedArticulation();
+    //! NOTE: moves fromRow's node, with the other selected ones if it's selected
     Q_INVOKABLE bool canMove(int fromRow, int toRow, DropPosition position) const;
     Q_INVOKABLE void move(int fromRow, int toRow, DropPosition position);
     Q_INVOKABLE void toggleExpanded(int row);
@@ -175,6 +190,8 @@ public:
     Q_INVOKABLE void rename(int row, const QString& name);
     Q_INVOKABLE void setColor(int row, const QColor& color);
     Q_INVOKABLE void resetColor(int row);
+    Q_INVOKABLE void setSelectedColor(const QColor& color);
+    Q_INVOKABLE void resetSelectedColor();
 
     Q_INVOKABLE void setSelectedIsDefault(bool isDefault);
     Q_INVOKABLE void setSelectedIsDisabled(bool isDisabled);
@@ -212,6 +229,7 @@ private:
         SequenceRole,
         IsDefaultRole,
         IsDisabledRole,
+        IsSelectedRole,
     };
 
     struct Node;
@@ -239,8 +257,18 @@ private:
     Node* nodeAt(int row) const;
     int rowOf(const Node* node) const;
     int numberOf(const Node* node) const;
+    //! NOTE: the current row's articulation, else the first selected one
     Node* selectedEntry() const;
+    //! NOTE: in display order, folders excluded
+    std::vector<Node*> selectedEntries() const;
+    //! NOTE: in display order, without what's inside a selected folder
+    std::vector<Node*> selectedTopNodes() const;
+    bool isSelected(const Node* node) const;
     void selectNode(const Node* node);
+    void setSelection(const std::vector<const Node*>& nodes, const Node* current);
+    void notifySelectionChanged();
+    void notifyAllRowsChanged();
+    std::vector<Node*> nodesToMove(int fromRow) const;
 
     QString uniqueName(const Node* parent, const QString& name, const Node* except = nullptr) const;
     QString pathOf(const Node* node) const;
@@ -256,6 +284,8 @@ private:
     std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded
     const Node* m_defaultNode = nullptr;
     const Node* m_selectedNode = nullptr;
+    std::vector<const Node*> m_selectedNodes; // m_selectedNode and the others selected with it
+    const Node* m_selectionAnchor = nullptr; // the start of a Shift+click range
 
     std::optional<engraving::InstrumentTrackId> m_targetTrack;
     bool m_hasInstrumentEditor = false;

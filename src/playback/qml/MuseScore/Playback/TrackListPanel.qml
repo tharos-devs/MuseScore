@@ -319,6 +319,25 @@ Item {
                 width: ListView.view.width
                 height: 28
 
+                //! NOTE: selection, like the Mixer's (click, Cmd/Ctrl+click, Shift+click): the color, Mute and Solo of
+                //! a selected row apply to the whole selection
+                Rectangle {
+                    anchors.fill: parent
+                    color: ui.theme.accentColor
+                    opacity: 0.3
+                    visible: rowItem.channelItem ? rowItem.channelItem.selected : false
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: function(mouse) {
+                        // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux
+                        trackListModel.selectRow(rowItem.index, (mouse.modifiers & Qt.ControlModifier) !== 0,
+                                                 (mouse.modifiers & Qt.ShiftModifier) !== 0)
+                    }
+                }
+
                 //! NOTE: the track's color, its menu on a left click (like the Timeline's color strips)
                 Rectangle {
                     id: colorStrip
@@ -347,7 +366,9 @@ Item {
 
                         items: [
                             { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                            { id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: rowItem.channelItem.hasCustomColor }
+                            //! NOTE: on a selected row, for the whole selection, whose other rows may have a color
+                            { id: "resetColor", title: qsTrc("playback", "Reset color"),
+                                enabled: rowItem.channelItem.hasCustomColor || rowItem.channelItem.selected }
                         ]
 
                         onHandleMenuItem: function(itemId) {
@@ -428,11 +449,19 @@ Item {
                         accessibleName: rowItem.channelItem.title
 
                         onMuteToggled: function(muted) {
-                            rowItem.channelItem.muted = muted
+                            if (rowItem.channelItem.selected) {
+                                trackListModel.setMutedForSelectedRows(muted)
+                            } else {
+                                rowItem.channelItem.muted = muted
+                            }
                         }
 
                         onSoloToggled: function(solo) {
-                            rowItem.channelItem.solo = solo
+                            if (rowItem.channelItem.selected) {
+                                trackListModel.setSoloForSelectedRows(solo)
+                            } else {
+                                rowItem.channelItem.solo = solo
+                            }
                         }
                     }
 

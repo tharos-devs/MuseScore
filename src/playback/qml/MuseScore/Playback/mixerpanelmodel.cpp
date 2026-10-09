@@ -132,46 +132,12 @@ QVariantMap MixerPanelModel::get(int index)
 
 void MixerPanelModel::selectChannel(MixerChannelItem* item, bool extendSelection, bool rangeSelection)
 {
-    if (!item) {
-        return;
-    }
-
-    const int itemIndex = m_mixerChannelList.indexOf(item);
-
-    auto isSelectable = [](const MixerChannelItem* channel) {
+    ChannelSelection::select(m_mixerChannelList, item, extendSelection, rangeSelection, m_selectionAnchorIndex,
+                             [](const MixerChannelItem* channel) {
         return channel->type() == MixerChannelItem::Type::PrimaryInstrument
                || channel->type() == MixerChannelItem::Type::SecondaryInstrument
                || channel->type() == MixerChannelItem::Type::Aux;
-    };
-
-    if (rangeSelection && m_selectionAnchorIndex >= 0 && itemIndex >= 0) {
-        const int from = std::min(m_selectionAnchorIndex, itemIndex);
-        const int to = std::max(m_selectionAnchorIndex, itemIndex);
-
-        for (int i = 0; i < m_mixerChannelList.size(); ++i) {
-            MixerChannelItem* channel = m_mixerChannelList.at(i);
-            if (isSelectable(channel)) {
-                channel->setSelected(i >= from && i <= to);
-            }
-        }
-
-        return;
-    }
-
-    if (extendSelection) {
-        item->setSelected(!item->selected());
-        m_selectionAnchorIndex = itemIndex;
-        return;
-    }
-
-    for (MixerChannelItem* channel : m_mixerChannelList) {
-        if (channel != item && channel->selected()) {
-            channel->setSelected(false);
-        }
-    }
-
-    item->setSelected(true);
-    m_selectionAnchorIndex = itemIndex;
+    });
 }
 
 void MixerPanelModel::setColorForSelectedChannels(const QColor& color)
@@ -301,60 +267,17 @@ void MixerPanelModel::connectContinuousChangeUndo(MixerChannelItem* item)
 
 void MixerPanelModel::setMutedForSelectedChannels(bool muted)
 {
-    for (MixerChannelItem* item : m_mixerChannelList) {
-        if (!item->selected()) {
-            continue;
-        }
-
-        //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button
-        //! `enabled: !(muted && forceMute)` guard - a channel showing muted purely
-        //! because ANOTHER channel's solo force-muted it isn't something the user is
-        //! directly interacting with right now, so a multi-select fan-out shouldn't
-        //! silently overwrite its own persisted manual mute state as a side effect
-        //! of muting/unmuting a DIFFERENT selected channel.
-        if (item->muted() && item->forceMute()) {
-            continue;
-        }
-
-        item->setMuted(muted);
-    }
+    ChannelSelection::setMuted(m_mixerChannelList, muted);
 }
 
 void MixerPanelModel::setSoloForSelectedChannels(bool solo)
 {
-    for (MixerChannelItem* item : m_mixerChannelList) {
-        if (!item->selected()) {
-            continue;
-        }
-
-        //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button `enabled`/
-        //! `visible` guards - solo is only meaningful for a non-Aux channel or a
-        //! Group-type Aux bus (see that file's own NOTE on why a plain send/return
-        //! bus is excluded). The mute condition is deliberately the OPPOSITE of the
-        //! Mute case above: `muted && !forceMute` (manually muted), not `muted &&
-        //! forceMute` - a force-muted channel's own Solo button stays enabled by
-        //! design (soloing it is exactly how you hand the solo over to it), so
-        //! skipping it here would silently block the very channel the user just
-        //! clicked Solo on from ever taking the solo while part of a selection.
-        bool soloEligible = item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
-        bool manuallyMuted = item->muted() && !item->forceMute();
-        if (!soloEligible || manuallyMuted) {
-            continue;
-        }
-
-        item->setSolo(solo);
-    }
+    ChannelSelection::setSolo(m_mixerChannelList, solo);
 }
 
 void MixerPanelModel::clearSelection()
 {
-    for (MixerChannelItem* item : m_mixerChannelList) {
-        if (item->selected()) {
-            item->setSelected(false);
-        }
-    }
-
-    m_selectionAnchorIndex = -1;
+    ChannelSelection::clear(m_mixerChannelList, m_selectionAnchorIndex);
 }
 
 QVariant MixerPanelModel::data(const QModelIndex& index, int role) const

@@ -89,10 +89,14 @@ StyledDialogView {
     ColorPickerModel {
         id: colorPickerModel
 
-        property int row: -1
+        property int row: -1 // -1: the selected articulations
 
         onColorSelected: function(color) {
-            editorModel.setColor(row, color)
+            if (row < 0) {
+                editorModel.setSelectedColor(color)
+            } else {
+                editorModel.setColor(row, color)
+            }
         }
     }
 
@@ -107,6 +111,9 @@ StyledDialogView {
         readonly property int sidePanelWidth: 340
 
         property int editingRow: -1
+
+        // several articulations selected: the side panel sets the properties of all of them
+        readonly property bool multipleArticulations: editorModel.selectedArticulationCount > 1
 
         property bool alwaysOnTop: false
         property bool alwaysOnTopInitialized: false
@@ -310,6 +317,25 @@ StyledDialogView {
 
                         model: editorModel
 
+                        function isListKey(event) {
+                            return event.matches(StandardKey.SelectAll) || event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace
+                        }
+
+                        // not the application's shortcuts (the score's Select all, Delete...)
+                        Keys.onShortcutOverride: function(event) {
+                            event.accepted = isListKey(event)
+                        }
+
+                        Keys.onPressed: function(event) {
+                            if (event.matches(StandardKey.SelectAll)) {
+                                editorModel.selectAll()
+                                event.accepted = true
+                            } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                                editorModel.removeSelected()
+                                event.accepted = true
+                            }
+                        }
+
                         delegate: Item {
                             id: rowItem
 
@@ -325,15 +351,16 @@ StyledDialogView {
                             required property string sequence
                             required property bool isDefault
                             required property bool isDisabled
+                            required property bool isSelected
 
                             width: listView.width
                             height: prv.rowHeight
 
                             Rectangle {
                                 anchors.fill: parent
-                                color: editorModel.selectedRow === rowItem.index ? ui.theme.accentColor
+                                color: rowItem.isSelected ? ui.theme.accentColor
                                        : (rowMouseArea.containsMouse ? ui.theme.buttonColor : "transparent")
-                                opacity: editorModel.selectedRow === rowItem.index ? 0.5 : 0.6
+                                opacity: rowItem.isSelected ? 0.5 : 0.6
                             }
 
                             // drop indicator
@@ -358,15 +385,36 @@ StyledDialogView {
                                 preventStealing: true // the list would otherwise take the drag to scroll
 
                                 property point pressPoint
+                                // pressed in a selection of several rows: they're dragged together, a click selects it alone
+                                property bool selectAloneOnRelease: false
 
-                                onPressed: function(mouse) {
+                                function selectAlone(button) {
                                     editorModel.selectedRow = rowItem.index
-                                    pressPoint = Qt.point(mouse.x, mouse.y)
 
                                     //! NOTE: clicking an articulation lets you hear it on the track's instrument
-                                    if (mouse.button === Qt.LeftButton) {
+                                    if (button === Qt.LeftButton) {
                                         editorModel.sendArticulation(rowItem.index)
                                     }
+                                }
+
+                                onPressed: function(mouse) {
+                                    listView.forceActiveFocus()
+                                    pressPoint = Qt.point(mouse.x, mouse.y)
+                                    selectAloneOnRelease = false
+
+                                    const toggle = mouse.modifiers & Qt.ControlModifier
+                                    const extend = mouse.modifiers & Qt.ShiftModifier
+                                    if (mouse.button === Qt.LeftButton && (toggle || extend)) {
+                                        editorModel.selectRow(rowItem.index, toggle, extend)
+                                        return
+                                    }
+
+                                    if (rowItem.isSelected && editorModel.selectionCount > 1) {
+                                        selectAloneOnRelease = mouse.button === Qt.LeftButton
+                                        return
+                                    }
+
+                                    selectAlone(mouse.button)
                                 }
 
                                 onPositionChanged: function(mouse) {
@@ -423,7 +471,14 @@ StyledDialogView {
                                     }
                                 }
 
-                                onReleased: {
+                                onReleased: function(mouse) {
+                                    if (selectAloneOnRelease && !prv.isDragging) {
+                                        selectAloneOnRelease = false
+                                        selectAlone(mouse.button)
+                                        return
+                                    }
+
+                                    selectAloneOnRelease = false
                                     prv.drop()
                                 }
 
@@ -464,12 +519,18 @@ StyledDialogView {
                                             anchors.fill: parent
                                             anchors.margins: -4
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            // on a row of a selection of several articulations: all of them
                                             onClicked: function(mouse) {
+                                                const forSelection = rowItem.isSelected && prv.multipleArticulations
                                                 if (mouse.button === Qt.RightButton) {
-                                                    editorModel.resetColor(rowItem.index)
+                                                    if (forSelection) {
+                                                        editorModel.resetSelectedColor()
+                                                    } else {
+                                                        editorModel.resetColor(rowItem.index)
+                                                    }
                                                     return
                                                 }
-                                                colorPickerModel.row = rowItem.index
+                                                colorPickerModel.row = forSelection ? -1 : rowItem.index
                                                 colorPickerModel.selectColor(rowItem.articulationColor, false)
                                             }
                                         }
@@ -561,21 +622,21 @@ StyledDialogView {
                     FlatButton {
                         minWidth: 0
                         text: qsTrc("notation", "Rename")
-                        enabled: editorModel.hasSelection
+                        enabled: editorModel.hasSelection && editorModel.selectionCount === 1
                         onClicked: prv.editingRow = editorModel.selectedRow
                     }
 
                     FlatButton {
                         minWidth: 0
                         text: qsTrc("global", "Copy")
-                        enabled: editorModel.hasSelection && !editorModel.selectedIsFolder
+                        enabled: editorModel.selectedArticulationCount > 0
                         onClicked: editorModel.copySelectedArticulation()
                     }
 
                     FlatButton {
                         minWidth: 0
                         text: qsTrc("global", "Remove")
-                        enabled: editorModel.hasSelection
+                        enabled: editorModel.selectionCount > 0
                         onClicked: editorModel.removeSelected()
                     }
                 }
@@ -590,7 +651,7 @@ StyledDialogView {
 
                 StyledTextLabel {
                     anchors.centerIn: parent
-                    visible: !editorModel.hasSelection || editorModel.selectedIsFolder
+                    visible: !prv.multipleArticulations && (!editorModel.hasSelection || editorModel.selectedIsFolder)
                     width: parent.width - 32
                     wrapMode: Text.WordWrap
                     text: editorModel.selectedIsFolder
@@ -602,27 +663,32 @@ StyledDialogView {
                     anchors.fill: parent
                     anchors.margins: 12
                     spacing: 10
-                    visible: editorModel.hasSelection && !editorModel.selectedIsFolder
+                    visible: prv.multipleArticulations || (editorModel.hasSelection && !editorModel.selectedIsFolder)
 
                     StyledTextLabel {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideRight
                         font: ui.theme.largeBodyBoldFont
-                        text: editorModel.selectedNumber + "   " + editorModel.selectedName
+                        text: prv.multipleArticulations
+                              ? qsTrc("notation", "%n articulation(s) selected", "", editorModel.selectedArticulationCount)
+                              : editorModel.selectedNumber + "   " + editorModel.selectedName
                     }
 
                     CheckBox {
+                        visible: !prv.multipleArticulations
                         text: qsTrc("notation", "Default articulation")
                         enabled: !editorModel.selectedIsDisabled
                         checked: editorModel.selectedIsDefault
                         onClicked: editorModel.setSelectedIsDefault(!checked)
                     }
 
+                    // mixed: a click disables all of them
                     CheckBox {
                         text: qsTrc("notation", "Disable articulation")
-                        checked: editorModel.selectedIsDisabled
-                        onClicked: editorModel.setSelectedIsDisabled(!checked)
+                        checked: editorModel.selectedIsDisabled && !editorModel.selectedIsDisabledMixed
+                        isIndeterminate: editorModel.selectedIsDisabledMixed
+                        onClicked: editorModel.setSelectedIsDisabled(isIndeterminate || !checked)
                     }
 
                     RowLayout {
@@ -631,8 +697,9 @@ StyledDialogView {
                         CheckBox {
                             Layout.fillWidth: true
                             text: qsTrc("notation", "Articulation delay")
-                            checked: editorModel.selectedHasKeyswitchOffset
-                            onClicked: editorModel.setSelectedHasKeyswitchOffset(!checked)
+                            checked: editorModel.selectedHasKeyswitchOffset && !editorModel.selectedHasKeyswitchOffsetMixed
+                            isIndeterminate: editorModel.selectedHasKeyswitchOffsetMixed
+                            onClicked: editorModel.setSelectedHasKeyswitchOffset(isIndeterminate || !checked)
                         }
 
                         IncrementalPropertyControl {
@@ -698,8 +765,15 @@ StyledDialogView {
                         }
                     }
 
+                    // in place of the activation sequence, shown for one articulation only
+                    Item {
+                        Layout.fillHeight: true
+                        visible: prv.multipleArticulations
+                    }
+
                     StyledTextLabel {
                         Layout.topMargin: 8
+                        visible: !prv.multipleArticulations
                         horizontalAlignment: Text.AlignLeft
                         font: ui.theme.bodyBoldFont
                         text: qsTrc("notation", "Activation sequence")
@@ -707,6 +781,7 @@ StyledDialogView {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: !prv.multipleArticulations
                         spacing: 6
 
                         StyledTextLabel {
@@ -729,6 +804,7 @@ StyledDialogView {
                     StyledFlickable {
                         id: messagesFlickable
 
+                        visible: !prv.multipleArticulations
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         contentHeight: messagesColumn.height
@@ -805,6 +881,7 @@ StyledDialogView {
                     }
 
                     FlatButton {
+                        visible: !prv.multipleArticulations
                         minWidth: 0
                         text: qsTrc("notation", "+ Add")
                         onClicked: editorModel.addMessage()

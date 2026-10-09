@@ -301,6 +301,9 @@ void TrackListModel::reload()
         m_globalMuteSolo.clear();
     }
 
+    // the new items aren't selected
+    m_selectionAnchorIndex = -1;
+
     m_rebuildRequired = false;
 
     //! NOTE: the new rows are complete before the reset: no change notification in the middle of it
@@ -624,13 +627,47 @@ void TrackListModel::applyTrackColor(int row, const QColor& color, const Transla
         return;
     }
 
-    const PartTracks& tracks = m_rows.at(row).tracks;
-    std::vector<ChannelColorChange::Target> targets { { tracks.instrumentTrackId, std::nullopt } };
-    for (const InstrumentTrackId& trackId : tracks.otherInstrumentTrackIds) {
-        targets.push_back({ trackId, std::nullopt });
+    const bool forSelection = m_rows.at(row).item->selected();
+
+    std::vector<ChannelColorChange::Target> targets;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const Row& r = m_rows.at(i);
+        if (forSelection ? !r.item->selected() : i != row) {
+            continue;
+        }
+
+        targets.push_back({ r.tracks.instrumentTrackId, std::nullopt });
+        for (const InstrumentTrackId& trackId : r.tracks.otherInstrumentTrackIds) {
+            targets.push_back({ trackId, std::nullopt });
+        }
     }
 
     ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
+}
+
+void TrackListModel::selectRow(int row, bool toggle, bool range)
+{
+    if (row < 0 || row >= m_rows.size()) {
+        return;
+    }
+
+    ChannelSelection::select(channels(), m_rows.at(row).item, toggle, range, m_selectionAnchorIndex,
+                             [](const MixerChannelItem*) { return true; });
+}
+
+void TrackListModel::clearSelection()
+{
+    ChannelSelection::clear(channels(), m_selectionAnchorIndex);
+}
+
+void TrackListModel::setMutedForSelectedRows(bool muted)
+{
+    ChannelSelection::setMuted(channels(), muted);
+}
+
+void TrackListModel::setSoloForSelectedRows(bool solo)
+{
+    ChannelSelection::setSolo(channels(), solo);
 }
 
 GlobalMuteSoloToggle::Channels TrackListModel::channels() const

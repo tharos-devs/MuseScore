@@ -23,6 +23,7 @@
 #include "articulationmapeditormodel.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 #include "articulationmapcolors.h"
 
@@ -219,6 +220,7 @@ QVariant ArticulationMapEditorModel::data(const QModelIndex& index, int role) co
     case SequenceRole: return sequenceText(node);
     case IsDefaultRole: return node == m_defaultNode;
     case IsDisabledRole: return node->disabled;
+    case IsSelectedRole: return isSelected(node);
     }
 
     return QVariant();
@@ -243,6 +245,7 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
         { SequenceRole, "sequence" },
         { IsDefaultRole, "isDefault" },
         { IsDisabledRole, "isDisabled" },
+        { IsSelectedRole, "isSelected" },
     };
 }
 
@@ -268,6 +271,27 @@ void ArticulationMapEditorModel::rebuildRows()
         }
     };
     visit(m_root.get(), 0, true);
+
+    //! NOTE: only what's shown stays selected (not what's in a collapsed folder); a current row set alone
+    //! (e.g. a new articulation) is selected alone
+    std::unordered_set<const Node*> shown;
+    for (const Row& row : m_rows) {
+        shown.insert(row.node);
+    }
+    std::erase_if(m_selectedNodes, [&shown](const Node* node) { return !shown.contains(node); });
+
+    if (m_selectedNode && shown.contains(m_selectedNode)) {
+        if (!isSelected(m_selectedNode)) {
+            m_selectedNodes = { m_selectedNode };
+            m_selectionAnchor = m_selectedNode;
+        }
+    } else {
+        m_selectedNode = m_selectedNodes.empty() ? nullptr : m_selectedNodes.back();
+    }
+
+    if (!m_selectionAnchor || !shown.contains(m_selectionAnchor)) {
+        m_selectionAnchor = m_selectedNode;
+    }
 
     endResetModel();
 
@@ -298,6 +322,13 @@ int ArticulationMapEditorModel::numberOf(const Node* node) const
 {
     auto it = m_numbers.find(node);
     return it == m_numbers.end() ? 0 : it->second;
+}
+
+void ArticulationMapEditorModel::notifyAllRowsChanged()
+{
+    if (!m_rows.empty()) {
+        emit dataChanged(index(0), index(static_cast<int>(m_rows.size()) - 1));
+    }
 }
 
 void ArticulationMapEditorModel::notifyRowChanged(const Node* node)
@@ -488,6 +519,8 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
     m_root->isFolder = true;
     m_defaultNode = nullptr;
     m_selectedNode = nullptr;
+    m_selectedNodes.clear();
+    m_selectionAnchor = nullptr;
 
     auto ensureFolder = [this](const QStringList& names) {
         Node* folder = m_root.get();
@@ -915,9 +948,7 @@ void ArticulationMapEditorModel::setMiddleCOctave(int octave)
     markDirty();
     emit headerChanged();
 
-    if (!m_rows.empty()) {
-        emit dataChanged(index(0), index(static_cast<int>(m_rows.size()) - 1));
-    }
+    notifyAllRowsChanged();
     emit selectionChanged();
 }
 
@@ -952,19 +983,141 @@ void ArticulationMapEditorModel::setSelectedRow(int row)
 
 void ArticulationMapEditorModel::selectNode(const Node* node)
 {
-    if (m_selectedNode == node) {
+    if (node) {
+        setSelection({ node }, node);
+    } else {
+        setSelection({}, nullptr);
+    }
+}
+
+void ArticulationMapEditorModel::setSelection(const std::vector<const Node*>& nodes, const Node* current)
+{
+    if (m_selectedNodes == nodes && m_selectedNode == current) {
         return;
     }
 
-    m_selectedNode = node;
+    m_selectedNodes = nodes;
+    m_selectedNode = current;
+    m_selectionAnchor = current;
+    notifySelectionChanged();
+}
+
+void ArticulationMapEditorModel::notifySelectionChanged()
+{
+    if (!m_rows.empty()) {
+        emit dataChanged(index(0), index(static_cast<int>(m_rows.size()) - 1), { IsSelectedRole });
+    }
     emit selectionChanged();
+}
+
+bool ArticulationMapEditorModel::isSelected(const Node* node) const
+{
+    return std::find(m_selectedNodes.cbegin(), m_selectedNodes.cend(), node) != m_selectedNodes.cend();
+}
+
+void ArticulationMapEditorModel::selectRow(int row, bool toggle, bool extend)
+{
+    const Node* node = nodeAt(row);
+    if (!node) {
+        return;
+    }
+
+    const int anchorRow = rowOf(m_selectionAnchor);
+    if (extend && anchorRow >= 0) {
+        std::vector<const Node*> nodes = toggle ? m_selectedNodes : std::vector<const Node*> {};
+        for (int r = std::min(anchorRow, row); r <= std::max(anchorRow, row); ++r) {
+            if (std::find(nodes.cbegin(), nodes.cend(), nodeAt(r)) == nodes.cend()) {
+                nodes.push_back(nodeAt(r));
+            }
+        }
+
+        const Node* anchor = m_selectionAnchor;
+        setSelection(nodes, node);
+        m_selectionAnchor = anchor; // the next Shift+click starts from the same row
+        return;
+    }
+
+    if (!toggle) {
+        selectNode(node);
+        return;
+    }
+
+    std::vector<const Node*> nodes = m_selectedNodes;
+    if (isSelected(node)) {
+        std::erase(nodes, node);
+        setSelection(nodes, node == m_selectedNode ? (nodes.empty() ? nullptr : nodes.back()) : m_selectedNode);
+    } else {
+        nodes.push_back(node);
+        setSelection(nodes, node);
+    }
+}
+
+void ArticulationMapEditorModel::selectAll()
+{
+    std::vector<const Node*> nodes;
+    for (const Row& row : m_rows) {
+        nodes.push_back(row.node);
+    }
+
+    const Node* current = m_selectedNode ? m_selectedNode : (nodes.empty() ? nullptr : nodes.front());
+    setSelection(nodes, current);
+}
+
+int ArticulationMapEditorModel::selectionCount() const
+{
+    return static_cast<int>(m_selectedNodes.size());
+}
+
+int ArticulationMapEditorModel::selectedArticulationCount() const
+{
+    return static_cast<int>(selectedEntries().size());
 }
 
 ArticulationMapEditorModel::Node* ArticulationMapEditorModel::selectedEntry() const
 {
-    const int row = rowOf(m_selectedNode);
-    Node* node = nodeAt(row);
-    return node && !node->isFolder ? node : nullptr;
+    Node* node = nodeAt(rowOf(m_selectedNode));
+    if (node && !node->isFolder) {
+        return node;
+    }
+
+    const std::vector<Node*> entries = selectedEntries();
+    return entries.empty() ? nullptr : entries.front();
+}
+
+std::vector<ArticulationMapEditorModel::Node*> ArticulationMapEditorModel::selectedEntries() const
+{
+    std::vector<Node*> result;
+    for (const Row& row : m_rows) {
+        if (!row.node->isFolder && isSelected(row.node)) {
+            result.push_back(row.node);
+        }
+    }
+
+    return result;
+}
+
+std::vector<ArticulationMapEditorModel::Node*> ArticulationMapEditorModel::selectedTopNodes() const
+{
+    std::vector<Node*> result;
+    for (const Row& row : m_rows) {
+        if (!isSelected(row.node)) {
+            continue;
+        }
+
+        bool inSelectedFolder = false;
+        for (const Node* parent = row.node->parent; parent; parent = parent->parent) {
+            if (isSelected(parent)) {
+                inSelectedFolder = true;
+                break;
+            }
+        }
+
+        if (!inSelectedFolder) {
+            result.push_back(row.node);
+        }
+    }
+
+    return result;
 }
 
 bool ArticulationMapEditorModel::hasSelection() const
@@ -998,10 +1151,26 @@ bool ArticulationMapEditorModel::selectedIsDisabled() const
     return entry && entry->disabled;
 }
 
+bool ArticulationMapEditorModel::selectedIsDisabledMixed() const
+{
+    const std::vector<Node*> entries = selectedEntries();
+    return std::any_of(entries.cbegin(), entries.cend(), [&entries](const Node* entry) {
+        return entry->disabled != entries.front()->disabled;
+    });
+}
+
 bool ArticulationMapEditorModel::selectedHasKeyswitchOffset() const
 {
     const Node* entry = selectedEntry();
     return entry && entry->keyswitchOffsetMs.has_value();
+}
+
+bool ArticulationMapEditorModel::selectedHasKeyswitchOffsetMixed() const
+{
+    const std::vector<Node*> entries = selectedEntries();
+    return std::any_of(entries.cbegin(), entries.cend(), [&entries](const Node* entry) {
+        return entry->keyswitchOffsetMs.has_value() != entries.front()->keyswitchOffsetMs.has_value();
+    });
 }
 
 int ArticulationMapEditorModel::selectedKeyswitchOffsetMs() const
@@ -1120,39 +1289,64 @@ void ArticulationMapEditorModel::addFolder()
 
 void ArticulationMapEditorModel::copySelectedArticulation()
 {
-    Node* entry = selectedEntry();
-    if (!entry || !entry->parent) {
+    const std::vector<Node*> entries = selectedEntries();
+    if (entries.empty()) {
         return;
     }
 
-    Node* parent = entry->parent;
-    std::unique_ptr<Node> copy = copyOfArticulation(*entry);
-    copy->name = uniqueName(parent, entry->name);
+    // per folder, in display order
+    std::vector<std::pair<Node*, std::vector<Node*> > > groups;
+    for (Node* entry : entries) {
+        auto it = std::find_if(groups.begin(), groups.end(), [entry](const auto& group) { return group.first == entry->parent; });
+        if (it == groups.end()) {
+            groups.push_back({ entry->parent, { entry } });
+        } else {
+            it->second.push_back(entry);
+        }
+    }
 
-    m_selectedNode = parent->addChild(std::move(copy), parent->indexOf(entry) + 1);
+    std::vector<const Node*> copies;
+    for (const auto& [parent, groupEntries] : groups) {
+        size_t index = 0;
+        for (const Node* entry : groupEntries) {
+            index = std::max(index, parent->indexOf(entry) + 1);
+        }
+
+        for (const Node* entry : groupEntries) {
+            std::unique_ptr<Node> copy = copyOfArticulation(*entry);
+            copy->name = uniqueName(parent, entry->name);
+            copies.push_back(parent->addChild(std::move(copy), index++));
+        }
+    }
+
+    m_selectedNodes = copies;
+    m_selectedNode = copies.front();
+    m_selectionAnchor = copies.front();
     rebuildRows();
     markDirty();
 }
 
 void ArticulationMapEditorModel::removeSelected()
 {
-    const int row = rowOf(m_selectedNode);
-    Node* node = nodeAt(row);
-    if (!node) {
+    const std::vector<Node*> nodes = selectedTopNodes();
+    if (nodes.empty()) {
         return;
     }
 
-    auto doRemove = [this, node]() {
-        Node* parent = node->parent;
-        const size_t index = parent->indexOf(node);
+    auto doRemove = [this, nodes]() {
+        // the first one's parent stays: it isn't selected, nor in a selected folder
+        Node* parent = nodes.front()->parent;
+        const size_t index = parent->indexOf(nodes.front());
 
-        if (m_defaultNode && node->contains(m_defaultNode)) {
-            m_defaultNode = nullptr;
+        for (Node* node : nodes) {
+            if (m_defaultNode && node->contains(m_defaultNode)) {
+                m_defaultNode = nullptr;
+            }
+
+            std::unique_ptr<Node> removed = node->parent->takeChild(node);
         }
 
-        std::unique_ptr<Node> removed = parent->takeChild(node);
-
-        // select what takes its place
+        // select what takes the place of the first one
         if (index < parent->children.size()) {
             m_selectedNode = parent->children[index].get();
         } else if (index > 0) {
@@ -1160,17 +1354,24 @@ void ArticulationMapEditorModel::removeSelected()
         } else {
             m_selectedNode = parent == m_root.get() ? nullptr : parent;
         }
+        m_selectedNodes.clear();
+        m_selectionAnchor = nullptr;
 
         rebuildRows();
         markDirty();
     };
 
-    if (!node->isFolder || node->children.empty()) {
+    const Node* first = nodes.front();
+    if (nodes.size() == 1 && (!first->isFolder || first->children.empty())) {
         doRemove();
         return;
     }
 
-    interactive()->question("", muse::qtrc("notation", "Remove the folder “%1” and everything in it?").arg(node->name).toStdString(), {
+    const QString question = nodes.size() == 1
+                             ? muse::qtrc("notation", "Remove the folder “%1” and everything in it?").arg(first->name)
+                             : muse::qtrc("notation", "Remove the %n selected item(s)?", nullptr, static_cast<int>(nodes.size()));
+
+    interactive()->question("", question.toStdString(), {
         IInteractive::Button::Cancel, IInteractive::Button::Yes
     }, IInteractive::Button::Yes)
     .onResolve(this, [doRemove](const IInteractive::Result& res) {
@@ -1180,22 +1381,34 @@ void ArticulationMapEditorModel::removeSelected()
     });
 }
 
+std::vector<ArticulationMapEditorModel::Node*> ArticulationMapEditorModel::nodesToMove(int fromRow) const
+{
+    Node* from = nodeAt(fromRow);
+    if (!from) {
+        return {};
+    }
+
+    return isSelected(from) ? selectedTopNodes() : std::vector<Node*> { from };
+}
+
 //! NOTE: toRow -1 = at the end of the map, outside of any folder
 bool ArticulationMapEditorModel::canMove(int fromRow, int toRow, DropPosition position) const
 {
-    const Node* from = nodeAt(fromRow);
+    const std::vector<Node*> nodes = nodesToMove(fromRow);
     if (toRow < 0) {
-        return from && position == DropPosition::After;
+        return !nodes.empty() && position == DropPosition::After;
     }
 
     const Node* to = nodeAt(toRow);
-    if (!from || !to || from == to) {
+    if (nodes.empty() || !to) {
         return false;
     }
 
-    // a folder can't go into itself
-    if (from->isFolder && from->contains(to)) {
-        return false;
+    // not next to itself, and a folder can't go into itself
+    for (const Node* node : nodes) {
+        if (node->contains(to)) {
+            return false;
+        }
     }
 
     return position != DropPosition::Into || to->isFolder;
@@ -1207,10 +1420,13 @@ void ArticulationMapEditorModel::move(int fromRow, int toRow, DropPosition posit
         return;
     }
 
-    Node* from = nodeAt(fromRow);
+    const std::vector<Node*> nodes = nodesToMove(fromRow);
     Node* to = toRow >= 0 ? nodeAt(toRow) : nullptr;
 
-    std::unique_ptr<Node> taken = from->parent->takeChild(from);
+    std::vector<std::unique_ptr<Node> > taken;
+    for (Node* node : nodes) {
+        taken.push_back(node->parent->takeChild(node));
+    }
 
     Node* parent = nullptr;
     size_t index = 0;
@@ -1226,8 +1442,10 @@ void ArticulationMapEditorModel::move(int fromRow, int toRow, DropPosition posit
         index = parent->indexOf(to) + (position == DropPosition::After ? 1 : 0);
     }
 
-    taken->name = uniqueName(parent, taken->name);
-    parent->addChild(std::move(taken), index);
+    for (std::unique_ptr<Node>& node : taken) {
+        node->name = uniqueName(parent, node->name);
+        parent->addChild(std::move(node), index++);
+    }
 
     rebuildRows();
     markDirty();
@@ -1287,23 +1505,64 @@ void ArticulationMapEditorModel::resetColor(int row)
     markDirty();
 }
 
-void ArticulationMapEditorModel::setSelectedIsDisabled(bool isDisabled)
+void ArticulationMapEditorModel::setSelectedColor(const QColor& color)
 {
-    Node* entry = selectedEntry();
-    if (!entry || entry->disabled == isDisabled) {
+    if (!color.isValid()) {
         return;
     }
 
-    entry->disabled = isDisabled;
-
-    // a disabled articulation is never played, it can't be the one played by default
-    if (isDisabled && entry == m_defaultNode) {
-        m_defaultNode = nullptr;
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->color != (color.rgb() & 0xFFFFFF)) {
+            entry->color = color.rgb() & 0xFFFFFF;
+            changed = true;
+        }
     }
 
-    notifyRowChanged(entry);
-    markDirty();
-    emit selectionChanged();
+    if (changed) {
+        notifyAllRowsChanged();
+        markDirty();
+    }
+}
+
+void ArticulationMapEditorModel::resetSelectedColor()
+{
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->color) {
+            entry->color.reset();
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        notifyAllRowsChanged();
+        markDirty();
+    }
+}
+
+void ArticulationMapEditorModel::setSelectedIsDisabled(bool isDisabled)
+{
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->disabled == isDisabled) {
+            continue;
+        }
+
+        entry->disabled = isDisabled;
+        changed = true;
+
+        // a disabled articulation is never played, it can't be the one played by default
+        if (isDisabled && entry == m_defaultNode) {
+            m_defaultNode = nullptr;
+        }
+    }
+
+    if (changed) {
+        notifyAllRowsChanged();
+        markDirty();
+        emit selectionChanged();
+    }
 }
 
 void ArticulationMapEditorModel::setSelectedIsDefault(bool isDefault)
@@ -1326,58 +1585,79 @@ void ArticulationMapEditorModel::setSelectedIsDefault(bool isDefault)
 
 void ArticulationMapEditorModel::setSelectedHasKeyswitchOffset(bool has)
 {
-    Node* entry = selectedEntry();
-    if (!entry || has == entry->keyswitchOffsetMs.has_value()) {
-        return;
+    // the value shown (the current articulation's, else the map's) for the ones that get one
+    const int ms = selectedKeyswitchOffsetMs();
+
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (has == entry->keyswitchOffsetMs.has_value()) {
+            continue;
+        }
+
+        if (has) {
+            entry->keyswitchOffsetMs = ms;
+        } else {
+            entry->keyswitchOffsetMs.reset();
+        }
+        changed = true;
     }
 
-    if (has) {
-        entry->keyswitchOffsetMs = m_keyswitchOffsetMs;
-    } else {
-        entry->keyswitchOffsetMs.reset();
+    if (changed) {
+        markDirty();
+        emit selectionChanged();
     }
-
-    markDirty();
-    emit selectionChanged();
 }
 
 void ArticulationMapEditorModel::setSelectedKeyswitchOffsetMs(int ms)
 {
-    Node* entry = selectedEntry();
-    if (!entry || entry->keyswitchOffsetMs == ms) {
-        return;
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->keyswitchOffsetMs != ms) {
+            entry->keyswitchOffsetMs = ms;
+            changed = true;
+        }
     }
 
-    entry->keyswitchOffsetMs = ms;
-    markDirty();
-    emit selectionChanged();
+    if (changed) {
+        markDirty();
+        emit selectionChanged();
+    }
 }
 
 void ArticulationMapEditorModel::setSelectedChannel(int channel)
 {
-    Node* entry = selectedEntry();
     const std::optional<int> newChannel = channel >= 1 && channel <= ArticulationMapParser::MIDI_CHANNEL_COUNT
                                           ? std::optional<int>(channel - 1) : std::nullopt;
-    if (!entry || entry->channel == newChannel) {
-        return;
+
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->channel != newChannel) {
+            entry->channel = newChannel;
+            changed = true;
+        }
     }
 
-    entry->channel = newChannel;
-    notifyRowChanged(entry);
-    markDirty();
-    emit selectionChanged();
+    if (changed) {
+        notifyAllRowsChanged();
+        markDirty();
+        emit selectionChanged();
+    }
 }
 
 void ArticulationMapEditorModel::setSelectedNotesOffsetMs(int ms)
 {
-    Node* entry = selectedEntry();
-    if (!entry || entry->notesOffsetMs == ms) {
-        return;
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->notesOffsetMs != ms) {
+            entry->notesOffsetMs = ms;
+            changed = true;
+        }
     }
 
-    entry->notesOffsetMs = ms;
-    markDirty();
-    emit selectionChanged();
+    if (changed) {
+        markDirty();
+        emit selectionChanged();
+    }
 }
 
 // ---- activation sequence
