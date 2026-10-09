@@ -95,6 +95,11 @@ public:
     muse::async::Notification settingsChanged() const override;
     void markAsChanged() override;
 
+    QJsonObject inputParamsToJson(const AudioInputParams& params) const override;
+    AudioInputParams inputParamsFromJson(const QJsonObject& object) const override;
+    QJsonObject outputParamsToJson(const AudioOutputParams& params) const override;
+    AudioOutputParams outputParamsFromJson(const QJsonObject& object) const override;
+
     muse::Ret read(const engraving::MscReader& reader);
     muse::Ret write(engraving::MscWriter& writer, notation::INotationSoloMuteStatePtr masterSoloMuteStatePtr);
 
@@ -106,8 +111,6 @@ private:
     ProjectAudioSettings(const muse::modularity::ContextPtr& iocCtx)
         : muse::Contextable(iocCtx) {}
 
-    AudioInputParams inputParamsFromJson(const QJsonObject& object) const;
-    AudioOutputParams outputParamsFromJson(const QJsonObject& object) const;
     SoloMuteState soloMuteStateFromJson(const QJsonObject& object) const;
     muse::audio::AudioFxChain fxChainFromJson(const QJsonObject& fxChainObject) const;
     muse::audio::AudioFxParams fxParamsFromJson(const QJsonObject& object) const;
@@ -117,8 +120,6 @@ private:
     muse::audio::AudioUnitConfig unitConfigFromJson(const QJsonObject& object) const;
     muse::audio::AudioResourceAttributes attributesFromJson(const QJsonObject& object) const;
 
-    QJsonObject inputParamsToJson(const AudioInputParams& params) const;
-    QJsonObject outputParamsToJson(const AudioOutputParams& params) const;
     QJsonObject soloMuteStateToJson(const SoloMuteState& state) const;
     QJsonObject fxChainToJson(const muse::audio::AudioFxChain& fxChain) const;
     QJsonObject fxParamsToJson(const muse::audio::AudioFxParams& fxParams) const;

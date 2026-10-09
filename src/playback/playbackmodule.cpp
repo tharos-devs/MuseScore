@@ -64,6 +64,8 @@ void PlaybackModule::resolveImports()
     if (ir) {
         ir->registerQmlUri(Uri("musescore://playback/soundprofiles"), "MuseScore.Playback", "SoundProfilesDialog");
         ir->registerQmlUri(Uri("musescore://playback/projectloading"), "MuseScore.Playback", "ProjectLoadingDialog");
+        ir->registerQmlUri(Uri("musescore://playback/savetrackpreset"), "MuseScore.Playback", "SaveTrackPresetDialog");
+        ir->registerQmlUri(Uri("musescore://playback/trackpresets"), "MuseScore.Playback", "TrackPresetsDialog");
     }
 
     auto cr = globalIoc()->resolve<muse::rcommand::ICommandsRegister>(mname);

@@ -525,6 +525,7 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
     });
 
     connect(this, &MixerChannelItem::controlParamsChanged, this, [this](const AudioOutputParams& params) {
+        m_lastControlParamsSent.start();
         playback()->setControlParams(m_trackId, params.control());
 
         //! NOTE Only persist volume/balance/gain here; solo/mute/forceMute are owned by
@@ -567,6 +568,22 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
             emit outputParamsReceived();
         }
     });
+
+    //! NOTE: gain, volume and pan set elsewhere (e.g. a track preset); not the mute, owned by the solo/mute state.
+    //! The engine echoes every change, this channel's own ones too: one arriving late while a fader is moving would
+    //! pull it back, so the echoes of its own recent changes are left out
+    playback()->controlParamsChanged().onReceive(this, [this](const TrackId trackId, const ControlParams& params) {
+        static constexpr qint64 OWN_CHANGE_ECHO_MS = 500;
+        if (trackId != m_trackId || !m_outputParamsLoaded
+            || (m_lastControlParamsSent.isValid() && m_lastControlParamsSent.elapsed() < OWN_CHANGE_ECHO_MS)) {
+            return;
+        }
+        const volume_db_t volume = params.volume.hasAutomation() ? m_outParams.volume
+                                   : std::get<volume_db_t>(params.volume.value());
+        const balance_t balance = params.balance.hasAutomation() ? m_outParams.balance
+                                  : std::get<balance_t>(params.balance.value());
+        loadControlParams(volume, balance, params.gain);
+    });
 }
 
 void MixerChannelItem::loadInputParams(const AudioInputParams& newParams)
@@ -590,29 +607,7 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
     //! and by PlaybackController's live force-mute computation, and are always default-false
     //! on an AudioOutputParams fetched from IProjectAudioSettings. Applying them here would
     //! clobber the solo/mute state already loaded via loadSoloMuteState().
-    if (!muse::RealIsEqual(m_outParams.volume, newParams.volume)) {
-        m_outParams.volume = newParams.volume;
-        if (!m_hasVolumeAutomation) {
-            setDisplayedVolumeLevel(m_outParams.volume);
-        }
-    }
-
-    if (!muse::RealIsEqual(m_outParams.balance, newParams.balance)) {
-        m_outParams.balance = newParams.balance;
-        if (!m_hasBalanceAutomation) {
-            setDisplayedBalance(m_outParams.balance.raw() * BALANCE_SCALING_FACTOR);
-        }
-    }
-
-    if (!muse::RealIsEqual(m_outParams.gain, newParams.gain)) {
-        m_outParams.gain = newParams.gain;
-        setDisplayedGain(m_outParams.gain.raw());
-    }
-
-    if (m_outParams.color != newParams.color) {
-        m_outParams.color = newParams.color;
-        emit colorChanged();
-    }
+    loadControlParams(newParams.volume, newParams.balance, newParams.gain);
 
     if (m_outParams.color != newParams.color) {
         m_outParams.color = newParams.color;
@@ -623,6 +618,28 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
     loadAuxSendItems(newParams.auxSends);
 
     m_outputParamsLoaded = true;
+}
+
+void MixerChannelItem::loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain)
+{
+    if (!muse::RealIsEqual(m_outParams.volume, volume)) {
+        m_outParams.volume = volume;
+        if (!m_hasVolumeAutomation) {
+            setDisplayedVolumeLevel(m_outParams.volume);
+        }
+    }
+
+    if (!muse::RealIsEqual(m_outParams.balance, balance)) {
+        m_outParams.balance = balance;
+        if (!m_hasBalanceAutomation) {
+            setDisplayedBalance(m_outParams.balance.raw() * BALANCE_SCALING_FACTOR);
+        }
+    }
+
+    if (!muse::RealIsEqual(m_outParams.gain, gain)) {
+        m_outParams.gain = gain;
+        setDisplayedGain(m_outParams.gain.raw());
+    }
 }
 
 void MixerChannelItem::loadOutputResourceItems(const AudioFxChain& fxChain)
@@ -1081,6 +1098,39 @@ bool MixerChannelItem::handleArticulationMapMenuItem(const QString& itemId) cons
     query.addParam("partId", muse::Val(std::to_string(m_instrumentTrackId.partId.toUint64())));
     query.addParam("instrumentId", muse::Val(m_instrumentTrackId.instrumentId.toStdString()));
     commandDispatcher()->dispatch(query);
+
+    return true;
+}
+
+static const QString SAVE_TRACK_PRESET_ITEM_ID("saveTrackPreset");
+static const QString LOAD_TRACK_PRESET_ITEM_ID("loadTrackPreset");
+
+QVariantList MixerChannelItem::trackPresetMenuItems() const
+{
+    return {
+        QVariantMap { { "id", SAVE_TRACK_PRESET_ITEM_ID }, { "title", muse::qtrc("playback", "Save as track preset…") } },
+        QVariantMap { { "id", LOAD_TRACK_PRESET_ITEM_ID }, { "title", muse::qtrc("playback", "Load track preset…") } },
+    };
+}
+
+bool MixerChannelItem::handleTrackPresetMenuItem(const QString& itemId) const
+{
+    if (itemId != SAVE_TRACK_PRESET_ITEM_ID && itemId != LOAD_TRACK_PRESET_ITEM_ID) {
+        return false;
+    }
+
+    //! NOTE: one presets window: brought to the front if it's open
+    const bool save = itemId == SAVE_TRACK_PRESET_ITEM_ID;
+    const muse::Uri uri(save ? "musescore://playback/savetrackpreset" : "musescore://playback/trackpresets");
+    if (!save && interactive()->isOpened(uri).val) {
+        interactive()->raise(muse::UriQuery(uri));
+        return true;
+    }
+
+    muse::UriQuery query(uri);
+    query.addParam("partId", muse::Val(std::to_string(m_instrumentTrackId.partId.toUint64())));
+    query.addParam("instrumentId", muse::Val(m_instrumentTrackId.instrumentId.toStdString()));
+    interactive()->open(query);
 
     return true;
 }

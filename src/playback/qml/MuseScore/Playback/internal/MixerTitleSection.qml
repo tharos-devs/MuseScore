@@ -148,6 +148,9 @@ MixerPanelSection {
                     title: qsTrc("playback", "Articulation map"),
                     subitems: content.channelItem.articulationMapMenuItems()
                 })
+
+                items.push({})
+                items = items.concat(content.channelItem.trackPresetMenuItems())
             }
 
             return items
@@ -501,7 +504,7 @@ MixerPanelSection {
                     root.model.addGroupChannelForSelectedTracks()
                 } else if (itemId === "deleteChannel") {
                     root.model.deleteAuxChannel(content.channelItem)
-                } else {
+                } else if (!content.channelItem.handleTrackPresetMenuItem(itemId)) {
                     content.channelItem.handleArticulationMapMenuItem(itemId)
                 }
             }
