@@ -109,6 +109,7 @@ Item {
     readonly property bool sidebarBelow: root.hitPointsPanelBelowTimeline || root.dockedAtSide
     property bool timelineVisible: true
     property bool controlsVisible: true
+    readonly property bool hasVideo: videoModel.hasVideo
     readonly property int timelineZoomMax: 10
     property real timelineZoom: 1
     readonly property int timelineFrameRate: Math.max(1, Math.round(videoModel.frameRate))
