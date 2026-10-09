@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-09
+- Fixed: no panel could be docked at the bottom of the main window anymore (the drop zone showed at the right instead): a saved layout could keep the hidden drop zones at the wrong edges. They're now put back at their own edge each time a page loads, which also repairs such a layout.
 - Video panel: "Clear video" in the "…" menu, like the sidebar's button (disabled without a video).
 
 ### 2026-10-08
