@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -147,6 +148,16 @@ void NoteVelocityOverlay::paint(QPainter* painter)
     // uncluttered the rest of the time.
     if (m_pressed && m_activeRectIndex >= 0 && m_activeRectIndex < m_rects.size()) {
         paintValueLabel(painter, m_rects.at(m_activeRectIndex));
+    }
+
+    // While painting: the bar under the mouse (its column's notes all have the same value), the frontmost one
+    if (m_painting) {
+        for (auto it = m_rects.crbegin(); it != m_rects.crend(); ++it) {
+            if (m_lastPaintPosPx.x() >= it->leftN * width() && m_lastPaintPosPx.x() <= it->rightN * width()) {
+                paintValueLabel(painter, *it);
+                break;
+            }
+        }
     }
 }
 
@@ -282,8 +293,23 @@ void NoteVelocityOverlay::hoverLeaveEvent(QHoverEvent*)
     unsetCursor();
 }
 
+QPointF NoteVelocityOverlay::normalized(const QPointF& posPx) const
+{
+    return QPointF(posPx.x() / std::max(1.0, width()), posPx.y() / std::max(1.0, height()));
+}
+
 void NoteVelocityOverlay::mousePressEvent(QMouseEvent* e)
 {
+    // Decided on press for the whole gesture: Alt may be let go of while dragging
+    if (e->modifiers() & Qt::AltModifier) {
+        m_painting = true;
+        m_lastPaintPosPx = e->position();
+        e->accept();
+        emit barsPainted(normalized(m_lastPaintPosPx), normalized(m_lastPaintPosPx), false);
+        update();
+        return;
+    }
+
     const int hit = hitTestPx(e->position());
     if (hit < 0) {
         e->ignore();
@@ -315,6 +341,13 @@ void NoteVelocityOverlay::mousePressEvent(QMouseEvent* e)
 
 void NoteVelocityOverlay::mouseMoveEvent(QMouseEvent* e)
 {
+    if (m_painting) {
+        const QPointF fromPx = std::exchange(m_lastPaintPosPx, e->position());
+        emit barsPainted(normalized(fromPx), normalized(m_lastPaintPosPx), false);
+        update();
+        return;
+    }
+
     if (!m_pressed) {
         return;
     }
@@ -333,6 +366,14 @@ void NoteVelocityOverlay::mouseMoveEvent(QMouseEvent* e)
 
 void NoteVelocityOverlay::mouseReleaseEvent(QMouseEvent* e)
 {
+    if (m_painting) {
+        m_painting = false;
+        const QPointF fromPx = std::exchange(m_lastPaintPosPx, e->position());
+        emit barsPainted(normalized(fromPx), normalized(m_lastPaintPosPx), true);
+        update();
+        return;
+    }
+
     if (!m_pressed) {
         return;
     }
@@ -364,6 +405,11 @@ void NoteVelocityOverlay::mouseUngrabEvent()
     // active. Treat it as a cancel rather than guessing a commit at an unknown final position.
     if (m_pressed) {
         emit dragCancelled(m_activeRectIndex);
+    }
+    if (m_painting) {
+        m_painting = false;
+        emit paintCancelled();
+        update();
     }
     m_pressed = false;
     m_activeRectIndex = -1;

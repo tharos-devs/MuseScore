@@ -23,6 +23,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QQuickItem>
@@ -130,6 +131,10 @@ private:
     void scheduleRebuild();
     void onBarDragged(const SysStaffKey& key, int rectIndex, qreal deltaYN, bool completed);
     void onDragCancelled(const SysStaffKey& key, int rectIndex);
+    void onBarsPainted(const SysStaffKey& key, const QPointF& fromN, const QPointF& toN, bool completed);
+    void onPaintCancelled();
+    void revertPreviews(const std::vector<mu::engraving::Note*>& notes);
+    void rebuildIfDeferredByGesture();
     // Cmd+click on a bar: a small field next to it to type the note's velocity (and the other selected notes')
     void showVelocityEditor(const NoteRef& noteRef, const QPointF& globalPos);
     mu::engraving::Note* resolveNote(const NoteRef& noteRef) const;
@@ -165,6 +170,17 @@ private:
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;
     QPointer<QObject> m_velocityEditor; // a QWidget (see showVelocityEditor())
+    bool m_rebuildDeferredByGesture = false; // see rebuildAllOverlays()
+
+    // The current paint gesture (see onBarsPainted())
+    bool m_painting = false;
+    bool m_paintAborted = false; // the score changed meanwhile: its notes may be gone
+    std::map<mu::engraving::Note*, int> m_paintedVelocities;
+    struct UnheardChange {
+        mu::engraving::Note* note = nullptr;
+        int velocity = 0;
+    };
+    std::optional<UnheardChange> m_paintUnheard; // the last change, not auditioned yet (throttled)
 
     // Avoids re-triggering the audition sound on every single mouse-move event during a drag -
     // only once per actually-distinct velocity value, and never faster than a fixed minimum

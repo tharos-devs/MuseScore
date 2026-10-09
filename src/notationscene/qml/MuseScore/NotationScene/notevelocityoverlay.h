@@ -73,7 +73,7 @@ public:
 
     void paint(QPainter* painter) override;
 
-    bool isDragging() const { return m_pressed; }
+    bool isDragging() const { return m_pressed || m_painting; }
 
 signals:
     // deltaYN is the mouse's own vertical displacement (normalized to this item's height) since
@@ -96,6 +96,13 @@ signals:
     // type the note's velocity, next to positionPx (in this item's own coordinates)
     void barValueEditRequested(int rectIndex, const QPointF& positionPx);
 
+    // Alt+press (Option on macOS) anywhere in this item, on a bar or not, then drag: every bar the mouse goes over
+    // takes the velocity of the mouse's height. Sent for each stretch of the mouse's path (fromN to toN, normalized
+    // like the rects; the first one, on press, is a single point), completed on release; paintCancelled() instead
+    // of a final one when the mouse grab is stolen
+    void barsPainted(const QPointF& fromN, const QPointF& toN, bool completed);
+    void paintCancelled();
+
 protected:
     void hoverMoveEvent(QHoverEvent* e) override;
     void hoverLeaveEvent(QHoverEvent* e) override;
@@ -106,6 +113,7 @@ protected:
 
 private:
     int hitTestPx(const QPointF& posPx) const;
+    QPointF normalized(const QPointF& posPx) const;
     void paintValueLabel(QPainter* painter, const RectData& rect) const;
 
     QVector<RectData> m_rects;
@@ -122,5 +130,8 @@ private:
     qreal m_dragStartYPx = 0.0;
     bool m_movedPastClickThreshold = false;
     bool m_hoveringBar = false;
+
+    bool m_painting = false;
+    QPointF m_lastPaintPosPx;
 };
 }
