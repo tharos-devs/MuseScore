@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-09
+- Articulation map editor: "Score markings" in the side panel chooses which notation symbols and playing technique texts select an articulation in the lane (e.g. Staccato for a "Staccatissimo" or "Spiccato" articulation), in a searchable list grouped like ARTICULATION_MAP_REFERENCE.md, each with its symbol; pre-checked from the name as before, written in the file only when different, set on all the selected articulations. A new "Score markings" column shows them for every articulation, dimmed where an articulation higher in the map takes the marking; Copy keeps them.
+- Articulation map editor: "Colors" recolors the selected articulations (or all of them) with one of 5 color gradients; Default and Disable side by side, "+ Add" next to "Activation sequence" and a taller window, to see several activation sequence lines; a narrower Name column.
 - Articulation map editor: several rows can be selected (Cmd/Ctrl+click, Shift+click, Cmd/Ctrl+A) to remove (also with Delete), move by dragging, or copy them at once; with several articulations selected, Disable, Articulation delay, Note delay, MIDI channel and the color (its square in the list) are set on all of them.
 - Track list: several rows can be selected like in the Mixer (click, Cmd/Ctrl+click, Shift+click); the color, Mute and Solo of a selected row apply to the whole selection (one undo step for the color).
 - Fixed: no panel could be docked at the bottom of the main window anymore (the drop zone showed at the right instead): a saved layout could keep the hidden drop zones at the wrong edges. They're now put back at their own edge each time a page loads, which also repairs such a layout.
