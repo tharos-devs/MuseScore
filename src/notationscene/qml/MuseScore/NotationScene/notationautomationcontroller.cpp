@@ -28,13 +28,11 @@
 #include <optional>
 #include <set>
 
-#include <QHBoxLayout>
-#include <QKeyEvent>
-#include <QDoubleSpinBox>
 #include <QGuiApplication>
 
 #include "segmentcanvasinterpolation.h"
 #include "midiccautomation.h"
+#include "valueeditorpopup.h"
 
 #include "uicomponents/qml/Muse/UiComponents/polylineplot.h"
 
@@ -1639,70 +1637,6 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
     updatePolylinesGeometry();
 }
 
-namespace {
-//! NOTE: Return/Enter or a click elsewhere (the editor losing focus) commits the typed value, Escape closes the editor
-//! without changing anything. It's a window of its own that takes the keyboard: the score's shortcuts belong to the
-//! main window (and are also kept off while typing, through ShortcutOverride)
-class PointValueEditorFilter : public QObject
-{
-public:
-    PointValueEditorFilter(QWidget* editor, QDoubleSpinBox* spinBox, std::function<void(double)> commit)
-        : QObject(editor), m_editor(editor), m_spinBox(spinBox), m_commit(std::move(commit)) {}
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
-    {
-        switch (event->type()) {
-        case QEvent::ShortcutOverride:
-            event->accept();
-            return true;
-        case QEvent::KeyPress: {
-            const int key = static_cast<QKeyEvent*>(event)->key();
-            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-                finish(true);
-                return true;
-            }
-            if (key == Qt::Key_Escape) {
-                finish(false);
-                return true;
-            }
-            break;
-        }
-        case QEvent::WindowDeactivate:
-            if (watched == m_editor) {
-                finish(true);
-            }
-            break;
-        default:
-            break;
-        }
-
-        return QObject::eventFilter(watched, event);
-    }
-
-private:
-    void finish(bool commit)
-    {
-        if (m_finished) {
-            return;
-        }
-        m_finished = true;
-
-        if (commit) {
-            m_spinBox->interpretText();
-            m_commit(m_spinBox->value());
-        }
-
-        m_editor->close();
-    }
-
-    QWidget* m_editor = nullptr;
-    QDoubleSpinBox* m_spinBox = nullptr;
-    std::function<void(double)> m_commit;
-    bool m_finished = false;
-};
-}
-
 //! NOTE: a point's value as typed by the user, in its type's own unit - the same as the drag tooltip's
 //! (see formattedActivePointValue()) - and its conversions from/to the display range [0, 1]
 struct PointValueField {
@@ -1763,20 +1697,9 @@ static PointValueField pointValueField(AutomationType type, int midiCc)
     return field;
 }
 
-static const QString POINT_VALUE_EDITOR_FILTER_NAME = QStringLiteral("pointValueEditorFilter");
-
-//! NOTE: without committing anything: its filter (which commits when it loses focus) goes first
 void NotationAutomationController::closePointValueEditor()
 {
-    if (!m_pointValueEditor) {
-        return;
-    }
-
-    delete m_pointValueEditor->findChild<QObject*>(POINT_VALUE_EDITOR_FILTER_NAME);
-    if (QWidget* editor = qobject_cast<QWidget*>(m_pointValueEditor.data())) {
-        editor->close();
-    }
-    m_pointValueEditor = nullptr;
+    closeValueEditorPopup(m_pointValueEditor);
 }
 
 void NotationAutomationController::showPointValueEditor(const SysStaffKey& key, int pointIdx, const QPointF& globalPos)
@@ -1798,25 +1721,15 @@ void NotationAutomationController::showPointValueEditor(const SysStaffKey& key, 
     const double scale = std::pow(10.0, field.decimals);
     const double currentValue = std::clamp(std::round(field.fromDisplay(currentDisplay) * scale) / scale, field.min, field.max);
 
-    closePointValueEditor();
+    ValueEditorPopupParams params;
+    params.min = field.min;
+    params.max = field.max;
+    params.value = currentValue;
+    params.decimals = field.decimals;
+    params.prefix = field.prefix;
+    params.suffix = field.suffix;
 
-    QWidget* editor = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-    editor->setAttribute(Qt::WA_DeleteOnClose);
-    m_pointValueEditor = editor;
-
-    QHBoxLayout* layout = new QHBoxLayout(editor);
-    layout->setContentsMargins(2, 2, 2, 2);
-
-    QDoubleSpinBox* spinBox = new QDoubleSpinBox(editor);
-    spinBox->setDecimals(field.decimals);
-    spinBox->setRange(field.min, field.max);
-    spinBox->setValue(currentValue);
-    spinBox->setPrefix(field.prefix);
-    spinBox->setSuffix(field.suffix);
-    layout->addWidget(spinBox);
-
-    PointValueEditorFilter* filter = new PointValueEditorFilter(editor, spinBox, [this, key, pointData, currentValue, field](double typed) {
-        const double value = std::clamp(typed, field.min, field.max);
+    showValueEditorPopup(m_pointValueEditor, params, globalPos, [this, key, pointData, currentValue, field](double value) {
         if (muse::RealIsEqual(value, currentValue)) {
             return;
         }
@@ -1836,17 +1749,6 @@ void NotationAutomationController::showPointValueEditor(const SysStaffKey& key, 
             }
         }
     });
-    filter->setObjectName(POINT_VALUE_EDITOR_FILTER_NAME);
-    editor->installEventFilter(filter);
-    spinBox->installEventFilter(filter);
-
-    editor->adjustSize();
-    editor->move(globalPos.toPoint() + QPoint(12, -editor->height() / 2));
-    editor->show();
-    editor->raise();
-    editor->activateWindow();
-    spinBox->setFocus(Qt::PopupFocusReason);
-    spinBox->selectAll();
 }
 
 bool NotationAutomationController::requestEditPoint(const PointData& oldPointData, const SysStaffKey& key, qreal x, qreal y)
