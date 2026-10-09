@@ -187,6 +187,17 @@ static String joinedLabel(const std::string& str)
     return String::fromStdString(label);
 }
 
+std::optional<mpe::ArticulationType> ArticulationMapParser::scoreArticulationType(const String& name)
+{
+    return articulationTypeFromName(name.toStdString());
+}
+
+String ArticulationMapParser::scoreArticulationName(mpe::ArticulationType type)
+{
+    auto it = mpe::ARTICULATION_TYPE_NAMES.find(type);
+    return it == mpe::ARTICULATION_TYPE_NAMES.cend() ? String() : String::fromQString(it->second);
+}
+
 std::vector<mpe::ArticulationType> ArticulationMapParser::implicitAliases(const String& labelStr)
 {
     //! NOTE: an articulation named like a score articulation (e.g. "Staccatissimo",

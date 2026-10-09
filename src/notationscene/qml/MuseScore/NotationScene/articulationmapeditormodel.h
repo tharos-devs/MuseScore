@@ -36,6 +36,7 @@
 #include "modularity/ioc.h"
 #include "global/iglobalconfiguration.h"
 #include "global/io/ifilesystem.h"
+#include "ui/iuiconfiguration.h"
 #include "interactive/iinteractive.h"
 #include "actions/iactionsdispatcher.h"
 #include "context/iglobalcontext.h"
@@ -88,6 +89,19 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(int selectedChannel READ selectedChannel NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList selectedMessages READ selectedMessages NOTIFY selectionChanged)
 
+    //! NOTE: the score articulations (notation symbols, playing technique texts) selecting the selected articulations
+    //! in the lane: by default the one they're named like, else the ones chosen (see ArticulationMapParser)
+    Q_PROPERTY(QString selectedScoreArticulationsText READ selectedScoreArticulationsText NOTIFY selectionChanged)
+    //! NOTE: name -> 0 none of the selected articulations, 1 all of them, 2 some of them
+    Q_PROPERTY(QVariantMap selectedScoreArticulationStates READ selectedScoreArticulationStates NOTIFY selectionChanged)
+    //! NOTE: the score articulations a score can select an articulation with, by group:
+    //! [{ title, items: [{ name, glyph, glyphFont }] }], glyph: their symbol, empty without one, in glyphFont: the UI's
+    //! music font, else Bravura when it doesn't have it (like the score's fallback)
+    Q_PROPERTY(QVariantList scoreArticulationGroups READ scoreArticulationGroups CONSTANT)
+
+    //! NOTE: the color gradients the articulations can be recolored with, each as a row of sample colors
+    Q_PROPERTY(QVariantList colorGradientPreviews READ colorGradientPreviews CONSTANT)
+
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
@@ -97,6 +111,7 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
 #endif
     muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
+    muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
 
 public:
     enum class DropPosition {
@@ -151,6 +166,10 @@ public:
     int selectedNotesOffsetMs() const;
     int selectedChannel() const;
     QVariantList selectedMessages() const;
+    QString selectedScoreArticulationsText() const;
+    QVariantMap selectedScoreArticulationStates() const;
+    QVariantList scoreArticulationGroups() const;
+    QVariantList colorGradientPreviews() const;
 
     Q_INVOKABLE void newMap();
     Q_INVOKABLE void openMap();
@@ -191,6 +210,9 @@ public:
     Q_INVOKABLE void setColor(int row, const QColor& color);
     Q_INVOKABLE void resetColor(int row);
     Q_INVOKABLE void setSelectedColor(const QColor& color);
+    //! NOTE: gives the selected articulations (all of them without several selected) the colors of the gradient,
+    //! stretched from the first one to the last one
+    Q_INVOKABLE void applyColorGradient(int gradientIndex);
     Q_INVOKABLE void resetSelectedColor();
 
     Q_INVOKABLE void setSelectedIsDefault(bool isDefault);
@@ -199,6 +221,8 @@ public:
     Q_INVOKABLE void setSelectedKeyswitchOffsetMs(int ms);
     Q_INVOKABLE void setSelectedNotesOffsetMs(int ms);
     Q_INVOKABLE void setSelectedChannel(int channel);
+    //! NOTE: adds/removes the score articulation (by name) to/from what selects each selected articulation
+    Q_INVOKABLE void setSelectedScoreArticulation(const QString& name, bool selects);
 
     Q_INVOKABLE void addMessage();
     Q_INVOKABLE void removeMessage(int index);
@@ -230,6 +254,7 @@ private:
         IsDefaultRole,
         IsDisabledRole,
         IsSelectedRole,
+        ScoreMarkingsRole,
     };
 
     struct Node;
@@ -273,6 +298,10 @@ private:
     QString uniqueName(const Node* parent, const QString& name, const Node* except = nullptr) const;
     QString pathOf(const Node* node) const;
     QString sequenceText(const Node* node) const;
+    std::vector<muse::mpe::ArticulationType> scoreArticulationsOf(const Node* node) const;
+    static void setScoreArticulations(Node* node, const std::vector<muse::mpe::ArticulationType>& types);
+    //! NOTE: [{ name, shadowed }]: shadowed, an articulation higher in the map has it too, and is played for it
+    QVariantList scoreMarkingsOf(const Node* node) const;
 
     void markDirty();
     void notifyRowChanged(const Node* node);

@@ -75,6 +75,10 @@ public:
     //! NOTE: the score articulations an entry is selected by when its line has no "= ..." list
     static std::vector<muse::mpe::ArticulationType> implicitAliases(const muse::String& label);
 
+    //! NOTE: a score articulation by its name in a "= ..." list (case ignored, e.g. "SnapPizzicato"), and its name
+    static std::optional<muse::mpe::ArticulationType> scoreArticulationType(const muse::String& name);
+    static muse::String scoreArticulationName(muse::mpe::ArticulationType type);
+
     //! NOTE: exposed for testing
     static bool parseMessages(const muse::String& code, int middleCOctave, std::vector<muse::mpe::MidiMessage>& messages);
 };

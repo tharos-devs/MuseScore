@@ -25,6 +25,8 @@
 #include <algorithm>
 #include <unordered_set>
 
+#include <QRawFont>
+
 #include "articulationmapcolors.h"
 
 #include "engraving/articulationmap/articulationmapwriter.h"
@@ -172,7 +174,8 @@ static const NodeT* articulationBefore(const NodeT* parent, size_t index)
     return nullptr;
 }
 
-//! NOTE: its name and triggers - not what makes it unique in its map (explicit aliases, default)
+//! NOTE: its name and triggers - not what makes it unique in its map (default); its score markings are set by the caller,
+//! once it's named
 std::unique_ptr<ArticulationMapEditorModel::Node> ArticulationMapEditorModel::copyOfArticulation(const Node& entry)
 {
     auto copy = std::make_unique<Node>();
@@ -221,6 +224,7 @@ QVariant ArticulationMapEditorModel::data(const QModelIndex& index, int role) co
     case IsDefaultRole: return node == m_defaultNode;
     case IsDisabledRole: return node->disabled;
     case IsSelectedRole: return isSelected(node);
+    case ScoreMarkingsRole: return node->isFolder ? QVariantList() : scoreMarkingsOf(node);
     }
 
     return QVariant();
@@ -246,6 +250,7 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
         { IsDefaultRole, "isDefault" },
         { IsDisabledRole, "isDisabled" },
         { IsSelectedRole, "isSelected" },
+        { ScoreMarkingsRole, "scoreMarkings" },
     };
 }
 
@@ -377,6 +382,56 @@ QString ArticulationMapEditorModel::sequenceText(const Node* node) const
     }
 
     return parts.join(" | ");
+}
+
+//! NOTE: only the name's last segment counts for its own (see ArticulationMapParser::implicitAliases()): the node's name,
+//! without building its path - this runs for every row and every row above it (see scoreMarkingsOf())
+std::vector<mpe::ArticulationType> ArticulationMapEditorModel::scoreArticulationsOf(const Node* node) const
+{
+    return node->hasImplicitAliases ? ArticulationMapParser::implicitAliases(String::fromQString(node->name)) : node->aliases;
+}
+
+QVariantList ArticulationMapEditorModel::scoreMarkingsOf(const Node* node) const
+{
+    //! NOTE: like ExpressionMap::entryForArticulations(): the first enabled articulation of the map with the marking
+    std::vector<mpe::ArticulationType> takenAbove;
+    bool found = false;
+    std::function<void(const Node*)> visit = [&](const Node* parent) {
+        for (const auto& child : parent->children) {
+            if (found) {
+                return;
+            }
+            if (child.get() == node) {
+                found = true;
+                return;
+            }
+            if (child->isFolder) {
+                visit(child.get());
+            } else if (!child->disabled) {
+                for (const mpe::ArticulationType type : scoreArticulationsOf(child.get())) {
+                    takenAbove.push_back(type);
+                }
+            }
+        }
+    };
+    visit(m_root.get());
+
+    QVariantList result;
+    for (const mpe::ArticulationType type : scoreArticulationsOf(node)) {
+        QVariantMap marking;
+        marking["name"] = ArticulationMapParser::scoreArticulationName(type).toQString();
+        marking["shadowed"] = std::find(takenAbove.cbegin(), takenAbove.cend(), type) != takenAbove.cend();
+        result << marking;
+    }
+
+    return result;
+}
+
+//! NOTE: back to the name's own when they're that: they follow a rename then, and aren't written in the file
+void ArticulationMapEditorModel::setScoreArticulations(Node* node, const std::vector<mpe::ArticulationType>& types)
+{
+    node->hasImplicitAliases = types == ArticulationMapParser::implicitAliases(String::fromQString(node->name));
+    node->aliases = node->hasImplicitAliases ? std::vector<mpe::ArticulationType> {} : types;
 }
 
 QString ArticulationMapEditorModel::uniqueName(const Node* parent, const QString& name, const Node* except) const
@@ -1228,6 +1283,128 @@ QVariantList ArticulationMapEditorModel::selectedMessages() const
     return result;
 }
 
+QString ArticulationMapEditorModel::selectedScoreArticulationsText() const
+{
+    const std::vector<Node*> entries = selectedEntries();
+    if (entries.empty()) {
+        return QString();
+    }
+
+    const std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entries.front());
+    for (const Node* entry : entries) {
+        if (scoreArticulationsOf(entry) != types) {
+            //: Shown when the selected articulations are selected by different score markings
+            return muse::qtrc("notation", "Various");
+        }
+    }
+
+    if (types.empty()) {
+        //: Shown when no score marking selects an articulation of the map
+        return muse::qtrc("notation", "None");
+    }
+
+    QStringList names;
+    for (const mpe::ArticulationType type : types) {
+        names << ArticulationMapParser::scoreArticulationName(type).toQString();
+    }
+
+    return names.join(", ");
+}
+
+QVariantMap ArticulationMapEditorModel::selectedScoreArticulationStates() const
+{
+    QVariantMap result;
+
+    const std::vector<Node*> entries = selectedEntries();
+    for (const Node* entry : entries) {
+        for (const mpe::ArticulationType type : scoreArticulationsOf(entry)) {
+            const QString name = ArticulationMapParser::scoreArticulationName(type).toQString();
+            result[name] = result.value(name).toInt() + 1;
+        }
+    }
+
+    for (auto it = result.begin(); it != result.end(); ++it) {
+        it.value() = it.value().toInt() == static_cast<int>(entries.size()) ? 1 : 2;
+    }
+
+    return result;
+}
+
+//! NOTE: the ones a score has (see ARTICULATION_MAP_REFERENCE.md), not every name the maps accept, with the SMuFL
+//! glyph of their symbol in the score (0: a playing technique text, or a line without a symbol of its own)
+QVariantList ArticulationMapEditorModel::scoreArticulationGroups() const
+{
+    struct Item {
+        const char* name;
+        char32_t glyph;
+    };
+
+    static const std::vector<std::pair<const char*, std::vector<Item> > > GROUPS {
+        { QT_TRANSLATE_NOOP("notation", "Articulations"), {
+              { "Staccato", 0xE4A2 }, { "Staccatissimo", 0xE4A6 }, { "Tenuto", 0xE4A4 }, { "Accent", 0xE4A0 },
+              { "Marcato", 0xE4AC }, { "SoftAccent", 0xED40 }, { "LaissezVibrer", 0xE4BA }, { "Subito", 0xE539 } } },
+        { QT_TRANSLATE_NOOP("notation", "Strings, brass, guitar"), {
+              { "Pizzicato", 0xE633 }, { "SnapPizzicato", 0xE631 }, { "ColLegno", 0 }, { "SulPonticello", 0 },
+              { "SulTasto", 0 }, { "Detache", 0 }, { "Martele", 0 }, { "Jete", 0xE620 }, { "DownBow", 0xE610 },
+              { "UpBow", 0xE612 }, { "Harmonic", 0xE614 }, { "Mute", 0xE5E5 }, { "Open", 0xE5E7 },
+              { "Fall", 0xE5DB }, { "QuickFall", 0xE5D8 }, { "Doit", 0xE5D5 }, { "Plop", 0xE5E0 },
+              { "Scoop", 0xE5D0 }, { "BrassBend", 0xE5E3 }, { "Multibend", 0 }, { "FadeIn", 0xE843 },
+              { "FadeOut", 0xE844 }, { "Slap", 0 }, { "Pop", 0 }, { "LeftHandTapping", 0xE840 },
+              { "RightHandTapping", 0xE841 }, { "Distortion", 0 }, { "Overdrive", 0 }, { "JazzTone", 0 } } },
+        { QT_TRANSLATE_NOOP("notation", "Lines"), {
+              { "Legato", 0 }, { "Pedal", 0xE650 }, { "PalmMute", 0 }, { "Vibrato", 0 }, { "WideVibrato", 0xEAB1 },
+              { "DiscreteGlissando", 0 }, { "ContinuousGlissando", 0 } } },
+        { QT_TRANSLATE_NOOP("notation", "Ornaments"), {
+              { "Trill", 0xE566 }, { "TrillBaroque", 0 }, { "ShortTrill", 0xE56C }, { "UpperMordentBaroque", 0 },
+              { "Mordent", 0xE56D }, { "PrallMordent", 0 }, { "UpMordent", 0 }, { "DownMordent", 0 },
+              { "PrallUp", 0 }, { "PrallDown", 0 }, { "UpPrall", 0 }, { "LinePrall", 0 }, { "Tremblement", 0xE56E },
+              { "Turn", 0xE567 }, { "InvertedTurn", 0xE568 } } },
+        { QT_TRANSLATE_NOOP("notation", "Tremolos, arpeggios, grace notes"), {
+              { "Tremolo8th", 0xE220 }, { "Tremolo16th", 0xE221 }, { "Tremolo32nd", 0xE222 },
+              { "Tremolo64th", 0xE223 }, { "TremoloBuzz", 0xE22A }, { "Arpeggio", 0xE63C }, { "ArpeggioUp", 0xE634 },
+              { "ArpeggioDown", 0xE635 }, { "ArpeggioStraightUp", 0 }, { "ArpeggioStraightDown", 0 },
+              { "Acciaccatura", 0xE560 }, { "PreAppoggiatura", 0xE562 }, { "PostAppoggiatura", 0 },
+              { "Breath", 0xE4CE } } },
+        { QT_TRANSLATE_NOOP("notation", "Handbells"), {
+              { "ThumbDamp", 0 }, { "BrushDamp", 0 }, { "RingTouch", 0 }, { "Pluck", 0 }, { "PluckLift", 0xE817 },
+              { "SingingBell", 0 }, { "SingingVibrate", 0 }, { "MalletBellOnTable", 0xE815 },
+              { "MalletBellSuspended", 0xE814 }, { "MalletLift", 0xE816 }, { "Gyro", 0xE81D },
+              { "Martellato", 0xE810 }, { "MartellatoLift", 0xE811 }, { "HandMartellato", 0xE812 },
+              { "MutedMartellato", 0xE813 }, { "Swing", 0xE81A }, { "Echo", 0xE81B }, { "Ring", 0 } } },
+    };
+
+    //! NOTE: the UI's music font (Leland) lacks many symbols, which the system would draw from an unrelated font
+    static const QString FALLBACK_FONT_FAMILY("Bravura");
+    const QString musicFontFamily = QString::fromStdString(uiConfiguration()->musicalFontFamily());
+    const QRawFont musicFont = QRawFont::fromFont(QFont(musicFontFamily));
+    const QRawFont fallbackFont = QRawFont::fromFont(QFont(FALLBACK_FONT_FAMILY));
+
+    QVariantList result;
+    for (const auto& [title, items] : GROUPS) {
+        QVariantList groupItems;
+        for (const Item& item : items) {
+            // the name as the maps spell it
+            const std::optional<mpe::ArticulationType> type = ArticulationMapParser::scoreArticulationType(String::fromAscii(item.name));
+            if (type) {
+                QVariantMap groupItem;
+                groupItem["name"] = ArticulationMapParser::scoreArticulationName(*type).toQString();
+                const bool inMusicFont = item.glyph && musicFont.supportsCharacter(item.glyph);
+                const bool inFallbackFont = item.glyph && !inMusicFont && fallbackFont.supportsCharacter(item.glyph);
+                groupItem["glyph"] = inMusicFont || inFallbackFont ? QString::fromUcs4(&item.glyph, 1) : QString();
+                groupItem["glyphFont"] = inFallbackFont ? FALLBACK_FONT_FAMILY : musicFontFamily;
+                groupItems << groupItem;
+            }
+        }
+
+        QVariantMap group;
+        group["title"] = muse::qtrc("notation", title);
+        group["items"] = groupItems;
+        result << group;
+    }
+
+    return result;
+}
+
 // ---- structure
 
 void ArticulationMapEditorModel::addArticulation()
@@ -1315,6 +1492,8 @@ void ArticulationMapEditorModel::copySelectedArticulation()
         for (const Node* entry : groupEntries) {
             std::unique_ptr<Node> copy = copyOfArticulation(*entry);
             copy->name = uniqueName(parent, entry->name);
+            // what selects it, even when it came from the name ("Staccato" copied as "Staccato 2")
+            setScoreArticulations(copy.get(), scoreArticulationsOf(entry));
             copies.push_back(parent->addChild(std::move(copy), index++));
         }
     }
@@ -1473,7 +1652,7 @@ void ArticulationMapEditorModel::rename(int row, const QString& name)
     }
 
     node->name = uniqueName(node->parent, sanitized, node);
-    notifyRowChanged(node);
+    notifyAllRowsChanged(); // its score markings may come from its name, and the rows below show theirs against them
     markDirty();
 
     if (node == m_selectedNode) {
@@ -1523,6 +1702,58 @@ void ArticulationMapEditorModel::setSelectedColor(const QColor& color)
         notifyAllRowsChanged();
         markDirty();
     }
+}
+
+QVariantList ArticulationMapEditorModel::colorGradientPreviews() const
+{
+    static constexpr int SAMPLE_COUNT = 10;
+
+    QVariantList result;
+    for (const std::vector<QColor>& stops : artMapColorGradients()) {
+        QVariantList samples;
+        for (int i = 0; i < SAMPLE_COUNT; ++i) {
+            samples << artMapGradientColor(stops, static_cast<double>(i) / (SAMPLE_COUNT - 1));
+        }
+        result << QVariant(samples);
+    }
+
+    return result;
+}
+
+void ArticulationMapEditorModel::applyColorGradient(int gradientIndex)
+{
+    const std::vector<std::vector<QColor> >& gradients = artMapColorGradients();
+    if (gradientIndex < 0 || gradientIndex >= static_cast<int>(gradients.size())) {
+        return;
+    }
+
+    std::vector<Node*> entries = selectedEntries();
+    if (entries.size() < 2) {
+        // every articulation, in collapsed folders too
+        entries.clear();
+        std::function<void(Node*)> visit = [&](Node* parent) {
+            for (const auto& child : parent->children) {
+                if (child->isFolder) {
+                    visit(child.get());
+                } else {
+                    entries.push_back(child.get());
+                }
+            }
+        };
+        visit(m_root.get());
+    }
+
+    if (entries.empty()) {
+        return;
+    }
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const double t = entries.size() > 1 ? static_cast<double>(i) / (entries.size() - 1) : 0.0;
+        entries[i]->color = artMapGradientColor(gradients[gradientIndex], t).rgb() & 0xFFFFFF;
+    }
+
+    notifyAllRowsChanged();
+    markDirty();
 }
 
 void ArticulationMapEditorModel::resetSelectedColor()
@@ -1635,6 +1866,38 @@ void ArticulationMapEditorModel::setSelectedChannel(int channel)
             entry->channel = newChannel;
             changed = true;
         }
+    }
+
+    if (changed) {
+        notifyAllRowsChanged();
+        markDirty();
+        emit selectionChanged();
+    }
+}
+
+void ArticulationMapEditorModel::setSelectedScoreArticulation(const QString& name, bool selects)
+{
+    const std::optional<mpe::ArticulationType> type = ArticulationMapParser::scoreArticulationType(String::fromQString(name));
+    if (!type) {
+        return;
+    }
+
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entry);
+        const bool has = std::find(types.cbegin(), types.cend(), *type) != types.cend();
+        if (has == selects) {
+            continue;
+        }
+
+        if (selects) {
+            types.push_back(*type);
+        } else {
+            std::erase(types, *type);
+        }
+
+        setScoreArticulations(entry, types);
+        changed = true;
     }
 
     if (changed) {
