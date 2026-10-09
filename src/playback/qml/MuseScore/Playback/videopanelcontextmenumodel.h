@@ -79,6 +79,9 @@ class VideoPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel,
     //! checkmark, same pattern as Timeline's own checkmark.
     Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE setControlsVisible NOTIFY controlsVisibleChanged)
 
+    //! NOTE Whether a video is attached -- fed in from VideoPanel.qml: "Clear video" is disabled without one
+    Q_PROPERTY(bool hasVideo READ hasVideo WRITE setHasVideo NOTIFY hasVideoChanged)
+
     QML_ELEMENT
 
 public:
@@ -119,6 +122,9 @@ public:
     bool controlsVisible() const;
     void setControlsVisible(bool visible);
 
+    bool hasVideo() const;
+    void setHasVideo(bool hasVideo);
+
 signals:
     //! NOTE Actually toggling full screen needs a QQuickWindow (via the
     //! Window attached property), which this menu-item-list model has no
@@ -153,6 +159,11 @@ signals:
     void toggleControlsVisibleRequested();
     void controlsVisibleChanged();
 
+    //! NOTE Clearing goes through VideoPanel.qml's clearAttachedVideo() (stops the player first), same as the
+    //! sidebar's "Clear video" button -- QML handles it on receiving this
+    void clearVideoRequested();
+    void hasVideoChanged();
+
 private:
     void updateItems();
 
@@ -163,5 +174,6 @@ private:
     bool m_hitPointsPanelVisible = true;
     bool m_timelineVisible = true;
     bool m_controlsVisible = true;
+    bool m_hasVideo = false;
 };
 }

@@ -39,6 +39,7 @@ static const ActionCode SET_HITPOINTS_PANEL_DOWN_ACTION("video-panel-set-hitpoin
 static const ActionCode TOGGLE_HITPOINTS_PANEL_VISIBLE_ACTION("video-panel-toggle-hitpoints-visible");
 static const ActionCode TOGGLE_TIMELINE_VISIBLE_ACTION("video-panel-toggle-timeline-visible");
 static const ActionCode TOGGLE_CONTROLS_VISIBLE_ACTION("video-panel-toggle-controls-visible");
+static const ActionCode CLEAR_VIDEO_ACTION("video-panel-clear-video");
 
 VideoPanelContextMenuModel::VideoPanelContextMenuModel(QObject* parent)
     : ZoomableMenuModel(muse::Settings::Key("playback", "playback/videoPanel/zoom"), 1.0, parent)
@@ -71,6 +72,10 @@ void VideoPanelContextMenuModel::load()
 
     dispatcher()->reg(this, TOGGLE_CONTROLS_VISIBLE_ACTION, [this]() {
         emit toggleControlsVisibleRequested();
+    });
+
+    dispatcher()->reg(this, CLEAR_VIDEO_ACTION, [this]() {
+        emit clearVideoRequested();
     });
 
     updateItems();
@@ -195,6 +200,23 @@ void VideoPanelContextMenuModel::setControlsVisible(bool visible)
     updateItems();
 }
 
+bool VideoPanelContextMenuModel::hasVideo() const
+{
+    return m_hasVideo;
+}
+
+void VideoPanelContextMenuModel::setHasVideo(bool hasVideo)
+{
+    if (m_hasVideo == hasVideo) {
+        return;
+    }
+
+    m_hasVideo = hasVideo;
+    emit hasVideoChanged();
+
+    updateItems();
+}
+
 QVariantMap VideoPanelContextMenuModel::screenAvailableGeometry(int windowX, int windowY) const
 {
     QScreen* screen = QGuiApplication::screenAt(QPoint(windowX, windowY));
@@ -295,6 +317,18 @@ void VideoPanelContextMenuModel::updateItems()
 
         items << fullScreenItem;
     }
+
+    items << makeSeparator();
+
+    UiAction clearVideoAction;
+    clearVideoAction.title = TranslatableString("playback", "Clear video");
+    clearVideoAction.code = CLEAR_VIDEO_ACTION;
+
+    MenuItem* clearVideoItem = new MenuItem(clearVideoAction, this);
+    clearVideoItem->setId("video-panel-clear-video");
+    clearVideoItem->setState(m_hasVideo ? UiActionState::make_enabled() : UiActionState::make_disabled());
+
+    items << clearVideoItem;
 
     items << makeSeparator();
     items << makeZoomMenu();

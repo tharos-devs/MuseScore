@@ -153,6 +153,7 @@ Item {
         hitPointsPanelVisible: videoPanelLoader.item ? videoPanelLoader.item.hitPointsPanelVisible : true
         timelineVisible: videoPanelLoader.item ? videoPanelLoader.item.timelineVisible : true
         controlsVisible: videoPanelLoader.item ? videoPanelLoader.item.controlsVisible : true
+        hasVideo: videoPanelLoader.item ? videoPanelLoader.item.hasVideo : false
 
         Component.onCompleted: contextMenuModel.load()
 
@@ -177,6 +178,12 @@ Item {
         onToggleControlsVisibleRequested: {
             if (videoPanelLoader.item) {
                 videoPanelLoader.item.toggleControlsVisible()
+            }
+        }
+
+        onClearVideoRequested: {
+            if (videoPanelLoader.item) {
+                videoPanelLoader.item.clearAttachedVideo()
             }
         }
 
