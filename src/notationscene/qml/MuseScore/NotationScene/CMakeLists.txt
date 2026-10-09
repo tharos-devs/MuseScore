@@ -114,6 +114,8 @@ qt_add_qml_module(notationscene_qml
         articulationmapoverlay.h
         notationarticulationmapcontroller.cpp
         notationarticulationmapcontroller.h
+        valueeditorpopup.cpp
+        valueeditorpopup.h
         paintedengravingitem.cpp
         paintedengravingitem.h
         partlistmodel.cpp

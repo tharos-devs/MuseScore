@@ -92,6 +92,10 @@ signals:
     // unrelated rebuild happened to refresh it.
     void dragCancelled(int rectIndex);
 
+    // Ctrl+click (Cmd+click on macOS) on a bar, instead of a click/drag: the controller then shows a field to
+    // type the note's velocity, next to positionPx (in this item's own coordinates)
+    void barValueEditRequested(int rectIndex, const QPointF& positionPx);
+
 protected:
     void hoverMoveEvent(QHoverEvent* e) override;
     void hoverLeaveEvent(QHoverEvent* e) override;

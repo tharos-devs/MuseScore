@@ -290,6 +290,12 @@ void NoteVelocityOverlay::mousePressEvent(QMouseEvent* e)
         return;
     }
 
+    if (e->modifiers() & Qt::ControlModifier) {
+        e->accept();
+        emit barValueEditRequested(hit, e->position());
+        return;
+    }
+
     m_pressed = true;
     m_activeRectIndex = hit;
     // Stored as a raw pixel position, not pre-divided by height() - the height a drag started at

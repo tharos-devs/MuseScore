@@ -23,6 +23,7 @@
 #include "notationnotevelocitycontroller.h"
 
 #include "notevelocityoverlay.h"
+#include "valueeditorpopup.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +76,11 @@ NotationNoteVelocityController::NotationNoteVelocityController(QQuickItem* overl
 {
 }
 
+NotationNoteVelocityController::~NotationNoteVelocityController()
+{
+    closeVelocityEditor();
+}
+
 void NotationNoteVelocityController::init()
 {
     IF_ASSERT_FAILED(noteVelocity() && currentNotation()) {
@@ -84,6 +90,7 @@ void NotationNoteVelocityController::init()
     onCurrentNotationChanged();
 
     noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
+        closeVelocityEditor();
         if (noteVelocity()->isEditModeEnabled()) {
             rebuildAllOverlays();
         } else {
@@ -98,6 +105,7 @@ void NotationNoteVelocityController::init()
 
 void NotationNoteVelocityController::onCurrentNotationChanged()
 {
+    closeVelocityEditor();
     rebuildAllOverlays();
 
     if (mu::engraving::Score* thisScore = score()) {
@@ -325,6 +333,26 @@ void NotationNoteVelocityController::createOverlayForStaff(const System* system,
         });
         QObject::connect(overlay, &NoteVelocityOverlay::dragCancelled, [this, key](int rectIndex) {
             onDragCancelled(key, rectIndex);
+        });
+        QObject::connect(overlay, &NoteVelocityOverlay::barValueEditRequested, [this, key, overlay](int rectIndex,
+                                                                                                    const QPointF& positionPx) {
+            const auto dataIt = m_overlaysByStaff.find(key);
+            if (dataIt == m_overlaysByStaff.end() || rectIndex < 0 || static_cast<size_t>(rectIndex) >= dataIt->second.notes.size()) {
+                return;
+            }
+            const Note* note = dataIt->second.notes.at(rectIndex).note;
+            if (!note) {
+                return;
+            }
+
+            // The clicked note itself, not its bar: the overlays may be rebuilt before the editor shows
+            const NoteRef noteRef { note->track(), note->tick(), note->pitch() };
+            const QPointF globalPos = overlay->mapToGlobal(positionPx);
+
+            // The editor runs outside of the overlay's mouse event handler
+            muse::async::Async::call(this, [this, noteRef, globalPos]() {
+                showVelocityEditor(noteRef, globalPos);
+            });
         });
     }
 
@@ -608,11 +636,7 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
         }
     }
 
-    struct PendingChange {
-        Note* note = nullptr;
-        int velocity = 0;
-    };
-    std::vector<PendingChange> changes;
+    std::vector<VelocityChange> changes;
     changes.reserve(affectedNotes.size());
 
     for (Note* note : affectedNotes) {
@@ -628,36 +652,12 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
         changes.push_back({ note, otherVelocity });
     }
 
-    // A tied-continuation note either produces no playback event of its own (its own velocity is
-    // then irrelevant) or, in some tie configurations (a tremolo spanning the tie, a partial tie
-    // across a repeat, a multi-note articulation, a trill ending on the tie's start chord), is
-    // rendered as its own independent event using its own velocity - which was otherwise never
-    // touched by this overlay (createOverlayForStaff() doesn't offer it a handle at all). Mirror
-    // every affected note's new value onto its whole forward tie chain so neither case is left
-    // with a stale value.
-    std::vector<PendingChange> tiedChanges;
-    for (const PendingChange& change : changes) {
-        std::vector<Note*> chain { change.note };
-        for (Tie* tie = change.note->tieFor(); tie; tie = tie->endNote() ? tie->endNote()->tieFor() : nullptr) {
-            Note* tied = tie->endNote();
-            if (!tied || muse::contains(chain, tied)) {
-                break;
-            }
-            chain.push_back(tied);
-
-            const bool alreadyPending = muse::contains_if(changes, [tied](const PendingChange& c) { return c.note == tied; })
-                                        || muse::contains_if(tiedChanges, [tied](const PendingChange& c) { return c.note == tied; });
-            if (!alreadyPending) {
-                tiedChanges.push_back({ tied, change.velocity });
-            }
-        }
-    }
-    changes.insert(changes.end(), tiedChanges.begin(), tiedChanges.end());
+    changes = withTieChains(changes);
 
     if (!completed) {
         // Live drag preview - update every affected overlay's displayed bar height without
         // touching the score.
-        for (const PendingChange& change : changes) {
+        for (const VelocityChange& change : changes) {
             const auto locIt = m_noteLocations.find(change.note);
             if (locIt != m_noteLocations.end()) {
                 previewBarHeight(locIt->second, change.velocity);
@@ -666,13 +666,50 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
         return;
     }
 
+    commitVelocities(changes);
+}
+
+std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::withTieChains(
+    const std::vector<VelocityChange>& changes) const
+{
+    // A tied-continuation note either produces no playback event of its own (its own velocity is
+    // then irrelevant) or, in some tie configurations (a tremolo spanning the tie, a partial tie
+    // across a repeat, a multi-note articulation, a trill ending on the tie's start chord), is
+    // rendered as its own independent event using its own velocity - which was otherwise never
+    // touched by this overlay (createOverlayForStaff() doesn't offer it a handle at all). Mirror
+    // every affected note's new value onto its whole forward tie chain so neither case is left
+    // with a stale value.
+    std::vector<VelocityChange> tiedChanges;
+    for (const VelocityChange& change : changes) {
+        std::vector<Note*> chain { change.note };
+        for (Tie* tie = change.note->tieFor(); tie; tie = tie->endNote() ? tie->endNote()->tieFor() : nullptr) {
+            Note* tied = tie->endNote();
+            if (!tied || muse::contains(chain, tied)) {
+                break;
+            }
+            chain.push_back(tied);
+
+            const bool alreadyPending = muse::contains_if(changes, [tied](const VelocityChange& c) { return c.note == tied; })
+                                        || muse::contains_if(tiedChanges, [tied](const VelocityChange& c) { return c.note == tied; });
+            if (!alreadyPending) {
+                tiedChanges.push_back({ tied, change.velocity });
+            }
+        }
+    }
+    std::vector<VelocityChange> result = changes;
+    result.insert(result.end(), tiedChanges.begin(), tiedChanges.end());
+    return result;
+}
+
+void NotationNoteVelocityController::commitVelocities(const std::vector<VelocityChange>& changes)
+{
     // A note whose target velocity turned out identical to what it's already effectively playing
     // at (the whole gesture net out to a zero delta - e.g. a plain click that lands back on the
     // bar's own current position) has nothing to write - skip it rather than pin it to an
     // explicit VeloType::USER_VAL it never asked for, and skip the whole undo entry if every
     // affected note turns out this way (e.g. a click that amounts to just an audition).
-    std::vector<PendingChange> realChanges;
-    for (const PendingChange& change : changes) {
+    std::vector<VelocityChange> realChanges;
+    for (const VelocityChange& change : changes) {
         if (change.velocity != displayedVelocity(change.note)) {
             realChanges.push_back(change);
         }
@@ -693,7 +730,7 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
     // USER_VAL. Its relative-to-the-dynamic-marking behavior is intentionally traded for "this is
     // now the value I dragged it to" once the user has directly edited it through this UI.
     undoStack->prepareChanges(muse::TranslatableString("undoableAction", "Change note velocity"));
-    for (const PendingChange& change : realChanges) {
+    for (const VelocityChange& change : realChanges) {
         if (change.note->getProperty(mu::engraving::Pid::VELO_TYPE).value<VeloType>() != VeloType::USER_VAL) {
             change.note->undoChangeProperty(mu::engraving::Pid::VELO_TYPE, VeloType::USER_VAL,
                                             mu::engraving::PropertyFlags::NOSTYLE);
@@ -701,6 +738,64 @@ void NotationNoteVelocityController::onBarDragged(const SysStaffKey& key, int re
         change.note->undoChangeProperty(mu::engraving::Pid::USER_VELOCITY, change.velocity, mu::engraving::PropertyFlags::NOSTYLE);
     }
     undoStack->commitChanges();
+}
+
+void NotationNoteVelocityController::closeVelocityEditor()
+{
+    closeValueEditorPopup(m_velocityEditor);
+}
+
+Note* NotationNoteVelocityController::resolveNote(const NoteRef& noteRef) const
+{
+    const mu::engraving::Score* thisScore = score();
+    const ChordRest* cr = thisScore ? thisScore->findCR(noteRef.tick, noteRef.track) : nullptr;
+    if (!cr || !cr->isChord() || cr->tick() != noteRef.tick) {
+        return nullptr;
+    }
+    return toChord(cr)->findNote(noteRef.pitch);
+}
+
+void NotationNoteVelocityController::showVelocityEditor(const NoteRef& noteRef, const QPointF& globalPos)
+{
+    const Note* note = resolveNote(noteRef);
+    if (!note) {
+        return;
+    }
+
+    ValueEditorPopupParams params;
+    params.min = MIN_DRAGGABLE_VELOCITY;
+    params.max = MAX_DRAGGABLE_VELOCITY;
+    params.value = std::clamp(displayedVelocity(note), MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY);
+
+    showValueEditorPopup(m_velocityEditor, params, globalPos, [this, noteRef](double typed) {
+        // The score may have changed while the editor was open: edit the same note, if it's still there
+        Note* edited = resolveNote(noteRef);
+        if (!edited) {
+            return;
+        }
+
+        const int velocity = static_cast<int>(std::lround(typed));
+
+        // Unlike a drag (a delta added to each note), a typed value is absolute: every selected note gets it when
+        // the edited one is part of the selection
+        std::vector<Note*> affectedNotes { edited };
+        const std::vector<Note*> selected = selectedNotes();
+        if (selected.size() > 1 && muse::contains(selected, edited)) {
+            affectedNotes = selected;
+        }
+
+        std::vector<VelocityChange> changes;
+        for (Note* affected : affectedNotes) {
+            changes.push_back({ affected, velocity });
+        }
+
+        if (velocity != displayedVelocity(edited)) {
+            auditionNote(edited, velocity);
+        }
+
+        // Unchanged notes are skipped there
+        commitVelocities(withTieChains(changes));
+    });
 }
 
 int NotationNoteVelocityController::contextVelocity(const Note* note) const

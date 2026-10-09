@@ -24,6 +24,7 @@
 
 #include <map>
 #include <QElapsedTimer>
+#include <QPointer>
 #include <QQuickItem>
 
 #include "context/iglobalcontext.h"
@@ -49,6 +50,7 @@ class NotationNoteVelocityController : public muse::Contextable, public muse::as
 
 public:
     NotationNoteVelocityController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx);
+    ~NotationNoteVelocityController();
 
     void init();
     void setViewMatrix(const muse::draw::Transform& viewMatrix);
@@ -103,6 +105,18 @@ private:
         muse::RectF bandRect;
     };
 
+    struct VelocityChange {
+        mu::engraving::Note* note = nullptr;
+        int velocity = 0;
+    };
+
+    // A note found again in the score when it's needed - a Note* kept across event loop turns can be deleted meanwhile
+    struct NoteRef {
+        track_idx_t track = muse::nidx;
+        mu::engraving::Fraction tick;
+        int pitch = 0;
+    };
+
     using OverlaysMap = std::map<SysStaffKey, StaffOverlayData>;
     using NoteLocationMap = std::map<mu::engraving::Note*, NoteLocation>;
 
@@ -116,6 +130,12 @@ private:
     void scheduleRebuild();
     void onBarDragged(const SysStaffKey& key, int rectIndex, qreal deltaYN, bool completed);
     void onDragCancelled(const SysStaffKey& key, int rectIndex);
+    // Cmd+click on a bar: a small field next to it to type the note's velocity (and the other selected notes')
+    void showVelocityEditor(const NoteRef& noteRef, const QPointF& globalPos);
+    mu::engraving::Note* resolveNote(const NoteRef& noteRef) const;
+    void closeVelocityEditor();
+    std::vector<VelocityChange> withTieChains(const std::vector<VelocityChange>& changes) const;
+    void commitVelocities(const std::vector<VelocityChange>& changes);
     void previewBarHeight(const NoteLocation& location, int newVelocity);
     void auditionNote(const mu::engraving::Note* note, int velocity);
     bool auditionThrottleElapsed() const;
@@ -144,6 +164,7 @@ private:
     NoteLocationMap m_noteLocations;
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;
+    QPointer<QObject> m_velocityEditor; // a QWidget (see showVelocityEditor())
 
     // Avoids re-triggering the audition sound on every single mouse-move event during a drag -
     // only once per actually-distinct velocity value, and never faster than a fixed minimum
