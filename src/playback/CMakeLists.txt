@@ -55,6 +55,8 @@ target_sources(playback PRIVATE
     internal/knownaudiopluginsconfigurator.h
     internal/videoaudiodecoder.cpp
     internal/videoaudiodecoder.h
+    internal/trackpresets.cpp
+    internal/trackpresets.h
 )
 
 if (TARGET Qt6::Multimedia)

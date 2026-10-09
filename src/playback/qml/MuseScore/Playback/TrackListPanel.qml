@@ -330,11 +330,26 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                     onClicked: function(mouse) {
+                        //! NOTE: right click: the track presets menu, like in the Mixer
+                        if (mouse.button === Qt.RightButton) {
+                            trackPresetMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.trackPresetMenuItems())
+                            return
+                        }
+
                         // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux
                         trackListModel.selectRow(rowItem.index, (mouse.modifiers & Qt.ControlModifier) !== 0,
                                                  (mouse.modifiers & Qt.ShiftModifier) !== 0)
+                    }
+
+                    ContextMenuLoader {
+                        id: trackPresetMenu
+
+                        onHandleMenuItem: function(itemId) {
+                            rowItem.channelItem.handleTrackPresetMenuItem(itemId)
+                        }
                     }
                 }
 

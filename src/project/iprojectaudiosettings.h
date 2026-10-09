@@ -25,6 +25,7 @@
 #include <memory>
 
 #include <QColor>
+#include <QJsonObject>
 
 #include "async/notification.h"
 #include "audio/common/audiotypes.h"
@@ -119,6 +120,12 @@ public:
                                      bool notifySettingsChanged = true) = 0;
     virtual void clearTrackInputParams() = 0;
     virtual muse::async::Channel<engraving::InstrumentTrackId> trackInputParamsChanged() const = 0;
+
+    //! NOTE: a track's params as the project file stores them (plugin states included), e.g. for track presets
+    virtual QJsonObject inputParamsToJson(const AudioInputParams& params) const = 0;
+    virtual AudioInputParams inputParamsFromJson(const QJsonObject& object) const = 0;
+    virtual QJsonObject outputParamsToJson(const AudioOutputParams& params) const = 0;
+    virtual AudioOutputParams outputParamsFromJson(const QJsonObject& object) const = 0;
 
     virtual bool trackHasExistingOutputParams(const engraving::InstrumentTrackId& trackId) const = 0;
     virtual const AudioOutputParams& trackOutputParams(const engraving::InstrumentTrackId& trackId) const = 0;

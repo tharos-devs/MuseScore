@@ -24,6 +24,7 @@
 
 #include <optional>
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <qqmlintegration.h>
 
@@ -178,6 +179,11 @@ public:
     //! change signal. handleArticulationMapMenuItem() returns false for an item that isn't one of them
     Q_INVOKABLE QVariantList articulationMapMenuItems() const;
     Q_INVOKABLE bool handleArticulationMapMenuItem(const QString& itemId) const;
+
+    //! NOTE: "Save as track preset…" and "Load track preset…" (see TrackPresets), in the Mixer's and the Track list's
+    //! menus. handleTrackPresetMenuItem() returns false for an item that isn't one of them
+    Q_INVOKABLE QVariantList trackPresetMenuItems() const;
+    Q_INVOKABLE bool handleTrackPresetMenuItem(const QString& itemId) const;
 
     void setOutputResourceItemCount(size_t count);
     void setAuxSendItemCount(size_t count);
@@ -343,6 +349,7 @@ protected:
 
     void applyMuteToOutputParams(const bool isMuted);
 
+    void loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain);
     void loadOutputResourceItems(const muse::audio::AudioFxChain& fxChain);
     void loadAuxSendItems(const muse::audio::AuxSendsParams& auxSends);
 
@@ -396,6 +403,7 @@ protected:
 
     project::AudioInputParams m_inputParams;
     project::AudioOutputParams m_outParams;
+    QElapsedTimer m_lastControlParamsSent; // see bindInstrumentTrack()
 
     float m_volumeLevel = 0.f;
     int m_balance = 0;

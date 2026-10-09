@@ -29,6 +29,8 @@
 #include "midi/miditypes.h"
 
 namespace mu::playback {
+static const muse::String MS_BASIC_SOUNDFONT_NAME(u"MS Basic");
+
 struct MsBasicItem {
     muse::String title;
     std::vector<MsBasicItem> subItems;

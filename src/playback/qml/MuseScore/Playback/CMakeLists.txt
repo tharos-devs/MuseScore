@@ -74,6 +74,10 @@ qt_add_qml_module(playback_qml
         tracklistcontextmenumodel.h
         tracklistmodel.cpp
         tracklistmodel.h
+        savetrackpresetmodel.cpp
+        savetrackpresetmodel.h
+        trackpresetsmodel.cpp
+        trackpresetsmodel.h
         videopanelcontextmenumodel.cpp
         videopanelcontextmenumodel.h
         videopanelmodel.cpp
@@ -118,6 +122,8 @@ qt_add_qml_module(playback_qml
         SoundFlagPopup.qml
         SoundProfilesDialog.qml
         TrackListPanel.qml
+        SaveTrackPresetDialog.qml
+        TrackPresetsDialog.qml
         VideoPanelLoader.qml
         VideoPanel.qml
     IMPORTS

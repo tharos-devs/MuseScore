@@ -49,8 +49,6 @@ static const QString MIDI_PORT_ITEM_ID_PREFIX("midiPort\\");
 static const QString MIDI_CHANNEL_ITEM_ID_PREFIX("midiChannel\\");
 static constexpr int MIDI_CHANNEL_COUNT = 16;
 
-static const muse::String MS_BASIC_SOUNDFONT_NAME(u"MS Basic");
-
 static std::unordered_map<AudioResourceType, QString> AUDIO_RESOURCE_TYPE_TO_STR {
     { AudioResourceType::FluidSoundfont, SOUNDFONTS_MENU_ITEM_ID },
     { AudioResourceType::VstPlugin, VST_MENU_ITEM_ID },
