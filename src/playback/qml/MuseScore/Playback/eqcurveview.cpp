@@ -293,10 +293,11 @@ void EqCurveView::paintCurve(QPainter* painter) const
     }
 
     const int steps = std::max(2, static_cast<int>(rect.width()));
+    const std::vector<eq::BandFilter> filters = eq::activeFilters(m_eq, DISPLAY_SAMPLE_RATE);
     QPainterPath curve;
     for (int i = 0; i <= steps; ++i) {
         const double x = rect.left() + rect.width() * i / steps;
-        const double db = eq::responseDb(m_eq, frequencyForX(x), DISPLAY_SAMPLE_RATE);
+        const double db = eq::responseDb(filters, frequencyForX(x), DISPLAY_SAMPLE_RATE);
         const QPointF point(x, yForDb(db));
         if (i == 0) {
             curve.moveTo(point);
@@ -393,6 +394,12 @@ void EqCurveView::mouseReleaseEvent(QMouseEvent*)
     const int band = m_draggedBand;
     m_draggedBand = -1;
     emit bandDragFinished(band);
+}
+
+//! NOTE An interrupted drag (e.g. the window losing the mouse) ends like a released one
+void EqCurveView::mouseUngrabEvent()
+{
+    mouseReleaseEvent(nullptr);
 }
 
 void EqCurveView::hoverMoveEvent(QHoverEvent* event)

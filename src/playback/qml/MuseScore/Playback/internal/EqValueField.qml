@@ -132,6 +132,13 @@ Rectangle {
         }
     }
 
+    // interrupted (e.g. closed) in the middle of a scroll: the gesture still ends
+    Component.onDestruction: {
+        if (wheelEndTimer.running) {
+            root.gestureFinished()
+        }
+    }
+
     // a scroll is one gesture
     Timer {
         id: wheelEndTimer
@@ -178,6 +185,13 @@ Rectangle {
         }
 
         onReleased: {
+            if (dragging) {
+                dragging = false
+                root.gestureFinished()
+            }
+        }
+
+        onCanceled: {
             if (dragging) {
                 dragging = false
                 root.gestureFinished()

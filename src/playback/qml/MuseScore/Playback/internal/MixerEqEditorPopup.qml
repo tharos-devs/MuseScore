@@ -56,6 +56,13 @@ StyledPopupView {
     }
 
     // a scroll gesture over a point is one undoable change
+    // closed in the middle of a scroll: the gesture still ends
+    Component.onDestruction: {
+        if (qScrollEndTimer.running && root.channelItem) {
+            root.channelItem.endEqChange()
+        }
+    }
+
     Timer {
         id: qScrollEndTimer
 

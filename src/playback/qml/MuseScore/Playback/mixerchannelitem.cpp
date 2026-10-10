@@ -626,7 +626,8 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
 void MixerChannelItem::loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain,
                                          const muse::audio::EqParams& eq)
 {
-    if (m_outParams.eq != eq) {
+    // a late echo of an earlier value mustn't pull back the EQ being edited
+    if (!m_eqChangeStart && m_outParams.eq != eq) {
         m_outParams.eq = eq;
         emit eqChanged();
     }

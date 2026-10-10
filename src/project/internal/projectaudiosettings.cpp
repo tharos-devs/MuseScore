@@ -31,6 +31,7 @@
 #include "types/bytearray.h"
 
 #include "audio/common/audioutils.h"
+#include "audio/common/channeleq.h"
 #include "vst/vstpluginattrs.h"
 
 #include "log.h"
@@ -685,10 +686,13 @@ EqParams ProjectAudioSettings::eqFromJson(const QJsonObject& object) const
         const QJsonObject bandObj = bands.at(static_cast<int>(i)).toObject();
         EqBandParams& band = result.bands[i];
 
+        // an unknown type, or one the band can't take, keeps the default one
         const QString typeKey = bandObj.value("type").toString();
         for (const auto& [type, key] : EQ_BAND_TYPE_KEYS) {
             if (key == typeKey) {
-                band.type = type;
+                if (muse::contains(muse::audio::eq::availableBandTypes(i), type)) {
+                    band.type = type;
+                }
                 break;
             }
         }
