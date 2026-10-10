@@ -521,6 +521,7 @@ void ArticulationMapEditorModel::confirmDiscardChanges(std::function<void()> pro
 void ArticulationMapEditorModel::newMap()
 {
     confirmDiscardChanges([this]() {
+        m_editsTargetTrackMap = false;
         setFile(ArticulationMapParser::Result(), io::path_t());
     });
 }
@@ -531,6 +532,7 @@ void ArticulationMapEditorModel::openMap()
         const io::path_t path = interactive()->selectOpeningFileSync(muse::trc("notation", "Open articulation map"), mapsDir(),
                                                                      fileFilter());
         if (!path.empty()) {
+            m_editsTargetTrackMap = false;
             loadFile(path);
         }
     });
@@ -719,7 +721,7 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
     emit dirtyChanged();
 
     if (reloadTracks) {
-        reloadTracksUsingFile(path, std::nullopt);
+        reloadTracksUsingFile(path, m_editsTargetTrackMap ? m_targetTrack : std::nullopt);
     }
 
     return true;
@@ -778,6 +780,12 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
 
     const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
+
+    // a track without a map yet (New…) gets the edited one only through Reload into track
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);
+
     emit targetTrackChanged();
 
     if (!subscribed) {
