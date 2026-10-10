@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-10
+- Mixer: channel EQ, 4 bands applied right after the gain, before the Audio FX, on every track, aux/group bus, the master and the video channel. An "EQ" row (View menu) shows each channel's curve; a click opens its editor above the channel (one at a time): drag a band's point (frequency, gain; wheel: Q), set each band's on/off and type, and its gain, frequency and Q with drag bars (Shift: fine, wheel, double click to type); hover shows the frequency, note and level. Right click on the thumbnail: enable/disable, reset. Defaults: 100 Hz Low Shelf II, 800 Hz and 2 kHz Parametric II, 12 kHz High Shelf II. Types: Parametric I/II, Low/High Shelf I-IV, High/Low Pass I/II, their curves matched to measured reference curves. Moving a band while playing doesn't click; undoable; saved with the project and track presets.
 - MIDI input: "All devices" in Preferences > I/O > MIDI input listens to every MIDI input device at once, e.g. a keyboard for note input and a control surface (nanoKONTROL…) for MIDI CC recording, including devices plugged in later (immediately on Mac, within 5 s on Windows/Linux); a device that can't be opened (used by another application) doesn't prevent listening to the others. Never chosen automatically. Also fixed, on device changes: a Windows device's SysEx buffer put back while closing it (handle leak, possible crash) and Linux closing the ALSA sequencer before stopping the thread reading it.
 
 ### 2026-10-09
