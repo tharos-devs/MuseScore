@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-10
+- MIDI input: "All devices" in Preferences > I/O > MIDI input listens to every MIDI input device at once, e.g. a keyboard for note input and a control surface (nanoKONTROL…) for MIDI CC recording, including devices plugged in later (immediately on Mac, within 5 s on Windows/Linux); a device that can't be opened (used by another application) doesn't prevent listening to the others. Never chosen automatically. Also fixed, on device changes: a Windows device's SysEx buffer put back while closing it (handle leak, possible crash) and Linux closing the ALSA sequencer before stopping the thread reading it.
+
 ### 2026-10-09
 - Note velocity: Alt/Option+drag on a staff paints velocities - every bar the mouse goes over takes the velocity of the mouse's height (all the notes of a chord), along the mouse's whole path so a fast move skips none, on the line the gesture started on, in one undo step; the bar under the mouse shows its value and the changed notes are heard (throttled). Started anywhere on the staff, on a bar or not.
 - Note velocity: Cmd/Ctrl+click on a velocity bar opens a field to type the note's velocity (1-127), like on automation points; with the note part of a selection, every selected note gets that value. Return or a click elsewhere applies it, Escape cancels. The field (automation points too) now stays on screen and applies a value typed back to the shown one.
