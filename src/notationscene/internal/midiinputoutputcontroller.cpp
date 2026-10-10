@@ -159,7 +159,8 @@ void MidiInputOutputController::onMidiEventReceived(const muse::midi::tick_t tic
 muse::midi::MidiDeviceID MidiInputOutputController::firstAvailableDeviceId(const muse::midi::MidiDeviceList& devices) const
 {
     for (const muse::midi::MidiDevice& device : devices) {
-        if (device.id == muse::midi::NONE_DEVICE_ID) {
+        // listening to all devices is only ever chosen by the user
+        if (device.id == muse::midi::NONE_DEVICE_ID || device.id == muse::midi::ALL_DEVICES_ID) {
             continue;
         }
 
