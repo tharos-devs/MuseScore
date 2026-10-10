@@ -721,10 +721,27 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
     emit dirtyChanged();
 
     if (reloadTracks) {
-        reloadTracksUsingFile(path, m_editsTargetTrackMap ? m_targetTrack : std::nullopt);
+        reloadTracksUsingFile(path, targetTrackToUpdate());
     }
 
     return true;
+}
+
+//! NOTE The target track, if the edited map is still its own: its map may have been removed meanwhile (No map,
+//! the part deleted...), then it isn't given one back
+std::optional<InstrumentTrackId> ArticulationMapEditorModel::targetTrackToUpdate() const
+{
+    if (!m_editsTargetTrackMap || !m_targetTrack) {
+        return std::nullopt;
+    }
+
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
+        return std::nullopt;
+    }
+
+    return m_targetTrack;
 }
 
 bool ArticulationMapEditorModel::saveMap()
