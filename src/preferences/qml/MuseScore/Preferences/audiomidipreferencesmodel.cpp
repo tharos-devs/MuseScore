@@ -53,29 +53,42 @@ void AudioMidiPreferencesModel::setCurrentAudioDriverIndex(int index)
 
     std::string fallback = audioDriverController()->currentAudioDriverName();
 
-    audioDriverController()->availableOutputDevicesChanged().onNotify(this, [this, fallback]() {
+    auto warnAndFallBack = [this, fallback](const std::string& title, const QString& text) {
+        auto promise = interactive()->warning(title,
+                                              text.arg(QString::fromStdString(audioDriverController()->currentAudioDriverName()))
+                                              .toStdString());
+
+        promise.onResolve(this, [this, fallback](const muse::IInteractive::Result&) {
+            audioDriverController()->changeCurrentAudioDriver(fallback);
+            emit currentAudioDriverIndexChanged(currentAudioDriverIndex());
+        });
+    };
+
+    audioDriverController()->availableOutputDevicesChanged().onNotify(this, [this, warnAndFallBack]() {
         audioDriverController()->availableOutputDevicesChanged().disconnect(this);
 
         if (!audioDriverController()->availableOutputDevices().empty()) {
             return;
         }
 
-        auto promise = interactive()->warning(
-            muse::trc("preferences", "No audio devices available"),
-            muse::qtrc("preferences", "The selected audio driver does not have any available audio devices. "
-                                      "MuseScore Studio will use the default audio driver instead. "
-                                      "To use %1, ensure your hardware is set up correctly, "
-                                      "then restart MuseScore Studio and try again.")
-            .arg(QString::fromStdString(audioDriverController()->currentAudioDriverName())).toStdString());
-
-        promise.onResolve(this, [this, fallback](const muse::IInteractive::Result&) {
-            audioDriverController()->changeCurrentAudioDriver(fallback);
-            emit currentAudioDriverIndexChanged(currentAudioDriverIndex());
-        });
+        warnAndFallBack(muse::trc("preferences", "No audio devices available"),
+                        muse::qtrc("preferences", "The selected audio driver does not have any available audio devices. "
+                                                  "MuseScore Studio will use the default audio driver instead. "
+                                                  "To use %1, ensure your hardware is set up correctly, "
+                                                  "then restart MuseScore Studio and try again."));
     }, Asyncable::Mode::SetReplace);
 
-    audioDriverController()->changeCurrentAudioDriver(drivers.at(index));
+    const bool opened = audioDriverController()->changeCurrentAudioDriver(drivers.at(index));
     emit currentAudioDriverIndexChanged(index);
+
+    // without any device, warned above
+    if (!opened && !audioDriverController()->availableOutputDevices().empty()) {
+        warnAndFallBack(muse::trc("preferences", "Audio devices could not be opened"),
+                        muse::qtrc("preferences", "None of the audio devices of the selected audio driver could be opened. "
+                                                  "MuseScore Studio will use the previous audio driver instead. "
+                                                  "To use %1, ensure your hardware is set up correctly and is not used by "
+                                                  "another application, then try again."));
+    }
 }
 
 QString AudioMidiPreferencesModel::midiInputDeviceId() const
