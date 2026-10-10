@@ -28,6 +28,8 @@
 #include "notation/inotationinteraction.h"
 #include "notation/inotationselection.h"
 
+#include "../playbackcommands.h"
+
 using namespace mu::playback;
 using namespace mu::notation;
 using namespace muse;
@@ -111,6 +113,14 @@ const UiActionList PlaybackUiActions::s_midiInputActions = {
              mu::context::CTX_ANY,
              TranslatableString("action", "Enable MIDI input"),
              TranslatableString("action", "Toggle MIDI input"),
+             IconCode::Code::MIDI_INPUT,
+             Checkable::Yes
+             ),
+    UiAction(MIDI_START_NOTE_INPUT_ACTION_CODE,
+             mu::context::UiCtxAny,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Start note input on MIDI key press"),
+             TranslatableString("action", "When pressing a MIDI key, begin note input at the selected measure, note, or rest"),
              IconCode::Code::MIDI_INPUT,
              Checkable::Yes
              ),

@@ -23,6 +23,7 @@
 
 #include "modularity/ioc.h"
 
+#include "menuitemsutils.h"
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
 #include "notation/inotationconfiguration.h"
@@ -45,6 +46,8 @@ class ExpressionMenuModel : public muse::uicomponents::AbstractMenuModel
 
 public:
     Q_INVOKABLE void init();
+    //! Rebuilds the items right before the menu opens
+    Q_INVOKABLE void prepareMenuOpening();
 
     QString currentTitle() const;
     int currentIcon() const;
@@ -57,5 +60,7 @@ signals:
 
 private:
     void updateItems();
+
+    ReplacedMenuItems m_replacedItems;
 };
 }

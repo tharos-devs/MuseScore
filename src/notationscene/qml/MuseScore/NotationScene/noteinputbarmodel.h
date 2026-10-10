@@ -45,12 +45,18 @@ class NoteInputBarModel : public muse::uicomponents::AbstractMenuModel, public Q
     Q_PROPERTY(int caretGridIcon READ caretGridIcon NOTIFY caretGridChanged)
     Q_PROPERTY(bool caretGridDotted READ caretGridDotted NOTIFY caretGridChanged)
     Q_PROPERTY(bool horizontal READ horizontal WRITE setHorizontal NOTIFY horizontalChanged)
+    Q_PROPERTY(bool isMidiInputEnabled READ isMidiInputEnabled NOTIFY midiStartNoteInputChanged)
+    Q_PROPERTY(bool midiStartNoteInput READ midiStartNoteInput NOTIFY midiStartNoteInputChanged)
+    Q_PROPERTY(QString midiStartNoteInputShortcut READ midiStartNoteInputShortcut NOTIFY midiStartNoteInputShortcutChanged)
 
     muse::GlobalInject<muse::rcommand::ICommandsRegister> commandsRegister;
     muse::ContextInject<muse::ui::IUiState> uiState = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<INotationCommandsController> commandsController = { this };
     muse::GlobalInject<INotationConfiguration> configuration;
+#ifndef MUSE_MODULE_SHORTCUTS_V2
+    muse::ContextInject<muse::shortcuts::IShortcutsRegister> noteInputShortcutsRegister = { this };
+#endif
 
 public:
     explicit NoteInputBarModel(QObject* parent = nullptr);
@@ -63,8 +69,12 @@ public:
     bool caretGridDotted() const;
     bool horizontal() const;
     void setHorizontal(bool horizontal);
+    bool isMidiInputEnabled() const;
+    bool midiStartNoteInput() const;
+    QString midiStartNoteInputShortcut() const;
 
     Q_INVOKABLE void handleMenuItem(const QString& itemId) override;
+    Q_INVOKABLE void toggleMidiStartNoteInput();
 
     static const muse::ui::ToolConfig& defaultNoteInputConfig();
 
@@ -81,6 +91,8 @@ signals:
     void isInputAllowedChanged();
     void caretGridChanged();
     void horizontalChanged();
+    void midiStartNoteInputChanged();
+    void midiStartNoteInputShortcutChanged();
 
 private:
     enum NoteInputRoles {

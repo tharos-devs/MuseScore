@@ -123,6 +123,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::MIDI_INPUT, rcommand::Checkable::Yes)
     },
     CommandInfo{
+        MIDI_START_NOTE_INPUT_TOGGLE_COMMAND,
+        TranslatableString("playback", "Start note input on MIDI key press"),
+        TranslatableString("playback", "When pressing a MIDI key, begin note input at the selected measure, note, or rest"),
+        InputSchema(),
+        Decoration(IconCode::Code::MIDI_INPUT, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
         MIDI_INPUT_WRITTEN_PITCH_COMMAND,
         TranslatableString("playback", "Written pitch"),
         TranslatableString("playback", "Input written pitch"),

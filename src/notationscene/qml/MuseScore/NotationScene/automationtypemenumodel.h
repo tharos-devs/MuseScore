@@ -24,6 +24,7 @@
 
 #include "modularity/ioc.h"
 
+#include "menuitemsutils.h"
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
 #include "context/iglobalcontext.h"
@@ -53,6 +54,8 @@ class AutomationTypeMenuModel : public muse::uicomponents::AbstractMenuModel
 
 public:
     Q_INVOKABLE void init();
+    //! Rebuilds the items right before the menu opens
+    Q_INVOKABLE void prepareMenuOpening();
 
     //! NOTE: the name of the curve currently shown, e.g. "Tempo", "Expression" or "CC21"
     QString currentTitle() const;
@@ -66,6 +69,8 @@ signals:
 
 private:
     void updateItems();
+
+    ReplacedMenuItems m_replacedItems;
     muse::uicomponents::MenuItem* makeMidiCcMenu();
     muse::uicomponents::MenuItem* makeAutomationTypeItem(mu::engraving::AutomationType type, const std::string& queryTypeParam,
                                                          const muse::TranslatableString& title);

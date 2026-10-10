@@ -42,6 +42,10 @@ AppearancePreferencesModel::AppearancePreferencesModel(QObject* parent)
 
 void AppearancePreferencesModel::init()
 {
+    appshellConfiguration()->secondaryWindowAlwaysOnTopChanged().onNotify(this, [this]() {
+        emit secondaryWindowAlwaysOnTopChanged();
+    });
+
     uiConfiguration()->isFollowSystemTheme().notification.onNotify(this, [this]() {
         emit isFollowSystemThemeChanged();
     });
@@ -292,6 +296,20 @@ bool AppearancePreferencesModel::scoreInversionEnabled() const
 bool AppearancePreferencesModel::isOnlyInvertInDarkTheme() const
 {
     return notationConfiguration()->isOnlyInvertInDarkTheme();
+}
+
+bool AppearancePreferencesModel::secondaryWindowAlwaysOnTop() const
+{
+    return appshellConfiguration()->secondaryWindowAlwaysOnTop();
+}
+
+void AppearancePreferencesModel::setSecondaryWindowAlwaysOnTop(bool value)
+{
+    if (value == secondaryWindowAlwaysOnTop()) {
+        return;
+    }
+
+    appshellConfiguration()->setSecondaryWindowAlwaysOnTop(value);
 }
 
 QColor AppearancePreferencesModel::engravingColor() const

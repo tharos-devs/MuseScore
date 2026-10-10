@@ -62,6 +62,11 @@ void PlaybackCommandsController::init()
     registerCommand(LOOP_OUT_COMMAND, &IPlaybackController::addLoopBoundary, LoopBoundaryType::LoopOut);
     registerCommand(METRONOME_TOGGLE_COMMAND, &IPlaybackController::toggleMetronome);
     registerCommand(MIDI_TOGGLE_COMMAND, &IPlaybackController::toggleMidiInput);
+    registerCommand(MIDI_START_NOTE_INPUT_TOGGLE_COMMAND, [this]() {
+        const bool start = notationConfiguration()->startNoteInputAtSelectedNoteRestWhenPressingMidiKey();
+        notationConfiguration()->setStartNoteInputAtSelectedNoteRestWhenPressingMidiKey(!start);
+        return muse::make_ok();
+    });
     registerCommand(MIDI_INPUT_WRITTEN_PITCH_COMMAND, &IPlaybackController::setMidiUseWrittenPitch, true);
     registerCommand(MIDI_INPUT_SOUNDING_PITCH_COMMAND, &IPlaybackController::setMidiUseWrittenPitch, false);
     registerCommand(REPEATS_TOGGLE_COMMAND, &IPlaybackController::togglePlayRepeats);
@@ -95,6 +100,7 @@ void PlaybackCommandsController::init()
             { "metronome", METRONOME_TOGGLE_COMMAND, {} },
             { "playback-setup", OPEN_PLAYBACK_SETUP_COMMAND, {} },
             { "midi-on", MIDI_TOGGLE_COMMAND, {} },
+            { MIDI_START_NOTE_INPUT_ACTION_CODE, MIDI_START_NOTE_INPUT_TOGGLE_COMMAND, {} },
             { "midi-input-written-pitch", MIDI_INPUT_WRITTEN_PITCH_COMMAND, {} },
             { "midi-input-sounding-pitch", MIDI_INPUT_SOUNDING_PITCH_COMMAND, {} },
             { "repeats", REPEATS_TOGGLE_COMMAND, {} },
