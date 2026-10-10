@@ -43,6 +43,7 @@ struct AudioOutputParams {
     muse::audio::volume_db_t volume = 0.f;
     muse::audio::balance_t balance = 0.f;
     muse::audio::volume_db_t gain = 0.f;
+    muse::audio::EqParams eq;
     muse::audio::AuxSendsParams auxSends;
     bool solo = false;
     bool muted = false;
@@ -57,6 +58,7 @@ struct AudioOutputParams {
                && muse::is_equal(volume, other.volume)
                && muse::is_equal(balance, other.balance)
                && muse::is_equal(gain, other.gain)
+               && eq == other.eq
                && auxSends == other.auxSends
                && solo == other.solo
                && muted == other.muted
@@ -71,6 +73,7 @@ struct AudioOutputParams {
         control.balance = balance;
         control.muted = muted;
         control.gain = gain;
+        control.eq = eq;
         return control;
     }
 
@@ -84,6 +87,7 @@ struct AudioOutputParams {
         }
         muted = control.muted;
         gain = control.gain;
+        eq = control.eq;
     }
 };
 

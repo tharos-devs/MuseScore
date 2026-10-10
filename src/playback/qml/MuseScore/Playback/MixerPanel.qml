@@ -440,6 +440,28 @@ ColumnLayout {
                         }
                     }
 
+                    MixerEqSection {
+                        id: eqSection
+
+                        visible: contextMenuModel.eqSectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
+
+                        model: mixerPanelModel
+
+                        navigationRowStart: 75
+                        needReadChannelName: prv.isPanelActivated
+
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
+                    }
+
                     MixerFxSection {
                         id: fxSection
 

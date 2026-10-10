@@ -21,14 +21,17 @@
  */
 #include "projectaudiosettings.h"
 
+#include <algorithm>
 #include <map>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include "containers.h"
 #include "types/bytearray.h"
 
 #include "audio/common/audioutils.h"
+#include "audio/common/channeleq.h"
 #include "vst/vstpluginattrs.h"
 
 #include "log.h"
@@ -264,6 +267,7 @@ void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId,
         paramsChanged |= !muse::RealIsEqual(it->second.volume, params.volume);
         paramsChanged |= !muse::RealIsEqual(it->second.balance, params.balance);
         paramsChanged |= !muse::RealIsEqual(it->second.gain, params.gain);
+        paramsChanged |= (it->second.eq != params.eq);
         paramsChanged |= (it->second.fxChain != params.fxChain);
         paramsChanged |= (it->second.auxSends != params.auxSends);
         paramsChanged |= (it->second.color != params.color);
@@ -609,6 +613,9 @@ AudioOutputParams ProjectAudioSettings::outputParamsFromJson(const QJsonObject& 
     result.balance = object.value("balance").toVariant().toFloat();
     result.volume = object.value("volumeDb").toVariant().toFloat();
     result.gain = object.value("gainDb").toVariant().toFloat();
+    if (object.contains("eq")) {
+        result.eq = eqFromJson(object.value("eq").toObject());
+    }
     result.auxSends = auxSendsFromJson(object.value("auxSends").toArray());
 
     const QString colorName = object.value("color").toString();
@@ -648,6 +655,74 @@ AudioFxParams ProjectAudioSettings::fxParamsFromJson(const QJsonObject& object) 
     result.resourceMeta = resourceMetaFromJson(object.value("resourceMeta").toObject());
     result.configuration = unitConfigFromJson(object.value("unitConfiguration").toObject());
     result.categories = audioFxCategoriesFromString(result.resourceMeta.attributeVal(vst::CATEGORIES_ATTRIBUTE));
+
+    return result;
+}
+
+static const std::map<EqBandType, QString> EQ_BAND_TYPE_KEYS {
+    { EqBandType::Parametric1, "parametric1" },
+    { EqBandType::Parametric2, "parametric2" },
+    { EqBandType::LowShelf1, "lowShelf1" },
+    { EqBandType::LowShelf2, "lowShelf2" },
+    { EqBandType::LowShelf3, "lowShelf3" },
+    { EqBandType::LowShelf4, "lowShelf4" },
+    { EqBandType::HighShelf1, "highShelf1" },
+    { EqBandType::HighShelf2, "highShelf2" },
+    { EqBandType::HighShelf3, "highShelf3" },
+    { EqBandType::HighShelf4, "highShelf4" },
+    { EqBandType::HighPass1, "highPass1" },
+    { EqBandType::HighPass2, "highPass2" },
+    { EqBandType::LowPass1, "lowPass1" },
+    { EqBandType::LowPass2, "lowPass2" },
+};
+
+EqParams ProjectAudioSettings::eqFromJson(const QJsonObject& object) const
+{
+    EqParams result;
+    result.enabled = object.value("enabled").toBool(true);
+
+    const QJsonArray bands = object.value("bands").toArray();
+    for (size_t i = 0; i < EQ_BAND_COUNT && i < static_cast<size_t>(bands.size()); ++i) {
+        const QJsonObject bandObj = bands.at(static_cast<int>(i)).toObject();
+        EqBandParams& band = result.bands[i];
+
+        // an unknown type, or one the band can't take, keeps the default one
+        const QString typeKey = bandObj.value("type").toString();
+        for (const auto& [type, key] : EQ_BAND_TYPE_KEYS) {
+            if (key == typeKey) {
+                if (muse::contains(muse::audio::eq::availableBandTypes(i), type)) {
+                    band.type = type;
+                }
+                break;
+            }
+        }
+
+        band.frequency = std::clamp(static_cast<float>(bandObj.value("frequency").toDouble(band.frequency)),
+                                    EQ_FREQUENCY_MIN, EQ_FREQUENCY_MAX);
+        band.gain = std::clamp(static_cast<float>(bandObj.value("gain").toDouble(band.gain)), EQ_GAIN_DB_MIN, EQ_GAIN_DB_MAX);
+        band.q = std::clamp(static_cast<float>(bandObj.value("q").toDouble(band.q)), EQ_Q_MIN, EQ_Q_MAX);
+        band.enabled = bandObj.value("enabled").toBool(band.enabled);
+    }
+
+    return result;
+}
+
+QJsonObject ProjectAudioSettings::eqToJson(const EqParams& eq) const
+{
+    QJsonArray bands;
+    for (const EqBandParams& band : eq.bands) {
+        QJsonObject bandObj;
+        bandObj.insert("type", muse::value(EQ_BAND_TYPE_KEYS, band.type));
+        bandObj.insert("frequency", band.frequency);
+        bandObj.insert("gain", band.gain);
+        bandObj.insert("q", band.q);
+        bandObj.insert("enabled", band.enabled);
+        bands.append(bandObj);
+    }
+
+    QJsonObject result;
+    result.insert("enabled", eq.enabled);
+    result.insert("bands", bands);
 
     return result;
 }
@@ -738,6 +813,11 @@ QJsonObject ProjectAudioSettings::outputParamsToJson(const AudioOutputParams& pa
     result.insert("balance", params.balance.raw());
     result.insert("volumeDb", params.volume.raw());
     result.insert("gainDb", params.gain.raw());
+
+    // default (flat): not written
+    if (params.eq != muse::audio::EqParams()) {
+        result.insert("eq", eqToJson(params.eq));
+    }
 
     if (!params.auxSends.empty()) {
         result.insert("auxSends", auxSendsToJson(params.auxSends));

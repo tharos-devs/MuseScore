@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 
 #include <QElapsedTimer>
@@ -83,6 +84,8 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(int gain READ gain WRITE setGain NOTIFY gainChanged)
     Q_PROPERTY(int gainMin READ gainMin CONSTANT)
     Q_PROPERTY(int gainMax READ gainMax CONSTANT)
+    //! NOTE The channel EQ: { enabled, flat, bands: [{ type, typeTitle, frequency, gain, q, enabled, hasGain, hasQ }] }
+    Q_PROPERTY(QVariantMap eq READ eq NOTIFY eqChanged)
     Q_PROPERTY(bool hasVolumeAutomation READ hasVolumeAutomation NOTIFY hasVolumeAutomationChanged)
     Q_PROPERTY(bool hasBalanceAutomation READ hasBalanceAutomation NOTIFY hasBalanceAutomationChanged)
     Q_PROPERTY(bool solo READ solo WRITE setSolo NOTIFY soloChanged)
@@ -155,6 +158,9 @@ public:
     int gain() const;
     int gainMin() const;
     int gainMax() const;
+
+    QVariantMap eq() const;
+    const muse::audio::EqParams& eqParams() const;
     bool hasVolumeAutomation() const;
     bool hasBalanceAutomation() const;
     bool solo() const;
@@ -276,6 +282,19 @@ public:
     Q_INVOKABLE void beginGainChange();
     Q_INVOKABLE void endGainChange();
 
+    //! NOTE The EQ: each call is one undoable change, except within beginEqChange()/endEqChange() (e.g. dragging
+    //! a band on the curve), which makes the whole gesture one
+    Q_INVOKABLE QVariantList eqBandTypes(int bandIndex) const;
+    Q_INVOKABLE void setEqEnabled(bool enabled);
+    Q_INVOKABLE void resetEq();
+    Q_INVOKABLE void setEqBandEnabled(int bandIndex, bool enabled);
+    Q_INVOKABLE void setEqBandType(int bandIndex, int type);
+    Q_INVOKABLE void setEqBandFrequency(int bandIndex, double frequency);
+    Q_INVOKABLE void setEqBandGain(int bandIndex, double gain);
+    Q_INVOKABLE void setEqBandQ(int bandIndex, double q);
+    Q_INVOKABLE void beginEqChange();
+    Q_INVOKABLE void endEqChange();
+
 public slots:
     void setTitle(QString title);
 
@@ -285,6 +304,7 @@ public slots:
     void setVolumeLevel(float volumeLevel);
     void setBalance(int balance);
     void setGain(int gain);
+    void setEqParams(muse::audio::EqParams eq);
     void setSolo(bool solo);
     void setMuted(bool mute);
     void setColor(QColor color);
@@ -299,6 +319,7 @@ signals:
     void volumeLevelChanged(float volumeLevel);
     void balanceChanged(int balance);
     void gainChanged(int gain);
+    void eqChanged();
     void hasVolumeAutomationChanged();
     void hasBalanceAutomationChanged();
     void soloChanged();
@@ -333,6 +354,7 @@ signals:
     void volumeChangeCommitted(float oldVolumeLevel, float newVolumeLevel);
     void balanceChangeCommitted(int oldBalance, int newBalance);
     void gainChangeCommitted(int oldGain, int newGain);
+    void eqChangeCommitted(const muse::audio::EqParams& oldEq, const muse::audio::EqParams& newEq);
     //! NOTE: forwarded from the relevant AuxSendItem's own levelChangeCommitted (see
     //! its NOTE) - fired here too (with the slot's stable auxIndex added) so
     //! MixerPanelModel can wire ALL of this channel's continuous-change undo in one
@@ -349,7 +371,9 @@ protected:
 
     void applyMuteToOutputParams(const bool isMuted);
 
-    void loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain);
+    void loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain,
+                           const muse::audio::EqParams& eq);
+    void changeEq(const std::function<void(muse::audio::EqParams&)>& change);
     void loadOutputResourceItems(const muse::audio::AudioFxChain& fxChain);
     void loadAuxSendItems(const muse::audio::AuxSendsParams& auxSends);
 
@@ -446,5 +470,6 @@ protected:
     std::optional<float> m_volumeChangeStart;
     std::optional<int> m_balanceChangeStart;
     std::optional<int> m_gainChangeStart;
+    std::optional<muse::audio::EqParams> m_eqChangeStart;
 };
 }

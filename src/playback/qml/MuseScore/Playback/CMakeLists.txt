@@ -47,6 +47,8 @@ qt_add_qml_module(playback_qml
         inputresourceitem.h
         midiinputactivitymodel.cpp
         midiinputactivitymodel.h
+        eqcurveview.cpp
+        eqcurveview.h
         mixerchannelitem.cpp
         mixerchannelitem.h
         mixerpanelcontextmenumodel.cpp
@@ -96,6 +98,9 @@ qt_add_qml_module(playback_qml
         internal/MixerAuxSendsSection.qml
         internal/MixerBalanceSection.qml
         internal/MixerFaderSection.qml
+        internal/EqValueField.qml
+        internal/MixerEqEditorPopup.qml
+        internal/MixerEqSection.qml
         internal/MixerFxSection.qml
         internal/MixerGainSection.qml
         internal/MixerMuteAndSoloSection.qml
