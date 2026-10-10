@@ -210,6 +210,12 @@ void NavigableAppMenuModel::setOpenedMenuAreaRect(QRect openedMenuAreaRect)
 
 bool NavigableAppMenuModel::eventFilter(QObject* watched, QEvent* event)
 {
+    //! NOTE Alt released after a click made while holding it (e.g. Alt+drag) doesn't highlight the menu bar,
+    //! like in native applications: otherwise the next keys go to the menu instead of the score
+    if (event->type() == QEvent::MouseButtonPress) {
+        m_needActivateHighlight = false;
+    }
+
     bool isMenuOpened = !m_openedMenuId.isEmpty();
     if (event->type() == QEvent::MouseButtonPress && watched == appWindow()) {
         QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
