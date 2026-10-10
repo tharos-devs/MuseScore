@@ -98,6 +98,15 @@ void AppshellCommandsController::init()
         });
     }
 
+    auto applySecondaryWindowOnTop = [this]() {
+        if (dock::IDockWindow* window = dockWindowProvider()->window()) {
+            window->setSecondaryWindowOnTop(configuration()->secondaryWindowAlwaysOnTop());
+        }
+    };
+    dockWindowProvider()->windowChanged().onNotify(this, applySecondaryWindowOnTop);
+    configuration()->secondaryWindowAlwaysOnTopChanged().onNotify(this, applySecondaryWindowOnTop);
+    applySecondaryWindowOnTop();
+
     cd->onRequest(this, DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND, [this]() {
         if (dock::IDockWindow* window = dockWindowProvider()->window()) {
             window->setSecondaryWindowOpen(!window->isSecondaryWindowOpen());

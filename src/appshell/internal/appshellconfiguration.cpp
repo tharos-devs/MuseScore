@@ -43,6 +43,8 @@ static const Settings::Key WELCOME_DIALOG_SHOW_ON_STARTUP_KEY(module_name, "appl
 static const Settings::Key WELCOME_DIALOG_LAST_SHOWN_VERSION_KEY(module_name, "application/welcomeDialogLastShownVersion");
 static const Settings::Key WELCOME_DIALOG_LAST_SHOWN_INDEX(module_name, "application/welcomeDialogLastShownIndex");
 
+static const Settings::Key SECONDARY_WINDOW_ALWAYS_ON_TOP_KEY(module_name, "application/secondaryWindowAlwaysOnTop");
+
 static const Settings::Key STARTUP_MODE_TYPE(module_name, "application/startup/modeStart");
 static const Settings::Key STARTUP_SCORE_PATH(module_name, "application/startup/startScore");
 
@@ -75,6 +77,11 @@ void AppShellConfiguration::init()
     settings()->setDefaultValue(WELCOME_DIALOG_SHOW_ON_STARTUP_KEY, Val(true));
     settings()->valueChanged(WELCOME_DIALOG_SHOW_ON_STARTUP_KEY).onReceive(this, [this](const Val&) {
         m_welcomeDialogShowOnStartupChanged.notify();
+    });
+
+    settings()->setDefaultValue(SECONDARY_WINDOW_ALWAYS_ON_TOP_KEY, Val(false));
+    settings()->valueChanged(SECONDARY_WINDOW_ALWAYS_ON_TOP_KEY).onReceive(this, [this](const Val&) {
+        m_secondaryWindowAlwaysOnTopChanged.notify();
     });
 
     settings()->setDefaultValue(WELCOME_DIALOG_LAST_SHOWN_VERSION_KEY, Val("0.0.0"));
@@ -120,6 +127,21 @@ void AppShellConfiguration::setWelcomeDialogShowOnStartup(bool show)
 async::Notification AppShellConfiguration::welcomeDialogShowOnStartupChanged() const
 {
     return m_welcomeDialogShowOnStartupChanged;
+}
+
+bool AppShellConfiguration::secondaryWindowAlwaysOnTop() const
+{
+    return settings()->value(SECONDARY_WINDOW_ALWAYS_ON_TOP_KEY).toBool();
+}
+
+void AppShellConfiguration::setSecondaryWindowAlwaysOnTop(bool onTop)
+{
+    settings()->setSharedValue(SECONDARY_WINDOW_ALWAYS_ON_TOP_KEY, Val(onTop));
+}
+
+async::Notification AppShellConfiguration::secondaryWindowAlwaysOnTopChanged() const
+{
+    return m_secondaryWindowAlwaysOnTopChanged;
 }
 
 std::string AppShellConfiguration::welcomeDialogLastShownVersion() const

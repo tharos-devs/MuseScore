@@ -71,10 +71,15 @@ void ExpressionMenuModel::init()
     }, async::Asyncable::Mode::SetReplace);
 }
 
+void ExpressionMenuModel::prepareMenuOpening()
+{
+    m_replacedItems.deleteAll();
+    updateItems();
+}
+
 void ExpressionMenuModel::updateItems()
 {
-    // setItems() doesn't delete the replaced items, and this runs on every dropdown open
-    qDeleteAll(items());
+    const MenuItemList oldItems = this->items();
 
     MenuItemList items;
     for (const ExpressionEditorInfo& info : editorInfos()) {
@@ -91,6 +96,7 @@ void ExpressionMenuModel::updateItems()
     }
 
     setItems(items);
+    m_replacedItems.add(oldItems);
 }
 
 QString ExpressionMenuModel::currentTitle() const

@@ -292,6 +292,34 @@ Item {
         popupComponent: NoteInputBarCustomisePopup {}
     }
 
+    FlatButton {
+        id: midiStartNoteInputButton
+
+        anchors.margins: 4
+
+        width: gridView.cellWidth
+        height: gridView.cellHeight
+
+        icon: IconCode.MIDI_INPUT
+        iconFont: ui.theme.toolbarIconsFont
+        toolTipTitle: qsTrc("notation", "Start note input on MIDI key press")
+        toolTipDescription: noteInputModel.isMidiInputEnabled
+                            ? qsTrc("notation", "When pressing a MIDI key, begin note input at the selected measure, note, or rest")
+                            : qsTrc("notation", "Requires MIDI input to be enabled")
+        toolTipShortcut: noteInputModel.midiStartNoteInputShortcut
+
+        accentButton: noteInputModel.midiStartNoteInput
+        transparent: !accentButton
+
+        enabled: noteInputModel.isMidiInputEnabled
+
+        navigation.panel: root.navigationPanel
+        navigation.order: 101
+        navigation.accessible.name: toolTipTitle
+
+        onClicked: noteInputModel.toggleMidiStartNoteInput()
+    }
+
     states: [
         State {
             when: gridView.isHorizontal
@@ -309,6 +337,12 @@ Item {
             AnchorChanges {
                 target: customizeButton
                 anchors.left: gridView.right
+                anchors.verticalCenter: root.verticalCenter
+            }
+
+            AnchorChanges {
+                target: midiStartNoteInputButton
+                anchors.left: customizeButton.right
                 anchors.verticalCenter: root.verticalCenter
             }
         },
@@ -329,6 +363,12 @@ Item {
                 target: customizeButton
                 anchors.top: gridView.bottom
                 anchors.right: parent.right
+            }
+
+            AnchorChanges {
+                target: midiStartNoteInputButton
+                anchors.top: gridView.bottom
+                anchors.left: parent.left
             }
         }
     ]

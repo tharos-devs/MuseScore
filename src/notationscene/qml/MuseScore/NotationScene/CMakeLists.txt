@@ -38,6 +38,7 @@ qt_add_qml_module(notationscene_qml
         abstractnotationpaintview.h
         automationtypemenumodel.cpp
         automationtypemenumodel.h
+        menuitemsutils.h
         expressionmenumodel.cpp
         expressionmenumodel.h
         continuouspanel.cpp

@@ -94,7 +94,11 @@ void PlaybackCommandsState::init()
     }
 
     notationConfiguration()->isMidiInputEnabledChanged().onNotify(this, [this]() {
-        updateCommandStates({ MIDI_TOGGLE_COMMAND });
+        updateCommandStates({ MIDI_TOGGLE_COMMAND, MIDI_START_NOTE_INPUT_TOGGLE_COMMAND });
+    });
+
+    notationConfiguration()->startNoteInputAtSelectedNoteRestWhenPressingMidiKeyChanged().onNotify(this, [this]() {
+        updateCommandStates({ MIDI_START_NOTE_INPUT_TOGGLE_COMMAND });
     });
 
     notationConfiguration()->midiUseWrittenPitch().ch.onReceive(this, [this](bool) {
@@ -192,6 +196,9 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
         return CommandState(true, midiCcRecorder() && midiCcRecorder()->isArmed());
     } else if (command == MIDI_TOGGLE_COMMAND) {
         return CommandState(true, notationConfiguration()->isMidiInputEnabled());
+    } else if (command == MIDI_START_NOTE_INPUT_TOGGLE_COMMAND) {
+        return CommandState(notationConfiguration()->isMidiInputEnabled(),
+                            notationConfiguration()->startNoteInputAtSelectedNoteRestWhenPressingMidiKey());
     } else if (command == MIDI_INPUT_WRITTEN_PITCH_COMMAND) {
         return CommandState(true, notationConfiguration()->midiUseWrittenPitch().val);
     } else if (command == MIDI_INPUT_SOUNDING_PITCH_COMMAND) {

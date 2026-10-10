@@ -115,7 +115,7 @@ StyledToolBarView {
             }
 
             onAboutToOpenMenu: {
-                expressionMenuModel.init()
+                expressionMenuModel.prepareMenuOpening()
             }
         }
     }
@@ -163,7 +163,7 @@ StyledToolBarView {
                 // Refresh right before showing, rather than relying solely on the model's own
                 // reactive updates - matches how the right-click "Automation type" submenu is
                 // always rebuilt fresh on open, so it can't show a stale/no checkmark either.
-                automationTypeMenuModel.init()
+                automationTypeMenuModel.prepareMenuOpening()
             }
         }
     }

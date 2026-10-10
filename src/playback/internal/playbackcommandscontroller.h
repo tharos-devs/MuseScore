@@ -39,12 +39,14 @@
 #include "../iplaybackcontroller.h"
 #include "../imidiccrecorder.h"
 #include "../iplaybackconfiguration.h"
+#include "notation/inotationconfiguration.h"
 
 namespace mu::playback {
 class PlaybackCommandsController : public IPlaybackCommandsController, public muse::Contextable, public muse::actions::Actionable,
     public muse::rcommand::Commandable
 {
     muse::GlobalInject<IPlaybackConfiguration> configuration;
+    muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> dispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandsState> commandsState = { this };

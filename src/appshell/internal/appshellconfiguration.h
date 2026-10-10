@@ -65,6 +65,10 @@ public:
     void setWelcomeDialogShowOnStartup(bool show) override;
     muse::async::Notification welcomeDialogShowOnStartupChanged() const override;
 
+    bool secondaryWindowAlwaysOnTop() const override;
+    void setSecondaryWindowAlwaysOnTop(bool onTop) override;
+    muse::async::Notification secondaryWindowAlwaysOnTopChanged() const override;
+
     std::string welcomeDialogLastShownVersion() const override;
     void setWelcomeDialogLastShownVersion(const std::string& version) override;
 
@@ -124,6 +128,7 @@ private:
     QString m_preferencesDialogCurrentPageId;
 
     muse::async::Notification m_welcomeDialogShowOnStartupChanged;
+    muse::async::Notification m_secondaryWindowAlwaysOnTopChanged;
 
     muse::async::Notification m_startupModeTypeChanged;
     muse::async::Notification m_startupScorePathChanged;

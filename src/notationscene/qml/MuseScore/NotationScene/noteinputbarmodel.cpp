@@ -34,6 +34,8 @@
 
 #include "internal/notationuiactions.h"
 #include "notationcommands.h"
+#include "playback/playbackcommands.h"
+#include "shortcuts/shortcutstypes.h"
 
 using namespace mu;
 using namespace mu::notation;
@@ -130,6 +132,20 @@ void NoteInputBarModel::init()
     commandsController()->isNoteInputAllowedChanged().onReceive(this, [this](bool) {
         emit isInputAllowedChanged();
     });
+
+    configuration()->isMidiInputEnabledChanged().onNotify(this, [this]() {
+        emit midiStartNoteInputChanged();
+    });
+
+    configuration()->startNoteInputAtSelectedNoteRestWhenPressingMidiKeyChanged().onNotify(this, [this]() {
+        emit midiStartNoteInputChanged();
+    });
+
+#ifndef MUSE_MODULE_SHORTCUTS_V2
+    noteInputShortcutsRegister()->shortcutsChanged().onNotify(this, [this]() {
+        emit midiStartNoteInputShortcutChanged();
+    });
+#endif
 
     load();
 }
@@ -335,6 +351,30 @@ bool NoteInputBarModel::caretGridDotted() const
 {
     const CaretGridValue* value = currentCaretGridValue(configuration()->caretGridTicks());
     return value && value->dots > 0;
+}
+
+bool NoteInputBarModel::isMidiInputEnabled() const
+{
+    return configuration()->isMidiInputEnabled();
+}
+
+bool NoteInputBarModel::midiStartNoteInput() const
+{
+    return configuration()->startNoteInputAtSelectedNoteRestWhenPressingMidiKey();
+}
+
+QString NoteInputBarModel::midiStartNoteInputShortcut() const
+{
+#ifndef MUSE_MODULE_SHORTCUTS_V2
+    return shortcuts::sequencesToNativeText(noteInputShortcutsRegister()->shortcut(playback::MIDI_START_NOTE_INPUT_ACTION_CODE).sequences);
+#else
+    return QString();
+#endif
+}
+
+void NoteInputBarModel::toggleMidiStartNoteInput()
+{
+    dispatchCommand(playback::MIDI_START_NOTE_INPUT_TOGGLE_COMMAND, {});
 }
 
 void NoteInputBarModel::handleMenuItem(const QString& itemId)

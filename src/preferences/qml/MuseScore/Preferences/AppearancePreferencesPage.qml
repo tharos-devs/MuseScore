@@ -226,10 +226,41 @@ PreferencesPage {
 
         SeparatorLine {}
 
+        BaseSection {
+            id: secondaryWindowSection
+
+            navigation.name: "SecondaryWindowSection"
+            navigation.section: root.navigationSection
+            navigation.order: root.navigationOrderStart + 7
+
+            CheckBox {
+                width: parent.width
+
+                text: qsTrc("preferences", "Secondary windows always on top")
+                checked: appearanceModel.secondaryWindowAlwaysOnTop
+
+                navigation.name: "SecondaryWindowAlwaysOnTopBox"
+                navigation.panel: secondaryWindowSection.navigation
+                navigation.row: 0
+
+                onClicked: {
+                    appearanceModel.secondaryWindowAlwaysOnTop = !checked
+                }
+            }
+
+            onFocusChanged: {
+                if (activeFocus) {
+                    root.ensureContentVisibleRequested(Qt.rect(x, y, width, height))
+                }
+            }
+        }
+
+        SeparatorLine {}
+
         ThemeAdditionalOptionsSection {
 
             navigation.section: root.navigationSection
-            navigation.order: root.navigationOrderStart + 7
+            navigation.order: root.navigationOrderStart + 8
 
             onResetThemeToDefaultRequested: {
                 appearanceModel.resetAppearancePreferencesToDefault()

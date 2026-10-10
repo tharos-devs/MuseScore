@@ -95,27 +95,37 @@ QString AutomationTypeMenuModel::currentIconSuffix() const
     return notationConfiguration()->currentAutomationType() == AutomationType::Tempo ? QStringLiteral("=") : QString();
 }
 
+void AutomationTypeMenuModel::prepareMenuOpening()
+{
+    m_replacedItems.deleteAll();
+    updateItems();
+}
+
 void AutomationTypeMenuModel::updateItems()
 {
-    // AbstractMenuModel::setItems() doesn't delete the items it's replacing (unlike
-    // AbstractToolBarModel's own setItems), and this runs on every dropdown open - without this,
-    // each open leaks the previous batch.
-    qDeleteAll(items());
+    const MenuItemList oldItems = items();
 
-    MenuItem* midiCcMenu = makeMidiCcMenu();
-    if (midiCcMenu) {
-        midiCcMenu->setIcon(automationTypeIcon(AutomationType::MidiCC));
-        midiCcMenu->setCheckable(true);
-    }
-
-    setItems({
+    MenuItemList newItems;
+    for (MenuItem* item : {
         makeAutomationTypeItem(AutomationType::Dynamics, "dynamics", TranslatableString::untranslatable("Dynamics")),
         makeAutomationTypeItem(AutomationType::Tempo, "tempo", TranslatableString::untranslatable("Tempo")),
         makeAutomationTypeItem(AutomationType::Volume, "volume", TranslatableString::untranslatable("Volume")),
         makeAutomationTypeItem(AutomationType::Pan, "pan", TranslatableString::untranslatable("Pan")),
-        makeSeparator(),
-        midiCcMenu,
-    });
+    }) {
+        // a null item would break the menu (null entries in its QML model)
+        if (item) {
+            newItems << item;
+        }
+    }
+
+    if (MenuItem* midiCcMenu = makeMidiCcMenu()) {
+        midiCcMenu->setIcon(automationTypeIcon(AutomationType::MidiCC));
+        midiCcMenu->setCheckable(true);
+        newItems << makeSeparator() << midiCcMenu;
+    }
+
+    setItems(newItems);
+    m_replacedItems.add(oldItems);
 }
 
 MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()

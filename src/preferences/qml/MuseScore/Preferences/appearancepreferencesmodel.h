@@ -29,6 +29,7 @@
 #include "modularity/ioc.h"
 #include "ui/iuiconfiguration.h"
 #include "notation/inotationconfiguration.h"
+#include "appshell/iappshellconfiguration.h"
 #include "async/asyncable.h"
 
 namespace mu::preferences {
@@ -71,8 +72,12 @@ class AppearancePreferencesModel : public QObject, public muse::Contextable, pub
 
     Q_PROPERTY(QColor engravingColor READ engravingColor WRITE setEngravingColor NOTIFY engravingColorChanged)
 
+    Q_PROPERTY(
+        bool secondaryWindowAlwaysOnTop READ secondaryWindowAlwaysOnTop WRITE setSecondaryWindowAlwaysOnTop NOTIFY secondaryWindowAlwaysOnTopChanged)
+
     muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
+    muse::GlobalInject<appshell::IAppShellConfiguration> appshellConfiguration;
 
 public:
     explicit AppearancePreferencesModel(QObject* parent = nullptr);
@@ -115,6 +120,8 @@ public:
     bool scoreInversionEnabled() const;
     bool isOnlyInvertInDarkTheme() const;
 
+    bool secondaryWindowAlwaysOnTop() const;
+
     QColor engravingColor() const;
 
     Q_INVOKABLE void resetAppearancePreferencesToDefault();
@@ -139,6 +146,7 @@ public slots:
     void setScoreInversionEnabled(bool value);
     void setOnlyInvertInDarkTheme(bool value);
     void setEngravingColor(const QColor& color);
+    void setSecondaryWindowAlwaysOnTop(bool value);
 
 signals:
     void isFollowSystemThemeChanged();
@@ -155,6 +163,7 @@ signals:
     void invertScoreColorChanged();
     void isOnlyInvertInDarkThemeChanged();
     void engravingColorChanged();
+    void secondaryWindowAlwaysOnTopChanged();
 
 private:
     muse::ui::ThemeInfo currentTheme() const;

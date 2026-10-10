@@ -44,6 +44,10 @@ public:
     virtual void setWelcomeDialogShowOnStartup(bool show) = 0;
     virtual muse::async::Notification welcomeDialogShowOnStartupChanged() const = 0;
 
+    virtual bool secondaryWindowAlwaysOnTop() const = 0;
+    virtual void setSecondaryWindowAlwaysOnTop(bool onTop) = 0;
+    virtual muse::async::Notification secondaryWindowAlwaysOnTopChanged() const = 0;
+
     virtual std::string welcomeDialogLastShownVersion() const = 0;
     virtual void setWelcomeDialogLastShownVersion(const std::string& version) = 0;
 
