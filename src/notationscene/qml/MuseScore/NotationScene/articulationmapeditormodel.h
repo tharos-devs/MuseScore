@@ -274,6 +274,7 @@ private:
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
     bool writeFile(const muse::io::path_t& path, bool reloadTracks = true);
     void reloadTracksUsingFile(const muse::io::path_t& path, const std::optional<engraving::InstrumentTrackId>& alsoTrack);
+    std::optional<engraving::InstrumentTrackId> targetTrackToUpdate() const;
     muse::io::path_t mapsDir() const;
 
     void confirmDiscardChanges(std::function<void()> proceed);
@@ -317,6 +318,9 @@ private:
     const Node* m_selectionAnchor = nullptr; // the start of a Shift+click range
 
     std::optional<engraving::InstrumentTrackId> m_targetTrack;
+    //! NOTE The edited map is the target track's own (opened from it, not replaced by New/Open since): saved, it
+    //! updates that track, even when saved to another file (e.g. its original file is no longer there)
+    bool m_editsTargetTrackMap = false;
     bool m_hasInstrumentEditor = false;
     bool m_instrumentEditorOpened = false;
 
