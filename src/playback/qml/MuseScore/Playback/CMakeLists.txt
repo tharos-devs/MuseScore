@@ -98,6 +98,7 @@ qt_add_qml_module(playback_qml
         internal/MixerAuxSendsSection.qml
         internal/MixerBalanceSection.qml
         internal/MixerFaderSection.qml
+        internal/EqValueField.qml
         internal/MixerEqEditorPopup.qml
         internal/MixerEqSection.qml
         internal/MixerFxSection.qml

@@ -40,8 +40,12 @@ StyledPopupView {
     readonly property var bandNames: [ qsTrc("playback", "1 LO"), qsTrc("playback", "2 LMF"),
                                        qsTrc("playback", "3 HMF"), qsTrc("playback", "4 HI") ]
 
-    contentWidth: 600
-    contentHeight: contentColumn.implicitHeight
+    // the content is laid out at full size and shown at 90%, less massive
+    readonly property real contentScale: 0.9
+    readonly property real unscaledWidth: 400
+
+    contentWidth: root.unscaledWidth * root.contentScale
+    contentHeight: contentColumn.implicitHeight * root.contentScale
 
     NavigationPanel {
         id: navPanel
@@ -66,8 +70,11 @@ StyledPopupView {
     ColumnLayout {
         id: contentColumn
 
-        width: root.contentWidth
+        width: root.unscaledWidth
         spacing: 8
+
+        scale: root.contentScale
+        transformOrigin: Item.TopLeft
 
         RowLayout {
             Layout.fillWidth: true
@@ -99,11 +106,6 @@ StyledPopupView {
                 Layout.fillWidth: true
             }
 
-            StyledTextLabel {
-                text: curveView.hoverText
-                horizontalAlignment: Text.AlignRight
-            }
-
             FlatButton {
                 text: qsTrc("playback", "Reset")
 
@@ -119,7 +121,7 @@ StyledPopupView {
             id: curveView
 
             Layout.fillWidth: true
-            Layout.preferredHeight: 260
+            Layout.preferredHeight: 150
 
             eq: root.eq
             editable: true
@@ -128,6 +130,17 @@ StyledPopupView {
             curveColor: ui.theme.accentColor
             gridColor: Utils.colorWithAlpha(ui.theme.fontPrimaryColor, 0.15)
             textColor: ui.theme.fontPrimaryColor
+
+            // the frequency, note and value under the mouse
+            StyledTextLabel {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.topMargin: 8
+                anchors.leftMargin: 36
+
+                text: curveView.hoverText
+                horizontalAlignment: Text.AlignLeft
+            }
 
             onBandDragStarted: function(band) {
                 root.channelItem.beginEqChange()
@@ -153,10 +166,14 @@ StyledPopupView {
             }
         }
 
-        RowLayout {
+        Row {
+            id: bandsRow
+
             Layout.fillWidth: true
             Layout.bottomMargin: 4
-            spacing: 8
+            spacing: 6
+
+            readonly property real bandWidth: (root.unscaledWidth - 3 * spacing) / 4
 
             Repeater {
                 model: 4
@@ -168,12 +185,12 @@ StyledPopupView {
 
                     readonly property var band: root.eq.bands ? root.eq.bands[index] : ({})
 
-                    Layout.fillWidth: true
-                    spacing: 6
+                    width: bandsRow.bandWidth
+                    spacing: 4
 
                     Rectangle {
                         width: parent.width
-                        height: 28
+                        height: 26
                         radius: 3
 
                         color: curveView.selectedBand === bandColumn.index ? Utils.colorWithAlpha(ui.theme.accentColor, 0.3)
@@ -208,31 +225,6 @@ StyledPopupView {
                                 text: root.bandNames[bandColumn.index]
                                 horizontalAlignment: Text.AlignLeft
                             }
-
-                            FlatButton {
-                                id: typeButton
-
-                                Layout.preferredHeight: 22
-
-                                text: bandColumn.band.typeTitle ?? ""
-                                transparent: true
-
-                                toolTipTitle: qsTrc("playback", "Band type")
-
-                                navigation.panel: navPanel
-                                navigation.row: 1
-                                navigation.column: bandColumn.index * 2 + 1
-
-                                onClicked: typeMenuLoader.toggleOpened(bandColumn.typeMenuItems())
-
-                                StyledMenuLoader {
-                                    id: typeMenuLoader
-
-                                    onHandleMenuItem: function(itemId) {
-                                        root.channelItem.setEqBandType(bandColumn.index, Number(itemId))
-                                    }
-                                }
-                            }
                         }
 
                         MouseArea {
@@ -242,67 +234,83 @@ StyledPopupView {
                         }
                     }
 
-                    IncrementalPropertyControl {
+                    FlatButton {
+                        id: typeButton
+
+                        width: parent.width
+                        height: 24
+
+                        text: bandColumn.band.typeTitle ?? ""
+
+                        toolTipTitle: qsTrc("playback", "Band type")
+
+                        navigation.panel: navPanel
+                        navigation.row: 1
+                        navigation.column: bandColumn.index * 2 + 1
+
+                        onClicked: typeMenuLoader.toggleOpened(bandColumn.typeMenuItems())
+
+                        StyledMenuLoader {
+                            id: typeMenuLoader
+
+                            onHandleMenuItem: function(itemId) {
+                                root.channelItem.setEqBandType(bandColumn.index, Number(itemId))
+                            }
+                        }
+                    }
+
+                    EqValueField {
                         width: parent.width
 
                         enabled: Boolean(bandColumn.band.hasGain)
-                        currentValue: bandColumn.band.gain ?? 0
-                        minValue: -24
-                        maxValue: 24
-                        step: 0.5
+                        value: bandColumn.band.gain ?? 0
+                        from: -24
+                        to: 24
                         decimals: 1
-                        measureUnitsSymbol: qsTrc("global", "dB")
+                        unit: qsTrc("global", "dB")
 
                         navigation.panel: navPanel
                         navigation.row: 2
                         navigation.column: bandColumn.index
                         navigation.accessible.name: root.bandNames[bandColumn.index] + " " + qsTrc("playback", "Gain")
 
-                        onValueEdited: function(newValue) {
-                            root.channelItem.beginEqChange()
+                        onGestureStarted: root.channelItem.beginEqChange()
+                        onValueRequested: function(newValue) {
                             root.channelItem.setEqBandGain(bandColumn.index, newValue)
                         }
-
-                        onValueEditingFinished: function(newValue) {
-                            root.channelItem.setEqBandGain(bandColumn.index, newValue)
-                            root.channelItem.endEqChange()
-                        }
+                        onGestureFinished: root.channelItem.endEqChange()
                     }
 
-                    IncrementalPropertyControl {
+                    EqValueField {
                         width: parent.width
 
-                        currentValue: bandColumn.band.frequency ?? 1000
-                        minValue: 20
-                        maxValue: 20000
-                        step: currentValue >= 1000 ? 100 : (currentValue >= 100 ? 10 : 1)
-                        decimals: currentValue >= 1000 ? 0 : 1
-                        measureUnitsSymbol: qsTrc("playback", "Hz")
+                        value: bandColumn.band.frequency ?? 1000
+                        from: 20
+                        to: 20000
+                        logarithmic: true
+                        decimals: value >= 1000 ? 0 : 1
+                        unit: qsTrc("playback", "Hz")
 
                         navigation.panel: navPanel
                         navigation.row: 3
                         navigation.column: bandColumn.index
                         navigation.accessible.name: root.bandNames[bandColumn.index] + " " + qsTrc("playback", "Frequency")
 
-                        onValueEdited: function(newValue) {
-                            root.channelItem.beginEqChange()
+                        onGestureStarted: root.channelItem.beginEqChange()
+                        onValueRequested: function(newValue) {
                             root.channelItem.setEqBandFrequency(bandColumn.index, newValue)
                         }
-
-                        onValueEditingFinished: function(newValue) {
-                            root.channelItem.setEqBandFrequency(bandColumn.index, newValue)
-                            root.channelItem.endEqChange()
-                        }
+                        onGestureFinished: root.channelItem.endEqChange()
                     }
 
-                    IncrementalPropertyControl {
+                    EqValueField {
                         width: parent.width
 
                         enabled: Boolean(bandColumn.band.hasQ)
-                        currentValue: bandColumn.band.q ?? 1
-                        minValue: 0.1
-                        maxValue: 12
-                        step: 0.1
+                        value: bandColumn.band.q ?? 1
+                        from: 0.1
+                        to: 12
+                        logarithmic: true
                         decimals: 1
 
                         navigation.panel: navPanel
@@ -310,15 +318,11 @@ StyledPopupView {
                         navigation.column: bandColumn.index
                         navigation.accessible.name: root.bandNames[bandColumn.index] + " " + qsTrc("playback", "Q")
 
-                        onValueEdited: function(newValue) {
-                            root.channelItem.beginEqChange()
+                        onGestureStarted: root.channelItem.beginEqChange()
+                        onValueRequested: function(newValue) {
                             root.channelItem.setEqBandQ(bandColumn.index, newValue)
                         }
-
-                        onValueEditingFinished: function(newValue) {
-                            root.channelItem.setEqBandQ(bandColumn.index, newValue)
-                            root.channelItem.endEqChange()
-                        }
+                        onGestureFinished: root.channelItem.endEqChange()
                     }
 
                     function typeMenuItems() {

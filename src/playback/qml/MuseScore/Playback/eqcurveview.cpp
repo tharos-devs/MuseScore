@@ -171,7 +171,8 @@ QRectF EqCurveView::plotRect() const
     }
 
     // room for the dB scale on the left and the frequency scale below
-    return QRectF(30, 6, std::max(0.0, width() - 36), std::max(0.0, height() - 24));
+    // and for half of the last frequency label on the right
+    return QRectF(30, 6, std::max(0.0, width() - 46), std::max(0.0, height() - 24));
 }
 
 double EqCurveView::xForFrequency(double frequency) const
@@ -205,13 +206,11 @@ double EqCurveView::dbForY(double y) const
     return std::clamp(db, static_cast<double>(EQ_GAIN_DB_MIN), static_cast<double>(EQ_GAIN_DB_MAX));
 }
 
-//! NOTE At its gain; a band without gain (pass filter) sits on the curve at its frequency
+//! NOTE At its gain; a band without gain (pass filter) on the 0 dB line
 QPointF EqCurveView::bandPoint(size_t band) const
 {
     const EqBandParams& params = m_eq.bands[band];
-    const double db = eq::bandTypeHasGain(params.type)
-                      ? params.gain
-                      : eq::responseDb(m_eq, params.frequency, DISPLAY_SAMPLE_RATE);
+    const double db = eq::bandTypeHasGain(params.type) ? params.gain : 0.0;
     return QPointF(xForFrequency(params.frequency), yForDb(db));
 }
 
