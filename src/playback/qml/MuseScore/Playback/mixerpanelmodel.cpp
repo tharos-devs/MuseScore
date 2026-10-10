@@ -230,6 +230,11 @@ void MixerPanelModel::connectContinuousChangeUndo(MixerChannelItem* item)
                                          &MixerChannelItem::setGain, oldValue, newValue);
     });
 
+    connect(item, &MixerChannelItem::eqChangeCommitted, this, [this, item](const EqParams& oldValue, const EqParams& newValue) {
+        pushChannelFieldUndoCommand<EqParams>(item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel EQ"),
+                                              &MixerChannelItem::setEqParams, oldValue, newValue);
+    });
+
     connect(item, &MixerChannelItem::auxSendLevelChangeCommitted, this,
             [this, item](aux_channel_idx_t busIndex, int oldValue, int newValue) {
         IProjectUndoStackPtr undoStack = projectUndoStack();
@@ -1712,6 +1717,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         outParams.volume = params.volume;
         outParams.balance = params.balance;
         outParams.gain = params.gain;
+        outParams.eq = params.eq;
         audioSettings()->setAuxOutputParams(index, outParams);
     });
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
@@ -1757,6 +1763,7 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
         outParams.volume = params.volume;
         outParams.balance = params.balance;
         outParams.gain = params.gain;
+        outParams.eq = params.eq;
         controller()->setVideoOutputParams(outParams);
     });
 
@@ -1817,6 +1824,7 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
         outParams.volume = params.volume;
         outParams.balance = params.balance;
         outParams.gain = params.gain;
+        outParams.eq = params.eq;
         audioSettings()->setMasterAudioOutputParams(outParams);
     });
 

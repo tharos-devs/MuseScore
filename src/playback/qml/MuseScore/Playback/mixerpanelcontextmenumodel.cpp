@@ -49,6 +49,7 @@ static TranslatableString mixerSectionTitle(MixerSectionType type)
     case MixerSectionType::Labels: return TranslatableString("playback", "Labels");
     case MixerSectionType::Sound: return TranslatableString("playback", "Sound");
     case MixerSectionType::Gain: return TranslatableString("playback", "Gain");
+    case MixerSectionType::Eq: return TranslatableString("playback", "EQ");
     case MixerSectionType::AudioFX: return TranslatableString("playback", "Audio FX");
     case MixerSectionType::AuxSends: return TranslatableString("playback", "Aux sends");
     case MixerSectionType::Balance: return TranslatableString("playback", "Pan");
@@ -81,6 +82,11 @@ bool MixerPanelContextMenuModel::soundSectionVisible() const
 bool MixerPanelContextMenuModel::gainSectionVisible() const
 {
     return isSectionVisible(MixerSectionType::Gain);
+}
+
+bool MixerPanelContextMenuModel::eqSectionVisible() const
+{
+    return isSectionVisible(MixerSectionType::Eq);
 }
 
 bool MixerPanelContextMenuModel::audioFxSectionVisible() const
@@ -319,6 +325,9 @@ void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionT
     case MixerSectionType::Gain:
         emit gainSectionVisibleChanged();
         break;
+    case MixerSectionType::Eq:
+        emit eqSectionVisibleChanged();
+        break;
     case MixerSectionType::AudioFX:
         emit audioFxSectionVisibleChanged();
         break;
@@ -353,6 +362,7 @@ void MixerPanelContextMenuModel::updateItems()
         buildSectionVisibleItem(MixerSectionType::Labels),
         buildSectionVisibleItem(MixerSectionType::Sound),
         buildSectionVisibleItem(MixerSectionType::Gain),
+        buildSectionVisibleItem(MixerSectionType::Eq),
         buildSectionVisibleItem(MixerSectionType::AudioFX),
         buildSectionVisibleItem(MixerSectionType::AuxSends),
         buildAuxChannelsVisibleItem(),

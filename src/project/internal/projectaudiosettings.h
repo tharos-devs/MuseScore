@@ -115,6 +115,7 @@ private:
     muse::audio::AudioFxChain fxChainFromJson(const QJsonObject& fxChainObject) const;
     muse::audio::AudioFxParams fxParamsFromJson(const QJsonObject& object) const;
     muse::audio::AuxSendsParams auxSendsFromJson(const QJsonArray& objectList) const;
+    muse::audio::EqParams eqFromJson(const QJsonObject& object) const;
     muse::audio::AuxSendParams auxSendParamsFromJson(const QJsonObject& object) const;
     muse::audio::AudioResourceMeta resourceMetaFromJson(const QJsonObject& object) const;
     muse::audio::AudioUnitConfig unitConfigFromJson(const QJsonObject& object) const;
@@ -124,6 +125,7 @@ private:
     QJsonObject fxChainToJson(const muse::audio::AudioFxChain& fxChain) const;
     QJsonObject fxParamsToJson(const muse::audio::AudioFxParams& fxParams) const;
     QJsonArray auxSendsToJson(const muse::audio::AuxSendsParams& auxSends) const;
+    QJsonObject eqToJson(const muse::audio::EqParams& eq) const;
     QJsonObject auxSendParamsToJson(const muse::audio::AuxSendParams& auxParams) const;
     QJsonObject resourceMetaToJson(const muse::audio::AudioResourceMeta& meta) const;
     QJsonObject unitConfigToJson(const muse::audio::AudioUnitConfig& config) const;

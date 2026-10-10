@@ -24,6 +24,8 @@
 
 #include <algorithm>
 
+#include "audio/common/channeleq.h"
+#include "containers.h"
 #include "defer.h"
 #include "translation.h"
 #include "log.h"
@@ -539,6 +541,7 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
         outParams.volume = params.volume;
         outParams.balance = params.balance;
         outParams.gain = params.gain;
+        outParams.eq = params.eq;
         project->audioSettings()->setTrackOutputParams(m_instrumentTrackId, outParams);
     });
 
@@ -582,7 +585,7 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
                                    : std::get<volume_db_t>(params.volume.value());
         const balance_t balance = params.balance.hasAutomation() ? m_outParams.balance
                                   : std::get<balance_t>(params.balance.value());
-        loadControlParams(volume, balance, params.gain);
+        loadControlParams(volume, balance, params.gain, params.eq);
     });
 }
 
@@ -607,7 +610,7 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
     //! and by PlaybackController's live force-mute computation, and are always default-false
     //! on an AudioOutputParams fetched from IProjectAudioSettings. Applying them here would
     //! clobber the solo/mute state already loaded via loadSoloMuteState().
-    loadControlParams(newParams.volume, newParams.balance, newParams.gain);
+    loadControlParams(newParams.volume, newParams.balance, newParams.gain, newParams.eq);
 
     if (m_outParams.color != newParams.color) {
         m_outParams.color = newParams.color;
@@ -620,8 +623,14 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
     m_outputParamsLoaded = true;
 }
 
-void MixerChannelItem::loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain)
+void MixerChannelItem::loadControlParams(muse::audio::volume_db_t volume, muse::audio::balance_t balance, muse::audio::volume_db_t gain,
+                                         const muse::audio::EqParams& eq)
 {
+    if (m_outParams.eq != eq) {
+        m_outParams.eq = eq;
+        emit eqChanged();
+    }
+
     if (!muse::RealIsEqual(m_outParams.volume, volume)) {
         m_outParams.volume = volume;
         if (!m_hasVolumeAutomation) {
@@ -907,6 +916,205 @@ void MixerChannelItem::setGain(int gain)
     m_outParams.gain = static_cast<float>(gain);
     setDisplayedGain(gain);
     emit controlParamsChanged(m_outParams);
+}
+
+void MixerChannelItem::setEqParams(muse::audio::EqParams eq)
+{
+    if (m_outParams.eq == eq) {
+        return;
+    }
+
+    m_outParams.eq = eq;
+    emit eqChanged();
+    emit controlParamsChanged(m_outParams);
+}
+
+static QString eqBandTypeTitle(EqBandType type)
+{
+    switch (type) {
+    case EqBandType::Parametric1: return muse::qtrc("playback", "Parametric I");
+    case EqBandType::Parametric2: return muse::qtrc("playback", "Parametric II");
+    case EqBandType::LowShelf1: return muse::qtrc("playback", "Low Shelf I");
+    case EqBandType::LowShelf2: return muse::qtrc("playback", "Low Shelf II");
+    case EqBandType::LowShelf3: return muse::qtrc("playback", "Low Shelf III");
+    case EqBandType::LowShelf4: return muse::qtrc("playback", "Low Shelf IV");
+    case EqBandType::HighShelf1: return muse::qtrc("playback", "High Shelf I");
+    case EqBandType::HighShelf2: return muse::qtrc("playback", "High Shelf II");
+    case EqBandType::HighShelf3: return muse::qtrc("playback", "High Shelf III");
+    case EqBandType::HighShelf4: return muse::qtrc("playback", "High Shelf IV");
+    case EqBandType::HighPass1: return muse::qtrc("playback", "High Pass I");
+    case EqBandType::HighPass2: return muse::qtrc("playback", "High Pass II");
+    case EqBandType::LowPass1: return muse::qtrc("playback", "Low Pass I");
+    case EqBandType::LowPass2: return muse::qtrc("playback", "Low Pass II");
+    }
+
+    return QString();
+}
+
+QVariantMap MixerChannelItem::eq() const
+{
+    const EqParams& params = m_outParams.eq;
+
+    QVariantList bands;
+    for (const EqBandParams& band : params.bands) {
+        QVariantMap bandObj;
+        bandObj["type"] = static_cast<int>(band.type);
+        bandObj["typeTitle"] = eqBandTypeTitle(band.type);
+        bandObj["frequency"] = band.frequency;
+        bandObj["gain"] = band.gain;
+        bandObj["q"] = band.q;
+        bandObj["enabled"] = band.enabled;
+        bandObj["hasGain"] = muse::audio::eq::bandTypeHasGain(band.type);
+        bandObj["hasQ"] = muse::audio::eq::bandTypeHasQ(band.type);
+        bands << bandObj;
+    }
+
+    QVariantMap result;
+    result["enabled"] = params.enabled;
+    result["flat"] = params.isFlat();
+    result["bands"] = bands;
+
+    return result;
+}
+
+const EqParams& MixerChannelItem::eqParams() const
+{
+    return m_outParams.eq;
+}
+
+QVariantList MixerChannelItem::eqBandTypes(int bandIndex) const
+{
+    QVariantList result;
+    if (bandIndex < 0 || bandIndex >= static_cast<int>(EQ_BAND_COUNT)) {
+        return result;
+    }
+
+    for (EqBandType type : muse::audio::eq::availableBandTypes(static_cast<size_t>(bandIndex))) {
+        QVariantMap item;
+        item["value"] = static_cast<int>(type);
+        item["title"] = eqBandTypeTitle(type);
+        result << item;
+    }
+
+    return result;
+}
+
+//! NOTE One undoable change, unless a gesture (beginEqChange()) is in progress: then committed at its end
+void MixerChannelItem::changeEq(const std::function<void(EqParams&)>& change)
+{
+    const EqParams oldEq = m_outParams.eq;
+    EqParams newEq = oldEq;
+    change(newEq);
+
+    if (newEq == oldEq) {
+        return;
+    }
+
+    setEqParams(newEq);
+
+    if (!m_eqChangeStart) {
+        emit eqChangeCommitted(oldEq, newEq);
+    }
+}
+
+void MixerChannelItem::setEqEnabled(bool enabled)
+{
+    changeEq([enabled](EqParams& eq) {
+        eq.enabled = enabled;
+    });
+}
+
+void MixerChannelItem::resetEq()
+{
+    changeEq([](EqParams& eq) {
+        eq = EqParams();
+    });
+}
+
+static bool isValidEqBand(int bandIndex)
+{
+    return bandIndex >= 0 && bandIndex < static_cast<int>(EQ_BAND_COUNT);
+}
+
+void MixerChannelItem::setEqBandEnabled(int bandIndex, bool enabled)
+{
+    if (!isValidEqBand(bandIndex)) {
+        return;
+    }
+
+    changeEq([bandIndex, enabled](EqParams& eq) {
+        eq.bands[bandIndex].enabled = enabled;
+    });
+}
+
+void MixerChannelItem::setEqBandType(int bandIndex, int type)
+{
+    if (!isValidEqBand(bandIndex)) {
+        return;
+    }
+
+    const EqBandType bandType = static_cast<EqBandType>(type);
+    if (!muse::contains(muse::audio::eq::availableBandTypes(static_cast<size_t>(bandIndex)), bandType)) {
+        return;
+    }
+
+    changeEq([bandIndex, bandType](EqParams& eq) {
+        eq.bands[bandIndex].type = bandType;
+    });
+}
+
+void MixerChannelItem::setEqBandFrequency(int bandIndex, double frequency)
+{
+    if (!isValidEqBand(bandIndex)) {
+        return;
+    }
+
+    changeEq([bandIndex, frequency](EqParams& eq) {
+        eq.bands[bandIndex].frequency = std::clamp(static_cast<float>(frequency), EQ_FREQUENCY_MIN, EQ_FREQUENCY_MAX);
+    });
+}
+
+void MixerChannelItem::setEqBandGain(int bandIndex, double gain)
+{
+    if (!isValidEqBand(bandIndex)) {
+        return;
+    }
+
+    changeEq([bandIndex, gain](EqParams& eq) {
+        eq.bands[bandIndex].gain = std::clamp(static_cast<float>(gain), EQ_GAIN_DB_MIN, EQ_GAIN_DB_MAX);
+    });
+}
+
+void MixerChannelItem::setEqBandQ(int bandIndex, double q)
+{
+    if (!isValidEqBand(bandIndex)) {
+        return;
+    }
+
+    changeEq([bandIndex, q](EqParams& eq) {
+        eq.bands[bandIndex].q = std::clamp(static_cast<float>(q), EQ_Q_MIN, EQ_Q_MAX);
+    });
+}
+
+void MixerChannelItem::beginEqChange()
+{
+    if (!m_eqChangeStart) {
+        m_eqChangeStart = m_outParams.eq;
+    }
+}
+
+void MixerChannelItem::endEqChange()
+{
+    if (!m_eqChangeStart) {
+        return;
+    }
+
+    const EqParams oldEq = *m_eqChangeStart;
+    m_eqChangeStart.reset();
+
+    if (oldEq != m_outParams.eq) {
+        emit eqChangeCommitted(oldEq, m_outParams.eq);
+    }
 }
 
 void MixerChannelItem::beginVolumeChange()

@@ -560,12 +560,13 @@ void TrackPresets::apply(const TrackPreset& preset, const InstrumentTrackId& tra
     }
     playback()->setAuxSendsParams(engineTrackId, auxSends);
 
-    // gain, volume and pan, keeping the track's mute (owned by the solo/mute state)
+    // gain, EQ, volume and pan, keeping the track's mute (owned by the solo/mute state)
     playback()->params(engineTrackId).onResolve(this, [this, engineTrackId, preset](const TrackParams& params) {
         ControlParams control = params.control;
         control.volume = preset.output.volume;
         control.balance = preset.output.balance;
         control.gain = preset.output.gain;
+        control.eq = preset.output.eq;
         playback()->setControlParams(engineTrackId, control);
     });
 
@@ -573,6 +574,7 @@ void TrackPresets::apply(const TrackPreset& preset, const InstrumentTrackId& tra
     outParams.volume = preset.output.volume;
     outParams.balance = preset.output.balance;
     outParams.gain = preset.output.gain;
+    outParams.eq = preset.output.eq;
     outParams.color = preset.output.color;
     settings->setTrackOutputParams(trackId, outParams);
 
