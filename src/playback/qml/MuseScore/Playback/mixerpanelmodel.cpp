@@ -359,6 +359,57 @@ void MixerPanelModel::setMutedForSelectedChannels(bool muted)
 void MixerPanelModel::setSoloForSelectedChannels(bool solo)
 {
     ChannelSelection::setSolo(m_mixerChannelList, solo);
+
+    for (const MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+        if (item->selected() && item->isGroupBus() && item->solo() == solo) {
+            setSoloForGroupBusSources(item->auxBusIndex(), solo);
+        }
+    }
+}
+
+void MixerPanelModel::setChannelSolo(MixerChannelItem* channelItem, bool solo)
+{
+    IF_ASSERT_FAILED(channelItem) {
+        return;
+    }
+
+    channelItem->setSolo(solo);
+
+    if (channelItem->isGroupBus()) {
+        setSoloForGroupBusSources(channelItem->auxBusIndex(), solo);
+    }
+}
+
+void MixerPanelModel::setSoloForGroupBusSources(aux_channel_idx_t busIndex, bool solo)
+{
+    //! NOTE: the channels routed to this Group bus (an active send, as the engine routes them),
+    //! and to the Group buses feeding it, follow its Solo. Soloing skips a manually muted one,
+    //! like Solo set on a selection
+    std::vector<aux_channel_idx_t> groupBuses { busIndex };
+
+    for (size_t i = 0; i < groupBuses.size(); ++i) {
+        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+            if (item->type() == MixerChannelItem::Type::Master || item->type() == MixerChannelItem::Type::Metronome) {
+                continue;
+            }
+
+            const AuxSendItem* send = item->auxSendItemForBus(groupBuses[i]);
+            if (!send || !send->isActive() || send->audioSignalPercentage() == 0) {
+                continue;
+            }
+
+            if (item->isGroupBus()) {
+                if (muse::contains(groupBuses, item->auxBusIndex())) {
+                    continue;
+                }
+                groupBuses.push_back(item->auxBusIndex());
+            }
+
+            if (!solo || ChannelSelection::canTakeSolo(item)) {
+                item->setSolo(solo);
+            }
+        }
+    }
 }
 
 void MixerPanelModel::clearSelection()
