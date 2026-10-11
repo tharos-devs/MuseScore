@@ -870,6 +870,7 @@ void NotationActionController::init()
             { "select-similar-staff", SELECT_SIMILAR_IN_STAFF_COMMAND, {} },
             { "select-similar-range", SELECT_SIMILAR_IN_RANGE_COMMAND, {} },
             { "select-notes-in-chord", SELECT_NOTES_IN_CHORD_COMMAND, {} },
+            { "edit-element", SCREEN_EDIT_ELEMENT_COMMAND, {} },
             { "notation-select-all", SELECT_ALL_COMMAND, {} },
             { "notation-select-section", SELECT_SECTION_COMMAND, {} },
             { "select-dialog", OPEN_SELECTION_OPTIONS_COMMAND, {} },
