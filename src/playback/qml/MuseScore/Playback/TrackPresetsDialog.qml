@@ -536,10 +536,13 @@ StyledDialogView {
                     RowLayout {
                         Layout.fillWidth: true
 
+                        //! NOTE: one line, its width not the text's: a wrapped text's height follows the width the
+                        //! grid gives it, which re-arranged the grid while arranging it (a recursive rearrange)
                         StyledTextLabel {
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 1
                             horizontalAlignment: Text.AlignLeft
-                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
                             opacity: 0.7
                             text: presetsModel.selectedItemDetails
                         }
