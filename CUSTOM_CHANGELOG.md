@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-11
+- VST3 instruments: on stop (or a seek), the MIDI CCs keep their last value instead of going back to 0 (a sample library driven by CC1/CC11, e.g. BBCSO, was silent when played live from a MIDI keyboard after a stop); only the pitch bend, the aftertouch and the sustain/sostenuto/soft pedals go back to rest.
+- Fixed: playing a MIDI keyboard (or a Percussion panel pad) with no note input position crashed (upstream regression brought by the sync).
 - Synced with upstream `main` (116 commits, incl. lyrics and dynamics centered between staves, frames included in range selections, page/system locks on frames, shortcut improvements, the update flow's auto-update setting).
 - Track list: the dimmed articulation map button (a VST3 instrument without a map) opens the editor on a new map for the track.
 - Articulation map editor: "New" removes the track's map (undoable), and the Close button applies the editor's map to the track (saved first if needed, a file chosen for a new one) - closing the window or Escape still cancels.
