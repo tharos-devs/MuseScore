@@ -5,6 +5,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-11
+- Track list: a Metronome row (Mute) above the Video row, and the Aux FX/Aux Group buses' rows below the instruments, in the Mixer's order (color, Mute, Solo - disabled for an FX bus); the global Mute/Solo act on every listed row but the metronome. A View menu in its "…" menu shows/hides Video, Metronome, Instruments, Aux FX and Aux Group; the Mixer's "…" menu has the same items (replacing View > Aux channels), each panel remembering its own.
+- A Group bus's Solo now also solos its channels from the Track list too, and when they're hidden in the Mixer.
+- Fixed: the metronome channel's Mute didn't follow the metronome turned on/off elsewhere (toolbar, the other panel).
 - Mixer: Aux/Group buses have their own aux send slots, so a bus can send to other buses (Group→Group sub-groups, FX→Group, Group→FX, FX→FX). A bus's menu never offers itself nor a bus that already feeds it, so routing can't loop (a loop from a project file is broken safely by the engine). Buses are processed in routing order; a muted Group bus anywhere down a chain silences what goes through it, and Solo follows Group→Group chains.
 - Mixer: Solo on a Group bus also solos the channels routed to it (and the Group buses feeding it, with their channels); removing its Solo removes theirs. A track now plays during a solo only if it's soloed itself, even when it's routed to a soloed Group bus.
 - Mixer: the aux send menus list the buses in the Mixer's channel order (FX buses then Group buses, as dragged), not in creation order.
