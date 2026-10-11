@@ -437,6 +437,21 @@ const UiActionList NotationUiActions::s_actions = {
              TranslatableString("action", "Select sectio&n"),
              TranslatableString("action", "Select section")
              ),
+    //! NOTE: upstream dropped these two UiActions when turning the notation actions into commands; the shortcuts
+    //! (shortcuts.xml) still use them, and a shortcut whose action isn't registered is ignored. Dispatched to their
+    //! commands by the compat action list (see NotationActionController)
+    UiAction("select-notes-in-chord",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Select all &notes in chord"),
+             TranslatableString("action", "Select all notes in chord")
+             ),
+    UiAction("edit-element",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_OPENED,
+             TranslatableString("action", "Edit element"),
+             TranslatableString("action", "Edit element")
+             ),
     UiAction("select-similar",
              mu::context::UiCtxProjectOpened,
              mu::context::CTX_NOTATION_OPENED,
