@@ -22,7 +22,11 @@
 
 #include "tracklistcontextmenumodel.h"
 
+#include "types/translatablestring.h"
+
 using namespace mu::playback;
+using namespace muse;
+using namespace muse::uicomponents;
 
 TrackListContextMenuModel::TrackListContextMenuModel(QObject* parent)
     : ZoomableMenuModel(muse::Settings::Key("playback", "playback/trackList/zoom"), 0.9, parent)
@@ -33,5 +37,35 @@ void TrackListContextMenuModel::load()
 {
     ZoomableMenuModel::load();
 
-    setItems({ makeZoomMenu() });
+    setItems({
+        makeMenu(TranslatableString("playback", "View"), m_channelCategoriesMenu.makeItems(this)),
+        makeSeparator(),
+        makeZoomMenu()
+    });
 }
+
+void TrackListContextMenuModel::onCommandStateChanged(const rcommand::Command& command, const rcommand::CommandState& state)
+{
+    if (ChannelCategoriesMenu::isOwnCommand(command)) {
+        return;
+    }
+
+    AbstractMenuModel::onCommandStateChanged(command, state);
+}
+
+#ifdef MUSE_MODULE_ACTIONS_SUPPORT
+void TrackListContextMenuModel::onActionsStateChanges(const actions::ActionCodeList& codes)
+{
+    actions::ActionCodeList filtered;
+    for (const actions::ActionCode& code : codes) {
+        if (!ChannelCategoriesMenu::isOwnActionCode(code)) {
+            filtered.push_back(code);
+        }
+    }
+
+    if (!filtered.empty()) {
+        AbstractMenuModel::onActionsStateChanges(filtered);
+    }
+}
+
+#endif

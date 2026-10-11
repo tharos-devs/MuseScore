@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QTime>
 
 #include "global/containers.h"
@@ -108,6 +110,76 @@ inline QList<MixerSectionType> allMixerSectionTypes()
     };
 
     return sections;
+}
+
+//! NOTE: the panels listing channels whose kinds of channels can each be shown or hidden (View menu)
+enum class ChannelListPanel {
+    Mixer,
+    TrackList
+};
+
+enum class ChannelCategory {
+    Video,
+    Metronome,
+    Instruments,
+    AuxFx,
+    AuxGroup
+};
+
+static const std::map<ChannelListPanel, std::string> CHANNEL_LIST_PANEL_STR = {
+    { ChannelListPanel::Mixer, "mixer" },
+    { ChannelListPanel::TrackList, "track-list" }
+};
+
+static const std::map<ChannelCategory, std::string> CHANNEL_CATEGORY_STR = {
+    { ChannelCategory::Video, "video" },
+    { ChannelCategory::Metronome, "metronome" },
+    { ChannelCategory::Instruments, "instruments" },
+    { ChannelCategory::AuxFx, "aux-fx" },
+    { ChannelCategory::AuxGroup, "aux-group" }
+};
+
+static inline std::string str_conv(ChannelListPanel panel)
+{
+    return muse::value(CHANNEL_LIST_PANEL_STR, panel);
+}
+
+static inline std::optional<ChannelListPanel> channelListPanelFromString(const std::string& str)
+{
+    for (const auto& pair : CHANNEL_LIST_PANEL_STR) {
+        if (pair.second == str) {
+            return pair.first;
+        }
+    }
+    return std::nullopt;
+}
+
+static inline std::string str_conv(ChannelCategory category)
+{
+    return muse::value(CHANNEL_CATEGORY_STR, category);
+}
+
+static inline std::optional<ChannelCategory> channelCategoryFromString(const std::string& str)
+{
+    for (const auto& pair : CHANNEL_CATEGORY_STR) {
+        if (pair.second == str) {
+            return pair.first;
+        }
+    }
+    return std::nullopt;
+}
+
+inline QList<ChannelCategory> allChannelCategories()
+{
+    static const QList<ChannelCategory> categories {
+        ChannelCategory::Video,
+        ChannelCategory::Metronome,
+        ChannelCategory::Instruments,
+        ChannelCategory::AuxFx,
+        ChannelCategory::AuxGroup
+    };
+
+    return categories;
 }
 
 static const QTime ZERO_TIME(0, 0, 0, 0);

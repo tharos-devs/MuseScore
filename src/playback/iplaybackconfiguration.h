@@ -82,9 +82,9 @@ public:
     virtual void setMixerSectionVisible(MixerSectionType sectionType, bool visible) = 0;
     virtual muse::async::Channel<MixerSectionType, bool> isMixerSectionVisibleChanged() const = 0;
 
-    virtual bool areAuxChannelsVisible() const = 0;
-    virtual void setAuxChannelsVisible(bool visible) = 0;
-    virtual muse::async::Channel<bool> areAuxChannelsVisibleChanged() const = 0;
+    virtual bool isChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category) const = 0;
+    virtual void setChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category, bool visible) = 0;
+    virtual muse::async::Channel<ChannelListPanel, ChannelCategory, bool> channelCategoryVisibleChanged() const = 0;
 
     virtual bool isMixerCondensedViewEnabled() const = 0;
     virtual void setMixerCondensedViewEnabled(bool enabled) = 0;

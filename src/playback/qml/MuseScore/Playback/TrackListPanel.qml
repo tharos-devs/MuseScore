@@ -76,7 +76,7 @@ Item {
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
                 width: ListView.view.width
-                height: 32 + videoRow.height
+                height: 32 + metronomeRow.height + videoRow.height
                 z: 2
 
                 color: ui.theme.backgroundSecondaryColor
@@ -129,17 +129,133 @@ Item {
                     anchors.top: globalButtonsRow.bottom
                 }
 
-                //! NOTE: the video's row, first: its buttons in the parts' columns (Load video in the visibility one)
+                //! NOTE: the metronome's row, first: its Mute in the parts' column
+                Rectangle {
+                    id: metronomeRow
+
+                    readonly property MixerChannelItem channelItem: trackListModel.metronomeChannelItem
+
+                    anchors.top: globalButtonsRow.bottom
+                    width: parent.width
+                    height: visible ? 28 : 0
+                    visible: Boolean(channelItem) && trackListModel.metronomeVisible
+
+                    color: ui.theme.backgroundPrimaryColor
+
+                    Rectangle {
+                        id: metronomeColorStrip
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        width: 8
+                        height: 20
+                        radius: 2
+
+                        color: ui.theme.accentColor
+                    }
+
+                    Row {
+                        id: metronomeMeter
+
+                        anchors.left: metronomeColorStrip.right
+                        anchors.leftMargin: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        spacing: 1
+
+                        VolumePressureMeter {
+                            meterLength: 18
+                            meterThickness: 3
+                            overloadLength: 2
+                            currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.leftChannelPressure : -60
+                        }
+
+                        VolumePressureMeter {
+                            meterLength: 18
+                            meterThickness: 3
+                            overloadLength: 2
+                            currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.rightChannelPressure : -60
+                        }
+                    }
+
+                    StyledTextLabel {
+                        anchors.left: metronomeMeter.right
+                        anchors.leftMargin: 6
+                        anchors.right: metronomeButtonsRow.left
+                        anchors.rightMargin: 6
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        horizontalAlignment: Text.AlignLeft
+                        text: qsTrc("playback", "Metronome")
+                    }
+
+                    Row {
+                        id: metronomeButtonsRow
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        spacing: 4
+
+                        //! NOTE: Mute only (no Solo button for the metronome)
+                        ChannelMuteSoloButtons {
+                            spacing: 4
+
+                            channelItem: metronomeRow.channelItem
+
+                            navigationPanel: navPanel
+                            navigationName: "MetronomeRow"
+                            muteNavigationRow: 1
+                            muteNavigationColumn: 0
+                            accessibleName: qsTrc("playback", "Metronome")
+
+                            onMuteToggled: function(muted) {
+                                metronomeRow.channelItem.muted = muted
+                            }
+                        }
+
+                        //! NOTE: the parts' solo, visibility and sound columns
+                        Repeater {
+                            model: 3
+
+                            Item {
+                                width: 20
+                                height: 20
+                            }
+                        }
+
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: trackListModel.hasArticulationMapColumn
+                        }
+
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: trackListModel.hasEditorColumn
+                        }
+                    }
+
+                    SeparatorLine {
+                        anchors.bottom: parent.bottom
+                    }
+                }
+
+                //! NOTE: the video's row: its buttons in the parts' columns (Load video in the visibility one)
                 Rectangle {
                     id: videoRow
 
                     readonly property MixerChannelItem channelItem: trackListModel.videoChannelItem
                     readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
 
-                    anchors.top: globalButtonsRow.bottom
+                    anchors.top: metronomeRow.bottom
                     width: parent.width
-                    height: channelItem ? 28 : 0
-                    visible: Boolean(channelItem)
+                    height: visible ? 28 : 0
+                    visible: Boolean(channelItem) && trackListModel.videoVisible
 
                     color: ui.theme.backgroundPrimaryColor
 
@@ -244,9 +360,9 @@ Item {
 
                             navigationPanel: navPanel
                             navigationName: "VideoRow"
-                            muteNavigationRow: 1
+                            muteNavigationRow: 2
                             muteNavigationColumn: 0
-                            soloNavigationRow: 1
+                            soloNavigationRow: 2
                             soloNavigationColumn: 1
                             accessibleName: qsTrc("playback", "Video")
 
@@ -268,7 +384,7 @@ Item {
 
                             navigation.panel: navPanel
                             navigation.name: "LoadVideoButton"
-                            navigation.row: 1
+                            navigation.row: 2
                             navigation.column: 2
                             navigation.accessible.name: qsTrc("playback", "Load video")
 
@@ -314,6 +430,8 @@ Item {
                 required property bool instrumentEditorOpened
 
                 readonly property InputResourceItem soundItem: channelItem ? channelItem.inputResourceItem : null
+                //! NOTE: an Aux FX/Aux Group bus's row: color, Mute and Solo only (Solo disabled for an FX bus)
+                readonly property bool isAuxBus: channelItem ? channelItem.type === MixerChannelItem.Aux : false
                 readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
 
                 width: ListView.view.width
@@ -335,6 +453,9 @@ Item {
                     onClicked: function(mouse) {
                         //! NOTE: right click: the track presets menu, like in the Mixer
                         if (mouse.button === Qt.RightButton) {
+                            if (rowItem.isAuxBus) {
+                                return
+                            }
                             trackPresetMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.trackPresetMenuItems())
                             return
                         }
@@ -457,9 +578,9 @@ Item {
 
                         navigationPanel: navPanel
                         navigationName: "Row" + rowItem.index
-                        muteNavigationRow: rowItem.index + 2
+                        muteNavigationRow: rowItem.index + 3
                         muteNavigationColumn: 0
-                        soloNavigationRow: rowItem.index + 2
+                        soloNavigationRow: rowItem.index + 3
                         soloNavigationColumn: 1
                         accessibleName: rowItem.channelItem.title
 
@@ -475,21 +596,32 @@ Item {
                             if (rowItem.channelItem.selected) {
                                 trackListModel.setSoloForSelectedRows(solo)
                             } else {
-                                rowItem.channelItem.solo = solo
+                                rowItem.channelItem.setUserSolo(solo)
                             }
+                        }
+                    }
+
+                    //! NOTE: a bus's row has no visibility and sound: their columns stay
+                    Repeater {
+                        model: rowItem.isAuxBus ? 2 : 0
+
+                        Item {
+                            width: 20
+                            height: 20
                         }
                     }
 
                     FlatButton {
                         width: 20
                         height: 20
+                        visible: !rowItem.isAuxBus
 
                         transparent: true
                         icon: rowItem.partVisible ? IconCode.EYE_OPEN : IconCode.EYE_CLOSED
 
                         navigation.panel: navPanel
                         navigation.name: "VisibilityButton" + rowItem.index
-                        navigation.row: rowItem.index + 2
+                        navigation.row: rowItem.index + 3
                         navigation.column: 2
                         navigation.accessible.name: rowItem.channelItem.title + " " + (rowItem.partVisible ? qsTrc("playback", "Hide instrument") : qsTrc("playback", "Show instrument"))
 
@@ -504,13 +636,14 @@ Item {
 
                         width: 20
                         height: 20
+                        visible: !rowItem.isAuxBus
 
                         transparent: !soundMenu.isMenuOpened
                         icon: IconCode.AUDIO
 
                         navigation.panel: navPanel
                         navigation.name: "SoundButton" + rowItem.index
-                        navigation.row: rowItem.index + 2
+                        navigation.row: rowItem.index + 3
                         navigation.column: 3
                         navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
 
@@ -547,7 +680,7 @@ Item {
 
                             navigation.panel: navPanel
                             navigation.name: "ArticulationMapButton" + rowItem.index
-                            navigation.row: rowItem.index + 2
+                            navigation.row: rowItem.index + 3
                             navigation.column: 4
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
@@ -595,7 +728,7 @@ Item {
 
                             navigation.panel: navPanel
                             navigation.name: "EditorButton" + rowItem.index
-                            navigation.row: rowItem.index + 2
+                            navigation.row: rowItem.index + 3
                             navigation.column: 5
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
 

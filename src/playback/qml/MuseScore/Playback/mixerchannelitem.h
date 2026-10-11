@@ -43,6 +43,7 @@
 
 #include "audio/common/audiotypes.h"
 #include "audio/main/iplayback.h"
+#include "notation/inotationconfiguration.h"
 #include "project/iprojectaudiosettings.h"
 #include "inputresourceitem.h"
 #include "outputresourceitem.h"
@@ -102,6 +103,7 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     QML_UNCREATABLE("Must be created in C++ only")
 
     muse::GlobalInject<IPlaybackConfiguration> configuration;
+    muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
@@ -210,6 +212,15 @@ public:
     //! to the notation's state), and follows what the engine gets from elsewhere (sound, aux sends): one panel's
     //! change can't be undone by another's stale copy. outputParamsReceived() fires whenever its output params are in
     void bindInstrumentTrack(const engraving::InstrumentTrackId& instrumentTrackId);
+
+    //! NOTE: an Aux/Group bus channel's mute/solo, the same in every panel showing one (Mixer, Track list): loads
+    //! them (with the live force-mute), sends its own changes to the project's aux solo/mute state and follows the
+    //! ones made elsewhere
+    void bindAuxBus(muse::audio::aux_channel_idx_t index);
+
+    //! NOTE: Solo clicked by the user: on a Group bus, also applied to the channels routed to it (see
+    //! IPlaybackController::setGroupBusSourcesSolo()). setSolo() alone is for restoring a state (e.g. global Solo)
+    Q_INVOKABLE void setUserSolo(bool solo);
 
     void loadInputParams(const project::AudioInputParams& newParams);
     void loadOutputParams(const project::AudioOutputParams& newParams);

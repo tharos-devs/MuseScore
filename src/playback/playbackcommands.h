@@ -54,6 +54,6 @@ inline static const muse::rcommand::Command PROCESS_ONLINESOUNDS_COMMAND("comman
 inline static const muse::rcommand::Command RELOAD_PLAYBACK_CACHE_COMMAND("command://playback/reload-playback-cache");
 
 inline static const muse::rcommand::Command TOGGLE_MIXER_SECTION_COMMAND("command://playback/toggle-mixer-section"); // with params
-inline static const muse::rcommand::Command TOGGLE_AUX_CHANNELS_COMMAND("command://playback/toggle-aux-channels");
+inline static const muse::rcommand::Command TOGGLE_CHANNEL_CATEGORY_COMMAND("command://playback/toggle-channel-category"); // with params
 inline static const muse::rcommand::Command TOGGLE_MIXER_CONDENSED_VIEW_COMMAND("command://playback/toggle-mixer-condensed-view");
 }

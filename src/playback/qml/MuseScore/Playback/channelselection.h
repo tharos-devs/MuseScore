@@ -45,8 +45,5 @@ public:
 
     static void setMuted(const Channels& channels, bool muted);
     static void setSolo(const Channels& channels, bool solo);
-
-    //! NOTE: whether Solo applies to a channel when set on several channels at once
-    static bool canTakeSolo(const MixerChannelItem* item);
 };
 }

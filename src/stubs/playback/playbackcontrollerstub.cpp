@@ -284,6 +284,10 @@ bool PlaybackControllerStub::isAuxForceMuted(muse::audio::aux_channel_idx_t) con
     return false;
 }
 
+void PlaybackControllerStub::setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t, bool)
+{
+}
+
 muse::async::Channel<engraving::InstrumentTrackId, bool, bool> PlaybackControllerStub::trackMuteStateChanged() const
 {
     return {};

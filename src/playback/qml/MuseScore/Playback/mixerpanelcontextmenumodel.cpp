@@ -191,11 +191,6 @@ void MixerPanelContextMenuModel::load()
         emit toggleFullScreenRequested();
     });
 
-    configuration()->areAuxChannelsVisibleChanged().onReceive(this, [this](bool newVisibilityValue) {
-        auto query = rcommand::make_query(TOGGLE_AUX_CHANNELS_COMMAND, rcommand::Params());
-        setViewMenuItemChecked(query, newVisibilityValue);
-    });
-
     configuration()->isMixerSectionVisibleChanged().onReceive(this, [this](MixerSectionType sectionType, bool newVisibilityValue) {
         auto query = rcommand::make_query(TOGGLE_MIXER_SECTION_COMMAND, { { "section", Val(str_conv(sectionType)) } });
         setViewMenuItemChecked(query, newVisibilityValue);
@@ -228,16 +223,6 @@ MenuItem* MixerPanelContextMenuModel::buildSectionVisibleItem(MixerSectionType s
     return item;
 }
 
-MenuItem* MixerPanelContextMenuModel::buildAuxChannelsVisibleItem()
-{
-    MenuItem* item = new MenuItem(this);
-    item->setTitle(TranslatableString("playback", "Aux channels"));
-    item->setCheckable(true);
-    item->setChecked(configuration()->areAuxChannelsVisible());
-    item->setCommandQuery(rcommand::make_query(TOGGLE_AUX_CHANNELS_COMMAND, rcommand::Params()));
-    return item;
-}
-
 MenuItem* MixerPanelContextMenuModel::buildCondensedViewItem()
 {
     MenuItem* item = new MenuItem(this);
@@ -262,7 +247,7 @@ void MixerPanelContextMenuModel::setViewMenuItemChecked(const muse::rcommand::Co
 
 void MixerPanelContextMenuModel::onCommandStateChanged(const muse::rcommand::Command& command, const muse::rcommand::CommandState& state)
 {
-    //! NOTE: TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_AUX_CHANNELS_COMMAND back several
+    //! NOTE: TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_CHANNEL_CATEGORY_COMMAND back several
     //! independent per-section View-menu items (each carrying a different query param,
     //! e.g. "?section=gain"), but MenuItem::command() (via Uri) strips query params, so
     //! every one of those items shares the SAME bare command identity here and would
@@ -272,8 +257,8 @@ void MixerPanelContextMenuModel::onCommandStateChanged(const muse::rcommand::Com
     //! per-section checked state set by buildSectionVisibleItem()/setViewMenuItemChecked()).
     //! Skip the base class handling entirely for these two; this model already keeps them
     //! in sync itself via configuration()->isMixerSectionVisibleChanged()/
-    //! areAuxChannelsVisibleChanged() in load(), matched by full query (not just command()).
-    if (command == TOGGLE_MIXER_SECTION_COMMAND || command == TOGGLE_AUX_CHANNELS_COMMAND
+    //! ChannelCategoriesMenu, matched by full query (not just command()).
+    if (command == TOGGLE_MIXER_SECTION_COMMAND || ChannelCategoriesMenu::isOwnCommand(command)
         || command == TOGGLE_MIXER_CONDENSED_VIEW_COMMAND) {
         return;
     }
@@ -296,11 +281,10 @@ void MixerPanelContextMenuModel::onActionsStateChanges(const muse::actions::Acti
     filtered.reserve(codes.size());
 
     const std::string mixerSectionPrefix = TOGGLE_MIXER_SECTION_COMMAND.toString();
-    const std::string auxChannelsCode = TOGGLE_AUX_CHANNELS_COMMAND.toString();
     const std::string condensedViewCode = TOGGLE_MIXER_CONDENSED_VIEW_COMMAND.toString();
 
     for (const ActionCode& code : codes) {
-        if (code == auxChannelsCode || code == condensedViewCode || code.rfind(mixerSectionPrefix, 0) == 0) {
+        if (ChannelCategoriesMenu::isOwnActionCode(code) || code == condensedViewCode || code.rfind(mixerSectionPrefix, 0) == 0) {
             continue;
         }
         filtered.push_back(code);
@@ -365,7 +349,6 @@ void MixerPanelContextMenuModel::updateItems()
         buildSectionVisibleItem(MixerSectionType::Eq),
         buildSectionVisibleItem(MixerSectionType::AudioFX),
         buildSectionVisibleItem(MixerSectionType::AuxSends),
-        buildAuxChannelsVisibleItem(),
     };
 
     viewMenuItems.push_back(buildSectionVisibleItem(MixerSectionType::Balance));
@@ -391,6 +374,9 @@ void MixerPanelContextMenuModel::updateItems()
 
     items << makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND);
     items << makeMenu(TranslatableString("playback", "View"), viewMenuItems, VIEW_MENU_ID);
+
+    items << makeSeparator();
+    items << m_channelCategoriesMenu.makeItems(this);
 
     items << makeSeparator();
     items << makeZoomMenu();

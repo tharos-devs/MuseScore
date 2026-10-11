@@ -149,6 +149,9 @@ public:
     virtual bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const = 0;
     //! NOTE: same as isTrackForceMuted() above, but for an Aux/Group bus's own channel
     virtual bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const = 0;
+    //! NOTE: a Group bus's Solo set by the user also goes to the channels routed to it (tracks, the video, and the
+    //! Group buses feeding it with their own channels): soloing skips a muted one, un-soloing applies to all
+    virtual void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) = 0;
 
     //! NOTE: fires whenever updateSoloMuteStates()/updateAuxMuteStates() actually resends new
     //! (muted, forceMute) control params to the engine for a track/bus - including for a

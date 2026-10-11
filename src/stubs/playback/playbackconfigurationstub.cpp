@@ -133,16 +133,16 @@ muse::async::Channel<MixerSectionType, bool> PlaybackConfigurationStub::isMixerS
     return {};
 }
 
-bool PlaybackConfigurationStub::areAuxChannelsVisible() const
+bool PlaybackConfigurationStub::isChannelCategoryVisible(ChannelListPanel, ChannelCategory) const
 {
-    return false;
+    return true;
 }
 
-void PlaybackConfigurationStub::setAuxChannelsVisible(bool)
+void PlaybackConfigurationStub::setChannelCategoryVisible(ChannelListPanel, ChannelCategory, bool)
 {
 }
 
-muse::async::Channel<bool> PlaybackConfigurationStub::areAuxChannelsVisibleChanged() const
+muse::async::Channel<ChannelListPanel, ChannelCategory, bool> PlaybackConfigurationStub::channelCategoryVisibleChanged() const
 {
     return {};
 }
