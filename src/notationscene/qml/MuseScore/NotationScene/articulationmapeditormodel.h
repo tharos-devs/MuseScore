@@ -186,6 +186,9 @@ public:
     //! NOTE: saves the changes if needed, then loads the file into the track, like the Mixer's "Reload"
     //! (saving alone already reloads it into the tracks of the open score that use this file)
     Q_INVOKABLE void reloadIntoTrack();
+    //! NOTE: the Close button: with a track, the editor's map is the track's once closed (saved, then reloaded
+    //! into it), so a map opened or started here isn't lost; without one, like closing the window
+    Q_INVOKABLE void applyAndClose();
     //! NOTE: like the Mixer's and the Track list's button (comes to the front if already open)
     Q_INVOKABLE void openInstrumentEditor();
     //! NOTE: sends the row's articulation (its messages and channel, as edited) to the target track's VST instrument,
@@ -274,6 +277,7 @@ private:
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
     bool writeFile(const muse::io::path_t& path, bool reloadTracks = true);
     void removeTargetTrackMap();
+    bool applyToTrack();
     void reloadTracksUsingFile(const muse::io::path_t& path, const std::optional<engraving::InstrumentTrackId>& alsoTrack);
     std::optional<engraving::InstrumentTrackId> targetTrackToUpdate() const;
     muse::io::path_t mapsDir() const;

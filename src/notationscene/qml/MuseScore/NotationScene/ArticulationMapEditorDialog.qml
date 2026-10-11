@@ -1235,7 +1235,7 @@ StyledDialogView {
 
             FlatButton {
                 text: qsTrc("global", "Close")
-                onClicked: root.close()
+                onClicked: editorModel.applyAndClose()
             }
         }
     }
