@@ -1301,7 +1301,9 @@ void TWrite::write(const Clef* item, XmlWriter& xml, WriteContext& ctx)
     writeProperty(item, xml, Pid::CLEF_TYPE_CONCERT);
     writeProperty(item, xml, Pid::CLEF_TYPE_TRANSPOSING);
     writeProperty(item, xml, Pid::CLEF_TO_BARLINE_POS);
-    writeProperty(item, xml, Pid::IS_HEADER);
+    if (item->isHeader()) {
+        xml.tag("isHeader", true);
+    }
     writeProperty(item, xml, Pid::IS_COURTESY);
     if (!item->showCourtesy()) {
         xml.tag("showCourtesyClef", item->showCourtesy());
@@ -2384,6 +2386,7 @@ void TWrite::write(const Lyrics* item, XmlWriter& xml, WriteContext& ctx)
         xml.tag("syllabic", TConv::toXml(item->syllabic()));
     }
     writeProperty(item, xml, Pid::LYRIC_TICKS);
+    writeProperty(item, xml, Pid::CENTER_BETWEEN_STAVES);
 
     writeProperties(toTextBase(item), xml, ctx, true);
     if (item->separator() && !item->separator()->generated()) {
@@ -2692,7 +2695,7 @@ void TWrite::writeProperties(const Part* item, XmlWriter& xml, WriteContext& ctx
             xml.tag("preferSharpFlat", "flats");
             break;
         case PreferSharpFlat::SHARPS:
-            xml.tag("preferSharpFlat", "flats");
+            xml.tag("preferSharpFlat", "sharps");
             break;
         case PreferSharpFlat::NONE:
             xml.tag("preferSharpFlat", "none");
@@ -2722,6 +2725,8 @@ void TWrite::write(const PartialLyricsLine* item, XmlWriter& xml, WriteContext& 
     xml.startElement(item);
     writeProperty(item, xml, Pid::VERSE);
     xml.tag("isEndMelisma", item->isEndMelisma());
+    writeProperty(item, xml, Pid::CENTER_BETWEEN_STAVES);
+    writeProperty(item, xml, Pid::PLACEMENT);
     writeProperties(static_cast<const SLine*>(item), xml, ctx);
     xml.endElement();
 }
@@ -3111,6 +3116,8 @@ void TWrite::write(const StaffType* item, XmlWriter& xml, WriteContext& ctx)
     if (item->group() == StaffGroup::STANDARD) {
         xml.tag("noteheadScheme", TConv::toXml(item->noteHeadScheme()), TConv::toXml(NoteHeadScheme::HEAD_NORMAL));
     }
+    xml.tag("instrumentLabelVisibility", TConv::toXml(item->instrumentLabelVisibility()),
+            TConv::toXml(InstrumentLabelVisibility::AUTO));
     if (item->group() == StaffGroup::STANDARD || item->group() == StaffGroup::PERCUSSION) {
         if (!item->genKeysig()) {
             xml.tag("keysig", item->genKeysig());
@@ -3589,7 +3596,7 @@ static bool writeVoiceMove(XmlWriter& xml, WriteContext& ctx, Segment* seg, cons
 static void writeTimeSig(Score* score, const Fraction& tick, XmlWriter& xml, WriteContext& ctx)
 {
     Fraction tsf = score->sigmap()->timesig(tick).nominal();
-    TimeSig* ts = Factory::createTimeSig(score->dummy()->segment());
+    TimeSig* ts = Factory::createTimeSig(score->dummy());
     ts->setSig(tsf);
     TWrite::write(ts, xml, ctx);
     ts->masterScore()->eidRegister()->removeItem(ts);
@@ -3721,7 +3728,7 @@ void TWrite::writeSegments(XmlWriter& xml, WriteContext& ctx, track_idx_t strack
                 if (!keySigWritten) {
                     Key ck = score->staff(track2staff(track))->concertKey(segment->tick());
                     Key tk = score->staff(track2staff(track))->key(segment->tick());
-                    KeySig* ks = Factory::createKeySig(score->dummy()->segment());
+                    KeySig* ks = Factory::createKeySig(score->dummy());
                     ks->setKey(ck, tk);
                     TWrite::write(ks, xml, ctx);
                     ks->masterScore()->eidRegister()->removeItem(ks);

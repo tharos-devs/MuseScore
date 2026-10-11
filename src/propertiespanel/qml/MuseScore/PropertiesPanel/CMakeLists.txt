@@ -52,6 +52,8 @@ qt_add_qml_module(propertiespanel_qml
         propertiespanellistmodel.h
         propertiespanelmodelfactory.cpp
         propertiespanelmodelfactory.h
+        modelwithstavecenteringoptions.cpp
+        modelwithstavecenteringoptions.h
         modelwithvoiceandpositionoptions.cpp
         modelwithvoiceandpositionoptions.h
         propertiespanelcontextmenumodel.cpp
@@ -233,12 +235,14 @@ qt_add_qml_module(propertiespanel_qml
         types/noteheadtypes.h
         types/ornamenttypes.h
         types/slurtietypes.h
+        types/stafftypelabeltypes.h
         types/texttypes.h
         types/tremolobartypes.h
         types/tremolotypes.h
         types/voicetypes.h
 
     QML_FILES
+        common/CenterBetweenStavesSection.qml
         common/CheckBoxPropertyView.qml
         common/ColorSection.qml
         common/DirectionSection.qml

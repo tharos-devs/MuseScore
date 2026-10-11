@@ -136,8 +136,6 @@ enum class KerningType : unsigned char
     ALLOW_COLLISION,
 };
 
-using EngravingItemList = std::vector<EngravingItem*>;
-
 //-------------------------------------------------------------------
 //    @@ EngravingItem
 ///     \brief Base class of score layout elements
@@ -162,8 +160,6 @@ public:
     virtual EngravingItem* linkedClone();
 
     void deleteLater();
-
-    EngravingItemList childrenItems(bool all = false) const;
 
     //! Item-typed variant of ownershipParent(); additionally null when the
     //! owner is not an item.
@@ -477,8 +473,9 @@ public:
     bool accessibleEnabled() const;
     void setAccessibleEnabled(bool enabled);
 
-    //! Parent in the accessibility hierarchy: the layout parent when placed,
-    //! otherwise the raw parent (so that e.g. palette items reach the dummy).
+    //! Parent in the accessibility hierarchy: the layout parent when placed; the head of
+    //! the tree the unattached objects form when attached to nothing; null in between,
+    //! i.e. while attached to something that does not place it.
     virtual EngravingItem* accessibleParentItem() const;
     //! Children in the accessibility hierarchy: the items that name this one as their
     //! accessibleParentItem(). Those are the children it owns, unless ownership and
@@ -604,17 +601,6 @@ public:
         EngravingItem* itemSnappedBefore() const { return m_itemSnappedBefore; }
         EngravingItem* itemSnappedAfter() const { return m_itemSnappedAfter; }
 
-        struct StaffCenteringInfo {
-            double availableVertSpaceAbove = 0.0;
-            double availableVertSpaceBelow = 0.0;
-        };
-        const StaffCenteringInfo& staffCenteringInfo() const { return m_staffCenteringInfo; }
-        void setStaffCenteringInfo(double availSpaceAbove, double availSpaceBelow)
-        {
-            m_staffCenteringInfo.availableVertSpaceAbove = availSpaceAbove;
-            m_staffCenteringInfo.availableVertSpaceBelow = availSpaceBelow;
-        }
-
         void dump(std::stringstream& ss) const;
 
     protected:
@@ -650,8 +636,6 @@ public:
         EngravingItem* m_itemSnappedBefore = nullptr;
         EngravingItem* m_itemSnappedAfter = nullptr;
 
-        StaffCenteringInfo m_staffCenteringInfo;
-
         // STAVE SHARING
         EngravingItem* m_sharedItem = nullptr;
         std::vector<EngravingItem*> m_originItems;
@@ -684,8 +668,15 @@ public:
     static void connectSharedItem(EngravingItem* sharedItem, EngravingItem* originItem);
     static void disconnectSharedItem(EngravingItem* sharedItem, EngravingItem* originItem);
     static void disconnectAllOriginItems(EngravingItem* sharedItem);
+    static void disconnectSharedTree(EngravingItem* item);
 
     virtual bool isBefore(const EngravingItem* item) const;
+
+    /** The staff this item would be centered against if it were centered between staves, or
+     * nullptr if there is none. `system` limits the search to the staves visible on that
+     * system; if null, the system this item is laid out on is used.
+     */
+    const Staff* staffToCenterAgainst(bool above, const System* system = nullptr) const;
 
     //! --- Old Interface ---
     void setbbox(const RectF& r) { mutldata()->setBbox(r); }

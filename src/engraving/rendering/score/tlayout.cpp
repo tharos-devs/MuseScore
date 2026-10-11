@@ -1542,7 +1542,6 @@ void TLayout::layoutGroupBracket(const Bracket* item, Bracket::LayoutData* ldata
 
     if (!item->text()) {
         Text* bracketText = new Text(const_cast<Bracket*>(item), TextStyleType::GROUP_BRACKET);
-        bracketText->setOwnershipParent(const_cast<Bracket*>(item));
         bracketText->setSelected(item->selected());
         bracketText->setGenerated(true);
         const_cast<Bracket*>(item)->setText(bracketText);
@@ -1561,9 +1560,10 @@ void TLayout::layoutGroupBracket(const Bracket* item, Bracket::LayoutData* ldata
     double minHeight = bracketHeight - 6 * textPadding;
 
     if (textOrientation == Orientation::HORIZONTAL) {
-        text->setXmlText(item->system()->ldata()->useLongNames() ? bracketItem->longName() : bracketItem->shortName());
+        text->setXmlText(item->labelType() == InstrumentNameType::LONG ? bracketItem->longName() : bracketItem->shortName());
         layoutText(text, text->mutldata());
     } else {
+        // Vertical labels ignore labelType(): use the long name if it fits, otherwise the short name
         text->setXmlText(bracketItem->longName());
         layoutText(text, text->mutldata());
         if (text->ldata()->bbox().height() > minHeight) {
@@ -2837,10 +2837,11 @@ void TLayout::alignTabGraceNotesToMainStave(GraceNotesGroup* graceNotes, const S
 
     for (Chord* grace : *graceNotes) {
         Chord* linkedGrace = toChord(grace->findLinkedInStaff(notationStaff));
-        PointF linkedGracePos = linkedGrace->ldata()->pos();
-        if (linkedGrace) {
-            grace->setPos(linkedGracePos);
+        if (!linkedGrace) {
+            continue;
         }
+        PointF linkedGracePos = linkedGrace->ldata()->pos();
+        grace->setPos(linkedGracePos);
     }
 }
 
@@ -6600,7 +6601,7 @@ void TLayout::fillTupletShape(const Tuplet* item, Tuplet::LayoutData* ldata)
     ldata->setShape(s);
 }
 
-void TLayout::layoutVibratoSegment(VibratoSegment* item, LayoutContext& ctx)
+void TLayout::layoutVibratoSegment(VibratoSegment* item, LayoutContext&)
 {
     LAYOUT_CALL_ITEM(item);
     VibratoSegment::LayoutData* ldata = item->mutldata();

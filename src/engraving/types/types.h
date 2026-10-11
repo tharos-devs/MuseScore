@@ -860,7 +860,8 @@ enum class IntervalType : unsigned char {
 enum class InstrumentLabelVisibility : unsigned char {
     LONG,
     SHORT,
-    HIDE
+    HIDE,
+    AUTO
 };
 
 struct OrnamentInterval
@@ -1374,6 +1375,11 @@ enum class LyricsDashSystemStart : unsigned char {
     STANDARD,
     UNDER_HEADER,
     UNDER_FIRST_NOTE
+};
+
+enum class LyricsStackingOrder : unsigned char {
+    LYRICS_AFTER_PEDALS,    // < v5.0
+    LYRICS_BEFORE_DYNAMICS  // >= v5.0
 };
 
 enum class NoteLineEndPlacement : unsigned char {
