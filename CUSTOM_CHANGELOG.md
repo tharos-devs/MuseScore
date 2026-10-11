@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-11
+- Fixed: the "Select all notes in chord" (Ctrl+Alt+A) and "Edit element" (F2, Alt+Shift+E) shortcuts did nothing (upstream lost their actions when turning them into commands).
 - VST3 instruments: on stop (or a seek), the MIDI CCs keep their last value instead of going back to 0 (a sample library driven by CC1/CC11, e.g. BBCSO, was silent when played live from a MIDI keyboard after a stop); only the pitch bend, the aftertouch and the sustain/sostenuto/soft pedals go back to rest.
 - Fixed: playing a MIDI keyboard (or a Percussion panel pad) with no note input position crashed (upstream regression brought by the sync).
 - Synced with upstream `main` (116 commits, incl. lyrics and dynamics centered between staves, frames included in range selections, page/system locks on frames, shortcut improvements, the update flow's auto-update setting).
