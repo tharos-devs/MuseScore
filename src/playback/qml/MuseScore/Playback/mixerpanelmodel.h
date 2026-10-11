@@ -93,9 +93,6 @@ public:
     //! affects that one channel, same as it always has).
     Q_INVOKABLE void setMutedForSelectedChannels(bool muted);
     Q_INVOKABLE void setSoloForSelectedChannels(bool solo);
-    //! NOTE: Solo clicked on a channel that isn't selected - on a Group bus, also applied to
-    //! everything routed to it (see setSoloForGroupBusSources())
-    Q_INVOKABLE void setChannelSolo(mu::playback::MixerChannelItem* channelItem, bool solo);
 
     Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
     Q_INVOKABLE void deleteAuxChannel(mu::playback::MixerChannelItem* channelItem);
@@ -168,7 +165,6 @@ signals:
     void globalSoloEngagedChanged();
 
 private:
-    void setSoloForGroupBusSources(muse::audio::aux_channel_idx_t busIndex, bool solo);
     void classBegin() override {}
     void componentComplete() override;
     void init();
@@ -202,6 +198,10 @@ private:
     void requestNewAuxBusForSelectedTracks(bool isGroupBus);
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
     int resolveVideoInsertIndex() const;
+    //! NOTE: whether a kind of channels is shown ("…" menu, see ChannelCategoriesMenu)
+    bool isCategoryVisible(ChannelCategory category) const;
+    bool isAuxBusVisible(muse::audio::aux_channel_idx_t index) const;
+    bool isInstrumentTrackVisible(const engraving::InstrumentTrackId& instrumentTrackId) const;
     std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
     int resolveAuxInsertIndex(muse::audio::aux_channel_idx_t index, bool isGroupBus) const;
     int indexOf(const muse::audio::TrackId trackId) const;

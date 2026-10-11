@@ -78,7 +78,7 @@ void PlaybackCommandsController::init()
     registerCommand(RELOAD_PLAYBACK_CACHE_COMMAND, &IPlaybackController::reloadPlaybackCache);
 
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
-    registerCommand(TOGGLE_AUX_CHANNELS_COMMAND, [this]() { return toggleAuxChannels(); });
+    registerCommand(TOGGLE_CHANNEL_CATEGORY_COMMAND, [this](const rcommand::Params& params) { return toggleChannelCategory(params); });
     registerCommand(TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, [this]() { return toggleMixerCondensedView(); });
     registerCommand(MIDI_CC_RECORD_TOGGLE_COMMAND, [this]() {
         midiCcRecorder()->toggleArmed();
@@ -112,7 +112,6 @@ void PlaybackCommandsController::init()
             { "reload-playback-cache", RELOAD_PLAYBACK_CACHE_COMMAND, {} },
             { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },
             { "toggle-mixer-section", TOGGLE_MIXER_SECTION_COMMAND, mixerSectionToggle },
-            { "toggle-aux-channels", TOGGLE_AUX_CHANNELS_COMMAND, {} },
             { "toggle-mixer-condensed-view", TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, {} },
         };
 
@@ -144,10 +143,16 @@ muse::Ret PlaybackCommandsController::toggleMixerSection(const muse::rcommand::P
     return make_ok();
 }
 
-muse::Ret PlaybackCommandsController::toggleAuxChannels()
+muse::Ret PlaybackCommandsController::toggleChannelCategory(const muse::rcommand::Params& params)
 {
-    bool visible = configuration()->areAuxChannelsVisible();
-    configuration()->setAuxChannelsVisible(!visible);
+    const std::optional<ChannelListPanel> panel = channelListPanelFromString(params.at("panel").toString());
+    const std::optional<ChannelCategory> category = channelCategoryFromString(params.at("category").toString());
+    if (!panel || !category) {
+        return make_ret(Ret::Code::BadArgs);
+    }
+
+    bool visible = configuration()->isChannelCategoryVisible(*panel, *category);
+    configuration()->setChannelCategoryVisible(*panel, *category, !visible);
     return make_ok();
 }
 

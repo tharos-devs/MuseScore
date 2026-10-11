@@ -51,6 +51,9 @@ public:
     MOCK_METHOD(bool, isMixerSectionVisible, (MixerSectionType sectionType), (const, override));
     MOCK_METHOD(void, setMixerSectionVisible, (MixerSectionType sectionType, bool visible), (override));
     MOCK_METHOD((muse::async::Channel<MixerSectionType, bool>), isMixerSectionVisibleChanged, (), (const, override));
+    MOCK_METHOD(bool, isChannelCategoryVisible, (ChannelListPanel, ChannelCategory), (const, override));
+    MOCK_METHOD(void, setChannelCategoryVisible, (ChannelListPanel, ChannelCategory, bool), (override));
+    MOCK_METHOD((muse::async::Channel<ChannelListPanel, ChannelCategory, bool>), channelCategoryVisibleChanged, (), (const, override));
 
     MOCK_METHOD(bool, isAuxSendVisible, (muse::audio::aux_channel_idx_t index), (const, override));
     MOCK_METHOD(void, setAuxSendVisible, (muse::audio::aux_channel_idx_t index, bool visible), (override));

@@ -31,6 +31,8 @@
 
 #include "playback/playbacktypes.h"
 
+#include "channelcategoriesmenu.h"
+
 namespace mu::playback {
 class MixerPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel, public muse::actions::Actionable
 {
@@ -130,7 +132,7 @@ signals:
     void toggleFullScreenRequested();
 
 protected:
-    //! NOTE: overridden to ignore TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_AUX_CHANNELS_COMMAND -
+    //! NOTE: overridden to ignore TOGGLE_MIXER_SECTION_COMMAND/TOGGLE_CHANNEL_CATEGORY_COMMAND -
     //! see the .cpp for why the base class implementation must not be allowed to touch them
     void onCommandStateChanged(const muse::rcommand::Command& command, const muse::rcommand::CommandState& state) override;
 
@@ -146,7 +148,6 @@ private:
     bool isSectionVisible(MixerSectionType sectionType) const;
 
     muse::uicomponents::MenuItem* buildSectionVisibleItem(MixerSectionType sectionType);
-    muse::uicomponents::MenuItem* buildAuxChannelsVisibleItem();
     muse::uicomponents::MenuItem* buildCondensedViewItem();
 
     void emitMixerSectionVisibilityChanged(MixerSectionType sectionType);
@@ -154,6 +155,8 @@ private:
     void setViewMenuItemChecked(const muse::rcommand::CommandQuery& query, bool checked);
 
     void updateItems();
+
+    ChannelCategoriesMenu m_channelCategoriesMenu { ChannelListPanel::Mixer };
 
     bool m_floating = false;
     bool m_isFullScreen = false;

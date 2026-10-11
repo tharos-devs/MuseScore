@@ -99,20 +99,8 @@ void ChannelSelection::setMuted(const Channels& channels, bool muted)
     }
 }
 
-void ChannelSelection::setSolo(const Channels& channels, bool solo)
-{
-    for (MixerChannelItem* item : channels) {
-        if (!item->selected()) {
-            continue;
-        }
-
-        if (canTakeSolo(item)) {
-            item->setSolo(solo);
-        }
-    }
-}
-
-bool ChannelSelection::canTakeSolo(const MixerChannelItem* item)
+//! NOTE: whether Solo applies to a channel when set on several channels at once
+static bool canTakeSolo(const MixerChannelItem* item)
 {
     //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button `enabled`/
     //! `visible` guards - solo is only meaningful for a non-Aux channel or a
@@ -126,4 +114,17 @@ bool ChannelSelection::canTakeSolo(const MixerChannelItem* item)
     bool soloEligible = item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
     bool manuallyMuted = item->muted() && !item->forceMute();
     return soloEligible && !manuallyMuted;
+}
+
+void ChannelSelection::setSolo(const Channels& channels, bool solo)
+{
+    for (MixerChannelItem* item : channels) {
+        if (!item->selected()) {
+            continue;
+        }
+
+        if (canTakeSolo(item)) {
+            item->setUserSolo(solo);
+        }
+    }
 }

@@ -84,9 +84,9 @@ public:
     void setMixerSectionVisible(MixerSectionType sectionType, bool visible) override;
     muse::async::Channel<MixerSectionType, bool> isMixerSectionVisibleChanged() const override;
 
-    bool areAuxChannelsVisible() const override;
-    void setAuxChannelsVisible(bool visible) override;
-    muse::async::Channel<bool> areAuxChannelsVisibleChanged() const override;
+    bool isChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category) const override;
+    void setChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category, bool visible) override;
+    muse::async::Channel<ChannelListPanel, ChannelCategory, bool> channelCategoryVisibleChanged() const override;
 
     bool isMixerCondensedViewEnabled() const override;
     void setMixerCondensedViewEnabled(bool enabled) override;
@@ -136,7 +136,7 @@ private:
     muse::async::Channel<bool> m_playChordWhenEditingChanged;
     muse::async::Channel<bool> m_playHarmonyWhenEditingChanged;
     muse::async::Channel<bool> m_playNotesOnMidiInputChanged;
-    muse::async::Channel<bool> m_areAuxChannelsVisibleChanged;
+    muse::async::Channel<ChannelListPanel, ChannelCategory, bool> m_channelCategoryVisibleChanged;
     muse::async::Channel<MixerSectionType, bool> m_isMixerSectionVisibleChanged;
     muse::async::Channel<bool> m_isMixerCondensedViewEnabledChanged;
 

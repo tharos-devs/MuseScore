@@ -37,6 +37,8 @@ qt_add_qml_module(playback_qml
         auxsenditem.h
         auxsenditemlistmodel.cpp
         auxsenditemlistmodel.h
+        channelcategoriesmenu.cpp
+        channelcategoriesmenu.h
         channelcolorchange.cpp
         channelcolorchange.h
         channelselection.cpp

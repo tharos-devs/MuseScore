@@ -219,10 +219,12 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo{
-        TOGGLE_AUX_CHANNELS_COMMAND,
-        TranslatableString("playback", "Toggle aux channels"),
-        TranslatableString("playback", "Toggle aux channels"),
-        InputSchema(),
+        TOGGLE_CHANNEL_CATEGORY_COMMAND,
+        TranslatableString("playback", "Show/hide a kind of channels"),
+        TranslatableString("playback", "Show/hide a kind of channels"),
+        InputSchema({
+            { "panel", Arg(DataType::String, u"Panel (mixer, track-list)") },
+            { "category", Arg(DataType::String, u"Kind of channels (video, metronome, instruments, aux-fx, aux-group)") } }),
         Decoration()
     },
     CommandInfo{

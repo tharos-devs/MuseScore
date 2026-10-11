@@ -584,6 +584,51 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
     });
 }
 
+void MixerChannelItem::bindAuxBus(aux_channel_idx_t index)
+{
+    setAuxBusIndex(index);
+
+    const project::INotationProjectPtr project = context()->currentProject();
+    if (!project) {
+        return;
+    }
+
+    const project::IProjectAudioSettingsPtr audioSettings = project->audioSettings();
+    const notation::INotationSoloMuteState::SoloMuteState& state = audioSettings->auxSoloMuteState(index);
+    loadSoloMuteState(state);
+    const bool forceMute = playbackController()->isAuxForceMuted(index);
+    loadMuteForceMuteState(state.mute || forceMute, forceMute);
+
+    connect(this, &MixerChannelItem::soloMuteStateChanged, this,
+            [this, audioSettings](const notation::INotationSoloMuteState::SoloMuteState& newState) {
+        audioSettings->setAuxSoloMuteState(m_auxBusIndex, newState);
+    });
+
+    //! NOTE: changed elsewhere (another panel, the global Mute/Solo, a Group bus's Solo), or this one's own change
+    //! echoed back (a no-op)
+    audioSettings->auxSoloMuteStateChanged().onReceive(
+        this, [this](aux_channel_idx_t busIndex, const notation::INotationSoloMuteState::SoloMuteState& newState) {
+        if (busIndex == m_auxBusIndex) {
+            loadSoloMuteState(newState);
+        }
+    });
+
+    playbackController()->auxMuteStateChanged().onReceive(this, [this](aux_channel_idx_t busIndex, bool muted, bool forceMute) {
+        if (busIndex == m_auxBusIndex) {
+            loadMuteForceMuteState(muted, forceMute);
+        }
+    });
+}
+
+void MixerChannelItem::setUserSolo(bool solo)
+{
+    setSolo(solo);
+
+    if (isGroupBus() && m_outParams.solo == solo) {
+        playbackController()->setGroupBusSourcesSolo(m_auxBusIndex, solo);
+    }
+}
+
 void MixerChannelItem::loadInputParams(const AudioInputParams& newParams)
 {
     if (m_outputOnly) {

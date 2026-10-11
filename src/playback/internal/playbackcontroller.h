@@ -139,6 +139,7 @@ public:
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
     bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
     bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
+    void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) override;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;

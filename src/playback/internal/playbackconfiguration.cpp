@@ -95,6 +95,7 @@ static const Settings::Key ONLINE_SOUNDS_SHOW_ERROR(moduleName, "playback/online
 static const Settings::Key ONLINE_SOUNDS_SHOW_PROGRESS_BAR_MODE(moduleName, "playback/onlineSounds/showProgressBarMode");
 
 static const Settings::Key MUTE_HIDDEN_INSTRUMENTS(moduleName, "playback/mixer/muteHiddenInstruments");
+//! NOTE: the Mixer's former single "Aux channels" toggle, read once as the default of its Aux FX/Aux Group ones
 static const Settings::Key AUX_CHANNELS_VISIBLE(moduleName, "playback/mixer/auxChannelsVisible");
 static const Settings::Key AUX_CHANNELS_VISIBLE_MIGRATED(moduleName, "playback/mixer/auxChannelsVisibleMigratedFromPerIndex");
 
@@ -112,6 +113,27 @@ static const Settings::Key DEFAULT_SOUND_PROFILE_FOR_NEW_PROJECTS(moduleName, "p
 static const SoundProfileName BASIC_PROFILE_NAME(u"MuseScore Basic");
 static const SoundProfileName MUSESOUNDS_PROFILE_NAME(u"MuseSounds");
 static const SoundProfileName COMPAT_MUSESOUNDS_PROFILE_NAME(u"Muse Sounds");
+
+static Settings::Key channelCategoryVisibleKey(ChannelListPanel panel, ChannelCategory category)
+{
+    const std::string panelName = panel == ChannelListPanel::Mixer ? "mixer" : "trackList";
+
+    std::string categoryName;
+    switch (category) {
+    case ChannelCategory::Video: categoryName = "video";
+        break;
+    case ChannelCategory::Metronome: categoryName = "metronome";
+        break;
+    case ChannelCategory::Instruments: categoryName = "instruments";
+        break;
+    case ChannelCategory::AuxFx: categoryName = "auxFx";
+        break;
+    case ChannelCategory::AuxGroup: categoryName = "auxGroup";
+        break;
+    }
+
+    return Settings::Key(moduleName, "playback/" + panelName + "/" + categoryName + "ChannelsVisible");
+}
 
 static Settings::Key mixerSectionVisibleKey(MixerSectionType sectionType)
 {
@@ -202,9 +224,18 @@ void PlaybackConfiguration::init()
         settings()->setSharedValue(AUX_CHANNELS_VISIBLE_MIGRATED, Val(true));
     }
 
-    settings()->valueChanged(AUX_CHANNELS_VISIBLE).onReceive(this, [this](const Val& val) {
-        m_areAuxChannelsVisibleChanged.send(val.toBool());
-    });
+    const bool legacyAuxChannelsVisible = settings()->value(AUX_CHANNELS_VISIBLE).toBool();
+    for (ChannelListPanel panel : { ChannelListPanel::Mixer, ChannelListPanel::TrackList }) {
+        for (ChannelCategory category : allChannelCategories()) {
+            const bool isMixerAux = panel == ChannelListPanel::Mixer
+                                    && (category == ChannelCategory::AuxFx || category == ChannelCategory::AuxGroup);
+            const Settings::Key key = channelCategoryVisibleKey(panel, category);
+            settings()->setDefaultValue(key, Val(isMixerAux ? legacyAuxChannelsVisible : true));
+            settings()->valueChanged(key).onReceive(this, [this, panel, category](const Val& val) {
+                m_channelCategoryVisibleChanged.send(panel, category, val.toBool());
+            });
+        }
+    }
 
     settings()->setDefaultValue(MIXER_CONDENSED_VIEW_ENABLED, Val(false));
     settings()->valueChanged(MIXER_CONDENSED_VIEW_ENABLED).onReceive(this, [this](const Val& val) {
@@ -397,19 +428,19 @@ muse::async::Channel<MixerSectionType, bool> PlaybackConfiguration::isMixerSecti
     return m_isMixerSectionVisibleChanged;
 }
 
-bool PlaybackConfiguration::areAuxChannelsVisible() const
+bool PlaybackConfiguration::isChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category) const
 {
-    return settings()->value(AUX_CHANNELS_VISIBLE).toBool();
+    return settings()->value(channelCategoryVisibleKey(panel, category)).toBool();
 }
 
-void PlaybackConfiguration::setAuxChannelsVisible(bool visible)
+void PlaybackConfiguration::setChannelCategoryVisible(ChannelListPanel panel, ChannelCategory category, bool visible)
 {
-    settings()->setSharedValue(AUX_CHANNELS_VISIBLE, Val(visible));
+    settings()->setSharedValue(channelCategoryVisibleKey(panel, category), Val(visible));
 }
 
-muse::async::Channel<bool> PlaybackConfiguration::areAuxChannelsVisibleChanged() const
+muse::async::Channel<ChannelListPanel, ChannelCategory, bool> PlaybackConfiguration::channelCategoryVisibleChanged() const
 {
-    return m_areAuxChannelsVisibleChanged;
+    return m_channelCategoryVisibleChanged;
 }
 
 bool PlaybackConfiguration::isMixerCondensedViewEnabled() const

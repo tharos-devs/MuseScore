@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QAbstractListModel>
 #include <QColor>
 #include <QList>
@@ -49,12 +51,18 @@
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
 
+namespace mu::engraving {
+class Part;
+}
+
 namespace mu::playback {
 //! NOTE: the Track list panel: one row per part, with the part's Mixer controls that fit in a row (color, mute,
-//! solo, sound, VST editor, articulation map) and the part's visibility. Each row's channel item is a Mixer channel
-//! item of its own (not the Mixer's), bound to the part's first instrument's track like the Mixer's (see
-//! MixerChannelItem::bindInstrumentTrack()): everything goes through the same services as the Mixer and the
-//! Timeline, which pick the changes up from there (and the other way around)
+//! solo, sound, VST editor, articulation map) and the part's visibility, then one row per Aux FX/Aux Group bus
+//! (color, mute, solo), in the Mixer's order. Each row's channel item is a Mixer channel item of its own (not the
+//! Mixer's), bound to the part's first instrument's track or to the bus like the Mixer's (see
+//! MixerChannelItem::bindInstrumentTrack()/bindAuxBus()): everything goes through the same services as the Mixer
+//! and the Timeline, which pick the changes up from there (and the other way around). The Metronome and Video rows
+//! are above them; each kind of rows can be hidden (View menu, see ChannelCategoriesMenu)
 class TrackListModel : public QAbstractListModel, public QQmlParserStatus, public muse::async::Asyncable, public muse::Contextable
 {
     Q_OBJECT
@@ -74,6 +82,12 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     //! attachment's, shared with the Video panel and the Timeline), there even without a video, to load one
     Q_PROPERTY(MixerChannelItem * videoChannelItem READ videoChannelItem NOTIFY videoChannelItemChanged)
     Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY hasVideoChanged)
+
+    //! NOTE: the Metronome row, above the Video row: its mute only
+    Q_PROPERTY(MixerChannelItem * metronomeChannelItem READ metronomeChannelItem NOTIFY metronomeChannelItemChanged)
+
+    Q_PROPERTY(bool videoVisible READ videoVisible NOTIFY categoriesVisibleChanged)
+    Q_PROPERTY(bool metronomeVisible READ metronomeVisible NOTIFY categoriesVisibleChanged)
 
     QML_ELEMENT
 
@@ -116,6 +130,11 @@ public:
     MixerChannelItem* videoChannelItem() const;
     bool hasVideo() const;
 
+    MixerChannelItem* metronomeChannelItem() const;
+
+    bool videoVisible() const;
+    bool metronomeVisible() const;
+
     //! NOTE: same as the Timeline's Video row "Load video" (see Timeline::chooseVideoFile())
     Q_INVOKABLE void chooseVideoFile();
     Q_INVOKABLE void setVideoColor(const QColor& color);
@@ -132,6 +151,8 @@ signals:
     void columnsChanged();
     void videoChannelItemChanged();
     void hasVideoChanged();
+    void metronomeChannelItemChanged();
+    void categoriesVisibleChanged();
 
 private:
     enum Roles {
@@ -145,10 +166,12 @@ private:
 
     //! NOTE: a part's tracks: its first instrument's, whose sound, instrument window and articulation map the row
     //! shows, and its other instruments' (instrument changes), which follow the row's mute, solo and color
+    //! NOTE: or a bus's (auxIndex set, no instrument track)
     struct PartTracks {
         engraving::InstrumentTrackId instrumentTrackId;
         muse::audio::TrackId trackId = -1;
         std::vector<engraving::InstrumentTrackId> otherInstrumentTrackIds;
+        std::optional<muse::audio::aux_channel_idx_t> auxIndex;
 
         bool operator==(const PartTracks& other) const = default;
     };
@@ -177,6 +200,10 @@ private:
     void reload();
     std::vector<PartTracks> currentTracks() const;
     MixerChannelItem* buildChannelItem(const PartTracks& tracks);
+    void connectGlobalMuteSolo(MixerChannelItem* item);
+    bool isCategoryVisible(ChannelCategory category) const;
+    void rebuildMetronomeChannelItem();
+    QString auxBusTitle(muse::audio::aux_channel_idx_t index) const;
     bool updateRowState(Row& row) const;
     void updateRowStates();
     void updateColors();
@@ -185,6 +212,7 @@ private:
     void loadVideoMuteState();
     void loadVideoColor();
     GlobalMuteSoloToggle::Channels channels() const;
+    GlobalMuteSoloToggle::Channels globalMuteSoloChannels() const;
 
     int rowOf(const engraving::InstrumentTrackId& instrumentTrackId) const;
     const engraving::Part* visibilityPart(const Row& row) const;
@@ -216,5 +244,7 @@ private:
 
     MixerChannelItem* m_videoChannelItem = nullptr;
     bool m_hasVideo = false;
+
+    MixerChannelItem* m_metronomeChannelItem = nullptr;
 };
 }

@@ -464,6 +464,67 @@ bool PlaybackController::isAuxForceMuted(aux_channel_idx_t index) const
     return it != m_lastAppliedAuxForceMute.end() ? it->second : false;
 }
 
+void PlaybackController::setGroupBusSourcesSolo(aux_channel_idx_t index, bool solo)
+{
+    if (!audioSettings() || !m_notation) {
+        return;
+    }
+
+    //! NOTE: routed = an active send, as the engine routes it (see Mixer::hasActiveGroupBusSend())
+    auto routesTo = [](const AuxSendsParams& auxSends, const std::vector<aux_channel_idx_t>& buses) {
+        for (aux_channel_idx_t bus : buses) {
+            if (bus < auxSends.size() && auxSends[bus].active && !muse::is_zero(auxSends[bus].signalAmount)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    //! NOTE: this Group bus and, one level at a time, the Group buses feeding it
+    std::vector<aux_channel_idx_t> groupBuses { index };
+    for (bool added = true; added;) {
+        added = false;
+        for (const auto& pair : m_auxTrackIdMap) {
+            if (audioSettings()->isAuxBusGroup(pair.first) && !muse::contains(groupBuses, pair.first)
+                && routesTo(audioSettings()->auxOutputParams(pair.first).auxSends, groupBuses)) {
+                groupBuses.push_back(pair.first);
+                added = true;
+            }
+        }
+    }
+
+    for (aux_channel_idx_t bus : groupBuses) {
+        SoloMuteState state = audioSettings()->auxSoloMuteState(bus);
+        if (bus != index && state.solo != solo && !(solo && state.mute)) {
+            state.solo = solo;
+            audioSettings()->setAuxSoloMuteState(bus, state);
+        }
+    }
+
+    for (const auto& pair : m_instrumentTrackIdMap) {
+        const InstrumentTrackId& instrumentTrackId = pair.first;
+        if (!routesTo(trackOutputParams(instrumentTrackId).auxSends, groupBuses)) {
+            continue;
+        }
+
+        SoloMuteState state = trackSoloMuteState(instrumentTrackId);
+        if (state.solo != solo && !(solo && state.mute)) {
+            state.solo = solo;
+            setTrackSoloMuteState(instrumentTrackId, state);
+        }
+    }
+
+    IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
+    if (m_videoTrackId != INVALID_TRACK_ID && videoSettingsPtr && routesTo(videoOutputParams().auxSends, groupBuses)) {
+        const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
+        if (attachment.solo != solo && !(solo && attachment.muted)) {
+            updateVideoAttachment(videoSettingsPtr, [solo](VideoAttachmentSettings& updated) {
+                updated.solo = solo;
+            });
+        }
+    }
+}
+
 muse::async::Channel<InstrumentTrackId, bool, bool> PlaybackController::trackMuteStateChanged() const
 {
     return m_trackMuteStateChanged;
@@ -1884,7 +1945,8 @@ void PlaybackController::addNewAuxBus()
         return;
     }
 
-    configuration()->setAuxChannelsVisible(true);
+    //! NOTE: the new bus is shown in the Mixer
+    configuration()->setChannelCategoryVisible(ChannelListPanel::Mixer, ChannelCategory::AuxFx, true);
 
     //! NOTE: addAuxTrack() unconditionally increments m_loadingTrackCount and relies on its
     //! onFinished callback to bring it back down (see setupTracks()'s onAddFinished); without
@@ -1907,7 +1969,7 @@ void PlaybackController::addNewGroupBus()
     //! and the bus's own default title ("Bus %1" instead of "Aux %1")
     audioSettings()->setIsAuxBusGroup(freeIndex, true);
 
-    configuration()->setAuxChannelsVisible(true);
+    configuration()->setChannelCategoryVisible(ChannelListPanel::Mixer, ChannelCategory::AuxGroup, true);
 
     addAuxTrack(freeIndex, false /*projectHadNoAudioSettings*/, false /*isProjectLoad*/, [this]() {
         m_loadingTrackCount--;

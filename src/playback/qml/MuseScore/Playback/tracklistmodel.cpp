@@ -36,6 +36,7 @@
 #include "engraving/dom/sharedpart.h"
 
 #include "notation/imasternotation.h"
+#include "notation/inotationplayback.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/inotation.h"
 #include "notation/inotationparts.h"
@@ -66,9 +67,11 @@ TrackListModel::~TrackListModel()
         row.item->setParent(nullptr);
         items.push_back(row.item);
     }
-    if (m_videoChannelItem) {
-        m_videoChannelItem->setParent(nullptr);
-        items.push_back(m_videoChannelItem);
+    for (MixerChannelItem* item : { m_videoChannelItem, m_metronomeChannelItem }) {
+        if (item) {
+            item->setParent(nullptr);
+            items.push_back(item);
+        }
     }
 
     QMetaObject::invokeMethod(qApp, [items]() {
@@ -109,7 +112,25 @@ void TrackListModel::componentComplete()
         const int row = rowOf(instrumentTrackId);
         if (row >= 0) {
             m_rows.at(row).item->loadMuteForceMuteState(muted, forceMute);
+        } else if (m_metronomeChannelItem && m_metronomeChannelItem->instrumentTrackId() == instrumentTrackId) {
+            m_metronomeChannelItem->loadMuteForceMuteState(muted, forceMute);
         }
+    });
+
+    //! NOTE: a kind of rows shown or hidden (View menu)
+    playbackConfiguration()->channelCategoryVisibleChanged().onReceive(this, [this](ChannelListPanel panel, ChannelCategory, bool) {
+        if (panel == ChannelListPanel::TrackList) {
+            m_rebuildRequired = true;
+            scheduleReload();
+            emit categoriesVisibleChanged();
+            emit globalMuteEngagedChanged();
+            emit globalSoloEngagedChanged();
+        }
+    });
+
+    //! NOTE: a bus named after its first effect
+    controller()->auxChannelNameChanged().onReceive(this, [this](aux_channel_idx_t, const std::string&) {
+        updateRowStates();
     });
 
     context()->currentNotationChanged().onNotify(this, [this]() {
@@ -183,6 +204,8 @@ void TrackListModel::onCurrentNotationChanged()
                 const int row = rowOf(instrumentTrackId);
                 if (row >= 0) {
                     m_rows.at(row).item->loadSoloMuteState(state);
+                } else if (m_metronomeChannelItem && m_metronomeChannelItem->instrumentTrackId() == instrumentTrackId) {
+                    m_metronomeChannelItem->loadSoloMuteState(state);
                 }
             });
         }
@@ -201,6 +224,8 @@ void TrackListModel::onCurrentNotationChanged()
             if (m_hasVideo != hasVideo) {
                 m_hasVideo = hasVideo;
                 emit hasVideoChanged();
+                emit globalMuteEngagedChanged();
+                emit globalSoloEngagedChanged();
             }
             loadVideoMuteState();
         });
@@ -211,9 +236,10 @@ void TrackListModel::onCurrentNotationChanged()
     rebuildVideoChannelItem();
 
     if (m_audioSettings) {
-        //! NOTE: a color changed from the Mixer, the Timeline or here
+        //! NOTE: a color or a bus's name changed from the Mixer, the Timeline or here
         m_audioSettings->settingsChanged().onNotify(this, [this]() {
             updateColors();
+            updateRowStates();
         });
     }
 
@@ -253,9 +279,10 @@ std::vector<TrackListModel::PartTracks> TrackListModel::currentTracks() const
 
     const IPlaybackController::InstrumentTrackIdMap& trackIdMap = controller()->instrumentTrackIdMap();
 
+    const bool instrumentsVisible = isCategoryVisible(ChannelCategory::Instruments);
     for (const Part* part : m_notation->parts()->partList()) {
         const Instrument* instrument = part->instrument();
-        if (!instrument) {
+        if (!instrumentsVisible || !instrument) {
             continue;
         }
 
@@ -277,7 +304,78 @@ std::vector<TrackListModel::PartTracks> TrackListModel::currentTracks() const
         result.push_back(std::move(tracks));
     }
 
+    //! NOTE: the buses, in the Mixer's order (FX buses, then Group buses)
+    const IPlaybackController::AuxTrackIdMap& auxTrackIdMap = controller()->auxTrackIdMap();
+    for (aux_channel_idx_t index : controller()->sortedAuxBusIndices()) {
+        const ChannelCategory category = controller()->isAuxBusGroup(index) ? ChannelCategory::AuxGroup : ChannelCategory::AuxFx;
+        if (!isCategoryVisible(category)) {
+            continue;
+        }
+
+        PartTracks tracks;
+        tracks.trackId = auxTrackIdMap.at(index);
+        tracks.auxIndex = index;
+        result.push_back(std::move(tracks));
+    }
+
     return result;
+}
+
+bool TrackListModel::isCategoryVisible(ChannelCategory category) const
+{
+    return playbackConfiguration()->isChannelCategoryVisible(ChannelListPanel::TrackList, category);
+}
+
+QString TrackListModel::auxBusTitle(aux_channel_idx_t index) const
+{
+    //! NOTE: a name given in the Mixer wins, like there
+    const IProjectAudioSettingsPtr settings = audioSettings();
+    const QString customName = settings ? settings->auxName(index).toQString() : QString();
+    return !customName.isEmpty() ? customName : QString::fromStdString(controller()->auxChannelName(index));
+}
+
+MixerChannelItem* TrackListModel::metronomeChannelItem() const
+{
+    return m_metronomeChannelItem;
+}
+
+//! NOTE: like the Mixer's Metronome channel, for its mute and level
+void TrackListModel::rebuildMetronomeChannelItem()
+{
+    MixerChannelItem* oldItem = m_metronomeChannelItem;
+    m_metronomeChannelItem = nullptr;
+
+    const INotationProjectPtr project = context()->currentProject();
+    const INotationPlaybackPtr notationPlayback = project ? project->masterNotation()->playback() : nullptr;
+    if (notationPlayback && controller()->isPlaybackInited()) {
+        const InstrumentTrackId& metronomeTrackId = notationPlayback->metronomeTrackId();
+        const IPlaybackController::InstrumentTrackIdMap& trackIdMap = controller()->instrumentTrackIdMap();
+        auto it = trackIdMap.find(metronomeTrackId);
+        if (it != trackIdMap.end()) {
+            m_metronomeChannelItem = new MixerChannelItem(this, MixerChannelItem::Type::Metronome, false /*outputOnly*/, it->second);
+            m_metronomeChannelItem->bindInstrumentTrack(metronomeTrackId);
+            m_metronomeChannelItem->setTitle(muse::qtrc("playback", "Metronome"));
+            connectGlobalMuteSolo(m_metronomeChannelItem);
+        }
+    }
+
+    emit metronomeChannelItemChanged();
+
+    //! NOTE: only once the view has released it
+    if (oldItem) {
+        oldItem->disconnect(this);
+        oldItem->deleteLater();
+    }
+}
+
+bool TrackListModel::videoVisible() const
+{
+    return isCategoryVisible(ChannelCategory::Video);
+}
+
+bool TrackListModel::metronomeVisible() const
+{
+    return isCategoryVisible(ChannelCategory::Metronome);
 }
 
 void TrackListModel::reload()
@@ -305,6 +403,8 @@ void TrackListModel::reload()
     m_selectionAnchorIndex = -1;
 
     m_rebuildRequired = false;
+
+    rebuildMetronomeChannelItem();
 
     //! NOTE: the new rows are complete before the reset: no change notification in the middle of it
     QList<Row> newRows;
@@ -340,15 +440,28 @@ void TrackListModel::reload()
     }
 }
 
-MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
+//! NOTE: forceMute too, see GlobalMuteSoloToggle::muteEngaged()
+void TrackListModel::connectGlobalMuteSolo(MixerChannelItem* item)
 {
-    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, false /*outputOnly*/, tracks.trackId);
-    item->bindInstrumentTrack(tracks.instrumentTrackId);
-
-    //! NOTE: forceMute too, see GlobalMuteSoloToggle::muteEngaged()
     connect(item, &MixerChannelItem::mutedChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::forceMuteChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::soloChanged, this, &TrackListModel::globalSoloEngagedChanged);
+}
+
+MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
+{
+    if (tracks.auxIndex) {
+        MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Aux, true /*outputOnly*/, tracks.trackId);
+        item->bindAuxBus(*tracks.auxIndex);
+        item->subscribeOnTrackAudioSignalChanges();
+        connectGlobalMuteSolo(item);
+        return item;
+    }
+
+    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, false /*outputOnly*/, tracks.trackId);
+    item->bindInstrumentTrack(tracks.instrumentTrackId);
+
+    connectGlobalMuteSolo(item);
     //! NOTE: the sound changed: whether it's a VST instrument (articulation map button) and has a window
     connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
         updateRowStates();
@@ -385,6 +498,14 @@ bool TrackListModel::isInstrumentEditorOpened(const Row& row) const
 //! of its own)
 bool TrackListModel::updateRowState(Row& row) const
 {
+    if (row.tracks.auxIndex) {
+        const QString title = auxBusTitle(*row.tracks.auxIndex);
+        if (row.item->title() != title) {
+            row.item->setTitle(title);
+        }
+        return false;
+    }
+
     const Part* part = m_notation ? m_notation->parts()->part(row.tracks.instrumentTrackId.partId) : nullptr;
 
     //! NOTE: building the title parses the names' HTML: only when they changed (this runs on every undo stack change)
@@ -470,7 +591,9 @@ void TrackListModel::updateColors()
     }
 
     for (const Row& row : std::as_const(m_rows)) {
-        if (settings->trackHasExistingOutputParams(row.tracks.instrumentTrackId)) {
+        if (row.tracks.auxIndex) {
+            row.item->setColor(settings->auxOutputParams(*row.tracks.auxIndex).color);
+        } else if (settings->trackHasExistingOutputParams(row.tracks.instrumentTrackId)) {
             row.item->setColor(settings->trackOutputParams(row.tracks.instrumentTrackId).color);
         }
     }
@@ -497,6 +620,7 @@ void TrackListModel::rebuildVideoChannelItem()
     const TrackId trackId = controller()->videoTrackId();
     m_videoChannelItem = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, trackId);
     m_videoChannelItem->setTitle(muse::qtrc("playback", "Video"));
+    connectGlobalMuteSolo(m_videoChannelItem);
     if (trackId != INVALID_TRACK_ID) {
         m_videoChannelItem->subscribeOnTrackAudioSignalChanges();
     }
@@ -636,7 +760,7 @@ void TrackListModel::applyTrackColor(int row, const QColor& color, const Transla
             continue;
         }
 
-        targets.push_back({ r.tracks.instrumentTrackId, std::nullopt });
+        targets.push_back({ r.tracks.instrumentTrackId, r.tracks.auxIndex });
         for (const InstrumentTrackId& trackId : r.tracks.otherInstrumentTrackIds) {
             targets.push_back({ trackId, std::nullopt });
         }
@@ -670,6 +794,7 @@ void TrackListModel::setSoloForSelectedRows(bool solo)
     ChannelSelection::setSolo(channels(), solo);
 }
 
+//! NOTE: the listed channels: the selection's, and the global Mute/Solo's (with the shown Metronome and Video rows)
 GlobalMuteSoloToggle::Channels TrackListModel::channels() const
 {
     GlobalMuteSoloToggle::Channels channels;
@@ -680,25 +805,38 @@ GlobalMuteSoloToggle::Channels TrackListModel::channels() const
     return channels;
 }
 
+GlobalMuteSoloToggle::Channels TrackListModel::globalMuteSoloChannels() const
+{
+    GlobalMuteSoloToggle::Channels channels = this->channels();
+    if (m_metronomeChannelItem && metronomeVisible()) {
+        channels.push_front(m_metronomeChannelItem);
+    }
+    if (m_videoChannelItem && m_hasVideo && videoVisible()) {
+        channels.push_front(m_videoChannelItem);
+    }
+
+    return channels;
+}
+
 bool TrackListModel::globalMuteEngaged() const
 {
-    return GlobalMuteSoloToggle::muteEngaged(channels());
+    return GlobalMuteSoloToggle::muteEngaged(globalMuteSoloChannels());
 }
 
 bool TrackListModel::globalSoloEngaged() const
 {
-    return GlobalMuteSoloToggle::soloEngaged(channels());
+    return GlobalMuteSoloToggle::soloEngaged(globalMuteSoloChannels());
 }
 
 void TrackListModel::toggleGlobalMute()
 {
-    m_globalMuteSolo.toggleMute(channels());
+    m_globalMuteSolo.toggleMute(globalMuteSoloChannels());
     emit globalMuteEngagedChanged();
 }
 
 void TrackListModel::toggleGlobalSolo()
 {
-    m_globalMuteSolo.toggleSolo(channels());
+    m_globalMuteSolo.toggleSolo(globalMuteSoloChannels());
     emit globalSoloEngagedChanged();
 }
 
