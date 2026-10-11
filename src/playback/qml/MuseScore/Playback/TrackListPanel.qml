@@ -684,10 +684,10 @@ Item {
                             navigation.column: 4
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
+                            //! NOTE: without a map (dimmed), opens the editor on a new one for the track
                             onClicked: {
-                                if (rowItem.hasArticulationMap) {
-                                    rowItem.channelItem.handleArticulationMapMenuItem("editArticulationMap")
-                                }
+                                rowItem.channelItem.handleArticulationMapMenuItem(rowItem.hasArticulationMap ? "editArticulationMap"
+                                                                                                             : "newArticulationMap")
                             }
 
                             //! NOTE: right click: the Mixer's "Articulation map" menu

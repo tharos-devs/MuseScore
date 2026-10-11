@@ -523,7 +523,23 @@ void ArticulationMapEditorModel::newMap()
     confirmDiscardChanges([this]() {
         m_editsTargetTrackMap = false;
         setFile(ArticulationMapParser::Result(), io::path_t());
+        removeTargetTrackMap();
     });
+}
+
+//! NOTE: "New" starts the track over: its map is removed (undoable, like its "Remove" menu item), the new one is
+//! attached by "Reload into the track"
+void ArticulationMapEditorModel::removeTargetTrackMap()
+{
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!m_targetTrack || !maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
+        return;
+    }
+
+    EditArticulationMapChanges changes;
+    changes.maps.emplace(*m_targetTrack, std::nullopt);
+    maps->edit(changes, muse::TranslatableString("undoableAction", "Remove articulation map"));
 }
 
 void ArticulationMapEditorModel::openMap()

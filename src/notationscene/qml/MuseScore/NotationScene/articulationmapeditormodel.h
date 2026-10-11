@@ -273,6 +273,7 @@ private:
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
     bool writeFile(const muse::io::path_t& path, bool reloadTracks = true);
+    void removeTargetTrackMap();
     void reloadTracksUsingFile(const muse::io::path_t& path, const std::optional<engraving::InstrumentTrackId>& alsoTrack);
     std::optional<engraving::InstrumentTrackId> targetTrackToUpdate() const;
     muse::io::path_t mapsDir() const;
