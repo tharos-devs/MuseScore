@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-11
+- Track list: the dimmed articulation map button (a VST3 instrument without a map) opens the editor on a new map for the track.
+- Articulation map editor: "New" removes the track's map (undoable), and the Close button applies the editor's map to the track (saved first if needed, a file chosen for a new one) - closing the window or Escape still cancels.
 - Track list: a Metronome row (Mute) above the Video row, and the Aux FX/Aux Group buses' rows below the instruments, in the Mixer's order (color, Mute, Solo - disabled for an FX bus); the global Mute/Solo act on every listed row but the metronome. A View menu in its "…" menu shows/hides Video, Metronome, Instruments, Aux FX and Aux Group; the Mixer's "…" menu has the same items (replacing View > Aux channels), each panel remembering its own.
 - A Group bus's Solo now also solos its channels from the Track list too, and when they're hidden in the Mixer.
 - Fixed: the metronome channel's Mute didn't follow the metronome turned on/off elsewhere (toolbar, the other panel).
