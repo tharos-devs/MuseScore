@@ -2289,6 +2289,9 @@ void PlaybackController::subscribeOnAudioParamsChanges()
             AudioOutputParams outParams = videoOutputParams();
             outParams.auxSends = params;
             setVideoOutputParams(outParams);
+
+            //! NOTE: routing a track to a group bus changes which group buses a solo keeps audible
+            updateSoloMuteStates();
             return;
         }
 
@@ -2300,6 +2303,7 @@ void PlaybackController::subscribeOnAudioParamsChanges()
             AudioOutputParams outParams = audioSettings()->trackOutputParams(instrumentIt->first);
             outParams.auxSends = params;
             audioSettings()->setTrackOutputParams(instrumentIt->first, outParams);
+            updateSoloMuteStates();
             return;
         }
 
