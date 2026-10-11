@@ -1259,7 +1259,6 @@ void MixerPanelModel::setupConnections()
         }
     });
 
-
     //! NOTE: an instrument channel follows its own sound and aux sends, see MixerChannelItem::bindInstrumentTrack()
 
     playback()->fxChainParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioFxChain& params) {
@@ -1342,7 +1341,6 @@ void MixerPanelModel::setupConnections()
             item->loadMuteForceMuteState(muted, forceMute);
         }
     });
-
 
     subscribeOnAutomationChanges();
 }

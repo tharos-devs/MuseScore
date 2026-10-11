@@ -69,9 +69,11 @@ MenuItemList ChannelCategoriesMenu::makeItems(QObject* parent)
         item->setTitle(channelCategoryTitle(category));
         item->setCheckable(true);
         item->setChecked(configuration()->isChannelCategoryVisible(m_panel, category));
-        item->setCommandQuery(rcommand::make_query(TOGGLE_CHANNEL_CATEGORY_COMMAND,
-                                                   { { "panel", Val(str_conv(m_panel)) },
-                                                     { "category", Val(str_conv(category)) } }));
+
+        rcommand::Params params;
+        params["panel"] = Val(str_conv(m_panel));
+        params["category"] = Val(str_conv(category));
+        item->setCommandQuery(rcommand::make_query(TOGGLE_CHANNEL_CATEGORY_COMMAND, params));
 
         m_items[category] = item;
         items << item;
