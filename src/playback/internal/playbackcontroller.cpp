@@ -344,6 +344,36 @@ bool PlaybackController::isAuxBusGroup(aux_channel_idx_t index) const
     return audioSettings()->isAuxBusGroup(index);
 }
 
+bool PlaybackController::auxBusFeeds(aux_channel_idx_t source, aux_channel_idx_t target) const
+{
+    std::vector<aux_channel_idx_t> toVisit { source };
+    std::set<aux_channel_idx_t> visited;
+
+    while (!toVisit.empty()) {
+        aux_channel_idx_t bus = toVisit.back();
+        toVisit.pop_back();
+
+        if (!visited.insert(bus).second || !muse::contains(m_auxTrackIdMap, bus)) {
+            continue;
+        }
+
+        const AuxSendsParams& auxSends = audioSettings()->auxOutputParams(bus).auxSends;
+        for (aux_channel_idx_t next = 0; next < auxSends.size(); ++next) {
+            if (next == bus || isBlankAuxSend(auxSends.at(next))) {
+                continue;
+            }
+
+            if (next == target) {
+                return true;
+            }
+
+            toVisit.push_back(next);
+        }
+    }
+
+    return false;
+}
+
 Channel<aux_channel_idx_t, std::string> PlaybackController::auxChannelNameChanged() const
 {
     return m_auxChannelNameChanged;
@@ -2256,6 +2286,9 @@ void PlaybackController::subscribeOnAudioParamsChanges()
             AudioOutputParams outParams = audioSettings()->auxOutputParams(auxIdx);
             outParams.auxSends = params;
             audioSettings()->setAuxOutputParams(auxIdx, outParams);
+
+            //! NOTE: a bus routed to a group bus changes which buses a solo keeps audible
+            updateSoloMuteStates();
         }
     });
 }
@@ -2433,22 +2466,55 @@ void PlaybackController::updateSoloMuteStates()
     //! would also let track 3 bleed through. directlySoloedGroupBuses (bus-solo only) is
     //! what per-track exemption below must use; audibleGroupBuses (both reasons merged) is
     //! only for the group bus channel's OWN force-mute decision in updateAuxMuteStates().
+    //!
+    //! A group bus can itself be routed to another group bus: soloing a bus also exempts the
+    //! group buses feeding it (and their tracks), and anything audible keeps every group bus
+    //! after it on its way to master audible too - but not the other tracks feeding those.
     std::vector<aux_channel_idx_t> audibleGroupBuses;
     std::vector<aux_channel_idx_t> directlySoloedGroupBuses;
     if (hasSolo) {
+        auto groupBusTargets = [this](const AuxSendsParams& auxSends) {
+            std::vector<aux_channel_idx_t> targets;
+            for (size_t i = 0; i < auxSends.size(); ++i) {
+                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
+                if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount) && audioSettings()->isAuxBusGroup(auxIdx)) {
+                    targets.push_back(auxIdx);
+                }
+            }
+            return targets;
+        };
+
+        auto feedsAny = [&groupBusTargets](const AuxSendsParams& auxSends, const std::vector<aux_channel_idx_t>& buses) {
+            for (aux_channel_idx_t target : groupBusTargets(auxSends)) {
+                if (muse::contains(buses, target)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         for (const auto& pair : m_auxTrackIdMap) {
             if (audioSettings()->isAuxBusGroup(pair.first) && audioSettings()->auxSoloMuteState(pair.first).solo) {
-                audibleGroupBuses.push_back(pair.first);
+                directlySoloedGroupBuses.push_back(pair.first);
             }
         }
 
-        directlySoloedGroupBuses = audibleGroupBuses;
+        for (bool added = true; added;) {
+            added = false;
+            for (const auto& pair : m_auxTrackIdMap) {
+                if (audioSettings()->isAuxBusGroup(pair.first) && !muse::contains(directlySoloedGroupBuses, pair.first)
+                    && feedsAny(audioSettings()->auxOutputParams(pair.first).auxSends, directlySoloedGroupBuses)) {
+                    directlySoloedGroupBuses.push_back(pair.first);
+                    added = true;
+                }
+            }
+        }
 
-        auto addAudibleGroupBuses = [this, &audibleGroupBuses](const AuxSendsParams& auxSends) {
-            for (size_t i = 0; i < auxSends.size(); ++i) {
-                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
-                if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount)
-                    && audioSettings()->isAuxBusGroup(auxIdx) && !muse::contains(audibleGroupBuses, auxIdx)) {
+        audibleGroupBuses = directlySoloedGroupBuses;
+
+        auto addAudibleGroupBuses = [&audibleGroupBuses, &groupBusTargets](const AuxSendsParams& auxSends) {
+            for (aux_channel_idx_t auxIdx : groupBusTargets(auxSends)) {
+                if (!muse::contains(audibleGroupBuses, auxIdx)) {
                     audibleGroupBuses.push_back(auxIdx);
                 }
             }
@@ -2464,6 +2530,11 @@ void PlaybackController::updateSoloMuteStates()
 
         if (isVideoSoloed) {
             addAudibleGroupBuses(videoOutputParams().auxSends);
+        }
+
+        //! NOTE: grows while being walked - each new bus's own targets are added after it
+        for (size_t i = 0; i < audibleGroupBuses.size(); ++i) {
+            addAudibleGroupBuses(audioSettings()->auxOutputParams(audibleGroupBuses[i]).auxSends);
         }
     }
 

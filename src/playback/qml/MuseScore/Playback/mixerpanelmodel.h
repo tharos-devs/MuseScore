@@ -225,6 +225,8 @@ private:
     //! gestures (see MixerChannelItem::beginVolumeChange() et al.) undoable - called
     //! for every channel type, same as connectGlobalMuteSoloAggregate() above.
     void connectContinuousChangeUndo(MixerChannelItem* item);
+    //! NOTE: undo for a send slot pointed at another bus (and the fan-out to the other selected tracks)
+    void connectAuxSendReassignment(MixerChannelItem* item);
 
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem

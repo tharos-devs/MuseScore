@@ -105,6 +105,9 @@ public:
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const = 0;
 
     virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
+    //! NOTE: whether a bus's signal reaches another one through bus-to-bus aux sends (directly or via other
+    //! buses), counting bypassed sends too - a send from target to source would then close a routing loop
+    virtual bool auxBusFeeds(muse::audio::aux_channel_idx_t source, muse::audio::aux_channel_idx_t target) const = 0;
     virtual muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const = 0;
 
     virtual muse::async::Promise<muse::audio::SoundPresetList>

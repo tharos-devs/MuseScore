@@ -77,18 +77,13 @@ static QString auxBusPositionalName(aux_channel_idx_t displayNumber, bool isGrou
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
 //! {signalAmount: 0.f, active: false} - the SAME value a default-constructed AuxSendParams
-//! has. Using -1.f (outside the valid [0;1] gain range) as the "never assigned" sentinel
-//! instead lets a reload correctly tell the two apart; the engine never acts on this value
-//! for a blank entry since it's always paired with active=false (see writeTrackToAuxBuffers,
+//! has. BLANK_AUX_SEND's -1.f (outside the valid [0;1] gain range) as the "never assigned"
+//! sentinel instead lets a reload correctly tell the two apart; the engine never acts on this
+//! value for a blank entry since it's always paired with active=false (see writeTrackToAuxBuffers,
 //! which skips non-active sends before ever reading signalAmount)
 static AuxSendParams blankAuxSendParams()
 {
-    return AuxSendParams { -1.f, false };
-}
-
-static bool isBlankAuxSend(const AuxSendParams& params)
-{
-    return params == blankAuxSendParams();
+    return BLANK_AUX_SEND;
 }
 
 //! NOTE: growing this vector must pad new positions with the blank sentinel, not the
@@ -1629,6 +1624,11 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 
         if (usedByAnotherSlot) {
             continue; // already targeted by another slot on this track
+        }
+
+        //! NOTE: a bus can't send to itself, nor to a bus that already feeds it - that would be a routing loop
+        if (m_type == Type::Aux && (busIndex == m_auxBusIndex || playbackController()->auxBusFeeds(busIndex, m_auxBusIndex))) {
+            continue;
         }
 
         bool isGroupBus = playbackController()->isAuxBusGroup(busIndex);
