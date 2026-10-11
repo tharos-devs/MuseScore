@@ -2638,8 +2638,11 @@ void Note::setHeadGroup(NoteHeadGroup val)
 
 int Note::ottaveCapoFret() const
 {
+    //! NOTE: a note played without being in the score (a MIDI keyboard's or the Percussion panel's preview, with no
+    //! note input segment) has no segment since its chord is parked on the score's dummy: taken at the start
     const Chord* ch = chord();
-    Fraction segmentTick = ch->segment()->tick();
+    const Segment* segment = ch ? ch->segment() : nullptr;
+    Fraction segmentTick = segment ? segment->tick() : Fraction(0, 1);
     const Staff* staff = this->staff();
 
     const CapoParams& capo = staff->capo(segmentTick);
