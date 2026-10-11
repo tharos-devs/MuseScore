@@ -43,6 +43,7 @@
 
 #include "audio/common/audiotypes.h"
 #include "audio/main/iplayback.h"
+#include "notation/inotationconfiguration.h"
 #include "project/iprojectaudiosettings.h"
 #include "inputresourceitem.h"
 #include "outputresourceitem.h"
@@ -102,6 +103,7 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     QML_UNCREATABLE("Must be created in C++ only")
 
     muse::GlobalInject<IPlaybackConfiguration> configuration;
+    muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };

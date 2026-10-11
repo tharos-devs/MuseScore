@@ -472,6 +472,16 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
     setInstrumentTrackId(instrumentTrackId);
     loadSoloMuteState(playbackController()->trackSoloMuteState(instrumentTrackId));
 
+    //! NOTE: the metronome's "mute" is the metronome being off (see PlaybackController::setTrackSoloMuteState()),
+    //! changed from the toolbar, the Mixer or the Track list: follow it
+    if (m_type == Type::Metronome) {
+        auto loadMetronomeMute = [this]() {
+            loadMuteForceMuteState(!notationConfiguration()->isMetronomeEnabled(), false);
+        };
+        loadMetronomeMute();
+        notationConfiguration()->isMetronomeEnabledChanged().onNotify(this, loadMetronomeMute);
+    }
+
     playback()->params(m_trackId)
     .onResolve(this, [this, instrumentTrackId](const TrackParams& params) {
         const project::INotationProjectPtr project = context()->currentProject();
