@@ -54,6 +54,10 @@ Item {
     //! only one of the three with no other way at all to trigger it.
     property bool compact: false
 
+    //! NOTE Opt-in: a title too long for the button is cut at the button's inner padding
+    //! instead of ending with "..."
+    property bool clipTitle: false
+
     readonly property bool showAdditionalButtons: rootMouseArea.containsMouse || (navigationPanel ? navigationPanel.highlight : false) || resourcePickingActive
 
     //! NOTE Named separately from the title button's `enabled` below -- when
@@ -315,6 +319,11 @@ Item {
                     height: titleButton.height
 
                     text: root.title
+
+                    elide: root.clipTitle ? Text.ElideNone : Text.ElideRight
+                    clip: root.clipTitle
+                    //! NOTE centered text wider than the label would be cut on both sides
+                    horizontalAlignment: root.clipTitle && implicitWidth > width ? Text.AlignLeft : Text.AlignHCenter
                 }
 
                 mouseArea.cursorShape: root.reorderingActive ? Qt.SizeVerCursor : Qt.ArrowCursor
