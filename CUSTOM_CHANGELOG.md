@@ -4,6 +4,13 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-11
+- Mixer: Aux/Group buses have their own aux send slots, so a bus can send to other buses (Group→Group sub-groups, FX→Group, Group→FX, FX→FX). A bus's menu never offers itself nor a bus that already feeds it, so routing can't loop (a loop from a project file is broken safely by the engine). Buses are processed in routing order; a muted Group bus anywhere down a chain silences what goes through it, and Solo follows Group→Group chains.
+- Mixer: Solo on a Group bus also solos the channels routed to it (and the Group buses feeding it, with their channels); removing its Solo removes theirs. A track now plays during a solo only if it's soloed itself, even when it's routed to a soloed Group bus.
+- Mixer: the aux send menus list the buses in the Mixer's channel order (FX buses then Group buses, as dragged), not in creation order.
+- Mixer: an aux send slot's name too long for the button is cut at its inner padding instead of ending with "...".
+- Fixed: routing a track (or the video) to another Group bus while a solo was active left that bus muted - and the track silent - until the next solo change.
+
 ### 2026-10-10
 - Note input toolbar: a MIDI button right of "Customize toolbar" turns on/off "When pressing a key, begin note input at the selected measure, note, or rest" (Preferences > Note input), also as the "Start note input on MIDI key press" shortcut action (no default shortcut, shown in the button's tooltip). Disabled while MIDI input is off, like the preference.
 - Preferences > Appearance: "Secondary windows always on top" keeps the secondary window above the main window while MuseScore is the active application - not while it's full screen (e.g. on a second screen), nor while a dialog has the focus (Preferences, a plugin window, the articulation map editor...). Our popups, menus, floating panels and tool windows (Master palette...) stay above it.
