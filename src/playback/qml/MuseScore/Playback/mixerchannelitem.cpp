@@ -1611,7 +1611,6 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 
     //! NOTE: listed in the Mixer's own channel order
     for (aux_channel_idx_t busIndex : playbackController()->sortedAuxBusIndices()) {
-
         //! NOTE: whether another slot is really using a bus must be based on its auxIndex(),
         //! not isBlank() - a slot bypassed with its knob at 0% is isBlank() but still holds
         //! a real target bus, and would otherwise let this bus be offered to two slots at once
