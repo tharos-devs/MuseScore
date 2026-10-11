@@ -374,6 +374,38 @@ bool PlaybackController::auxBusFeeds(aux_channel_idx_t source, aux_channel_idx_t
     return false;
 }
 
+std::vector<aux_channel_idx_t> PlaybackController::sortedAuxBusIndices() const
+{
+    std::vector<aux_channel_idx_t> fxIndices;
+    std::vector<aux_channel_idx_t> groupIndices;
+    for (const auto& pair : m_auxTrackIdMap) {
+        if (isAuxBusGroup(pair.first)) {
+            groupIndices.push_back(pair.first);
+        } else {
+            fxIndices.push_back(pair.first);
+        }
+    }
+
+    auto bySortOrder = [this](aux_channel_idx_t a, aux_channel_idx_t b) {
+        return auxBusSortOrder(a) < auxBusSortOrder(b);
+    };
+    std::stable_sort(fxIndices.begin(), fxIndices.end(), bySortOrder);
+    std::stable_sort(groupIndices.begin(), groupIndices.end(), bySortOrder);
+
+    fxIndices.insert(fxIndices.end(), groupIndices.begin(), groupIndices.end());
+    return fxIndices;
+}
+
+int PlaybackController::auxBusSortOrder(aux_channel_idx_t index) const
+{
+    //! NOTE: sort order is the user's drag-and-drop reorder position, not the bus's own
+    //! stable index - falling back to the index for a bus that's never had one assigned is
+    //! only a defensive fallback in practice, since ensureAuxSortOrderAssigned() gives every
+    //! bus a real one (initially matching its ascending-index position) as soon as it's loaded
+    int order = audioSettings()->auxSortOrder(index);
+    return order >= 0 ? order : static_cast<int>(index);
+}
+
 Channel<aux_channel_idx_t, std::string> PlaybackController::auxChannelNameChanged() const
 {
     return m_auxChannelNameChanged;
