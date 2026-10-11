@@ -76,6 +76,8 @@ public:
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
     bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    std::vector<muse::audio::aux_channel_idx_t> sortedAuxBusIndices() const override;
+    int auxBusSortOrder(muse::audio::aux_channel_idx_t index) const override;
     muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
 
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(

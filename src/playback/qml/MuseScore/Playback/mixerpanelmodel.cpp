@@ -1424,51 +1424,14 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
     return INVALID_INDEX;
 }
 
-int MixerPanelModel::auxSortOrderOrIndex(aux_channel_idx_t index) const
-{
-    //! NOTE: sort order is the user's drag-and-drop reorder position (see
-    //! reorderAuxChannels()), not the bus's own stable index - falling back to the
-    //! index for a bus that's never had one assigned is only a defensive fallback in
-    //! practice, since PlaybackController::ensureAuxSortOrderAssigned() gives every bus
-    //! a real one (initially matching its ascending-index position) as soon as it's
-    //! loaded. Shared by sortedAuxIndices() and resolveAuxInsertIndex() below, which
-    //! must stay consistent with each other.
-    int order = audioSettings()->auxSortOrder(index);
-    return order >= 0 ? order : static_cast<int>(index);
-}
-
 std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 {
-    //! NOTE: single source of truth for "FX-type buses first (by sort order), then
-    //! Group-type buses (by sort order)" - shared by reloadItems() and the
-    //! areAuxChannelsVisibleChanged handler in setupConnections(), which both need to
-    //! (re)build the aux section of the channel list in this same order. Must stay
+    //! NOTE: shared by reloadItems() and the areAuxChannelsVisibleChanged handler in
+    //! setupConnections(), which both need to (re)build the aux section of the channel
+    //! list in this same order (also the order of the aux send menus). Must stay
     //! consistent with resolveAuxInsertIndex() below, which resolves the equivalent
     //! position for a single newly-added bus rather than the whole list at once.
-    std::vector<aux_channel_idx_t> indices;
-    const auto& auxTrackIdMap = controller()->auxTrackIdMap();
-    indices.reserve(auxTrackIdMap.size());
-
-    std::vector<aux_channel_idx_t> fxIndices;
-    std::vector<aux_channel_idx_t> groupIndices;
-    for (const auto& pair : auxTrackIdMap) {
-        if (controller()->isAuxBusGroup(pair.first)) {
-            groupIndices.push_back(pair.first);
-        } else {
-            fxIndices.push_back(pair.first);
-        }
-    }
-
-    auto bySortOrder = [this](aux_channel_idx_t a, aux_channel_idx_t b) {
-        return auxSortOrderOrIndex(a) < auxSortOrderOrIndex(b);
-    };
-    std::stable_sort(fxIndices.begin(), fxIndices.end(), bySortOrder);
-    std::stable_sort(groupIndices.begin(), groupIndices.end(), bySortOrder);
-
-    indices.insert(indices.end(), fxIndices.begin(), fxIndices.end());
-    indices.insert(indices.end(), groupIndices.begin(), groupIndices.end());
-
-    return indices;
+    return controller()->sortedAuxBusIndices();
 }
 
 int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
@@ -1486,7 +1449,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
     //! being a stable function of the current bus set and its persisted order. Stopping
     //! at video/metronome too (not just master) keeps aux buses added after those
     //! already exist from landing on the wrong side of them.
-    int ownOrder = auxSortOrderOrIndex(index);
+    int ownOrder = controller()->auxBusSortOrder(index);
 
     if (isGroupBus) {
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
@@ -1497,7 +1460,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
                 return i;
             }
             if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus()
-                && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
+                && controller()->auxBusSortOrder(item->auxBusIndex()) > ownOrder) {
                 return i;
             }
         }
@@ -1513,7 +1476,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
             return i;
         }
-        if (item->type() == MixerChannelItem::Type::Aux && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
+        if (item->type() == MixerChannelItem::Type::Aux && controller()->auxBusSortOrder(item->auxBusIndex()) > ownOrder) {
             return i;
         }
     }

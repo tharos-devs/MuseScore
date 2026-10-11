@@ -200,9 +200,6 @@ private:
     int resolveVideoInsertIndex() const;
     std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
     int resolveAuxInsertIndex(muse::audio::aux_channel_idx_t index, bool isGroupBus) const;
-    //! NOTE: shared by sortedAuxIndices() and resolveAuxInsertIndex(), which must stay
-    //! consistent with each other - see sortedAuxIndices()'s own NOTE.
-    int auxSortOrderOrIndex(muse::audio::aux_channel_idx_t index) const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,

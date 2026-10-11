@@ -1609,8 +1609,8 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 {
     AuxSendItem::MenuData data;
 
-    for (const auto& pair : playbackController()->auxTrackIdMap()) {
-        aux_channel_idx_t busIndex = pair.first;
+    //! NOTE: listed in the Mixer's own channel order
+    for (aux_channel_idx_t busIndex : playbackController()->sortedAuxBusIndices()) {
 
         //! NOTE: whether another slot is really using a bus must be based on its auxIndex(),
         //! not isBlank() - a slot bypassed with its knob at 0% is isBlank() but still holds

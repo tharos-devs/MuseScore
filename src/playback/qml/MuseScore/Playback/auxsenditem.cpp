@@ -127,9 +127,8 @@ void AuxSendItem::requestAvailableResources()
     if (!data.availableBuses.empty()) {
         result << buildSeparator();
 
-        //! NOTE: FX-type buses are listed together, followed by all Group-type buses,
-        //! rather than interleaved in raw index order - mirrors the mixer channel strip
-        //! ordering in MixerPanelModel::resolveAuxInsertIndex()
+        //! NOTE: FX-type buses are listed together, followed by all Group-type buses, each in
+        //! the order they come in (the Mixer's, see IPlaybackController::sortedAuxBusIndices())
         bool hasFxBus = false;
         bool hasGroupBus = false;
         for (const BusOption& option : data.availableBuses) {

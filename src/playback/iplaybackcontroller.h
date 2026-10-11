@@ -105,6 +105,10 @@ public:
     virtual muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const = 0;
 
     virtual bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const = 0;
+    //! NOTE: the buses in their Mixer order: FX buses first, then Group buses, each by their (drag-and-drop) sort order
+    virtual std::vector<muse::audio::aux_channel_idx_t> sortedAuxBusIndices() const = 0;
+    //! NOTE: a bus's position among the buses of its type, see sortedAuxBusIndices()
+    virtual int auxBusSortOrder(muse::audio::aux_channel_idx_t index) const = 0;
     virtual muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const = 0;
 
     virtual muse::async::Promise<muse::audio::SoundPresetList>
