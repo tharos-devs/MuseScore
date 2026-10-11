@@ -37,6 +37,15 @@ static constexpr muse::audio::aux_channel_idx_t DEFAULT_AUX_CHANNEL_NUM = 2;
 static constexpr muse::audio::aux_channel_idx_t MAX_AUX_CHANNEL_NUM = 20;
 static constexpr muse::audio::aux_channel_idx_t REVERB_CHANNEL_IDX = 0;
 
+//! NOTE: an unused slot of a track's (or bus's) aux sends. A real send bypassed and pulled to 0%
+//! is AuxSendParams{0, false}: -1 (outside the valid [0;1] gain range) tells "never assigned" apart
+static constexpr muse::audio::AuxSendParams BLANK_AUX_SEND { -1.f, false };
+
+inline bool isBlankAuxSend(const muse::audio::AuxSendParams& params)
+{
+    return params == BLANK_AUX_SEND;
+}
+
 enum class PlaybackCursorType {
     SMOOTH,
     STEPPED

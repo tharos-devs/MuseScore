@@ -202,6 +202,21 @@ bool PlaybackControllerStub::isAuxBusGroup(muse::audio::aux_channel_idx_t) const
     return false;
 }
 
+bool PlaybackControllerStub::auxBusFeeds(muse::audio::aux_channel_idx_t, muse::audio::aux_channel_idx_t) const
+{
+    return false;
+}
+
+std::vector<muse::audio::aux_channel_idx_t> PlaybackControllerStub::sortedAuxBusIndices() const
+{
+    return {};
+}
+
+int PlaybackControllerStub::auxBusSortOrder(muse::audio::aux_channel_idx_t index) const
+{
+    return index;
+}
+
 muse::audio::aux_channel_idx_t PlaybackControllerStub::resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const
 {
     return index + 1;

@@ -270,6 +270,87 @@ void MixerPanelModel::connectContinuousChangeUndo(MixerChannelItem* item)
     });
 }
 
+void MixerPanelModel::connectAuxSendReassignment(MixerChannelItem* item)
+{
+    auto isInstrumentItem = [](const MixerChannelItem* channel) {
+        return channel->type() == MixerChannelItem::Type::PrimaryInstrument
+               || channel->type() == MixerChannelItem::Type::SecondaryInstrument;
+    };
+
+    //! NOTE: fans a user-picked aux-send bus out to every OTHER selected instrument
+    //! track, mirroring the multi-select behavior color/drag-reorder/mute/solo
+    //! already have - a no-op unless this item itself is a currently selected instrument
+    //! track (picking a bus on an unselected channel affects only that one channel, same as
+    //! clicking its own Mute/Solo button would; on a bus, only that bus: the bus picked
+    //! there was checked against routing loops for that bus alone).
+    connect(item, &MixerChannelItem::auxSendReassignedByUser, this,
+            [this, item, isInstrumentItem](aux_channel_idx_t oldBusIndex, aux_channel_idx_t newBusIndex) {
+        QList<muse::audio::TrackId> fanOutTrackIds;
+
+        if (item->selected() && isInstrumentItem(item)) {
+            for (MixerChannelItem* other : std::as_const(m_mixerChannelList)) {
+                if (other == item || !other->selected()) {
+                    continue;
+                }
+
+                if (isInstrumentItem(other)) {
+                    other->assignAuxSend(newBusIndex);
+                    fanOutTrackIds.push_back(other->trackId());
+                }
+            }
+        }
+
+        IProjectUndoStackPtr undoStack = projectUndoStack();
+        if (!undoStack) {
+            return;
+        }
+
+        QPointer<MixerPanelModel> guard(this);
+        muse::audio::TrackId primaryTrackId = item->trackId();
+
+        //! NOTE: undo/redo work purely at the semantic level (clearAuxSendsTargeting/
+        //! assignAuxSend), never on a captured AuxSendItem* slot pointer - a track's
+        //! aux-send slot list can be rebuilt (compactAuxSendItemKeys() etc.) by unrelated
+        //! changes before undo fires, which would leave a raw slot pointer dangling.
+        undoStack->push(muse::TranslatableString("undoableAction", "Assign Mixer aux send"),
+                        [guard, primaryTrackId, oldBusIndex, newBusIndex, fanOutTrackIds]() {
+            if (!guard) {
+                return;
+            }
+
+            if (MixerChannelItem* primary = guard->findChannelItem(primaryTrackId)) {
+                if (oldBusIndex != AuxSendItem::NO_BUS) {
+                    primary->clearAuxSendsTargeting(oldBusIndex);
+                }
+                primary->assignAuxSend(newBusIndex);
+            }
+
+            for (const muse::audio::TrackId& trackId : fanOutTrackIds) {
+                if (MixerChannelItem* other = guard->findChannelItem(trackId)) {
+                    other->assignAuxSend(newBusIndex);
+                }
+            }
+        }, [guard, primaryTrackId, oldBusIndex, newBusIndex, fanOutTrackIds]() {
+            if (!guard) {
+                return;
+            }
+
+            if (MixerChannelItem* primary = guard->findChannelItem(primaryTrackId)) {
+                primary->clearAuxSendsTargeting(newBusIndex);
+                if (oldBusIndex != AuxSendItem::NO_BUS) {
+                    primary->assignAuxSend(oldBusIndex);
+                }
+            }
+
+            for (const muse::audio::TrackId& trackId : fanOutTrackIds) {
+                if (MixerChannelItem* other = guard->findChannelItem(trackId)) {
+                    other->clearAuxSendsTargeting(newBusIndex);
+                }
+            }
+        });
+    });
+}
+
 void MixerPanelModel::setMutedForSelectedChannels(bool muted)
 {
     ChannelSelection::setMuted(m_mixerChannelList, muted);
@@ -278,6 +359,57 @@ void MixerPanelModel::setMutedForSelectedChannels(bool muted)
 void MixerPanelModel::setSoloForSelectedChannels(bool solo)
 {
     ChannelSelection::setSolo(m_mixerChannelList, solo);
+
+    for (const MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+        if (item->selected() && item->isGroupBus() && item->solo() == solo) {
+            setSoloForGroupBusSources(item->auxBusIndex(), solo);
+        }
+    }
+}
+
+void MixerPanelModel::setChannelSolo(MixerChannelItem* channelItem, bool solo)
+{
+    IF_ASSERT_FAILED(channelItem) {
+        return;
+    }
+
+    channelItem->setSolo(solo);
+
+    if (channelItem->isGroupBus()) {
+        setSoloForGroupBusSources(channelItem->auxBusIndex(), solo);
+    }
+}
+
+void MixerPanelModel::setSoloForGroupBusSources(aux_channel_idx_t busIndex, bool solo)
+{
+    //! NOTE: the channels routed to this Group bus (an active send, as the engine routes them),
+    //! and to the Group buses feeding it, follow its Solo. Soloing skips a manually muted one,
+    //! like Solo set on a selection
+    std::vector<aux_channel_idx_t> groupBuses { busIndex };
+
+    for (size_t i = 0; i < groupBuses.size(); ++i) {
+        for (MixerChannelItem* item : std::as_const(m_mixerChannelList)) {
+            if (item->type() == MixerChannelItem::Type::Master || item->type() == MixerChannelItem::Type::Metronome) {
+                continue;
+            }
+
+            const AuxSendItem* send = item->auxSendItemForBus(groupBuses[i]);
+            if (!send || !send->isActive() || send->audioSignalPercentage() == 0) {
+                continue;
+            }
+
+            if (item->isGroupBus()) {
+                if (muse::contains(groupBuses, item->auxBusIndex())) {
+                    continue;
+                }
+                groupBuses.push_back(item->auxBusIndex());
+            }
+
+            if (!solo || ChannelSelection::canTakeSolo(item)) {
+                item->setSolo(solo);
+            }
+        }
+    }
 }
 
 void MixerPanelModel::clearSelection()
@@ -1424,51 +1556,14 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
     return INVALID_INDEX;
 }
 
-int MixerPanelModel::auxSortOrderOrIndex(aux_channel_idx_t index) const
-{
-    //! NOTE: sort order is the user's drag-and-drop reorder position (see
-    //! reorderAuxChannels()), not the bus's own stable index - falling back to the
-    //! index for a bus that's never had one assigned is only a defensive fallback in
-    //! practice, since PlaybackController::ensureAuxSortOrderAssigned() gives every bus
-    //! a real one (initially matching its ascending-index position) as soon as it's
-    //! loaded. Shared by sortedAuxIndices() and resolveAuxInsertIndex() below, which
-    //! must stay consistent with each other.
-    int order = audioSettings()->auxSortOrder(index);
-    return order >= 0 ? order : static_cast<int>(index);
-}
-
 std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 {
-    //! NOTE: single source of truth for "FX-type buses first (by sort order), then
-    //! Group-type buses (by sort order)" - shared by reloadItems() and the
-    //! areAuxChannelsVisibleChanged handler in setupConnections(), which both need to
-    //! (re)build the aux section of the channel list in this same order. Must stay
+    //! NOTE: shared by reloadItems() and the areAuxChannelsVisibleChanged handler in
+    //! setupConnections(), which both need to (re)build the aux section of the channel
+    //! list in this same order (also the order of the aux send menus). Must stay
     //! consistent with resolveAuxInsertIndex() below, which resolves the equivalent
     //! position for a single newly-added bus rather than the whole list at once.
-    std::vector<aux_channel_idx_t> indices;
-    const auto& auxTrackIdMap = controller()->auxTrackIdMap();
-    indices.reserve(auxTrackIdMap.size());
-
-    std::vector<aux_channel_idx_t> fxIndices;
-    std::vector<aux_channel_idx_t> groupIndices;
-    for (const auto& pair : auxTrackIdMap) {
-        if (controller()->isAuxBusGroup(pair.first)) {
-            groupIndices.push_back(pair.first);
-        } else {
-            fxIndices.push_back(pair.first);
-        }
-    }
-
-    auto bySortOrder = [this](aux_channel_idx_t a, aux_channel_idx_t b) {
-        return auxSortOrderOrIndex(a) < auxSortOrderOrIndex(b);
-    };
-    std::stable_sort(fxIndices.begin(), fxIndices.end(), bySortOrder);
-    std::stable_sort(groupIndices.begin(), groupIndices.end(), bySortOrder);
-
-    indices.insert(indices.end(), fxIndices.begin(), fxIndices.end());
-    indices.insert(indices.end(), groupIndices.begin(), groupIndices.end());
-
-    return indices;
+    return controller()->sortedAuxBusIndices();
 }
 
 int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
@@ -1486,7 +1581,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
     //! being a stable function of the current bus set and its persisted order. Stopping
     //! at video/metronome too (not just master) keeps aux buses added after those
     //! already exist from landing on the wrong side of them.
-    int ownOrder = auxSortOrderOrIndex(index);
+    int ownOrder = controller()->auxBusSortOrder(index);
 
     if (isGroupBus) {
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
@@ -1497,7 +1592,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
                 return i;
             }
             if (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus()
-                && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
+                && controller()->auxBusSortOrder(item->auxBusIndex()) > ownOrder) {
                 return i;
             }
         }
@@ -1513,7 +1608,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
             return i;
         }
-        if (item->type() == MixerChannelItem::Type::Aux && auxSortOrderOrIndex(item->auxBusIndex()) > ownOrder) {
+        if (item->type() == MixerChannelItem::Type::Aux && controller()->auxBusSortOrder(item->auxBusIndex()) > ownOrder) {
             return i;
         }
     }
@@ -1583,79 +1678,7 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         updateAuxSendItemCount();
     });
 
-    //! NOTE: fans a user-picked aux-send bus out to every OTHER selected instrument
-    //! track, mirroring the multi-select behavior color/drag-reorder/mute/solo
-    //! already have - a no-op unless this item itself is currently selected (picking
-    //! a bus on an unselected channel affects only that one channel, same as
-    //! clicking its own Mute/Solo button would).
-    connect(item, &MixerChannelItem::auxSendReassignedByUser, this,
-            [this, item](aux_channel_idx_t oldBusIndex, aux_channel_idx_t newBusIndex) {
-        QList<muse::audio::TrackId> fanOutTrackIds;
-
-        if (item->selected()) {
-            for (MixerChannelItem* other : std::as_const(m_mixerChannelList)) {
-                if (other == item || !other->selected()) {
-                    continue;
-                }
-
-                bool isInstrument = other->type() == MixerChannelItem::Type::PrimaryInstrument
-                                    || other->type() == MixerChannelItem::Type::SecondaryInstrument;
-                if (isInstrument) {
-                    other->assignAuxSend(newBusIndex);
-                    fanOutTrackIds.push_back(other->trackId());
-                }
-            }
-        }
-
-        IProjectUndoStackPtr undoStack = projectUndoStack();
-        if (!undoStack) {
-            return;
-        }
-
-        QPointer<MixerPanelModel> guard(this);
-        muse::audio::TrackId primaryTrackId = item->trackId();
-
-        //! NOTE: undo/redo work purely at the semantic level (clearAuxSendsTargeting/
-        //! assignAuxSend), never on a captured AuxSendItem* slot pointer - a track's
-        //! aux-send slot list can be rebuilt (compactAuxSendItemKeys() etc.) by unrelated
-        //! changes before undo fires, which would leave a raw slot pointer dangling.
-        undoStack->push(muse::TranslatableString("undoableAction", "Assign Mixer aux send"),
-                        [guard, primaryTrackId, oldBusIndex, newBusIndex, fanOutTrackIds]() {
-            if (!guard) {
-                return;
-            }
-
-            if (MixerChannelItem* primary = guard->findChannelItem(primaryTrackId)) {
-                if (oldBusIndex != AuxSendItem::NO_BUS) {
-                    primary->clearAuxSendsTargeting(oldBusIndex);
-                }
-                primary->assignAuxSend(newBusIndex);
-            }
-
-            for (const muse::audio::TrackId& trackId : fanOutTrackIds) {
-                if (MixerChannelItem* other = guard->findChannelItem(trackId)) {
-                    other->assignAuxSend(newBusIndex);
-                }
-            }
-        }, [guard, primaryTrackId, oldBusIndex, newBusIndex, fanOutTrackIds]() {
-            if (!guard) {
-                return;
-            }
-
-            if (MixerChannelItem* primary = guard->findChannelItem(primaryTrackId)) {
-                primary->clearAuxSendsTargeting(newBusIndex);
-                if (oldBusIndex != AuxSendItem::NO_BUS) {
-                    primary->assignAuxSend(oldBusIndex);
-                }
-            }
-
-            for (const muse::audio::TrackId& trackId : fanOutTrackIds) {
-                if (MixerChannelItem* other = guard->findChannelItem(trackId)) {
-                    other->clearAuxSendsTargeting(newBusIndex);
-                }
-            }
-        });
-    });
+    connectAuxSendReassignment(item);
 
     connectGlobalMuteSoloAggregate(item);
     connectContinuousChangeUndo(item);
@@ -1728,6 +1751,7 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         playback()->setAuxSendsParams(trackId, params.auxSends);
         updateAuxSendItemCount();
     });
+    connectAuxSendReassignment(item);
 
     connect(item, &MixerChannelItem::soloMuteStateChanged, this,
             [this, index](const notation::INotationSoloMuteState::SoloMuteState& state) {

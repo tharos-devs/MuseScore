@@ -127,6 +127,9 @@ public:
     muse::async::Channel<muse::audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
     bool isAuxBusGroup(muse::audio::aux_channel_idx_t index) const override;
+    bool auxBusFeeds(muse::audio::aux_channel_idx_t source, muse::audio::aux_channel_idx_t target) const override;
+    std::vector<muse::audio::aux_channel_idx_t> sortedAuxBusIndices() const override;
+    int auxBusSortOrder(muse::audio::aux_channel_idx_t index) const override;
     muse::audio::aux_channel_idx_t resolveAuxBusDisplayNumber(muse::audio::aux_channel_idx_t index) const override;
 
     muse::async::Promise<muse::audio::SoundPresetList> availableSoundPresets(
@@ -249,7 +252,7 @@ private:
     void startVideoAudioDecoding(const muse::io::path_t& videoPath);
     muse::audio::AudioSourceParams videoSourceParams() const;
     void applyVideoSourceParams();
-    void updateVideoMuteState(bool hasSolo, const std::vector<muse::audio::aux_channel_idx_t>& directlySoloedGroupBuses);
+    void updateVideoMuteState(bool hasSolo);
 
     void resetPlayback();
     void setupPlaybackIfNeed();

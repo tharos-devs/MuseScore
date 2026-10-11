@@ -127,6 +127,7 @@ Item {
             Layout.fillHeight: true
 
             compact: root.compact
+            clipTitle: true
 
             resourceItemModel: root.auxSendItemModel
 

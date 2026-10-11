@@ -54,9 +54,6 @@ static const QString PRESETS_DIR_NAME("/TrackPresets");
 static const QString PRESET_SUFFIX("trackpreset");
 static constexpr int PRESET_FORMAT_VERSION = 1;
 
-//! NOTE: an unused slot of a track's aux sends (see MixerChannelItem::blankAuxSendParams())
-static const AuxSendParams BLANK_AUX_SEND { -1.f, false };
-
 TrackPresets::TrackPresets(const modularity::ContextPtr& iocCtx)
     : Contextable(iocCtx)
 {

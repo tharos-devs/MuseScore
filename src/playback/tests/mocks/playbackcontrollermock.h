@@ -84,6 +84,9 @@ public:
     MOCK_METHOD((muse::async::Channel<muse::audio::aux_channel_idx_t, std::string>), auxChannelNameChanged, (), (const, override));
 
     MOCK_METHOD(bool, isAuxBusGroup, (muse::audio::aux_channel_idx_t), (const, override));
+    MOCK_METHOD(bool, auxBusFeeds, (muse::audio::aux_channel_idx_t, muse::audio::aux_channel_idx_t), (const, override));
+    MOCK_METHOD(std::vector<muse::audio::aux_channel_idx_t>, sortedAuxBusIndices, (), (const, override));
+    MOCK_METHOD(int, auxBusSortOrder, (muse::audio::aux_channel_idx_t), (const, override));
     MOCK_METHOD(muse::audio::aux_channel_idx_t, resolveAuxBusDisplayNumber, (muse::audio::aux_channel_idx_t), (const, override));
 
     MOCK_METHOD(muse::async::Promise<muse::audio::SoundPresetList>, availableSoundPresets, (const engraving::InstrumentTrackId&), (const,

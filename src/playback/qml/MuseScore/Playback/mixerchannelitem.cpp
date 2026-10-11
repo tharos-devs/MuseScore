@@ -77,18 +77,13 @@ static QString auxBusPositionalName(aux_channel_idx_t displayNumber, bool isGrou
 
 //! NOTE: a real, assigned-but-silent send (bypassed and/or its knob pulled to 0%) is
 //! {signalAmount: 0.f, active: false} - the SAME value a default-constructed AuxSendParams
-//! has. Using -1.f (outside the valid [0;1] gain range) as the "never assigned" sentinel
-//! instead lets a reload correctly tell the two apart; the engine never acts on this value
-//! for a blank entry since it's always paired with active=false (see writeTrackToAuxBuffers,
+//! has. BLANK_AUX_SEND's -1.f (outside the valid [0;1] gain range) as the "never assigned"
+//! sentinel instead lets a reload correctly tell the two apart; the engine never acts on this
+//! value for a blank entry since it's always paired with active=false (see writeTrackToAuxBuffers,
 //! which skips non-active sends before ever reading signalAmount)
 static AuxSendParams blankAuxSendParams()
 {
-    return AuxSendParams { -1.f, false };
-}
-
-static bool isBlankAuxSend(const AuxSendParams& params)
-{
-    return params == blankAuxSendParams();
+    return BLANK_AUX_SEND;
 }
 
 //! NOTE: growing this vector must pad new positions with the blank sentinel, not the
@@ -1609,9 +1604,8 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 {
     AuxSendItem::MenuData data;
 
-    for (const auto& pair : playbackController()->auxTrackIdMap()) {
-        aux_channel_idx_t busIndex = pair.first;
-
+    //! NOTE: listed in the Mixer's own channel order
+    for (aux_channel_idx_t busIndex : playbackController()->sortedAuxBusIndices()) {
         //! NOTE: whether another slot is really using a bus must be based on its auxIndex(),
         //! not isBlank() - a slot bypassed with its knob at 0% is isBlank() but still holds
         //! a real target bus, and would otherwise let this bus be offered to two slots at once
@@ -1629,6 +1623,11 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 
         if (usedByAnotherSlot) {
             continue; // already targeted by another slot on this track
+        }
+
+        //! NOTE: a bus can't send to itself, nor to a bus that already feeds it - that would be a routing loop
+        if (m_type == Type::Aux && (busIndex == m_auxBusIndex || playbackController()->auxBusFeeds(busIndex, m_auxBusIndex))) {
+            continue;
         }
 
         bool isGroupBus = playbackController()->isAuxBusGroup(busIndex);

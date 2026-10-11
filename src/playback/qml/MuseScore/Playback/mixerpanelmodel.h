@@ -93,6 +93,9 @@ public:
     //! affects that one channel, same as it always has).
     Q_INVOKABLE void setMutedForSelectedChannels(bool muted);
     Q_INVOKABLE void setSoloForSelectedChannels(bool solo);
+    //! NOTE: Solo clicked on a channel that isn't selected - on a Group bus, also applied to
+    //! everything routed to it (see setSoloForGroupBusSources())
+    Q_INVOKABLE void setChannelSolo(mu::playback::MixerChannelItem* channelItem, bool solo);
 
     Q_INVOKABLE void renameAuxChannel(mu::playback::MixerChannelItem* channelItem, const QString& name);
     Q_INVOKABLE void deleteAuxChannel(mu::playback::MixerChannelItem* channelItem);
@@ -165,6 +168,7 @@ signals:
     void globalSoloEngagedChanged();
 
 private:
+    void setSoloForGroupBusSources(muse::audio::aux_channel_idx_t busIndex, bool solo);
     void classBegin() override {}
     void componentComplete() override;
     void init();
@@ -200,9 +204,6 @@ private:
     int resolveVideoInsertIndex() const;
     std::vector<muse::audio::aux_channel_idx_t> sortedAuxIndices() const;
     int resolveAuxInsertIndex(muse::audio::aux_channel_idx_t index, bool isGroupBus) const;
-    //! NOTE: shared by sortedAuxIndices() and resolveAuxInsertIndex(), which must stay
-    //! consistent with each other - see sortedAuxIndices()'s own NOTE.
-    int auxSortOrderOrIndex(muse::audio::aux_channel_idx_t index) const;
     int indexOf(const muse::audio::TrackId trackId) const;
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
@@ -225,6 +226,8 @@ private:
     //! gestures (see MixerChannelItem::beginVolumeChange() et al.) undoable - called
     //! for every channel type, same as connectGlobalMuteSoloAggregate() above.
     void connectContinuousChangeUndo(MixerChannelItem* item);
+    //! NOTE: undo for a send slot pointed at another bus (and the fan-out to the other selected tracks)
+    void connectAuxSendReassignment(MixerChannelItem* item);
 
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem
