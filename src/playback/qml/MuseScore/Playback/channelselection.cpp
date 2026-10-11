@@ -106,21 +106,24 @@ void ChannelSelection::setSolo(const Channels& channels, bool solo)
             continue;
         }
 
-        //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button `enabled`/
-        //! `visible` guards - solo is only meaningful for a non-Aux channel or a
-        //! Group-type Aux bus (see that file's own NOTE on why a plain send/return
-        //! bus is excluded). The mute condition is deliberately the OPPOSITE of the
-        //! Mute case above: `muted && !forceMute` (manually muted), not `muted &&
-        //! forceMute` - a force-muted channel's own Solo button stays enabled by
-        //! design (soloing it is exactly how you hand the solo over to it), so
-        //! skipping it here would silently block the very channel the user just
-        //! clicked Solo on from ever taking the solo while part of a selection.
-        bool soloEligible = item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
-        bool manuallyMuted = item->muted() && !item->forceMute();
-        if (!soloEligible || manuallyMuted) {
-            continue;
+        if (canTakeSolo(item)) {
+            item->setSolo(solo);
         }
-
-        item->setSolo(solo);
     }
+}
+
+bool ChannelSelection::canTakeSolo(const MixerChannelItem* item)
+{
+    //! NOTE: mirrors MixerMuteAndSoloSection.qml's own per-button `enabled`/
+    //! `visible` guards - solo is only meaningful for a non-Aux channel or a
+    //! Group-type Aux bus (see that file's own NOTE on why a plain send/return
+    //! bus is excluded). The mute condition is deliberately the OPPOSITE of the
+    //! Mute case above: `muted && !forceMute` (manually muted), not `muted &&
+    //! forceMute` - a force-muted channel's own Solo button stays enabled by
+    //! design (soloing it is exactly how you hand the solo over to it), so
+    //! skipping it here would silently block the very channel the user just
+    //! clicked Solo on from ever taking the solo while part of a selection.
+    bool soloEligible = item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
+    bool manuallyMuted = item->muted() && !item->forceMute();
+    return soloEligible && !manuallyMuted;
 }

@@ -118,7 +118,7 @@ MixerPanelSection {
                 if (content.channelItem.selected) {
                     root.model.setSoloForSelectedChannels(solo)
                 } else {
-                    content.channelItem.solo = solo
+                    root.model.setChannelSolo(content.channelItem, solo)
                 }
             }
         }
