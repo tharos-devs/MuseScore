@@ -130,7 +130,7 @@ void TrackListModel::componentComplete()
 
     //! NOTE: a bus named after its first effect
     controller()->auxChannelNameChanged().onReceive(this, [this](aux_channel_idx_t, const std::string&) {
-        updateRowStates();
+        updateAuxBusTitles();
     });
 
     context()->currentNotationChanged().onNotify(this, [this]() {
@@ -239,7 +239,7 @@ void TrackListModel::onCurrentNotationChanged()
         //! NOTE: a color or a bus's name changed from the Mixer, the Timeline or here
         m_audioSettings->settingsChanged().onNotify(this, [this]() {
             updateColors();
-            updateRowStates();
+            updateAuxBusTitles();
         });
     }
 
@@ -355,7 +355,6 @@ void TrackListModel::rebuildMetronomeChannelItem()
             m_metronomeChannelItem = new MixerChannelItem(this, MixerChannelItem::Type::Metronome, false /*outputOnly*/, it->second);
             m_metronomeChannelItem->bindInstrumentTrack(metronomeTrackId);
             m_metronomeChannelItem->setTitle(muse::qtrc("playback", "Metronome"));
-            connectGlobalMuteSolo(m_metronomeChannelItem);
         }
     }
 
@@ -496,6 +495,19 @@ bool TrackListModel::isInstrumentEditorOpened(const Row& row) const
 
 //! NOTE: whether the row's visibility, articulation map, sound type or open windows changed (its title has no role
 //! of its own)
+//! NOTE: on every audio settings change (e.g. a Mixer fader moving): only the buses' titles, not the whole rows
+void TrackListModel::updateAuxBusTitles()
+{
+    for (const Row& row : std::as_const(m_rows)) {
+        if (row.tracks.auxIndex) {
+            const QString title = auxBusTitle(*row.tracks.auxIndex);
+            if (row.item->title() != title) {
+                row.item->setTitle(title);
+            }
+        }
+    }
+}
+
 bool TrackListModel::updateRowState(Row& row) const
 {
     if (row.tracks.auxIndex) {
@@ -794,7 +806,7 @@ void TrackListModel::setSoloForSelectedRows(bool solo)
     ChannelSelection::setSolo(channels(), solo);
 }
 
-//! NOTE: the listed channels: the selection's, and the global Mute/Solo's (with the shown Metronome and Video rows)
+//! NOTE: the listed channels: the selection's, and the global Mute/Solo's (with the shown Video row)
 GlobalMuteSoloToggle::Channels TrackListModel::channels() const
 {
     GlobalMuteSoloToggle::Channels channels;
@@ -807,10 +819,9 @@ GlobalMuteSoloToggle::Channels TrackListModel::channels() const
 
 GlobalMuteSoloToggle::Channels TrackListModel::globalMuteSoloChannels() const
 {
+    //! NOTE: not the metronome, like the Mixer's: its "mute" is the metronome being off (see
+    //! PlaybackController::setTrackSoloMuteState()), so the global Mute would turn it on
     GlobalMuteSoloToggle::Channels channels = this->channels();
-    if (m_metronomeChannelItem && metronomeVisible()) {
-        channels.push_front(m_metronomeChannelItem);
-    }
     if (m_videoChannelItem && m_hasVideo && videoVisible()) {
         channels.push_front(m_videoChannelItem);
     }

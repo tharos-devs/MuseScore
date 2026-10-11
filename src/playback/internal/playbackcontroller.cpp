@@ -466,7 +466,7 @@ bool PlaybackController::isAuxForceMuted(aux_channel_idx_t index) const
 
 void PlaybackController::setGroupBusSourcesSolo(aux_channel_idx_t index, bool solo)
 {
-    if (!audioSettings() || !m_notation) {
+    if (!audioSettings() || !m_notation || !notationPlayback()) {
         return;
     }
 
@@ -502,8 +502,10 @@ void PlaybackController::setGroupBusSourcesSolo(aux_channel_idx_t index, bool so
     }
 
     for (const auto& pair : m_instrumentTrackIdMap) {
+        //! NOTE: not the metronome: it has no solo (its "mute" is the metronome being off)
         const InstrumentTrackId& instrumentTrackId = pair.first;
-        if (!routesTo(trackOutputParams(instrumentTrackId).auxSends, groupBuses)) {
+        if (instrumentTrackId == notationPlayback()->metronomeTrackId()
+            || !routesTo(trackOutputParams(instrumentTrackId).auxSends, groupBuses)) {
             continue;
         }
 

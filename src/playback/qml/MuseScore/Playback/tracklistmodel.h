@@ -207,6 +207,7 @@ private:
     bool updateRowState(Row& row) const;
     void updateRowStates();
     void updateColors();
+    void updateAuxBusTitles();
     void updateColumns();
     void rebuildVideoChannelItem();
     void loadVideoMuteState();
