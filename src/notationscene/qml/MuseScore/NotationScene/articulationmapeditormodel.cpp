@@ -523,7 +523,23 @@ void ArticulationMapEditorModel::newMap()
     confirmDiscardChanges([this]() {
         m_editsTargetTrackMap = false;
         setFile(ArticulationMapParser::Result(), io::path_t());
+        removeTargetTrackMap();
     });
+}
+
+//! NOTE: "New" starts the track over: its map is removed (undoable, like its "Remove" menu item), the new one is
+//! attached by "Reload into the track"
+void ArticulationMapEditorModel::removeTargetTrackMap()
+{
+    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!m_targetTrack || !maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
+        return;
+    }
+
+    EditArticulationMapChanges changes;
+    changes.maps.emplace(*m_targetTrack, std::nullopt);
+    maps->edit(changes, muse::TranslatableString("undoableAction", "Remove articulation map"));
 }
 
 void ArticulationMapEditorModel::openMap()
@@ -919,20 +935,39 @@ void ArticulationMapEditorModel::openInstrumentEditor()
 
 void ArticulationMapEditorModel::reloadIntoTrack()
 {
-    if (!m_targetTrack) {
+    applyToTrack();
+}
+
+void ArticulationMapEditorModel::applyAndClose()
+{
+    //! NOTE: nothing to apply after "New" with nothing added (the track's map is already removed)
+    if (!m_targetTrack || (m_filePath.empty() && !m_isDirty)) {
+        closeRequested();
         return;
+    }
+
+    if (applyToTrack()) {
+        emit closeAccepted();
+    }
+}
+
+bool ArticulationMapEditorModel::applyToTrack()
+{
+    if (!m_targetTrack) {
+        return false;
     }
 
     // Saved without reloading: the target track is reloaded below, together with the others using the file
     if (m_filePath.empty()) {
         if (!saveMapAs()) {
-            return;
+            return false;
         }
     } else if (m_isDirty && !writeFile(m_filePath, false /*reloadTracks*/)) {
-        return;
+        return false;
     }
 
     reloadTracksUsingFile(m_filePath, m_targetTrack);
+    return true;
 }
 
 //! NOTE: one undoable action for every track whose map comes from this file, plus alsoTrack (e.g. a track without
