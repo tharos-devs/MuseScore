@@ -252,7 +252,7 @@ private:
     void startVideoAudioDecoding(const muse::io::path_t& videoPath);
     muse::audio::AudioSourceParams videoSourceParams() const;
     void applyVideoSourceParams();
-    void updateVideoMuteState(bool hasSolo, const std::vector<muse::audio::aux_channel_idx_t>& directlySoloedGroupBuses);
+    void updateVideoMuteState(bool hasSolo);
 
     void resetPlayback();
     void setupPlaybackIfNeed();

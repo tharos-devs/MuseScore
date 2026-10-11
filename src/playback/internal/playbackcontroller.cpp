@@ -1504,7 +1504,7 @@ void PlaybackController::removeVideoTrack()
     updateSoloMuteStates();
 }
 
-void PlaybackController::updateVideoMuteState(bool hasSolo, const std::vector<aux_channel_idx_t>& directlySoloedGroupBuses)
+void PlaybackController::updateVideoMuteState(bool hasSolo)
 {
     IProjectVideoSettingsPtr videoSettingsPtr = videoSettings();
     if (m_videoTrackId == INVALID_TRACK_ID || !videoSettingsPtr) {
@@ -1515,13 +1515,7 @@ void PlaybackController::updateVideoMuteState(bool hasSolo, const std::vector<au
     AudioOutputParams params = videoOutputParams();
 
     //! NOTE Same rules as an instrument track (see updateSoloMuteStates())
-    bool feedsDirectlySoloedGroupBus = false;
-    for (size_t i = 0; i < params.auxSends.size() && !feedsDirectlySoloedGroupBus; ++i) {
-        feedsDirectlySoloedGroupBus = params.auxSends[i].active && !muse::is_zero(params.auxSends[i].signalAmount)
-                                      && muse::contains(directlySoloedGroupBuses, static_cast<aux_channel_idx_t>(i));
-    }
-
-    const bool forceMute = hasSolo && !attachment.solo && !feedsDirectlySoloedGroupBus;
+    const bool forceMute = hasSolo && !attachment.solo;
     const bool muted = (attachment.muted && !attachment.solo) || forceMute;
 
     m_isVideoForceMuted = forceMute;
@@ -2488,65 +2482,26 @@ void PlaybackController::updateSoloMuteStates()
     //! skip-direct-mix logic) - if solo force-muted it like any other non-soloed channel,
     //! soloing a track that only reaches master through a group bus would produce silence
     //! instead of isolating it. A group bus stays "audible" here (exempt from force-mute)
-    //! either because it's soloed itself, or because a track that's soloed sends to it.
+    //! either because it's soloed itself, or because something soloed sends to it - and a
+    //! group bus can itself be routed to another group bus: anything audible keeps every
+    //! group bus after it on its way to master audible too.
     //!
-    //! These two reasons are NOT equivalent for an individual INSTRUMENT track's own
-    //! force-mute below: soloing the bus itself means "let everything through this bus
-    //! play", so every track feeding it is exempt - but a bus made audible only because
-    //! ONE of its sibling tracks is soloed must NOT exempt every OTHER track sharing that
-    //! same bus, or soloing track 4 (routed to Group bus X together with un-soloed track 3)
-    //! would also let track 3 bleed through. directlySoloedGroupBuses (bus-solo only) is
-    //! what per-track exemption below must use; audibleGroupBuses (both reasons merged) is
-    //! only for the group bus channel's OWN force-mute decision in updateAuxMuteStates().
-    //!
-    //! A group bus can itself be routed to another group bus: soloing a bus also exempts the
-    //! group buses feeding it (and their tracks), and anything audible keeps every group bus
-    //! after it on its way to master audible too - but not the other tracks feeding those.
+    //! A track's own force-mute only depends on its own Solo: soloing a group bus solos
+    //! the tracks routed to it (see MixerPanelModel::setChannelSolo()), so one the user
+    //! then un-soloes must go silent, not play on through its soloed group bus.
     std::vector<aux_channel_idx_t> audibleGroupBuses;
-    std::vector<aux_channel_idx_t> directlySoloedGroupBuses;
     if (hasSolo) {
-        auto groupBusTargets = [this](const AuxSendsParams& auxSends) {
-            std::vector<aux_channel_idx_t> targets;
-            for (size_t i = 0; i < auxSends.size(); ++i) {
-                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
-                if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount) && audioSettings()->isAuxBusGroup(auxIdx)) {
-                    targets.push_back(auxIdx);
-                }
-            }
-            return targets;
-        };
-
-        auto feedsAny = [&groupBusTargets](const AuxSendsParams& auxSends, const std::vector<aux_channel_idx_t>& buses) {
-            for (aux_channel_idx_t target : groupBusTargets(auxSends)) {
-                if (muse::contains(buses, target)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
         for (const auto& pair : m_auxTrackIdMap) {
             if (audioSettings()->isAuxBusGroup(pair.first) && audioSettings()->auxSoloMuteState(pair.first).solo) {
-                directlySoloedGroupBuses.push_back(pair.first);
+                audibleGroupBuses.push_back(pair.first);
             }
         }
 
-        for (bool added = true; added;) {
-            added = false;
-            for (const auto& pair : m_auxTrackIdMap) {
-                if (audioSettings()->isAuxBusGroup(pair.first) && !muse::contains(directlySoloedGroupBuses, pair.first)
-                    && feedsAny(audioSettings()->auxOutputParams(pair.first).auxSends, directlySoloedGroupBuses)) {
-                    directlySoloedGroupBuses.push_back(pair.first);
-                    added = true;
-                }
-            }
-        }
-
-        audibleGroupBuses = directlySoloedGroupBuses;
-
-        auto addAudibleGroupBuses = [&audibleGroupBuses, &groupBusTargets](const AuxSendsParams& auxSends) {
-            for (aux_channel_idx_t auxIdx : groupBusTargets(auxSends)) {
-                if (!muse::contains(audibleGroupBuses, auxIdx)) {
+        auto addAudibleGroupBuses = [this, &audibleGroupBuses](const AuxSendsParams& auxSends) {
+            for (size_t i = 0; i < auxSends.size(); ++i) {
+                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
+                if (auxSends[i].active && !muse::is_zero(auxSends[i].signalAmount)
+                    && audioSettings()->isAuxBusGroup(auxIdx) && !muse::contains(audibleGroupBuses, auxIdx)) {
                     audibleGroupBuses.push_back(auxIdx);
                 }
             }
@@ -2589,20 +2544,7 @@ void PlaybackController::updateSoloMuteStates()
         AudioOutputParams params = trackOutputParams(instrumentTrackId);
 
         // 2. Evaluate "force mute" (disabling the mute button)
-        //! NOTE: must check directlySoloedGroupBuses (bus itself soloed), NOT the merged
-        //! audibleGroupBuses - otherwise an un-soloed track sharing a group bus with a
-        //! soloed SIBLING track would wrongly be exempted from force-mute too (see the note
-        //! above where these two vectors are built)
-        bool feedsDirectlySoloedGroupBus = false;
-        if (!directlySoloedGroupBuses.empty()) {
-            for (size_t i = 0; i < params.auxSends.size() && !feedsDirectlySoloedGroupBus; ++i) {
-                aux_channel_idx_t auxIdx = static_cast<aux_channel_idx_t>(i);
-                feedsDirectlySoloedGroupBus = params.auxSends[i].active && !muse::is_zero(params.auxSends[i].signalAmount)
-                                              && muse::contains(directlySoloedGroupBuses, auxIdx);
-            }
-        }
-
-        bool shouldForceMute = hasSolo && !soloMuteState.solo && !feedsDirectlySoloedGroupBus;
+        bool shouldForceMute = hasSolo && !soloMuteState.solo;
         if (notationPlayback()->isChordSymbolsTrack(instrumentTrackId) && !shouldForceMute) {
             shouldForceMute = !notationConfiguration()->isPlayChordSymbolsEnabled();
         }
@@ -2638,7 +2580,7 @@ void PlaybackController::updateSoloMuteStates()
     }
 
     updateAuxMuteStates(hasSolo, audibleGroupBuses);
-    updateVideoMuteState(hasSolo, directlySoloedGroupBuses);
+    updateVideoMuteState(hasSolo);
 }
 
 void PlaybackController::updateAuxMuteStates(bool hasSolo, const std::vector<aux_channel_idx_t>& audibleGroupBuses)
