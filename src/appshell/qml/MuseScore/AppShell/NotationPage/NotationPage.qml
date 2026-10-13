@@ -115,12 +115,12 @@ DockPage {
         root.panelBottomDropDestination
     ]
 
-    //! NOTE: unlike the other horizontal panels (Mixer, Timeline, Piano keyboard,
-    //! Percussion, Selection Filter), Video also makes sense as a narrow side
-    //! panel (its own internal sidebar can be moved below the timeline via its
-    //! context menu to fit that width) -- so it gets top/bottom PLUS left/right,
-    //! instead of reusing horizontalPanelDropDestinations verbatim.
-    readonly property var videoPanelDropDestinations: [
+    //! NOTE: unlike the other horizontal panels (Mixer, Piano keyboard, Percussion,
+    //! Selection Filter), Video and Timeline also make sense as a side panel (Video's
+    //! own internal sidebar can be moved below its timeline via its context menu to
+    //! fit that width) -- so they get top/bottom PLUS left/right, instead of reusing
+    //! horizontalPanelDropDestinations verbatim.
+    readonly property var horizontalOrSidePanelDropDestinations: [
         root.panelTopDropDestination,
         root.panelBottomDropDestination,
         { "dock": root.centralDock, "dropLocation": Location.Left, "dropDistance": root.verticalPanelDefaultWidth },
@@ -144,6 +144,32 @@ DockPage {
         if (videoPanelLoaderInstance) {
             videoPanelLoaderInstance.updateDockPlacement()
         }
+        if (timelineInstance) {
+            timelineInstance.updateDockPlacement()
+        }
+    }
+
+    //! NOTE: whether a panel (its content item) is docked at the left or right of the score - the framework only
+    //! knows the declared location (see DockPageView::actualLocation()), so this compares the geometries: true/false,
+    //! or undefined when it can't be known yet (no score view while a project opens, no size for a moment while
+    //! resizing its column, or as a tab not shown) - it stays where it was then
+    function isDockedAtSide(panel, item) {
+        if (!notationView) {
+            return undefined
+        }
+
+        if (panel.floating || item.Window.window !== notationView.Window.window) {
+            return false
+        }
+
+        if (item.width <= 0 || item.height <= 0 || notationView.width <= 0 || notationView.height <= 0) {
+            return undefined
+        }
+
+        //! NOTE: beside the score, not only past its left/right edge: a bottom panel may span further
+        const pos = item.mapToItem(notationView, 0, 0)
+        const besideVertically = pos.y < notationView.height && pos.y + item.height > 0
+        return besideVertically && (pos.x + item.width <= 1 || pos.x >= notationView.width - 1)
     }
 
     property var notationView: null
@@ -613,6 +639,8 @@ DockPage {
             maximumWidth: root.panelMaxDimension
 
             groupName: root.horizontalPanelsGroup
+            //! NOTE: at the left or right, it goes with the side panels instead (e.g. below Palettes, or tabbed with them)
+            sideGroupName: root.verticalPanelsGroup
             secondaryWindowAllowed: true
 
             //! NOTE: hidden by default
@@ -620,16 +648,45 @@ DockPage {
 
             location: Location.Bottom
 
-            dropDestinations: root.horizontalPanelDropDestinations
+            dropDestinations: root.horizontalOrSidePanelDropDestinations
 
             navigationSection: root.navigationPanelSec(timelinePanel.location)
 
             Timeline {
+                id: timelineInstance
+
                 navigationSection: timelinePanel.navigationSection
                 contentNavigationPanelOrderStart: timelinePanel.contentNavigationPanelOrderStart
 
+                //! NOTE: like the Video panel's: at a side, it takes the side panels' fixed width when tabbed or
+                //! stacked with one of them (see resizableSidePanelMaximumWidth()), and is as tall as its column -
+                //! elsewhere it keeps the horizontal panels' maximum height. A move always changes the panel's size
+                //! (or window)
+                function updateDockPlacement() {
+                    timelinePanel.maximumWidth = root.resizableSidePanelMaximumWidth(timelinePanel)
+
+                    const atSide = root.isDockedAtSide(timelinePanel, this)
+                    if (atSide !== undefined) {
+                        timelinePanel.maximumHeight = atSide ? root.panelMaxDimension : root.horizontalPanelMaxHeight
+                    }
+                }
+
+                readonly property var hostWindow: Window.window
+                onHostWindowChanged: Qt.callLater(updateDockPlacement)
+                onWidthChanged: Qt.callLater(updateDockPlacement)
+                onHeightChanged: Qt.callLater(updateDockPlacement)
+
+                Connections {
+                    target: timelinePanel
+
+                    function onFloatingChanged() {
+                        Qt.callLater(timelineInstance.updateDockPlacement)
+                    }
+                }
+
                 Component.onCompleted: {
                     timelinePanel.contextMenuModel = contextMenuModel
+                    Qt.callLater(updateDockPlacement)
                 }
 
                 Component.onDestruction: {
@@ -745,7 +802,7 @@ DockPage {
 
             location: Location.Bottom
 
-            dropDestinations: root.videoPanelDropDestinations
+            dropDestinations: root.horizontalOrSidePanelDropDestinations
 
             navigationSection: root.navigationPanelSec(videoPanel.location)
 
@@ -788,28 +845,14 @@ DockPage {
                     videoPanel.maximumWidth = root.resizableSidePanelMaximumWidth(videoPanel)
                     updateMinimumWidth()
 
-                    //! NOTE: no score view yet (e.g. while a project opens): nothing to compare, it stays where it was
-                    if (!notationView) {
+                    //! NOTE: not known (see root.isDockedAtSide()): it stays where it was - flipping would push the wide
+                    //! floor for that moment, and widen a side column for good
+                    const atSide = root.isDockedAtSide(videoPanel, this)
+                    if (atSide === undefined) {
                         return
                     }
 
-                    if (videoPanel.floating || Window.window !== notationView.Window.window) {
-                        dockedAtSide = false
-                        placementKnown = true
-                        return
-                    }
-
-                    //! NOTE: no size (for a moment while resizing its column, or as a tab not shown, or the score view
-                    //! not laid out yet while a project opens): nothing to compare, it stays where it was - flipping
-                    //! would push the wide floor for that moment, and widen a side column for good
-                    if (width <= 0 || height <= 0 || notationView.width <= 0 || notationView.height <= 0) {
-                        return
-                    }
-
-                    //! NOTE: beside the score, not only past its left/right edge: a bottom panel may span further
-                    const pos = mapToItem(notationView, 0, 0)
-                    const besideVertically = pos.y < notationView.height && pos.y + height > 0
-                    dockedAtSide = besideVertically && (pos.x + width <= 1 || pos.x >= notationView.width - 1)
+                    dockedAtSide = atSide
                     //! NOTE: after dockedAtSide: the sidebar's placement (and so the floor) follows it first
                     placementKnown = true
                 }
