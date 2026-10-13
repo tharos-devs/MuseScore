@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-13
+- Timeline: can also be docked at the left or right of the score, like the Video panel - with the side panels (below them, or tabbed with them at their width), as tall as its column; at the top or bottom it keeps its maximum height.
 - Circular toolbar: Z (Mac, Windows/Linux and AZERTY, changeable in Preferences > Shortcuts) shows a radial menu centered on the mouse over the score, kept inside the score view. A short tap leaves it open until a button is clicked, Z is pressed again, Escape or a click elsewhere; a long press shows it only while the key is held. Center: Mixer, Video, Secondary window, Timeline. Upper ring: CC01, CC11, Tempo, the last MIDI CC picked in "…" and "…" (CC07, the score's own MIDI CCs, "Other MIDI CC…"): each shows its curve, or hides it when it's the one shown. Lower ring: note velocities, the selected staff's articulation map editor (dimmed without a map: opens an empty editor), articulations lane, the selected staff's VST instrument window, note offsets. Each button does what the existing button does; the active ones are in the theme's accent color, the ones unavailable (no VST instrument, no staff selected) greyed out.
 
 ### 2026-10-11
