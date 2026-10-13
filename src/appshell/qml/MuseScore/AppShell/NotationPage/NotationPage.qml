@@ -141,11 +141,10 @@ DockPage {
 
     function updateResizableSidePanelsMaximumWidth() {
         trackListPanel.maximumWidth = resizableSidePanelMaximumWidth(trackListPanel)
-        if (videoPanelLoaderInstance) {
-            videoPanelLoaderInstance.updateDockPlacement()
-        }
-        if (timelineInstance) {
-            timelineInstance.updateDockPlacement()
+        for (const panel of [ videoPanel, timelinePanel ]) {
+            if (panel.dockPlacementUpdater) {
+                panel.dockPlacementUpdater()
+            }
         }
     }
 
@@ -629,6 +628,10 @@ DockPage {
             id: timelinePanel
 
             objectName: root.pageModel.timelinePanelName()
+
+            //! NOTE: its content's updateDockPlacement(), while it's loaded - the ids inside the content can't be
+            //! reached from the page: the panel loads it as a component of its own
+            property var dockPlacementUpdater: null
             title: qsTrc("appshell", "Timeline")
 
             height: 200
@@ -686,11 +689,13 @@ DockPage {
 
                 Component.onCompleted: {
                     timelinePanel.contextMenuModel = contextMenuModel
+                    timelinePanel.dockPlacementUpdater = updateDockPlacement
                     Qt.callLater(updateDockPlacement)
                 }
 
                 Component.onDestruction: {
                     timelinePanel.contextMenuModel = null
+                    timelinePanel.dockPlacementUpdater = null
                 }
             }
         },
@@ -750,6 +755,9 @@ DockPage {
             id: videoPanel
 
             objectName: root.pageModel.videoPanelName()
+
+            //! NOTE: see timelinePanel's
+            property var dockPlacementUpdater: null
             title: qsTrc("appshell", "Video")
 
             height: 360
@@ -827,6 +835,7 @@ DockPage {
                 // Component.onCompleted below in this same file).
                 Component.onCompleted: {
                     videoPanel.contextMenuModel = contextMenuModel
+                    videoPanel.dockPlacementUpdater = updateDockPlacement
                     Qt.callLater(updateDockPlacement)
                 }
 
@@ -918,6 +927,7 @@ DockPage {
 
                 Component.onDestruction: {
                     videoPanel.contextMenuModel = null
+                    videoPanel.dockPlacementUpdater = null
                 }
             }
         }
