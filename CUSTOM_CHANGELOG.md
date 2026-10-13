@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-13
+- Circular toolbar: Z (Mac, Windows/Linux and AZERTY, changeable in Preferences > Shortcuts) shows a radial menu centered on the mouse over the score, kept inside the score view. A short tap leaves it open until a button is clicked, Z is pressed again, Escape or a click elsewhere; a long press shows it only while the key is held. Center: Mixer, Video, Secondary window, Timeline. Upper ring: CC01, CC11, Tempo, the last MIDI CC picked in "…" and "…" (CC07, the score's own MIDI CCs, "Other MIDI CC…"): each shows its curve, or hides it when it's the one shown. Lower ring: note velocities, the selected staff's articulation map editor (dimmed without a map: opens an empty editor), articulations lane, the selected staff's VST instrument window, note offsets. Each button does what the existing button does; the active ones are in the theme's accent color, the ones unavailable (no VST instrument, no staff selected) greyed out.
+
 ### 2026-10-11
 - Fixed (Windows): deleting a track preset froze the app - its confirmation opened hidden behind the Track presets window kept on top. A modal dialog now opens above any window kept on top (Track presets, articulation map editor, secondary window).
 - Track presets: the selected preset's "not installed" line no longer re-arranges the fields endlessly (one line, cut with "…").
