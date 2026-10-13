@@ -81,7 +81,7 @@ StyledToolBarView {
             property var itemData
 
             icon: expressionMenuModel.currentIcon
-            // The articulation glyph is drawn larger than the others by the icon font
+            // The articulation and note offset glyphs are drawn larger (wider) than the others by the icon font
             iconFont: expressionMenuModel.currentIconIsLarge
                       ? Qt.font({ family: ui.theme.iconsFont.family, pixelSize: Math.round(ui.theme.iconsFont.pixelSize * 0.8) })
                       : ui.theme.iconsFont

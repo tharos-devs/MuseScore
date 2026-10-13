@@ -51,7 +51,7 @@ public:
 
     QString currentTitle() const;
     int currentIcon() const;
-    //! NOTE: the articulation glyph is drawn larger than the others by the icon font
+    //! NOTE: the articulation and note offset glyphs are drawn larger (wider) than the others by the icon font
     bool currentIconIsLarge() const;
     QStringList titles() const;
 

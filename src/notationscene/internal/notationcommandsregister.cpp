@@ -3006,7 +3006,7 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString("action", "Note offsets"),
         TranslatableString("action", "Toggle note offset editor"),
         InputSchema(),
-        Decoration(IconCode::Code::CLOCK, rcommand::Checkable::Yes)
+        Decoration(IconCode::Code::MULTIMEASURE_REST, rcommand::Checkable::Yes)
     },
     CommandInfo {
         TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND,

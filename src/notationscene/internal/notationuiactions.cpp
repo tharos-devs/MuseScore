@@ -2789,7 +2789,7 @@ const UiActionList NotationUiActions::s_actions = {
              mu::context::CTX_NOTATION_OPENED,
              TranslatableString("action", "Note offsets"),
              TranslatableString("action", "Toggle note offset editor"),
-             IconCode::Code::CLOCK,
+             IconCode::Code::MULTIMEASURE_REST,
              Checkable::Yes
              ),
     UiAction(TOGGLE_NOTE_VELOCITY_EDITOR_CODE,

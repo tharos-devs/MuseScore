@@ -41,7 +41,7 @@ struct ExpressionEditorInfo {
 const std::vector<ExpressionEditorInfo>& editorInfos()
 {
     static const std::vector<ExpressionEditorInfo> infos {
-        { ExpressionEditor::NoteOffsets, TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, "Note offset", IconCode::Code::CLOCK },
+        { ExpressionEditor::NoteOffsets, TOGGLE_NOTE_OFFSET_EDITOR_COMMAND, "Note offset", IconCode::Code::MULTIMEASURE_REST },
         { ExpressionEditor::NoteVelocities, TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND, "Note velocities", IconCode::Code::WAVEFORM_HALFWAVE },
         { ExpressionEditor::Articulations, TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND, "Articulations", IconCode::Code::ARTICULATION },
     };
@@ -111,7 +111,8 @@ int ExpressionMenuModel::currentIcon() const
 
 bool ExpressionMenuModel::currentIconIsLarge() const
 {
-    return currentInfo(notationConfiguration()->currentExpressionEditor()).editor == ExpressionEditor::Articulations;
+    const ExpressionEditor editor = currentInfo(notationConfiguration()->currentExpressionEditor()).editor;
+    return editor == ExpressionEditor::Articulations || editor == ExpressionEditor::NoteOffsets;
 }
 
 QStringList ExpressionMenuModel::titles() const
