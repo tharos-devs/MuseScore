@@ -24,6 +24,7 @@
 
 #include "articulationmapcolors.h"
 #include "articulationmapoverlay.h"
+#include "instrumenteditor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +94,20 @@ NotationArticulationMapController::NotationArticulationMapController(QQuickItem*
                                                                      const muse::modularity::ContextPtr& iocCtx)
     : muse::Contextable(iocCtx), m_overlaysParent(overlaysParent)
 {
+    m_picker = new ArticulationPickerModel(overlaysParent);
+}
+
+//! NOTE: the picker outlives it (see m_picker), its choices must no longer reach it
+NotationArticulationMapController::~NotationArticulationMapController()
+{
+    if (m_picker) {
+        m_picker->close();
+    }
+}
+
+ArticulationPickerModel* NotationArticulationMapController::picker() const
+{
+    return m_picker;
 }
 
 void NotationArticulationMapController::init()
@@ -182,6 +197,11 @@ void NotationArticulationMapController::rebuildAllOverlays()
     }
 
     m_rebuildAfterDrag = false;
+
+    // Its choices apply to the chords of the lane being replaced (the score changed, e.g. undo)
+    if (m_picker) {
+        m_picker->close();
+    }
 
     if (!score() || !articulationMaps() || !articulationMaps()->isOverlayEnabled()) {
         for (const auto& [key, data] : m_overlaysByStaff) {
@@ -503,6 +523,11 @@ void NotationArticulationMapController::setViewMatrix(const muse::draw::Transfor
     }
     m_viewMatrix = viewMatrix;
 
+    // Like a menu: it would no longer be next to its note
+    if (m_picker) {
+        m_picker->close();
+    }
+
     if (articulationMaps() && articulationMaps()->isOverlayEnabled()) {
         updateOverlaysGeometry();
     }
@@ -530,15 +555,16 @@ void NotationArticulationMapController::onClicked(const SysStaffKey& key, qreal 
 
     // The menu runs its own event loop - don't start it from inside the overlay's mouse event handler
     muse::async::Async::call(this, [this, key, chordIndex, globalPos]() {
-        showMenu(key, chordIndex, globalPos);
+        showChoices(key, chordIndex, globalPos);
     });
 }
 
-void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t chordIndex, const QPointF& globalPos)
+std::optional<ArticulationChoices> NotationArticulationMapController::articulationChoices(const SysStaffKey& key,
+                                                                                          size_t chordIndex)
 {
     const auto dataIt = m_overlaysByStaff.find(key);
     if (dataIt == m_overlaysByStaff.end() || chordIndex >= dataIt->second.chords.size()) {
-        return;
+        return std::nullopt;
     }
     const StaffOverlayData& data = dataIt->second;
     const ChordEntry& entry = data.chords[chordIndex];
@@ -546,7 +572,7 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
     const ArticulationMapDataConstPtr mapData = articulationMaps()->data();
     const ExpressionMap* map = mapData ? mapData->map(data.trackId) : nullptr;
     if (!map) {
-        return;
+        return std::nullopt;
     }
 
     const std::vector<ChordRest*> targets = targetMasterChords(data, chordIndex);
@@ -562,45 +588,155 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
                                                  ? ArticulationMark::Scope::SingleChord
                                                  : ArticulationMark::Scope::Latched;
 
-    const auto placeArticulation = [this, targets, ownMark, defaultScope, trackId](const muse::String& entryId) {
+    ArticulationChoices choices;
+    choices.currentEntryId = entry.entryId.toQString();
+
+    choices.choose = [this, targets, ownMark, defaultScope, trackId](const QString& entryId) {
         ArticulationMark mark;
-        mark.entryId = entryId;
+        mark.entryId = muse::String::fromQString(entryId);
         mark.scope = defaultScope;
         mark.tickOffset = ownMark ? ownMark->tickOffset : 0;
-        m_lastPlacedEntryIdByTrack[trackId] = entryId;
+        QStringList& placed = m_placedEntryIdsByTrack[trackId];
+        placed.removeAll(entryId);
+        placed.prepend(entryId);
         setMarks(targets, mark, muse::TranslatableString("undoableAction", "Set articulation"));
     };
 
+    for (const ExpressionMapEntry& mapEntry : map->entries) {
+        if (!mapEntry.disabled) {
+            choices.entryIds << mapEntry.id.toQString();
+        }
+    }
+
+    // Those still in the map; the articulation last given to a note of this track, to repeat it in one click
+    const auto placedIt = m_placedEntryIdsByTrack.find(trackId);
+    if (placedIt != m_placedEntryIdsByTrack.end()) {
+        for (const QString& entryId : placedIt->second) {
+            if (choices.entryIds.contains(entryId)) {
+                choices.placedEntryIds << entryId;
+            }
+        }
+    }
+    if (!choices.placedEntryIds.isEmpty()) {
+        choices.lastPlacedEntryId = choices.placedEntryIds.first();
+    }
+
+    if (ownMark && !isRest) {
+        ArticulationChoiceAction singleChord;
+        singleChord.title = muse::qtrc("notation", "This note only");
+        singleChord.checkable = true;
+        singleChord.checked = ownMark->scope == ArticulationMark::Scope::SingleChord;
+        singleChord.trigger = [this, targets, ownMark]() {
+            ArticulationMark mark = *ownMark;
+            mark.scope = mark.scope == ArticulationMark::Scope::SingleChord ? ArticulationMark::Scope::Latched
+                         : ArticulationMark::Scope::SingleChord;
+            setMarks(targets, mark, muse::TranslatableString("undoableAction", "Change articulation scope"));
+        };
+        choices.actions.push_back(std::move(singleChord));
+
+        if (ownMark->tickOffset != 0) {
+            ArticulationChoiceAction resetOffset;
+            resetOffset.title = muse::qtrc("notation", "Reset position");
+            resetOffset.trigger = [this, targets, ownMark]() {
+                ArticulationMark mark = *ownMark;
+                mark.tickOffset = 0;
+                setMarks(targets, mark, muse::TranslatableString("undoableAction", "Reset articulation position"));
+            };
+            choices.actions.push_back(std::move(resetOffset));
+        }
+    }
+
+    if (ownMark) {
+        ArticulationChoiceAction remove;
+        remove.title = muse::qtrc("notation", "Remove articulation change");
+        remove.trigger = [this, targets]() {
+            setMarks(targets, std::nullopt, muse::TranslatableString("undoableAction", "Remove articulation change"));
+        };
+        choices.actions.push_back(std::move(remove));
+    } else {
+        ArticulationChoiceAction hint;
+        hint.title = isRest ? muse::qtrc("notation", "Applies from the next note until the next change")
+                     : defaultScope == ArticulationMark::Scope::SingleChord
+                     ? muse::qtrc("notation", "Applies to this note only")
+                     : muse::qtrc("notation", "Applies until the next change");
+        hint.enabled = false;
+        choices.actions.push_back(std::move(hint));
+    }
+
+    choices.editMap = [this, trackId]() {
+        muse::rcommand::CommandQuery query(EDIT_ARTICULATION_MAP_COMMAND);
+        query.addParam("partId", muse::Val(std::to_string(trackId.partId.toUint64())));
+        query.addParam("instrumentId", muse::Val(trackId.instrumentId.toStdString()));
+        commandDispatcher()->dispatch(query);
+    };
+
+    if (const std::optional<instrumenteditor::Target> target
+            = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), trackId)) {
+        choices.openInstrumentEditor = [this, target = *target]() {
+            instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), target);
+        };
+    }
+
+    return choices;
+}
+
+void NotationArticulationMapController::showChoices(const SysStaffKey& key, size_t chordIndex, const QPointF& globalPos)
+{
+    std::optional<ArticulationChoices> choices = articulationChoices(key, chordIndex);
+    if (!choices) {
+        return;
+    }
+
+    // Keep showing which note the choice applies to while it's offered (the choice may rebuild the lane)
+    const StaffOverlayData& data = m_overlaysByStaff.at(key);
+    QPointer<ArticulationMapOverlay> overlay = data.overlay;
+    if (overlay) {
+        overlay->setPinnedTargetX((data.chords[chordIndex].canvasX - data.bandRect.x()) / std::max(1.0, data.bandRect.width()));
+    }
+    const auto unpin = [overlay]() {
+        if (overlay) {
+            overlay->setPinnedTargetX(-1.0);
+        }
+    };
+
+    if (!m_useColumnPicker) {
+        showMenu(*choices, globalPos);
+        unpin();
+        return;
+    }
+
+    const QPointF viewPos = m_overlaysParent->mapFromGlobal(globalPos);
+    m_picker->open(std::move(*choices), viewPos, unpin);
+}
+
+//! NOTE: the articulations in submenus, one per folder; runs its own event loop
+void NotationArticulationMapController::showMenu(const ArticulationChoices& choices, const QPointF& globalPos)
+{
     QMenu menu;
     std::map<QString, QMenu*> submenus;
 
-    // The articulation last given to a note of this track, to repeat it in one click
-    const auto lastPlacedIt = m_lastPlacedEntryIdByTrack.find(trackId);
-    const ExpressionMapEntry* lastPlaced = lastPlacedIt != m_lastPlacedEntryIdByTrack.end() ? map->entry(lastPlacedIt->second) : nullptr;
-    if (lastPlaced) {
+    const auto choose = choices.choose;
+
+    if (!choices.lastPlacedEntryId.isEmpty()) {
         // With its folders, e.g. "Long > Con vibrato" (entry ids are stored that way, see ArticulationMapParser)
         // Neither checkable nor checked, and in italics: it is a shortcut, not a second copy of the
         // articulation listed (and checked) below
-        QAction* lastPlacedAction = menu.addAction(lastPlaced->id.toQString());
+        QAction* lastPlacedAction = menu.addAction(choices.lastPlacedEntryId);
         QFont font = lastPlacedAction->font();
         font.setItalic(true);
         lastPlacedAction->setFont(font);
 
-        const muse::String entryId = lastPlaced->id;
-        QObject::connect(lastPlacedAction, &QAction::triggered, [placeArticulation, entryId]() {
-            placeArticulation(entryId);
+        const QString entryId = choices.lastPlacedEntryId;
+        QObject::connect(lastPlacedAction, &QAction::triggered, [choose, entryId]() {
+            choose(entryId);
         });
 
         menu.addSeparator();
     }
 
-    for (const ExpressionMapEntry& mapEntry : map->entries) {
-        if (mapEntry.disabled) {
-            continue;
-        }
-
+    for (const QString& entryId : choices.entryIds) {
         QMenu* parentMenu = &menu;
-        const QStringList path = mapEntry.id.toQString().split('>');
+        const QStringList path = entryId.split('>');
         QString pathSoFar;
         for (qsizetype i = 0; i + 1 < path.size(); ++i) {
             pathSoFar += path[i].trimmed() + ">";
@@ -613,70 +749,40 @@ void NotationArticulationMapController::showMenu(const SysStaffKey& key, size_t 
 
         QAction* action = parentMenu->addAction(path.last().trimmed());
         action->setCheckable(true);
-        action->setChecked(mapEntry.id == entry.entryId);
+        action->setChecked(entryId == choices.currentEntryId);
 
-        const muse::String entryId = mapEntry.id;
-        QObject::connect(action, &QAction::triggered, [placeArticulation, entryId]() {
-            placeArticulation(entryId);
+        QObject::connect(action, &QAction::triggered, [choose, entryId]() {
+            choose(entryId);
         });
     }
 
     menu.addSeparator();
 
-    if (ownMark && !isRest) {
-        QAction* singleChordAction = menu.addAction(muse::qtrc("notation", "This note only"));
-        singleChordAction->setCheckable(true);
-        singleChordAction->setChecked(ownMark->scope == ArticulationMark::Scope::SingleChord);
-        QObject::connect(singleChordAction, &QAction::triggered, [this, targets, ownMark](bool checked) {
-            ArticulationMark mark = *ownMark;
-            mark.scope = checked ? ArticulationMark::Scope::SingleChord : ArticulationMark::Scope::Latched;
-            setMarks(targets, mark, muse::TranslatableString("undoableAction", "Change articulation scope"));
-        });
-
-        if (ownMark->tickOffset != 0) {
-            QAction* resetOffsetAction = menu.addAction(muse::qtrc("notation", "Reset position"));
-            QObject::connect(resetOffsetAction, &QAction::triggered, [this, targets, ownMark]() {
-                ArticulationMark mark = *ownMark;
-                mark.tickOffset = 0;
-                setMarks(targets, mark, muse::TranslatableString("undoableAction", "Reset articulation position"));
-            });
+    for (const ArticulationChoiceAction& choiceAction : choices.actions) {
+        QAction* action = menu.addAction(choiceAction.title);
+        action->setEnabled(choiceAction.enabled);
+        if (choiceAction.checkable) {
+            action->setCheckable(true);
+            action->setChecked(choiceAction.checked);
         }
-    }
 
-    if (ownMark) {
-        QAction* removeAction = menu.addAction(muse::qtrc("notation", "Remove articulation change"));
-        QObject::connect(removeAction, &QAction::triggered, [this, targets]() {
-            setMarks(targets, std::nullopt, muse::TranslatableString("undoableAction", "Remove articulation change"));
+        const auto trigger = choiceAction.trigger;
+        QObject::connect(action, &QAction::triggered, [trigger]() {
+            if (trigger) {
+                trigger();
+            }
         });
-    } else {
-        QAction* hint = menu.addAction(isRest ? muse::qtrc("notation", "Applies from the next note until the next change")
-                                       : defaultScope == ArticulationMark::Scope::SingleChord
-                                       ? muse::qtrc("notation", "Applies to this note only")
-                                       : muse::qtrc("notation", "Applies until the next change"));
-        hint->setEnabled(false);
     }
 
+    // The column picker has a button for it instead
     menu.addSeparator();
-
     QAction* editMapAction = menu.addAction(muse::qtrc("notation", "Edit articulation map…"));
-    QObject::connect(editMapAction, &QAction::triggered, [this, trackId]() {
-        muse::rcommand::CommandQuery query(EDIT_ARTICULATION_MAP_COMMAND);
-        query.addParam("partId", muse::Val(std::to_string(trackId.partId.toUint64())));
-        query.addParam("instrumentId", muse::Val(trackId.instrumentId.toStdString()));
-        commandDispatcher()->dispatch(query);
+    const auto editMap = choices.editMap;
+    QObject::connect(editMapAction, &QAction::triggered, [editMap]() {
+        editMap();
     });
 
-    // Keep showing which note the choice applies to while the menu is open (the choice may rebuild the lane)
-    QPointer<ArticulationMapOverlay> overlay = data.overlay;
-    if (overlay) {
-        overlay->setPinnedTargetX((entry.canvasX - data.bandRect.x()) / std::max(1.0, data.bandRect.width()));
-    }
-
     menu.exec(globalPos.toPoint());
-
-    if (overlay) {
-        overlay->setPinnedTargetX(-1.0);
-    }
 }
 
 std::vector<ChordRest*> NotationArticulationMapController::targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const

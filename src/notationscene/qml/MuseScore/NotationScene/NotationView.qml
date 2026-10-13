@@ -239,6 +239,10 @@ FocusScope {
                         notationViewMatrix: notationView.matrix
                     }
 
+                    ArticulationColumnPicker {
+                        model: notationView.articulationPicker
+                    }
+
                     CircularToolbar {
                         id: circularToolbar
 

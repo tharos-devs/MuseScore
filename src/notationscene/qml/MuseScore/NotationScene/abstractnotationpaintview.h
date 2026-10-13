@@ -75,6 +75,8 @@ class AbstractNotationPaintView : public muse::uicomponents::QuickPaintedView, p
 
     Q_PROPERTY(bool readOnly READ readonly WRITE setReadonly NOTIFY readonlyChanged)
 
+    Q_PROPERTY(mu::notation::ArticulationPickerModel * articulationPicker READ articulationPicker NOTIFY articulationPickerChanged)
+
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
     muse::GlobalInject<INotationSceneConfiguration> configuration;
     muse::GlobalInject<engraving::IEngravingConfiguration> engravingConfiguration;
@@ -105,6 +107,8 @@ public:
     Q_INVOKABLE void onElementPopupIsOpenChanged(const PopupModelType& popupType = PopupModelType::TYPE_UNDEFINED);
 
     Q_INVOKABLE void setPlaybackCursorItem(QQuickItem* cursor);
+
+    ArticulationPickerModel* articulationPicker() const;
 
     qreal width() const override;
     qreal height() const override;
@@ -199,6 +203,8 @@ signals:
     void isMainViewChanged(bool isMainView);
 
     void readonlyChanged();
+
+    void articulationPickerChanged();
 
 protected:
     INotationPtr notation() const;
