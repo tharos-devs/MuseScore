@@ -116,6 +116,8 @@ qt_add_qml_module(notationscene_qml
         articulationmapeditormodel.h
         articulationmapoverlay.cpp
         articulationmapoverlay.h
+        articulationpickermodel.cpp
+        articulationpickermodel.h
         notationarticulationmapcontroller.cpp
         notationarticulationmapcontroller.h
         valueeditorpopup.cpp
@@ -217,6 +219,7 @@ qt_add_qml_module(notationscene_qml
         elementpopups/ShadowNotePopup.qml
         elementpopups/StaffVisibilityPopup.qml
         elementpopups/StringTuningsPopup.qml
+        internal/ArticulationColumnPicker.qml
         internal/CustomiseControlPanel.qml
         internal/CustomiseView.qml
         internal/NotationSwitchButton.qml

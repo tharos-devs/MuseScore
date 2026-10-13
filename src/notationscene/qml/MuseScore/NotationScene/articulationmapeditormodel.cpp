@@ -28,6 +28,7 @@
 #include <QRawFont>
 
 #include "articulationmapcolors.h"
+#include "articulationpickermodel.h"
 
 #include "engraving/articulationmap/articulationmapwriter.h"
 #include "notation/imasternotation.h"
@@ -46,6 +47,8 @@ using namespace muse;
 static const QString FOLDER_SEPARATOR(" > ");
 static constexpr int MIN_MIDDLE_C_OCTAVE = 3;
 static constexpr int MAX_MIDDLE_C_OCTAVE = 4;
+//! NOTE: the articulation lane's column picker shows each folder level in a column, then the articulations
+static constexpr int MAX_FOLDER_LEVELS = ArticulationPickerModel::MAX_COLUMNS - 1;
 
 struct ArticulationMapEditorModel::Node {
     bool isFolder = false;
@@ -94,6 +97,30 @@ struct ArticulationMapEditorModel::Node {
         }
 
         return children.size();
+    }
+
+    //! NOTE: the folders it is in, itself included (the root, a folder too: 0)
+    int folderDepth() const
+    {
+        int depth = 0;
+        for (const Node* n = this; n && n->parent; n = n->parent) {
+            if (n->isFolder) {
+                ++depth;
+            }
+        }
+
+        return depth;
+    }
+
+    //! NOTE: the folder levels it brings along, itself included
+    int folderHeight() const
+    {
+        int height = 0;
+        for (const std::unique_ptr<Node>& child : children) {
+            height = std::max(height, child->folderHeight());
+        }
+
+        return isFolder ? height + 1 : 0;
     }
 
     bool contains(const Node* node) const
@@ -1622,14 +1649,19 @@ bool ArticulationMapEditorModel::canMove(int fromRow, int toRow, DropPosition po
         return false;
     }
 
-    // not next to itself, and a folder can't go into itself
+    if (position == DropPosition::Into && !to->isFolder) {
+        return false;
+    }
+
+    // not next to itself, a folder can't go into itself, and no more than MAX_FOLDER_LEVELS folders deep
+    const int parentDepth = position == DropPosition::Into ? to->folderDepth() : to->parent->folderDepth();
     for (const Node* node : nodes) {
-        if (node->contains(to)) {
+        if (node->contains(to) || parentDepth + node->folderHeight() > MAX_FOLDER_LEVELS) {
             return false;
         }
     }
 
-    return position != DropPosition::Into || to->isFolder;
+    return true;
 }
 
 void ArticulationMapEditorModel::move(int fromRow, int toRow, DropPosition position)

@@ -25,8 +25,10 @@
 #include <optional>
 #include <vector>
 
+#include <QPointer>
 #include <QQuickItem>
 
+#include "actions/iactionsdispatcher.h"
 #include "async/asyncable.h"
 #include "context/iglobalcontext.h"
 #include "modularity/ioc.h"
@@ -34,6 +36,8 @@
 #include "notation/notationtypes.h"
 #include "playback/iplaybackcontroller.h"
 #include "rcommand/icommanddispatcher.h"
+
+#include "articulationpickermodel.h"
 
 namespace mu::notation {
 class ArticulationMapOverlay;
@@ -45,12 +49,16 @@ class NotationArticulationMapController : public muse::Contextable, public muse:
     muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
+    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
 
 public:
     NotationArticulationMapController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx);
+    ~NotationArticulationMapController();
 
     void init();
     void setViewMatrix(const muse::draw::Transform& viewMatrix);
+
+    ArticulationPickerModel* picker() const;
 
 private:
     //! NOTE: System pointers are compared by address only, never dereferenced (see NotationNoteVelocityController)
@@ -97,7 +105,10 @@ private:
     void onChipDragged(const SysStaffKey& key, int chipIndex, qreal deltaXN, bool completed);
     void onDragCancelled(const SysStaffKey& key, int chipIndex);
 
-    void showMenu(const SysStaffKey& key, size_t chordIndex, const QPointF& globalPos);
+    //! NOTE: what can be chosen for a chord of the lane, shown by the column picker or the menu
+    std::optional<ArticulationChoices> articulationChoices(const SysStaffKey& key, size_t chordIndex);
+    void showChoices(const SysStaffKey& key, size_t chordIndex, const QPointF& globalPos);
+    void showMenu(const ArticulationChoices& choices, const QPointF& globalPos);
     void setMarks(const std::vector<mu::engraving::ChordRest*>& masterChords, const std::optional<ArticulationMark>& mark,
                   const muse::TranslatableString& actionName);
     std::vector<mu::engraving::ChordRest*> targetMasterChords(const StaffOverlayData& data, size_t chordIndex) const;
@@ -117,7 +128,13 @@ private:
     bool m_rebuildScheduled = false;
     bool m_rebuildAfterDrag = false;
 
-    //! NOTE: the articulation last given to a note of each track (this session only), offered first in its menu
-    std::map<mu::engraving::InstrumentTrackId, muse::String> m_lastPlacedEntryIdByTrack;
+    //! NOTE: the column picker (shown by NotationView.qml); the menu is kept for a possible user option.
+    //! Owned by the overlays' parent: QML may still read it while the view is being destroyed
+    QPointer<ArticulationPickerModel> m_picker;
+    bool m_useColumnPicker = true;
+
+    //! NOTE: the articulations given to the notes of each track (this session only), the last one first: the last one
+    //! is offered first in its menu, and the column picker reopens the folders each one was chosen in
+    std::map<mu::engraving::InstrumentTrackId, QStringList> m_placedEntryIdsByTrack;
 };
 }

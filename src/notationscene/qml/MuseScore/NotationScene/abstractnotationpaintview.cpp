@@ -183,6 +183,7 @@ void AbstractNotationPaintView::load()
 
     m_notationArticulationMapController = std::make_unique<NotationArticulationMapController>(m_articulationMapOverlayContainer,
                                                                                               iocContext());
+    emit articulationPickerChanged();
     m_playbackCursor = std::make_unique<PlaybackCursor>(iocContext());
     m_playbackCursor->setVisible(false);
     m_noteInputCursor = std::make_unique<NoteInputCursor>(iocContext(), notationConfiguration()->thinNoteInputCursor());
@@ -2196,6 +2197,11 @@ void AbstractNotationPaintView::setIsMainView(bool isMainView)
 
     m_isMainView = isMainView;
     emit isMainViewChanged(m_isMainView);
+}
+
+ArticulationPickerModel* AbstractNotationPaintView::articulationPicker() const
+{
+    return m_notationArticulationMapController ? m_notationArticulationMapController->picker() : nullptr;
 }
 
 void AbstractNotationPaintView::setPlaybackCursorItem(QQuickItem* cursor)
