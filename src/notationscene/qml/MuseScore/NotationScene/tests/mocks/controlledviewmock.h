@@ -54,6 +54,7 @@ public:
     MOCK_METHOD(void, hideContextMenu, (), (override));
 
     MOCK_METHOD(void, showSearch, (), (override));
+    MOCK_METHOD(void, toggleCircularToolbar, (), (override));
 
     MOCK_METHOD(void, showElementPopup, (const ElementType&), (override));
     MOCK_METHOD(void, hideElementPopup, (const ElementType&), (override));

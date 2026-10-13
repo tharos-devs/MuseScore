@@ -38,6 +38,8 @@ qt_add_qml_module(notationscene_qml
         abstractnotationpaintview.h
         automationtypemenumodel.cpp
         automationtypemenumodel.h
+        circulartoolbarmodel.cpp
+        circulartoolbarmodel.h
         menuitemsutils.h
         expressionmenumodel.cpp
         expressionmenumodel.h
@@ -72,6 +74,7 @@ qt_add_qml_module(notationscene_qml
         loopmarker.cpp
         loopmarker.h
         midiccautomation.h
+        instrumenteditor.h
         midiccselectmodel.cpp
         midiccselectmodel.h
         notationautomationcontroller.h
@@ -229,6 +232,7 @@ qt_add_qml_module(notationscene_qml
         internal/VoicesPopup.qml
         NotationToolBar.qml
         NotationView.qml
+        CircularToolbar.qml
         NoteInputBar.qml
         PartsDialog.qml
         PercussionPanel.qml

@@ -167,6 +167,14 @@ FocusScope {
                         searchPopup.show()        
                     }
 
+                    onShowCircularToolbarRequested: function (viewPos) {
+                        circularToolbar.show(viewPos)
+                    }
+
+                    onHideCircularToolbarRequested: {
+                        circularToolbar.hide()
+                    }
+
                     onShowElementPopupRequested: function (popupType) {
                         popUpLoader.updateShow(popupType);
                     }
@@ -229,6 +237,18 @@ FocusScope {
                     NotationRegionsBeingProcessedView {
                         notationViewRect: Qt.rect(notationView.x, notationView.y, notationView.width, notationView.height)
                         notationViewMatrix: notationView.matrix
+                    }
+
+                    CircularToolbar {
+                        id: circularToolbar
+
+                        anchors.fill: parent
+                        // above the score's overlays (automation curves, note editors...)
+                        z: 1000
+
+                        onCloseRequested: {
+                            notationView.closeCircularToolbar()
+                        }
                     }
                 }
 

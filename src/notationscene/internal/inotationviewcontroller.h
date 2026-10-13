@@ -55,6 +55,7 @@ public:
     virtual void togglePopupForItemIfSupports(const mu::engraving::EngravingItem* item) = 0;
 
     virtual void showSearch() = 0;
+    virtual void toggleCircularToolbar() = 0;
 
     // diagnostic
     virtual void redrawView() = 0;

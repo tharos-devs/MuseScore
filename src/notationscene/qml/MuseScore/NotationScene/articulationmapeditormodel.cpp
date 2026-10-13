@@ -846,30 +846,18 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
     updateInstrumentEditorState();
 }
 
-std::optional<ArticulationMapEditorModel::InstrumentEditorTarget> ArticulationMapEditorModel::instrumentEditorTarget() const
+std::optional<instrumenteditor::Target> ArticulationMapEditorModel::instrumentEditorTarget() const
 {
-    const project::INotationProjectPtr project = globalContext()->currentProject();
-    if (!m_targetTrack || !project || !project->audioSettings()) {
+    if (!m_targetTrack) {
         return std::nullopt;
     }
 
-    const audio::AudioInputParams& params = project->audioSettings()->trackInputParams(*m_targetTrack);
-    if (params.type() != audio::AudioSourceType::Vsti || !audio::hasNativeEditorSupport(params.resourceMeta)) {
-        return std::nullopt;
-    }
-
-    const playback::IPlaybackController::InstrumentTrackIdMap& trackIds = playbackController()->instrumentTrackIdMap();
-    auto it = trackIds.find(*m_targetTrack);
-    if (it == trackIds.end()) {
-        return std::nullopt;
-    }
-
-    return InstrumentEditorTarget { it->second, params.resourceMeta.id };
+    return instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *m_targetTrack);
 }
 
 void ArticulationMapEditorModel::updateInstrumentEditorState()
 {
-    const std::optional<InstrumentEditorTarget> target = instrumentEditorTarget();
+    const std::optional<instrumenteditor::Target> target = instrumentEditorTarget();
     const bool hasEditor = target.has_value();
     bool opened = false;
 #ifdef MUSE_MODULE_VST
@@ -916,21 +904,12 @@ void ArticulationMapEditorModel::sendArticulation(int row)
 
 void ArticulationMapEditorModel::openInstrumentEditor()
 {
-    const std::optional<InstrumentEditorTarget> target = instrumentEditorTarget();
+    const std::optional<instrumenteditor::Target> target = instrumentEditorTarget();
     if (!target) {
         return;
     }
 
-    actions::ActionQuery query("action://vst/instrument_editor");
-    query.addParam("trackId", Val(target->trackId));
-    query.addParam("resourceId", Val(target->resourceId));
-    actionsDispatcher()->dispatch(query);
-
-    //! NOTE: same as the Mixer's (see MixerChannelItem::openEditor()): a plugin may change its state without
-    //! reporting it once its window is open
-    if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
-        project->audioSettings()->markAsChanged();
-    }
+    instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target);
 }
 
 void ArticulationMapEditorModel::reloadIntoTrack()

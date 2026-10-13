@@ -701,6 +701,7 @@ void NotationActionController::init()
     registerViewCommand(CONTEXT_MENU_OF_SELECTION_COMMAND, &ViewController::openContextMenuOfSelection);
 
     registerViewCommand(SHOW_SEARCH_COMMAND, &ViewController::showSearch);
+    registerViewCommand(TOGGLE_CIRCULAR_TOOLBAR_COMMAND, &ViewController::toggleCircularToolbar);
 
     registerCommandWithParams(PIANO_KEYBOARD_SET_NUMBER_OF_KEYS_COMMAND, &Controller::setPianoKeyboardNumberOfKeys);
 
@@ -1147,6 +1148,7 @@ void NotationActionController::init()
             { "notation-context-menu", CONTEXT_MENU_OF_SELECTION_COMMAND, {} },
             { "piano-keyboard-set-number-of-keys", PIANO_KEYBOARD_SET_NUMBER_OF_KEYS_COMMAND, make_conv({ { "keys", param<int> } }) },
             { "find", SHOW_SEARCH_COMMAND, {} },
+            { "toggle-circular-toolbar", TOGGLE_CIRCULAR_TOOLBAR_COMMAND, {} },
             { "diagnostic-notationview-redraw", DIAGNOSTIC_VIEW_REDRAW_COMMAND, {} },
         };
 
@@ -3886,12 +3888,28 @@ muse::Ret NotationActionController::toggleAutomationType(const muse::rcommand::P
     };
 
     const std::string type = params.at("type").toString();
+    const bool isAutomationModeEnabled = masterNotation->automation()->isAutomationModeEnabled();
+
+    if (type == "midicc") {
+        if (!params.contains("cc")) {
+            return selectAutomationType(params);
+        }
+
+        if (isAutomationModeEnabled && configuration()->currentAutomationType() == mu::engraving::AutomationType::MidiCC
+            && configuration()->currentAutomationMidiCc() == params.at("cc").toInt()) {
+            masterNotation->automation()->setAutomationModeEnabled(false);
+            return muse::make_ok();
+        }
+
+        return selectAutomationType(params);
+    }
+
     const auto it = TYPES.find(type);
     if (it == TYPES.end()) {
         return muse::make_ok();
     }
 
-    if (masterNotation->automation()->isAutomationModeEnabled() && configuration()->currentAutomationType() == it->second) {
+    if (isAutomationModeEnabled && configuration()->currentAutomationType() == it->second) {
         masterNotation->automation()->setAutomationModeEnabled(false);
         return muse::make_ok();
     }
