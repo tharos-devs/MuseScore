@@ -739,6 +739,21 @@ StyledDialogView {
                         enabled: editorModel.selectionCount > 0
                         onClicked: editorModel.removeSelected()
                     }
+
+                    //! NOTE: the same arrows as each folder's
+                    FlatButton {
+                        transparent: true
+                        icon: IconCode.SMALL_ARROW_DOWN
+                        toolTipTitle: qsTrc("notation", "Expand all folders")
+                        onClicked: editorModel.setAllExpanded(true)
+                    }
+
+                    FlatButton {
+                        transparent: true
+                        icon: IconCode.SMALL_ARROW_RIGHT
+                        toolTipTitle: qsTrc("notation", "Collapse all folders")
+                        onClicked: editorModel.setAllExpanded(false)
+                    }
                 }
             }
 

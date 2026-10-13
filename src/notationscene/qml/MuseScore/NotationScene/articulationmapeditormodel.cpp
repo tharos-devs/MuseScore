@@ -1712,6 +1712,22 @@ void ArticulationMapEditorModel::toggleExpanded(int row)
     rebuildRows();
 }
 
+//! NOTE: every folder, subfolders included
+void ArticulationMapEditorModel::setAllExpanded(bool expanded)
+{
+    std::function<void(Node*)> visit = [&](Node* parent) {
+        for (const std::unique_ptr<Node>& child : parent->children) {
+            if (child->isFolder) {
+                child->expanded = expanded;
+                visit(child.get());
+            }
+        }
+    };
+    visit(m_root.get());
+
+    rebuildRows();
+}
+
 // ---- articulation properties
 
 void ArticulationMapEditorModel::rename(int row, const QString& name)
