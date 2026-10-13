@@ -645,6 +645,12 @@ const UiActionList NotationUiActions::s_actions = {
              TranslatableString("action", "&Find / Go to"),
              TranslatableString("action", "Find / Go to")
              ),
+    UiAction("toggle-circular-toolbar",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_NOTATION_FOCUSED,
+             TranslatableString("action", "Circular toolbar"),
+             TranslatableString("action", "Show/hide the circular toolbar at the mouse position")
+             ),
     UiAction("staff-properties",
              mu::context::UiCtxProjectOpened,
              mu::context::CTX_NOTATION_OPENED,

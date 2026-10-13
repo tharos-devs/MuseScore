@@ -133,6 +133,9 @@ public:
 
     void showSearch() override;
 
+    void toggleCircularToolbar() override;
+    Q_INVOKABLE void closeCircularToolbar();
+
     void showElementPopup(const ElementType& elementType) override;
     void hideElementPopup(const ElementType& elementType) override;
     void hideElementPopup(PopupModelType modelType = PopupModelType::TYPE_UNDEFINED) override;
@@ -174,6 +177,9 @@ signals:
     void hideContextMenuRequested();
 
     void showSearchRequested();
+
+    void showCircularToolbarRequested(const QPointF& viewPos);
+    void hideCircularToolbarRequested();
 
     void showElementPopupRequested(mu::notation::AbstractElementPopupModel::PopupModelType modelType);
     void hideElementPopupRequested();
@@ -342,6 +348,13 @@ private:
 
     PopupModelType m_currentElementPopupType = PopupModelType::TYPE_UNDEFINED;
     bool m_isContextMenuOpen = false;
+
+    //! The circular toolbar stays open after a short tap of its shortcut key (until a click or a
+    //! new tap), but only while the key is held after a long press - see keyReleaseEvent().
+    bool m_isCircularToolbarOpen = false;
+    int m_circularToolbarKey = 0;
+    int m_lastShortcutOverrideKey = 0;
+    QElapsedTimer m_circularToolbarOpenTimer;
 
     muse::RectF m_shadowNoteRect;
     muse::RectF m_previewMeasureRect;

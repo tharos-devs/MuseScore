@@ -578,6 +578,7 @@ inline static const muse::rcommand::Command BOTTOM_OF_LAST_PAGE_COMMAND("command
 inline static const muse::rcommand::Command CONTEXT_MENU_OF_SELECTION_COMMAND("command://notation/view/context-menu-of-selection");
 
 inline static const muse::rcommand::Command SHOW_SEARCH_COMMAND("command://notation/view/show-search");
+inline static const muse::rcommand::Command TOGGLE_CIRCULAR_TOOLBAR_COMMAND("command://notation/view/toggle-circular-toolbar");
 
 // piano keyboard commands
 inline static const muse::rcommand::Command PIANO_KEYBOARD_SET_NUMBER_OF_KEYS_COMMAND("command://notation/piano-keyboard/set-number-of-keys");

@@ -81,6 +81,7 @@ public:
     virtual void hideContextMenu() = 0;
 
     virtual void showSearch() = 0;
+    virtual void toggleCircularToolbar() = 0;
 
     virtual void showElementPopup(const ElementType& elementType) = 0;
     virtual void hideElementPopup(const ElementType& elementType) = 0;
@@ -139,6 +140,7 @@ public:
     void togglePopupForItemIfSupports(const EngravingItem* item) override;
 
     void showSearch() override;
+    void toggleCircularToolbar() override;
 
     void redrawView() override;
     // -----------------------

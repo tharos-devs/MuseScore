@@ -139,18 +139,25 @@ inline bool hasVstInstrument(const project::INotationProjectPtr& project, const 
 using MakeMenuItemFn = std::function<muse::uicomponents::MenuItem* (const muse::rcommand::CommandQuery&, const muse::TranslatableString&)>;
 using MakeSeparatorFn = std::function<muse::uicomponents::MenuItem* ()>;
 
-//! NOTE: the predefined controllers, then the score's custom ones, a separator and "Other MIDI CC…";
-//! a controller that already has a curve somewhere in the score is marked with a dot
+//! NOTE: the predefined controllers, then the score's custom ones, a separator and "Other MIDI CC…", except the
+//! excluded controllers; a controller that already has a curve somewhere in the score is marked with a dot
 inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& makeMenuItem, const MakeSeparatorFn& makeSeparator,
                                                       const INotationConfiguration* configuration,
-                                                      const INotationAutomationPtr& automation, bool withDeleteItem = true)
+                                                      const INotationAutomationPtr& automation, bool withDeleteItem = true,
+                                                      const std::vector<int>& excludedControllers = {})
 {
-    std::vector<int> controllers = predefinedControllers();
+    std::vector<int> controllers;
+    for (const int controller : predefinedControllers()) {
+        if (!muse::contains(excludedControllers, controller)) {
+            controllers.push_back(controller);
+        }
+    }
     std::set<int> controllersWithCurve;
 
     if (automation) {
         for (const uint8_t controller : automation->customMidiCcs()) {
-            if (!muse::contains(controllers, static_cast<int>(controller))) {
+            if (!muse::contains(controllers, static_cast<int>(controller))
+                && !muse::contains(excludedControllers, static_cast<int>(controller))) {
                 controllers.push_back(controller);
             }
         }
@@ -166,7 +173,8 @@ inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& make
 
     const bool isMidiCcCurrent = configuration->currentAutomationType() == AutomationType::MidiCC;
     const int currentController = configuration->currentAutomationMidiCc();
-    if (isMidiCcCurrent && !muse::contains(controllers, currentController)) {
+    if (isMidiCcCurrent && !muse::contains(controllers, currentController)
+        && !muse::contains(excludedControllers, currentController)) {
         controllers.push_back(currentController);
     }
 
@@ -197,7 +205,9 @@ inline muse::uicomponents::MenuItemList makeMenuItems(const MakeMenuItemFn& make
         }
     }
 
-    items << makeSeparator();
+    if (!controllers.empty()) {
+        items << makeSeparator();
+    }
 
     muse::rcommand::CommandQuery otherQuery(SELECT_AUTOMATION_TYPE_COMMAND);
     otherQuery.addParam("type", muse::Val("midicc"));

@@ -3072,7 +3072,8 @@ static const std::vector<CommandInfo> s_commandInfos = {
         TranslatableString::untranslatable("Toggle automation type"),
         TranslatableString::untranslatable("Show this automation type, or turn automation off if it is already shown"),
         InputSchema({
-            { "type", Arg(DataType::String, u"Automation type (dynamics, tempo, volume, pan)") },
+            { "type", Arg(DataType::String, u"Automation type (dynamics, tempo, volume, pan, midicc)") },
+            { "cc", Arg(DataType::Integer, u"MIDI CC number for midicc (asks for one when omitted)", Val(0), Val(127)) },
         }),
     },
 
@@ -3258,6 +3259,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         SHOW_SEARCH_COMMAND,
         TranslatableString("action", "Show search"),
         TranslatableString("action", "Show search"),
+        InputSchema(),
+        Decoration()
+    },
+    CommandInfo {
+        TOGGLE_CIRCULAR_TOOLBAR_COMMAND,
+        TranslatableString("action", "Circular toolbar"),
+        TranslatableString("action", "Show/hide the circular toolbar at the mouse position"),
         InputSchema(),
         Decoration()
     },

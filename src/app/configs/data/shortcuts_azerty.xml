@@ -1243,4 +1243,9 @@
     <key>grace-note-bend</key>
     <seq>Ctrl+Alt+B</seq>
     </SC>
+  <SC>
+    <key>toggle-circular-toolbar</key>
+    <seq>Z</seq>
+    <autorepeat>0</autorepeat>
+    </SC>
   </Shortcuts>

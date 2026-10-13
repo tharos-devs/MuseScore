@@ -516,6 +516,9 @@ void AbstractNotationPaintView::onUnloadNotation(INotationPtr)
 {
     m_pageCache.clear();
 
+    // its buttons show the state of this notation
+    closeCircularToolbar();
+
     m_notation->notationChanged().disconnect(this);
     INotationInteractionPtr interaction = m_notation->interaction();
     interaction->noteInput()->stateChanged().disconnect(this);
@@ -964,6 +967,44 @@ void AbstractNotationPaintView::hideContextMenu()
 void AbstractNotationPaintView::showSearch()
 {
     emit showSearchRequested();
+}
+
+void AbstractNotationPaintView::toggleCircularToolbar()
+{
+    if (m_isCircularToolbarOpen) {
+        closeCircularToolbar();
+        return;
+    }
+
+    if (m_readonly) {
+        return;
+    }
+
+    QPointF pos = mapFromGlobal(QCursor::pos());
+    if (!boundingRect().contains(pos)) {
+        pos = QPointF(width() / 2, height() / 2);
+    }
+
+    hideContextMenu();
+    hideElementPopup();
+
+    m_isCircularToolbarOpen = true;
+    m_circularToolbarKey = m_lastShortcutOverrideKey;
+    m_circularToolbarOpenTimer.start();
+
+    emit showCircularToolbarRequested(pos);
+}
+
+void AbstractNotationPaintView::closeCircularToolbar()
+{
+    if (!m_isCircularToolbarOpen) {
+        return;
+    }
+
+    m_isCircularToolbarOpen = false;
+    m_circularToolbarKey = 0;
+
+    emit hideCircularToolbarRequested();
 }
 
 void AbstractNotationPaintView::showElementPopup(const ElementType& elementType)
@@ -1674,6 +1715,12 @@ bool AbstractNotationPaintView::shortcutOverride(QKeyEvent* event)
 
 void AbstractNotationPaintView::keyPressEvent(QKeyEvent* event)
 {
+    if (m_isCircularToolbarOpen && event->key() == Qt::Key_Escape) {
+        closeCircularToolbar();
+        event->accept();
+        return;
+    }
+
     // Qt::Key_Control is Cmd on macOS, Ctrl on Windows/Linux (same swap as
     // Qt::ControlModifier). Only *arms* here - the actual toggle only commits on a matching
     // keyReleaseEvent() with nothing else having cancelled it in between (see event(), the single
@@ -1699,6 +1746,20 @@ void AbstractNotationPaintView::keyPressEvent(QKeyEvent* event)
 
 void AbstractNotationPaintView::keyReleaseEvent(QKeyEvent* event)
 {
+    // A long press of the circular toolbar's key only shows it while the key is held; a short tap
+    // leaves it open.
+    static constexpr qint64 CIRCULAR_TOOLBAR_HOLD_MS = 250;
+    if (m_isCircularToolbarOpen && !event->isAutoRepeat() && m_circularToolbarKey != 0
+        && event->key() == m_circularToolbarKey) {
+        if (m_circularToolbarOpenTimer.elapsed() >= CIRCULAR_TOOLBAR_HOLD_MS) {
+            closeCircularToolbar();
+        }
+        m_circularToolbarKey = 0;
+    }
+    if (!event->isAutoRepeat()) {
+        m_lastShortcutOverrideKey = 0;
+    }
+
     // See keyPressEvent(). Swaps which of the note-offset and note-velocity
     // overlays paints - and is hit-tested - on top of the other, persisting until tapped again
     // (not just while held).
@@ -1781,6 +1842,15 @@ bool AbstractNotationPaintView::event(QEvent* event)
         showContextMenu(m_inputController->selectionType(), pos);
         return true;
     } else if (eventType == QEvent::Type::ShortcutOverride) {
+        // Escape only closes the circular toolbar, not also whatever the escape shortcut does
+        if (m_isCircularToolbarOpen && keyEvent->key() == Qt::Key_Escape) {
+            keyEvent->accept();
+            return true;
+        }
+
+        // The key of the shortcut that may be about to open the circular toolbar
+        m_lastShortcutOverrideKey = keyEvent->key();
+
         bool shouldOverrideShortcut = shortcutOverride(keyEvent);
 
         if (shouldOverrideShortcut) {

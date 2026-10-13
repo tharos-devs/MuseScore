@@ -42,6 +42,8 @@
 #include "context/iglobalcontext.h"
 #include "playback/iplaybackcontroller.h"
 
+#include "instrumenteditor.h"
+
 #include "muse_framework_config.h"
 #ifdef MUSE_MODULE_VST
 #include "vst/ivstpluginstateprovider.h"
@@ -266,11 +268,7 @@ private:
         int depth = 0;
     };
 
-    struct InstrumentEditorTarget {
-        muse::audio::TrackId trackId = -1;
-        muse::audio::AudioResourceId resourceId;
-    };
-    std::optional<InstrumentEditorTarget> instrumentEditorTarget() const;
+    std::optional<instrumenteditor::Target> instrumentEditorTarget() const;
     void updateInstrumentEditorState();
 
     void loadFile(const muse::io::path_t& path);

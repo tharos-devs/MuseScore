@@ -1788,6 +1788,11 @@ void NotationViewInputController::showSearch()
     m_view->showSearch();
 }
 
+void NotationViewInputController::toggleCircularToolbar()
+{
+    m_view->toggleCircularToolbar();
+}
+
 void NotationViewInputController::updateShadowNotePopupVisibility(bool forceHide)
 {
     const mu::engraving::ShadowNote* shadowNote = viewInteraction()->shadowNote();
