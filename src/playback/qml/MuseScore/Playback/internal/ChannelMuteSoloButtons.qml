@@ -31,6 +31,7 @@ import MuseScore.Playback
 Row {
     id: root
 
+    //! NOTE: may be null for a moment (e.g. a Track list row while its list is rebuilt)
     property MixerChannelItem channelItem: null
 
     property NavigationPanel navigationPanel: null
@@ -53,10 +54,10 @@ Row {
         width: 20
 
         icon: IconCode.MUTE
-        checked: root.channelItem.muted
+        checked: root.channelItem?.muted ?? false
 
         // TODO: not use `enabled` for this, but present visually in some other way
-        enabled: !(root.channelItem.muted && root.channelItem.forceMute)
+        enabled: Boolean(root.channelItem) && !(root.channelItem.muted && root.channelItem.forceMute)
 
         navigation.name: root.navigationName + "MuteButton"
         navigation.panel: root.navigationPanel
@@ -81,16 +82,18 @@ Row {
         width: 20
 
         icon: IconCode.SOLO
-        checked: root.channelItem.solo
+        checked: root.channelItem?.solo ?? false
 
         //! NOTE: solo is only meaningful for a "group" bus (soloing it, or a track
         //! that feeds it, correctly isolates them together - see
         //! PlaybackController::updateSoloMuteStates()) - a regular send/return aux
         //! bus is left disabled here, same as before, since there's no well-defined
         //! standard behavior for "solo through a send" (see AuxSendItem/DAW research)
-        enabled: (root.channelItem.type !== MixerChannelItem.Aux || root.channelItem.isGroupBus)
+        enabled: Boolean(root.channelItem)
+                 && (root.channelItem.type !== MixerChannelItem.Aux || root.channelItem.isGroupBus)
                  && (!root.channelItem.muted || root.channelItem.forceMute)
-        visible: root.channelItem.type !== MixerChannelItem.Master && root.channelItem.type !== MixerChannelItem.Metronome
+        visible: Boolean(root.channelItem)
+                 && root.channelItem.type !== MixerChannelItem.Master && root.channelItem.type !== MixerChannelItem.Metronome
 
         navigation.name: root.navigationName + "SoloButton"
         navigation.panel: root.navigationPanel
@@ -104,7 +107,9 @@ Row {
         }
 
         onToggled: {
-            root.soloToggled(!root.channelItem.solo)
+            if (root.channelItem) {
+                root.soloToggled(!root.channelItem.solo)
+            }
         }
     }
 }
