@@ -5,6 +5,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-13
+- Fixed: with the Timeline or the Video panel docked at the left or right of the score, opening or closing a fixed side panel (e.g. Palettes) no longer left its size as if it weren't at the side.
+- Fixed: "Cannot read property … of null" warnings from the Mute/Solo buttons while the Track list (or Mixer) rebuilds its rows.
 - Articulation map editor: two icons right of Remove expand or collapse every folder at once (subfolders included), with the same arrows as each folder.
 - Articulation lane: clicking a note opens a column picker instead of the menu - one column per folder level of the map (up to 7, shown at 90%): a folder clicked shows its content in the next column, an articulation clicked is placed. It opens on the folders of the articulation last chosen (per track, this session) and a folder clicked reopens the one last chosen in it - or else each first row as long as it's a folder, so a choice rarely needs every column clicked. Top row: the articulation last placed (one click to repeat it), a pencil to edit the track's articulation map and, for a VST instrument with its own window, a plugin button to open it; below: This note only, Reset position, Remove articulation change. The menu is kept in the code for a possible preference. The articulation map editor no longer lets folders be nested deeper than 6 levels.
 - Note offsets: a new icon (in the toolbar's Expression dropdown and button, where it's drawn a little smaller, and wherever the action shows) instead of the clock.
