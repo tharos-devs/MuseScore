@@ -210,6 +210,7 @@ public:
     Q_INVOKABLE bool canMove(int fromRow, int toRow, DropPosition position) const;
     Q_INVOKABLE void move(int fromRow, int toRow, DropPosition position);
     Q_INVOKABLE void toggleExpanded(int row);
+    Q_INVOKABLE void setAllExpanded(bool expanded);
 
     Q_INVOKABLE void rename(int row, const QString& name);
     Q_INVOKABLE void setColor(int row, const QColor& color);
