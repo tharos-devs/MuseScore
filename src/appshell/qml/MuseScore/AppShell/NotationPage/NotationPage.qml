@@ -630,7 +630,8 @@ DockPage {
             objectName: root.pageModel.timelinePanelName()
 
             //! NOTE: its content's updateDockPlacement(), while it's loaded - the ids inside the content can't be
-            //! reached from the page: the panel loads it as a component of its own
+            //! reached from the page: the panel loads it as a component of its own. Called through this property,
+            //! the function gets the panel as `this`: it names its content by id
             property var dockPlacementUpdater: null
             title: qsTrc("appshell", "Timeline")
 
@@ -668,7 +669,7 @@ DockPage {
                 function updateDockPlacement() {
                     timelinePanel.maximumWidth = root.resizableSidePanelMaximumWidth(timelinePanel)
 
-                    const atSide = root.isDockedAtSide(timelinePanel, this)
+                    const atSide = root.isDockedAtSide(timelinePanel, timelineInstance)
                     if (atSide !== undefined) {
                         timelinePanel.maximumHeight = atSide ? root.panelMaxDimension : root.horizontalPanelMaxHeight
                     }
@@ -856,7 +857,7 @@ DockPage {
 
                     //! NOTE: not known (see root.isDockedAtSide()): it stays where it was - flipping would push the wide
                     //! floor for that moment, and widen a side column for good
-                    const atSide = root.isDockedAtSide(videoPanel, this)
+                    const atSide = root.isDockedAtSide(videoPanel, videoPanelLoaderInstance)
                     if (atSide === undefined) {
                         return
                     }
