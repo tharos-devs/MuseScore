@@ -4,6 +4,10 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-14
+- Fixed: Escape now closes the articulation lane's column picker.
+- Mixer: with several instrument tracks selected, "No aux send" removes that send from all of them, and an effect (or "No effect") picked in an FX slot applies to all of them - the same effect replaced, or added in the first empty slot; "No effect" removes one instance. Buses in the selection are left alone. Choosing a bus, "No aux send" and FX choices are undoable, sends coming back with their level, on/off state and slot position, effects with their settings.
+
 ### 2026-10-13
 - Fixed: with the Timeline or the Video panel docked at the left or right of the score, opening or closing a fixed side panel (e.g. Palettes) no longer left its size as if it weren't at the side.
 - Fixed: "Cannot read property … of null" warnings from the Mute/Solo buttons while the Track list (or Mixer) rebuilds its rows.
