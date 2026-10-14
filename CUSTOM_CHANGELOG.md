@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-14
+- 2nd Palettes: a narrow panel (View > Secondary palettes, docked at the left, hidden by default) showing the same palettes as the Palettes panel in two columns, to sit beside the Track list. The first column has an icon per palette (its first cell when there's no fitting icon, "TEXT" for Text), the second the clicked palette's cells at their size, as many per row as fit, with "More" at the bottom. Clicking the shown palette's icon folds the second column. "+" adds palettes (the new one is shown), right click on an icon hides or resets that palette, dragging an icon reorders the palettes (when palette dragging is allowed). Its width is fixed; the palette shown, the fold and the zoom are remembered.
 - Track list: the meters are at the right edge of each row, the buttons left of them; the name starts right after the color strip.
 - Fixed: Escape now closes the articulation lane's column picker.
 - Mixer: with several instrument tracks selected, "No aux send" removes that send from all of them, and an effect (or "No effect") picked in an FX slot applies to all of them - the same effect replaced, or added in the first empty slot; "No effect" removes one instance. Buses in the selection are left alone. Choosing a bus, "No aux send" and FX choices are undoable, sends coming back with their level, on/off state and slot position, effects with their settings.
