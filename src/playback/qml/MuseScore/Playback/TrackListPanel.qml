@@ -86,7 +86,8 @@ Item {
 
                     height: 32
                     anchors.right: parent.right
-                    anchors.rightMargin: 4
+                    //! NOTE: lined up with the rows' buttons, left of their meters (2 × 3 px + 1, then 6)
+                    anchors.rightMargin: 4 + 7 + 6
                     anchors.top: parent.top
 
                     spacing: 4
@@ -159,8 +160,8 @@ Item {
                     Row {
                         id: metronomeMeter
 
-                        anchors.left: metronomeColorStrip.right
-                        anchors.leftMargin: 6
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
                         spacing: 1
@@ -181,7 +182,7 @@ Item {
                     }
 
                     StyledTextLabel {
-                        anchors.left: metronomeMeter.right
+                        anchors.left: metronomeColorStrip.right
                         anchors.leftMargin: 6
                         anchors.right: metronomeButtonsRow.left
                         anchors.rightMargin: 6
@@ -194,8 +195,8 @@ Item {
                     Row {
                         id: metronomeButtonsRow
 
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
+                        anchors.right: metronomeMeter.left
+                        anchors.rightMargin: 6
                         anchors.verticalCenter: parent.verticalCenter
 
                         spacing: 4
@@ -310,8 +311,8 @@ Item {
                     Row {
                         id: videoMeter
 
-                        anchors.left: videoColorStrip.right
-                        anchors.leftMargin: 6
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
                         spacing: 1
@@ -332,7 +333,7 @@ Item {
                     }
 
                     StyledTextLabel {
-                        anchors.left: videoMeter.right
+                        anchors.left: videoColorStrip.right
                         anchors.leftMargin: 6
                         anchors.right: videoButtonsRow.left
                         anchors.rightMargin: 6
@@ -346,8 +347,8 @@ Item {
                     Row {
                         id: videoButtonsRow
 
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
+                        anchors.right: videoMeter.left
+                        anchors.rightMargin: 6
                         anchors.verticalCenter: parent.verticalCenter
 
                         spacing: 4
@@ -529,8 +530,8 @@ Item {
                 Row {
                     id: meter
 
-                    anchors.left: colorStrip.right
-                    anchors.leftMargin: 6
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
                     anchors.verticalCenter: parent.verticalCenter
 
                     spacing: 1
@@ -551,7 +552,7 @@ Item {
                 }
 
                 StyledTextLabel {
-                    anchors.left: meter.right
+                    anchors.left: colorStrip.right
                     anchors.leftMargin: 6
                     anchors.right: buttonsRow.left
                     anchors.rightMargin: 6
@@ -565,8 +566,8 @@ Item {
                 Row {
                     id: buttonsRow
 
-                    anchors.right: parent.right
-                    anchors.rightMargin: 4
+                    anchors.right: meter.left
+                    anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
 
                     spacing: 4
