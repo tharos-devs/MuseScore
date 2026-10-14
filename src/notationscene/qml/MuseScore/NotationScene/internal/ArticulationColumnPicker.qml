@@ -83,9 +83,28 @@ Item {
         contentWidth: zoomContainer.width
         contentHeight: zoomContainer.height
 
+        onOpened: {
+            escapeHandler.forceActiveFocus()
+        }
+
         onClosed: {
             if (root.model) {
                 root.model.close()
+            }
+        }
+
+        // The app's shortcuts only work in the main window: this window handles Escape itself
+        Item {
+            id: escapeHandler
+
+            focus: true
+
+            Keys.onShortcutOverride: function(event) {
+                event.accepted = (event.key === Qt.Key_Escape)
+            }
+
+            Keys.onEscapePressed: {
+                popup.close()
             }
         }
 
