@@ -74,14 +74,23 @@ public:
 
     QString id() const;
 
+    //! NOTE: same as picking an effect (an invalid meta: "No effect") in the slot's dropdown,
+    //! without fxChangedByUser() nor opening/closing the effects' editors
+    void setFx(const muse::audio::AudioResourceMeta& meta);
+
 public slots:
     void setIsActive(bool newIsActive);
 
 signals:
     void fxParamsChanged();
 
+    //! NOTE: fires only when the user picks an effect or "No effect" (invalid newMeta) in the slot's
+    //! own dropdown, so the Mixer can do the same on the other selected channels (see setFx()).
+    //! Emitted before the change: emptying the slot can get it disconnected (blank slots tidied up)
+    void fxChangedByUser(const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta);
+
 private:
-    void updateCurrentFxParams(const muse::audio::AudioResourceMeta& newMeta);
+    void updateCurrentFxParams(const muse::audio::AudioResourceMeta& newMeta, bool byUser = true);
     void updateAvailableFxVendorsMap(const muse::audio::AudioResourceMetaList& availableFxResources);
 
     std::map<muse::audio::AudioResourceVendor, muse::audio::AudioResourceMetaList> m_fxByVendorMap;

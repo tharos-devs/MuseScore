@@ -1580,6 +1580,8 @@ OutputResourceItem* MixerChannelItem::buildOutputResourceItem(const audio::Audio
         emit fxChainParamsChanged(m_outParams);
     });
 
+    connect(newItem, &OutputResourceItem::fxChangedByUser, this, &MixerChannelItem::fxChangedByUser);
+
     connect(newItem, &OutputResourceItem::nativeEditorViewLaunchRequested, this, [this, newItem]() {
         if (newItem->params().type() != AudioFxType::VstFx) {
             return;
@@ -1714,7 +1716,12 @@ AuxSendItem::MenuData MixerChannelItem::buildAuxSendMenuData(const AuxSendItem* 
 void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& menuItemId)
 {
     if (menuItemId == "noAuxSend") {
+        aux_channel_idx_t oldBusIndex = item->auxIndex();
+        ChannelAuxSendsState stateBefore = auxSendsState();
         blankAuxSend(item);
+        if (oldBusIndex != AuxSendItem::NO_BUS) {
+            emit auxSendReassignedByUser(oldBusIndex, AuxSendItem::NO_BUS, stateBefore);
+        }
         return;
     }
 
@@ -1737,8 +1744,9 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
     aux_channel_idx_t newBusIndex = static_cast<aux_channel_idx_t>(menuItemId.toUInt(&ok));
     if (ok) {
         aux_channel_idx_t oldBusIndex = item->auxIndex();
+        ChannelAuxSendsState stateBefore = auxSendsState();
         reassignAuxSend(item, newBusIndex);
-        emit auxSendReassignedByUser(oldBusIndex, newBusIndex);
+        emit auxSendReassignedByUser(oldBusIndex, newBusIndex, stateBefore);
     }
 }
 
@@ -2100,7 +2108,7 @@ void MixerChannelItem::renameAuxSendsTargeting(aux_channel_idx_t busIndex, const
     }
 }
 
-void MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
+bool MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
 {
     //! NOTE: blankAuxSend() removes the item from m_auxSendItems, so the matching items
     //! must be collected up front rather than acted on while iterating that same map
@@ -2114,6 +2122,96 @@ void MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
     for (AuxSendItem* item : targetingItems) {
         blankAuxSend(item);
     }
+
+    return !targetingItems.isEmpty();
+}
+
+void MixerChannelItem::applyFxChange(const QString& oldResourceId, const AudioResourceMeta& newMeta)
+{
+    //! NOTE: setFx() can add/remove slots (see setOutputResourceItemCount()): find the targets first
+    QList<OutputResourceItem*> targets;
+
+    if (!newMeta.isValid()) {
+        //! NOTE: one slot, like on the channel where the user picked "No effect"
+        for (OutputResourceItem* item : std::as_const(m_outputResourceItems)) {
+            if (!item->isBlank() && item->title() == oldResourceId) {
+                targets.push_back(item);
+                break;
+            }
+        }
+    } else {
+        const QString newResourceId = QString::fromStdString(newMeta.id);
+        OutputResourceItem* replaced = nullptr;
+        OutputResourceItem* firstBlank = nullptr;
+
+        for (OutputResourceItem* item : std::as_const(m_outputResourceItems)) {
+            if (item->isBlank()) {
+                if (!firstBlank) {
+                    firstBlank = item;
+                }
+                continue;
+            }
+
+            if (item->title() == newResourceId) {
+                return;
+            }
+
+            if (!replaced && !oldResourceId.isEmpty() && item->title() == oldResourceId) {
+                replaced = item;
+            }
+        }
+
+        if (OutputResourceItem* target = replaced ? replaced : firstBlank) {
+            targets.push_back(target);
+        }
+    }
+
+    for (OutputResourceItem* item : targets) {
+        item->setFx(newMeta);
+    }
+}
+
+ChannelAuxSendsState MixerChannelItem::auxSendsState() const
+{
+    ChannelAuxSendsState state;
+    state.params = m_outParams.auxSends;
+
+    for (const AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        if (item->auxIndex() != AuxSendItem::NO_BUS) {
+            state.slotBuses.push_back(item->auxIndex());
+        }
+    }
+
+    return state;
+}
+
+void MixerChannelItem::restoreAuxSendsState(const ChannelAuxSendsState& state)
+{
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        item->disconnect();
+        item->deleteLater();
+    }
+    m_auxSendItems.clear();
+
+    m_outParams.auxSends = state.params;
+
+    int slotOrder = 0;
+    for (aux_channel_idx_t busIndex : state.slotBuses) {
+        if (busIndex < state.params.size() && !isBlankAuxSend(state.params[busIndex])) {
+            m_auxSendItems.insert(slotOrder++, buildAuxSendItem(busIndex, state.params[busIndex]));
+        }
+    }
+
+    ensureTrailingBlankAuxSlot();
+    m_auxSendItemListModel->sync(m_auxSendItems.values());
+
+    emit auxSendsParamsChanged(m_outParams);
+}
+
+void MixerChannelItem::restoreFxChain(const AudioFxChain& fxChain)
+{
+    loadOutputResourceItems(fxChain);
+    emit fxChainParamsChanged(m_outParams);
 }
 
 void MixerChannelItem::assignAuxSend(aux_channel_idx_t busIndex)

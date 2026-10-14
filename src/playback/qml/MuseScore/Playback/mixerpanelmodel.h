@@ -228,6 +228,7 @@ private:
     void connectContinuousChangeUndo(MixerChannelItem* item);
     //! NOTE: undo for a send slot pointed at another bus (and the fan-out to the other selected tracks)
     void connectAuxSendReassignment(MixerChannelItem* item);
+    void connectFxChangeFanOut(MixerChannelItem* item);
 
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem

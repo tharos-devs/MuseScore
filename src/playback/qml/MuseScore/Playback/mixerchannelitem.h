@@ -51,6 +51,18 @@
 #include "auxsenditemlistmodel.h"
 
 namespace mu::playback {
+//! NOTE: a channel's aux sends as a whole - their params and the bus each slot targets, in slot order -
+//! captured and restored by MixerPanelModel's undo of a user's aux-send choice
+struct ChannelAuxSendsState {
+    muse::audio::AuxSendsParams params;
+    QList<muse::audio::aux_channel_idx_t> slotBuses;
+
+    bool operator==(const ChannelAuxSendsState& other) const
+    {
+        return params == other.params && slotBuses == other.slotBuses;
+    }
+};
+
 class MixerChannelItem : public QObject, public muse::async::Asyncable, public muse::Contextable
 {
     Q_OBJECT
@@ -267,7 +279,18 @@ public:
     //! NOTE: resets to "No aux send" any of this track's aux-send slots that target busIndex -
     //! called on every other channel item when an aux/group bus is deleted, so no slot is
     //! left pointing at a bus index that no longer exists
-    void clearAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex);
+    //! Returns whether any slot was reset
+    bool clearAuxSendsTargeting(muse::audio::aux_channel_idx_t busIndex);
+
+    //! NOTE: for MixerPanelModel's multi-select fan-out of an FX slot's choice: an invalid newMeta
+    //! empties the first slot holding oldResourceId; otherwise newMeta replaces oldResourceId, or goes in
+    //! the first empty slot (nothing if this channel already has newMeta)
+    void applyFxChange(const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta);
+
+    //! NOTE: for MixerPanelModel's undo/redo of a user's aux-send or FX choice
+    ChannelAuxSendsState auxSendsState() const;
+    void restoreAuxSendsState(const ChannelAuxSendsState& state);
+    void restoreFxChain(const muse::audio::AudioFxChain& fxChain);
 
     //! NOTE: assigns this track's next available aux-send slot to target busIndex - the
     //! same reassignment reassignAuxSend() performs when a user picks a bus from an
@@ -355,7 +378,13 @@ signals:
     //! this same signal would recurse/double-apply across the selection. oldBusIndex
     //! is AuxSendItem::NO_BUS when the slot was previously blank - MixerPanelModel
     //! needs it (captured before the reassignment happens) to make this undoable.
-    void auxSendReassignedByUser(muse::audio::aux_channel_idx_t oldBusIndex, muse::audio::aux_channel_idx_t newBusIndex);
+    //! newBusIndex is AuxSendItem::NO_BUS when the user picked "No aux send". stateBefore: this
+    //! channel's sends before the change, for the undo.
+    void auxSendReassignedByUser(muse::audio::aux_channel_idx_t oldBusIndex, muse::audio::aux_channel_idx_t newBusIndex,
+                                 const mu::playback::ChannelAuxSendsState& stateBefore);
+
+    //! NOTE: see OutputResourceItem::fxChangedByUser()
+    void fxChangedByUser(const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta);
 
     //! NOTE: see bindInstrumentTrack()
     void outputParamsReceived();
