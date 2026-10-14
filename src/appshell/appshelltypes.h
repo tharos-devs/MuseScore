@@ -35,6 +35,7 @@ inline const muse::Uri NOTATION_URI("musescore://notation");
 
 // Panels:
 static const DockName PALETTES_PANEL_NAME("palettesPanel");
+static const DockName SECONDARY_PALETTES_PANEL_NAME("secondaryPalettesPanel");
 static const DockName LAYOUT_PANEL_NAME("layoutPanel");
 static const DockName PROPERTIES_PANEL_NAME("propertiesPanel");
 static const DockName SELECTION_FILTERS_PANEL_NAME("selectionFiltersPanel");

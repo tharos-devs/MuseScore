@@ -300,6 +300,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(APP_FULLSCREEN_COMMAND),
 #endif
         makeMenuItem(DOCK_TOGGLE_PALETTES_COMMAND),
+        makeMenuItem(DOCK_TOGGLE_SECONDARY_PALETTES_COMMAND),
         makeMenuItem(TOGGLE_MASTER_PALETTE_COMMAND),
         makeMenuItem(DOCK_TOGGLE_INSTRUMENTS_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PROPERTIES_COMMAND),

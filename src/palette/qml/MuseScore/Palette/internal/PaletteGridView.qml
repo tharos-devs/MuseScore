@@ -23,6 +23,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import QtQml.Models
 
 import MuseScore.Palette
@@ -35,6 +36,11 @@ StyledGridView {
     property size cellSize
     property bool drawGrid: false
     property bool showMoreButton: false
+
+    //! NOTE: for a narrow column (a few cells per row): "More" gets a row of its own at the bottom, fixed while the
+    //! cells scroll (see bottomMargin)
+    property bool narrow: false
+    readonly property int narrowMoreButtonHeight: 28
 
     property var paletteModel
     property var paletteRootIndex
@@ -56,7 +62,12 @@ StyledGridView {
 
     signal setCurrentTreeItemRequested(FlatButton item)
 
-    interactive: height < contentHeight // TODO: check if it helps on Mac
+    interactive: height < contentHeight + bottomMargin // TODO: check if it helps on Mac
+
+    bottomMargin: narrow && showMoreButton ? narrowMoreButtonHeight : 0
+
+    //! NOTE: above the grid lines (see PaletteGridLinesCanvas below), when the cells scroll
+    ScrollBar.vertical: StyledScrollBar { z: 1 }
 
     states: [
         State {
@@ -77,9 +88,13 @@ StyledGridView {
     state: "default"
 
     // internal property: whether the palette fits to one row
-    readonly property bool oneRow: cellDefaultWidth * ncells + moreButtonRect.implicitWidth < width
+    readonly property bool oneRow: !narrow && cellDefaultWidth * ncells + moreButtonRect.implicitWidth < width
 
     implicitHeight: {
+        if (narrow) {
+            return (ncells ? contentHeight : cellHeight) + bottomMargin;
+        }
+
         if (!ncells) {
             return cellHeight;
         }
@@ -647,10 +662,16 @@ StyledGridView {
     Rectangle {
         id: moreButtonRect
 
+        z: 2 // above the scroll bar
+
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         implicitWidth: 64
         width: {
+            if (paletteView.narrow) {
+                return parent.width;
+            }
+
             if (paletteView.empty) {
                 return implicitWidth;
             }
@@ -664,7 +685,8 @@ StyledGridView {
             return implicitWidth + addition;
         }
 
-        height: paletteView.cellHeight - (paletteView.oneRow ? 0 : 1)
+        height: paletteView.narrow ? paletteView.narrowMoreButtonHeight
+                                   : paletteView.cellHeight - (paletteView.oneRow ? 0 : 1)
         visible: paletteView.showMoreButton
         color: background.color
 

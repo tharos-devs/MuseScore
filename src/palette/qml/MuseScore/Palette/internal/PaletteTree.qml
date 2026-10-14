@@ -97,21 +97,9 @@ StyledListView {
         }
     }
 
-    ItemSelectionModel {
+    PaletteSelectionModel {
         id: paletteSelectionModel
         model: paletteTree.paletteModel
-
-        function selectRange(endIndex) {
-            const firstRow = currentIndex.row;
-            const lastRow = endIndex.row;
-            const parentIndex = endIndex.parent;
-            const step = firstRow < lastRow ? 1 : -1;
-            const endRow = lastRow + step;
-            for (var row = firstRow; row !== endRow; row += step) {
-                const idx = paletteTree.paletteModel.index(row, 0, parentIndex);
-                select(idx, ItemSelectionModel.Select);
-            }
-        }
     }
 
     function applyCurrentElement() {
@@ -273,114 +261,17 @@ StyledListView {
         }
     }
 
-    Loader {
+    MoreElementsPopupLoader {
         id: palettePopup
-        active: false
 
-        property var control: null
-        property var model: null
-        property alias isOpened: palettePopup.active
+        paletteProvider: paletteTree.paletteProvider
+        paletteModel: paletteTree.paletteModel
+        paletteController: paletteTree.paletteController
 
-        sourceComponent: MoreElementsPopup {
-            id: moreElementsPopup
+        maxHeight: Math.min(0.75 * paletteTree.height * paletteTree.zoom, 500)
 
-            property var control: palettePopup.control
-            property var model: palettePopup.model
-
-            maxHeight: Math.min(0.75 * paletteTree.height * paletteTree.zoom, 500)
-
-            // TODO: change settings to "hidden" model?
-            cellSize: control.cellSize
-            drawGrid: control.drawGrid
-
-            paletteName: model.display
-            paletteIsCustom: model.custom
-            paletteEditingEnabled: model.editable
-
-            onIsOpenedChanged: {
-                // build pool model on first popup appearance
-                if (isOpened && !poolPalette) {
-                    poolPalette = paletteTree.paletteProvider.poolPaletteModel(control.modelIndex);
-                    poolPaletteRootIndex = paletteTree.paletteProvider.poolPaletteIndex(control.modelIndex, poolPalette);
-                    poolPaletteController = paletteTree.paletteProvider.poolPaletteController(poolPalette, control.modelIndex);
-
-                    customPalette = paletteTree.paletteProvider.customElementsPaletteModel
-                    customPaletteRootIndex = paletteTree.paletteProvider.customElementsPaletteIndex(control.modelIndex) // TODO: make a property binding? (but that works incorrectly)
-                    customPaletteController = paletteTree.paletteProvider.customElementsPaletteController
-                }
-                if (!isOpened) {
-                    paletteTree.expandedPopupIndex = null
-                }
-            }
-
-            property bool needScrollToBottom: false
-
-            onOpened: {
-                scrollToPopupBottom();
-                needScrollToBottom = false;
-                enablePaletteAnimations = true;
-            }
-
-            onClosed: {
-                enablePaletteAnimations = false;
-                // Deactivating the loader while dragging will cause a crash (#25848), so defer the deactivation...
-                if (!moreElementsPopup.isDragInProgress) {
-                    palettePopup.active = false;
-                }
-            }
-
-            onIsDragInProgressChanged: {
-                const deactivationWasDeferred = !moreElementsPopup.isOpened && palettePopup.active
-                if (!moreElementsPopup.isDragInProgress && deactivationWasDeferred) {
-                    // We're now safe to deactivate the loader...
-                    palettePopup.active = false
-                }
-            }
-
-            function scrollToPopupBottom() {
-                //! FIXME Not worked as should
-//                        const popupBottom = implicitHeight + y + control.y + 14; // 14 for DropShadow in StyledPopup: depends on blur radius and vertical offset
-//                        paletteTree.ensureYVisible(popupBottom);
-            }
-
-            onContentHeightChanged: {
-                if (isOpened && (needScrollToBottom || paletteTree.atYEnd))
-                    scrollToPopupBottom();
-            }
-
-            onAddElementsRequested: function(mimeDataList) {
-                const parentIndex = control.modelIndex;
-                var idx = paletteTree.paletteModel.rowCount(parentIndex);
-
-                for (var i = 0; i < mimeDataList.length; i++) {
-                    const mimeData = mimeDataList[i];
-
-                    if (paletteTree.paletteController.insert(parentIndex, idx, mimeData, Qt.MoveAction)) {
-                        idx++;
-                    }
-                }
-            }
-        }
-
-        function close() {
-            if (palettePopup.active) {
-                (palettePopup.item as MoreElementsPopup).close();
-            }
-        }
-
-        function toggleOpened(model, control, parent) {
-            if (palettePopup.active) {
-                palettePopup.close();
-                return;
-            }
-
-            palettePopup.parent = parent;
-            palettePopup.model = model;
-            palettePopup.control = control;
-
-            palettePopup.active = true;
-            (palettePopup.item as MoreElementsPopup).setParentItem(parent);
-            (palettePopup.item as MoreElementsPopup).toggleOpened();
+        onPopupClosed: {
+            paletteTree.expandedPopupIndex = null
         }
     }
 

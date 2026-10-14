@@ -148,6 +148,11 @@ QString NotationPageModel::palettesPanelName() const
     return PALETTES_PANEL_NAME;
 }
 
+QString NotationPageModel::secondaryPalettesPanelName() const
+{
+    return SECONDARY_PALETTES_PANEL_NAME;
+}
+
 QString NotationPageModel::layoutPanelName() const
 {
     return LAYOUT_PANEL_NAME;

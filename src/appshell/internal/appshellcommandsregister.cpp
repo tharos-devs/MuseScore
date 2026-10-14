@@ -142,6 +142,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(rcommand::Checkable::Yes)
         ),
     CommandInfo(
+        DOCK_TOGGLE_SECONDARY_PALETTES_COMMAND,
+        TranslatableString("action", "Secondar&y palettes"),
+        TranslatableString("action", "Show/hide secondary palettes"),
+        InputSchema(),
+        Decoration(rcommand::Checkable::Yes)
+        ),
+    CommandInfo(
         DOCK_TOGGLE_INSTRUMENTS_COMMAND,
         TranslatableString("action", "&Layout"),
         TranslatableString("action", "Show/hide layout panel"),
