@@ -68,7 +68,7 @@ Item {
         }
     }
 
-    PopupButton {
+    AddPalettesButton {
         id: addPalettesButton
         objectName: "AddPalettesBtn"
 
@@ -79,36 +79,16 @@ Item {
         navigation.panel: navPanel
         navigation.order: 1
 
-        text: qsTrc("palette", "Add palettes")
         visible: !root.isSearchOpened
         enabled: visible
 
+        paletteProvider: root.paletteProvider
         popupAnchorItem: root.popupAnchorItem
+        popupAvailableWidth: root.width
+        popupMaxHeight: root.popupMaxHeight
 
-        popupComponent: AddPalettesPopup {
-            paletteProvider: root.paletteProvider
-            model: root.paletteProvider ? root.paletteProvider.availableExtraPalettesModel() : null
-            popupAvailableWidth: root.width
-            maxHeight: root.popupMaxHeight
-
-            onAddCustomPaletteRequested: {
-                addPalettesButton.close()
-                createCustomPalettePopupLoader.toggleOpened()
-            }
-        }
-
-        StyledPopupLoader {
-            id: createCustomPalettePopupLoader
-
-            popupAnchorItem: root.popupAnchorItem
-
-            sourceComponent: CreateCustomPalettePopup {
-                popupAvailableWidth: root.width
-
-                onAddCustomPaletteRequested: function(paletteName) {
-                    root.addCustomPaletteRequested(paletteName)
-                }
-            }
+        onAddCustomPaletteRequested: function(paletteName) {
+            root.addCustomPaletteRequested(paletteName)
         }
     }
 
@@ -127,8 +107,7 @@ Item {
         enabled: visible
 
         onClicked: {
-            addPalettesButton.close()
-            createCustomPalettePopupLoader.close()
+            addPalettesButton.closePopups()
             root.startSearch()
         }
     }

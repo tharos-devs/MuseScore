@@ -71,6 +71,7 @@ public:
     Q_INVOKABLE QString extensionsToolBarName() const;
 
     Q_INVOKABLE QString palettesPanelName() const;
+    Q_INVOKABLE QString secondaryPalettesPanelName() const;
     Q_INVOKABLE QString layoutPanelName() const;
     Q_INVOKABLE QString propertiesPanelName() const;
     Q_INVOKABLE QString selectionFiltersPanelName() const;

@@ -344,6 +344,66 @@ DockPage {
         },
 
         DockPanel {
+            id: secondaryPalettesPanel
+
+            objectName: root.pageModel.secondaryPalettesPanelName()
+            //: The secondary palettes panel's title: short, the panel is narrow
+            title: qsTrc("appshell", "2nd Palettes")
+
+            navigationSection: root.navigationPanelSec(secondaryPalettesPanel.location)
+
+            //! NOTE: narrow, its content's width (see updateWidth() below): not in the side panels' group, which would
+            //! tab it with the wide ones
+            width: 150
+            minimumWidth: 150
+            maximumWidth: 150
+
+            minimumHeight: root.panelMinDimension
+            maximumHeight: root.panelMaxDimension
+
+            location: Location.Left
+            secondaryWindowAllowed: true
+
+            //! NOTE: hidden by default
+            visible: false
+
+            dropDestinations: root.verticalPanelDropDestinations
+
+            SecondaryPalettesPanel {
+                navigationSection: secondaryPalettesPanel.navigationSection
+                navigationOrderStart: secondaryPalettesPanel.contentNavigationPanelOrderStart
+
+                //! NOTE: from here: the panel's content is a component, out of reach of the panel's bindings.
+                //! A fixed width: the minimum lowered first when narrowing, the maximum raised first when widening
+                function updateWidth() {
+                    const width = implicitWidth
+                    if (width <= 0) {
+                        return
+                    }
+
+                    if (width < secondaryPalettesPanel.minimumWidth) {
+                        secondaryPalettesPanel.minimumWidth = width
+                        secondaryPalettesPanel.maximumWidth = width
+                    } else {
+                        secondaryPalettesPanel.maximumWidth = width
+                        secondaryPalettesPanel.minimumWidth = width
+                    }
+                }
+
+                onImplicitWidthChanged: updateWidth()
+
+                Component.onCompleted: {
+                    secondaryPalettesPanel.contextMenuModel = contextMenuModel
+                    updateWidth()
+                }
+
+                Component.onDestruction: {
+                    secondaryPalettesPanel.contextMenuModel = null
+                }
+            }
+        },
+
+        DockPanel {
             id: layoutPanel
 
             objectName: root.pageModel.layoutPanelName()

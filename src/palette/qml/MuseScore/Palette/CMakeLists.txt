@@ -34,12 +34,17 @@ qt_add_qml_module(palette_qml
         internal/palettespanelcontextmenumodel.h
         internal/palettecellpropertiesmodel.h
         internal/palettecellpropertiesmodel.cpp
+        internal/secondarypalettespanelmodel.cpp
+        internal/secondarypalettespanelmodel.h
     QML_FILES
+        internal/AddPalettesButton.qml
         internal/AddPalettesPopup.qml
         internal/CreateCustomPalettePopup.qml
         internal/MoreElementsPopup.qml
+        internal/MoreElementsPopupLoader.qml
         internal/PaletteGridLinesCanvas.qml
         internal/PaletteGridView.qml
+        internal/PaletteSelectionModel.qml
         internal/PalettePropertyItem.qml
         internal/PalettesPanelHeader.qml
         internal/PaletteTree.qml
@@ -49,6 +54,7 @@ qt_add_qml_module(palette_qml
         PaletteCellPropertiesDialog.qml
         PalettePropertiesDialog.qml
         PalettesPanel.qml
+        SecondaryPalettesPanel.qml
     IMPORTS
         TARGET muse_ui_qml
         TARGET muse_uicomponents_qml

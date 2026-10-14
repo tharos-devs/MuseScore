@@ -146,6 +146,13 @@ const UiActionList ApplicationUiActions::m_actions = {
              TranslatableString("action", "Show/hide palettes"),
              ui::Checkable::Yes
              ),
+    UiAction("toggle-secondary-palettes",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Secondar&y palettes"),
+             TranslatableString("action", "Show/hide secondary palettes"),
+             ui::Checkable::Yes
+             ),
     UiAction("toggle-instruments",
              mu::context::UiCtxProjectOpened,
              mu::context::CTX_ANY,
@@ -440,6 +447,7 @@ const QMap<ActionCode, DockName>& ApplicationUiActions::toggleDockActions()
         { "toggle-noteinput", NOTE_INPUT_BAR_NAME },
 
         { "toggle-palettes", PALETTES_PANEL_NAME },
+        { "toggle-secondary-palettes", SECONDARY_PALETTES_PANEL_NAME },
         { "toggle-instruments", LAYOUT_PANEL_NAME },
         { "toggle-properties-panel", PROPERTIES_PANEL_NAME },
         { "toggle-selection-filter", SELECTION_FILTERS_PANEL_NAME },
