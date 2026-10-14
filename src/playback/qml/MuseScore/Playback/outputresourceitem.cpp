@@ -95,6 +95,9 @@ void OutputResourceItem::requestAvailableResources()
 void OutputResourceItem::handleMenuItem(const QString& menuItemId)
 {
     if (menuItemId == NO_FX_MENU_ITEM_ID()) {
+        if (!isBlank()) {
+            emit fxChangedByUser(title(), AudioResourceMeta());
+        }
         updateCurrentFxParams(AudioResourceMeta());
         return;
     } else if (menuItemId == GET_MORE_EFFECTS) {
@@ -112,6 +115,9 @@ void OutputResourceItem::handleMenuItem(const QString& menuItemId)
                 continue;
             }
 
+            if (m_currentFxParams.resourceMeta != fxResourceMeta) {
+                emit fxChangedByUser(isBlank() ? QString() : title(), fxResourceMeta);
+            }
             updateCurrentFxParams(fxResourceMeta);
         }
     }
@@ -176,13 +182,20 @@ void OutputResourceItem::setIsActive(bool newIsActive)
     emit fxParamsChanged();
 }
 
-void OutputResourceItem::updateCurrentFxParams(const AudioResourceMeta& newMeta)
+void OutputResourceItem::updateCurrentFxParams(const AudioResourceMeta& newMeta, bool byUser)
 {
     if (m_currentFxParams.resourceMeta == newMeta) {
         return;
     }
 
-    requestToCloseNativeEditorView();
+    //! NOTE: the Mixer closes the editor synchronously (see MixerChannelItem::closeEditor()). Not for the
+    //! other selected channels (setFx()): a removed plugin's window gets closed anyway when it's unloaded
+    //! (VstActionsController::onInstanceUnregistered()), and several blocking closes in a row could hang the UI
+    if (byUser) {
+        requestToCloseNativeEditorView();
+    } else {
+        setEditorAction(muse::actions::ActionQuery());
+    }
 
     audio::AudioFxParams newParams = m_currentFxParams;
     newParams.categories = audio::audioFxCategoriesFromString(newMeta.attributeVal(vst::CATEGORIES_ATTRIBUTE));
@@ -191,7 +204,14 @@ void OutputResourceItem::updateCurrentFxParams(const AudioResourceMeta& newMeta)
     newParams.active = newMeta.isValid();
 
     setParams(newParams);
-    requestToLaunchNativeEditorView();
+    if (byUser) {
+        requestToLaunchNativeEditorView();
+    }
+}
+
+void OutputResourceItem::setFx(const AudioResourceMeta& meta)
+{
+    updateCurrentFxParams(meta, /*byUser*/ false);
 }
 
 void OutputResourceItem::updateAvailableFxVendorsMap(const audio::AudioResourceMetaList& availableFxResources)
