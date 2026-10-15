@@ -141,6 +141,10 @@ public:
 
     ~MixerChannelItem() override;
 
+    //! NOTE: a channel item bound to this track and loaded, in whatever panel shows it: to undo/redo a change made
+    //! in a panel that may have been closed since (the change reaches the other panels through the engine)
+    static MixerChannelItem* findBoundChannel(muse::audio::TrackId trackId);
+
     Type type() const;
     bool isGroupBus() const;
     //! NOTE: only meaningful for Type::Aux channels - the Reverb bus is a built-in default
@@ -207,6 +211,9 @@ public:
 
     void setOutputResourceItemCount(size_t count);
     void setAuxSendItemCount(size_t count);
+    //! NOTE: every effect and aux send slot there can be (a single channel shown, e.g. in the Track list: its layout
+    //! doesn't change with its content, unlike the Mixer's channels lined up on the one with the most)
+    void showAllSlots();
 
     //! NOTE Reorders the channel's own FX slots by moving the slot currently
     //! at fromIndex to toIndex, shifting the slots in between -- e.g. moving
@@ -233,9 +240,9 @@ public:
     //! change can't be undone by another's stale copy. outputParamsReceived() fires whenever its output params are in
     void bindInstrumentTrack(const engraving::InstrumentTrackId& instrumentTrackId);
 
-    //! NOTE: an Aux/Group bus channel's mute/solo, the same in every panel showing one (Mixer, Track list): loads
-    //! them (with the live force-mute), sends its own changes to the project's aux solo/mute state and follows the
-    //! ones made elsewhere
+    //! NOTE: an Aux/Group bus channel's link to its engine track, the same in every panel showing one (Mixer, Track
+    //! list): loads its mute/solo (with the live force-mute) and output params, sends its own changes to the engine
+    //! and the project's aux settings, and follows the ones made elsewhere
     void bindAuxBus(muse::audio::aux_channel_idx_t index);
 
     //! NOTE: Solo clicked by the user: on a Group bus, also applied to the channels routed to it (see
@@ -424,6 +431,7 @@ protected:
     void changeEq(const std::function<void(muse::audio::EqParams&)>& change);
     void loadOutputResourceItems(const muse::audio::AudioFxChain& fxChain);
     void loadAuxSendItems(const muse::audio::AuxSendsParams& auxSends);
+    void followEngineOutputParams();
 
     InputResourceItem* buildInputResourceItem();
     OutputResourceItem* buildOutputResourceItem(const muse::audio::AudioFxParams& fxParams);
@@ -478,7 +486,9 @@ protected:
 
     project::AudioInputParams m_inputParams;
     project::AudioOutputParams m_outParams;
-    QElapsedTimer m_lastControlParamsSent; // see bindInstrumentTrack()
+    QElapsedTimer m_lastControlParamsSent; // see followEngineOutputParams()
+    QElapsedTimer m_lastAuxSendChangeSent; // the same, for a send's level or on/off
+    bool m_auxSendItemsLoading = false; // their changes then come from the engine: not sent back to it
 
     float m_volumeLevel = 0.f;
     int m_balance = 0;

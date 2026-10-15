@@ -114,6 +114,13 @@ static size_t requiredOutputResourceItemCount(const audio::AudioFxChain& fxChain
     return 0;
 }
 
+//! NOTE: every channel item alive, whatever panel shows it (see findBoundChannel())
+static QList<MixerChannelItem*>& allChannelItems()
+{
+    static QList<MixerChannelItem*> items;
+    return items;
+}
+
 MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, audio::TrackId trackId)
     : QObject(parent), muse::Contextable(muse::iocCtxForQmlObject(this)),
     m_type(type),
@@ -122,6 +129,8 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
     m_leftChannelPressure(MIN_DISPLAYED_DBFS),
     m_rightChannelPressure(MIN_DISPLAYED_DBFS)
 {
+    allChannelItems().push_back(this);
+
     if (!m_outputOnly) {
         m_inputResourceItem = buildInputResourceItem();
     }
@@ -172,7 +181,19 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
 
 MixerChannelItem::~MixerChannelItem()
 {
+    allChannelItems().removeOne(this);
     m_audioSignalChanges.disconnect(this);
+}
+
+MixerChannelItem* MixerChannelItem::findBoundChannel(audio::TrackId trackId)
+{
+    for (MixerChannelItem* item : std::as_const(allChannelItems())) {
+        if (item->m_trackId == trackId && item->m_outputParamsLoaded) {
+            return item;
+        }
+    }
+
+    return nullptr;
 }
 
 MixerChannelItem::Type MixerChannelItem::type() const
@@ -628,16 +649,35 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
         }
     });
 
+    followEngineOutputParams();
+}
+
+//! NOTE: what the engine gets from elsewhere (another panel showing this channel, a track preset, an undo): its
+//! control params (not the mute, owned by the solo/mute state), aux sends and effects. outputParamsReceived() tells
+//! a panel to fit its slots to them
+void MixerChannelItem::followEngineOutputParams()
+{
+    //! NOTE: a send level being dragged here: the late echoes of its own previous values would pull its knob back
     playback()->auxSendsParamsChanged().onReceive(this, [this](const TrackId trackId, const AuxSendsParams& auxSends) {
+        static constexpr qint64 OWN_CHANGE_ECHO_MS = 500;
+        if (trackId != m_trackId || !m_outputParamsLoaded
+            || (m_lastAuxSendChangeSent.isValid() && m_lastAuxSendChangeSent.elapsed() < OWN_CHANGE_ECHO_MS)) {
+            return;
+        }
+        loadAuxSendItems(auxSends);
+        emit outputParamsReceived();
+    });
+
+    //! NOTE: this channel's own change echoed back is a no-op (the same chain)
+    playback()->fxChainParamsChanged().onReceive(this, [this](const TrackId trackId, const AudioFxChain& fxChain) {
         if (trackId == m_trackId && m_outputParamsLoaded) {
-            loadAuxSendItems(auxSends);
+            loadOutputResourceItems(fxChain);
             emit outputParamsReceived();
         }
     });
 
-    //! NOTE: gain, volume and pan set elsewhere (e.g. a track preset); not the mute, owned by the solo/mute state.
-    //! The engine echoes every change, this channel's own ones too: one arriving late while a fader is moving would
-    //! pull it back, so the echoes of its own recent changes are left out
+    //! NOTE: the engine echoes every change, this channel's own ones too: one arriving late while a fader is moving
+    //! would pull it back, so the echoes of its own recent changes are left out
     playback()->controlParamsChanged().onReceive(this, [this](const TrackId trackId, const ControlParams& params) {
         static constexpr qint64 OWN_CHANGE_ECHO_MS = 500;
         if (trackId != m_trackId || !m_outputParamsLoaded
@@ -650,6 +690,16 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
                                   : std::get<balance_t>(params.balance.value());
         loadControlParams(volume, balance, params.gain, params.eq);
     });
+}
+
+void MixerChannelItem::showAllSlots()
+{
+    if (!m_outputParamsLoaded) {
+        return;
+    }
+
+    setOutputResourceItemCount(OUTPUT_RESOURCE_COUNT_LIMIT);
+    setAuxSendItemCount(AUX_SEND_SLOT_LIMIT);
 }
 
 void MixerChannelItem::bindAuxBus(aux_channel_idx_t index)
@@ -686,6 +736,35 @@ void MixerChannelItem::bindAuxBus(aux_channel_idx_t index)
             loadMuteForceMuteState(muted, forceMute);
         }
     });
+
+    //! NOTE: its output params are kept in the project's aux settings, which never hold the solo/mute (see above)
+    AudioOutputParams outParams = audioSettings->auxOutputParams(index);
+    outParams.solo = state.solo;
+    outParams.muted = state.mute || forceMute;
+    outParams.forceMute = forceMute;
+    loadOutputParams(outParams);
+
+    connect(this, &MixerChannelItem::controlParamsChanged, this, [this, audioSettings](const AudioOutputParams& params) {
+        m_lastControlParamsSent.start();
+        playback()->setControlParams(m_trackId, params.control());
+
+        AudioOutputParams persisted = audioSettings->auxOutputParams(m_auxBusIndex);
+        persisted.volume = params.volume;
+        persisted.balance = params.balance;
+        persisted.gain = params.gain;
+        persisted.eq = params.eq;
+        audioSettings->setAuxOutputParams(m_auxBusIndex, persisted);
+    });
+
+    connect(this, &MixerChannelItem::fxChainParamsChanged, this, [this](const AudioOutputParams& params) {
+        playback()->setFxChainParams(m_trackId, params.fxChain);
+    });
+
+    connect(this, &MixerChannelItem::auxSendsParamsChanged, this, [this](const AudioOutputParams& params) {
+        playback()->setAuxSendsParams(m_trackId, params.auxSends);
+    });
+
+    followEngineOutputParams();
 }
 
 void MixerChannelItem::setUserSolo(bool solo)
@@ -830,10 +909,11 @@ void MixerChannelItem::loadAuxSendItems(const AuxSendsParams& auxSends)
                              && !isBlankAuxSend(auxSends[busIndex]);
 
         if (stillAssigned) {
-            item->blockSignals(true);
+            //! NOTE: notified (the knob follows a change made in another panel), not sent back to the engine
+            m_auxSendItemsLoading = true;
             item->setIsActive(auxSends[busIndex].active);
             item->setAudioSignalPercentage(static_cast<int>(auxSends[busIndex].signalAmount * 100.f));
-            item->blockSignals(false);
+            m_auxSendItemsLoading = false;
             newItems.insert(it.key(), item);
             handledBuses.push_back(busIndex);
         } else if (item->isBlank()) {
@@ -1674,12 +1754,18 @@ AuxSendItem* MixerChannelItem::buildAuxSendItem(aux_channel_idx_t index, const A
     newItem->blockSignals(false);
 
     connect(newItem, &AuxSendItem::isActiveChanged, this, [this, newItem]() {
+        if (m_auxSendItemsLoading) {
+            return;
+        }
         updateAuxSendField(newItem, [newItem](AuxSendParams& params) {
             params.active = newItem->isActive();
         });
     });
 
     connect(newItem, &AuxSendItem::audioSignalPercentageChanged, this, [this, newItem](int percentage) {
+        if (m_auxSendItemsLoading) {
+            return;
+        }
         updateAuxSendField(newItem, [percentage](AuxSendParams& params) {
             params.signalAmount = static_cast<float>(percentage) / 100.f;
         });
@@ -1712,6 +1798,7 @@ void MixerChannelItem::updateAuxSendField(const AuxSendItem* item, const std::fu
     }
 
     setter(m_outParams.auxSends[idx]);
+    m_lastAuxSendChangeSent.start();
     emit auxSendsParamsChanged(m_outParams);
 }
 

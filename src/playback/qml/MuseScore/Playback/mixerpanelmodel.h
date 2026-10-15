@@ -233,25 +233,8 @@ private:
     void connectGlobalMuteSoloAggregate(MixerChannelItem* item);
     GlobalMuteSoloToggle::Channels globalMuteSoloChannels() const;
 
-    //! NOTE: makes every channel's volume/balance/gain/aux-send-level bracketed
-    //! gestures (see MixerChannelItem::beginVolumeChange() et al.) undoable - called
-    //! for every channel type, same as connectGlobalMuteSoloAggregate() above.
-    void connectContinuousChangeUndo(MixerChannelItem* item);
-    //! NOTE: undo for a send slot pointed at another bus (and the fan-out to the other selected tracks)
-    void connectAuxSendReassignment(MixerChannelItem* item);
-    void connectFxChangeFanOut(MixerChannelItem* item);
-
-    //! NOTE: an undo step restoring the channels' FX chains changed since before (by track)
-    using TrackFxChains = std::vector<std::pair<muse::audio::TrackId, muse::audio::AudioFxChain> >;
-    void pushFxChainsUndo(const muse::TranslatableString& actionName, const TrackFxChains& before);
-
-    //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
-    //! pushes a single undo command that just re-invokes the given MixerChannelItem
-    //! setter with the old/new value, looked up fresh by trackId() at undo/redo time
-    //! (never a captured MixerChannelItem*, which the undo/redo closures might outlive).
-    template<typename T>
-    void pushChannelFieldUndoCommand(const muse::audio::TrackId& trackId, const muse::TranslatableString& actionName,
-                                     void (MixerChannelItem::* setter)(T), T oldValue, T newValue);
+    //! NOTE: an effect or aux send picked: undoable, and applied to the other selected tracks (see ChannelEditUndo)
+    void connectPickedChangeUndo(MixerChannelItem* item);
 
     void loadOutputParams(MixerChannelItem* item, const project::AudioOutputParams& params);
     void updateOutputResourceItemCount();

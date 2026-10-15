@@ -1,0 +1,159 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ * MuseScore-Studio-CLA-applies
+ *
+ * MuseScore Studio
+ * Music Composition & Notation
+ *
+ * Copyright (C) 2026 MuseScore Limited and others
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+pragma ComponentBehavior: Bound
+
+import QtQuick
+
+import Muse.Ui
+import Muse.UiComponents
+import MuseScore.Playback
+
+//! NOTE: a channel's Pan or Gain (Mixer, Track list): a knob and its field. Compact: no field, the value shows while
+//! the knob is dragged
+Row {
+    id: root
+
+    required property MixerChannelItem channelItem
+    property bool isGain: false
+    property bool compact: false
+
+    property NavigationPanel navigationPanel: channelItem.panel
+    property int navigationRowStart: 0
+    property string accessibleName: ""
+
+    signal navigateControlIndexChanged(var index)
+
+    readonly property int value: root.isGain ? root.channelItem.gain : root.channelItem.balance
+    readonly property int minValue: root.isGain ? root.channelItem.gainMin : root.channelItem.balanceMin
+    readonly property int maxValue: root.isGain ? root.channelItem.gainMax : root.channelItem.balanceMax
+    //! NOTE: the pan curve drawn on the score sets it then
+    readonly property bool editable: root.isGain || !root.channelItem.hasBalanceAutomation
+
+    function setValue(newValue) {
+        if (root.isGain) {
+            root.channelItem.gain = newValue
+        } else {
+            root.channelItem.balance = newValue
+        }
+    }
+
+    function beginChange() {
+        if (root.isGain) {
+            root.channelItem.beginGainChange()
+        } else {
+            root.channelItem.beginBalanceChange()
+        }
+    }
+
+    function endChange() {
+        if (root.isGain) {
+            root.channelItem.endGainChange()
+        } else {
+            root.channelItem.endBalanceChange()
+        }
+    }
+
+    spacing: 8
+
+    KnobControl {
+        id: knob
+
+        from: root.minValue
+        to: root.maxValue
+        value: root.value
+        stepSize: 1
+        isBalanceKnob: true
+        accentColor: root.channelItem.hasCustomColor ? root.channelItem.color : ui.theme.accentColor
+        enabled: root.editable
+        opacity: enabled ? 1.0 : ui.theme.itemOpacityDisabled
+
+        //! NOTE: compact hides the field below, so this is the only way left to read the exact value -- shown only
+        //! while actively dragging, same "reveal on interaction" precedent as AuxSendControl's isDragging title swap
+        KnobDragValueTooltip {
+            visible: root.compact && knob.mouseArea.pressed
+            text: Math.round(root.value) + (root.isGain ? "dB" : "")
+        }
+
+        navigation.panel: root.navigationPanel
+        navigation.row: root.navigationRowStart
+        navigation.accessible.name: root.accessibleName
+        navigation.onActiveChanged: {
+            if (navigation.active) {
+                root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
+            }
+        }
+
+        onNewValueRequested: function(newValue) {
+            root.setValue(newValue)
+        }
+
+        Connections {
+            target: knob.mouseArea
+            function onPressedChanged() {
+                if (knob.mouseArea.pressed) {
+                    root.beginChange()
+                } else {
+                    root.endChange()
+                }
+            }
+        }
+    }
+
+    TextInputField {
+        visible: !root.compact
+
+        anchors.verticalCenter: knob.verticalCenter
+
+        height: 24
+        width: 36
+
+        enabled: root.editable
+
+        textHorizontalAlignment: Qt.AlignHCenter
+        textSidePadding: 0
+        background.radius: 2
+
+        navigation.panel: root.navigationPanel
+        navigation.row: root.navigationRowStart + 1
+        navigation.accessible.name: root.accessibleName + " " + currentText
+        navigation.onActiveChanged: {
+            if (navigation.active) {
+                root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
+            }
+        }
+
+        validator: IntInputValidator {
+            top: root.maxValue
+            bottom: root.minValue
+        }
+
+        currentText: root.value
+
+        onTextEdited: function(newTextValue) {
+            if (root.value !== Number(newTextValue)) {
+                root.beginChange()
+                root.setValue(Number(newTextValue))
+                root.endChange()
+            }
+        }
+    }
+}

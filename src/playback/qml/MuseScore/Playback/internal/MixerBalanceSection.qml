@@ -5,7 +5,7 @@
  * MuseScore Studio
  * Music Composition & Notation
  *
- * Copyright (C) 2021 MuseScore Limited and others
+ * Copyright (C) 2026 MuseScore Limited and others
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
@@ -19,13 +19,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-pragma ComponentBehavior: Bound    
+pragma ComponentBehavior: Bound
 
 import QtQuick
 
 import Muse.Ui
 import Muse.UiComponents
+import MuseScore.Playback
 
 MixerPanelSection {
     id: root
@@ -37,105 +37,23 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
-        height: contentRow.implicitHeight
+        height: control.height
         width: root.rowWidthFor(channelItem)
 
-        property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
-
-        readonly property bool condensedRow: root.isCondensedRow(channelItem)
-
-        Row {
-            id: contentRow
+        ChannelKnobControl {
+            id: control
 
             anchors.horizontalCenter: parent.horizontalCenter
 
-            spacing: 8
+            channelItem: content.channelItem
+            isGain: false
+            compact: root.isCondensedRow(content.channelItem)
 
-            KnobControl {
-                id: balanceKnob
+            navigationRowStart: root.navigationRowStart
+            accessibleName: (Boolean(root.needReadChannelName) ? content.channelItem.title + " " : "") + root.headerTitle
 
-                from: content.channelItem.balanceMin
-                to: content.channelItem.balanceMax
-                value: content.channelItem.balance
-                stepSize: 1
-                isBalanceKnob: true
-                accentColor: content.channelItem.hasCustomColor ? content.channelItem.color : ui.theme.accentColor
-                enabled: !content.channelItem.hasBalanceAutomation
-                opacity: enabled ? 1.0 : ui.theme.itemOpacityDisabled
-
-                //! NOTE: see MixerGainSection.qml's identical overlay -- condensed view
-                //! hides the always-on numeric field below, so this is the only way
-                //! left to read the exact value, shown only while actively dragging.
-                KnobDragValueTooltip {
-                    visible: content.condensedRow && balanceKnob.mouseArea.pressed
-                    text: Math.round(content.channelItem.balance)
-                }
-
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart
-                navigation.accessible.name: content.accessibleName
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                onNewValueRequested: function(newValue) {
-                    content.channelItem.balance = newValue
-                }
-
-                Connections {
-                    target: balanceKnob.mouseArea
-                    function onPressedChanged() {
-                        if (balanceKnob.mouseArea.pressed) {
-                            content.channelItem.beginBalanceChange()
-                        } else {
-                            content.channelItem.endBalanceChange()
-                        }
-                    }
-                }
-            }
-
-            TextInputField {
-                id: balanceTextInputField
-
-                visible: !content.condensedRow
-
-                anchors.verticalCenter: balanceKnob.verticalCenter
-
-                height: 24
-                width: 36
-
-                enabled: !content.channelItem.hasBalanceAutomation
-
-                textHorizontalAlignment: Qt.AlignHCenter
-                textSidePadding: 0
-                background.radius: 2
-
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart + 1
-                navigation.accessible.name: content.accessibleName + " " + currentText
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                validator: IntInputValidator {
-                    id: intInputValidator
-                    top: content.channelItem.balanceMax
-                    bottom: content.channelItem.balanceMin
-                }
-
-                currentText: content.channelItem.balance
-
-                onTextEdited: function(newTextValue) {
-                    if (content.channelItem.balance !== Number(newTextValue)) {
-                        content.channelItem.beginBalanceChange()
-                        content.channelItem.balance = Number(newTextValue)
-                        content.channelItem.endBalanceChange()
-                    }
-                }
+            onNavigateControlIndexChanged: function(index) {
+                root.navigateControlIndexChanged(index)
             }
         }
     }

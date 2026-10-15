@@ -22,26 +22,62 @@
 
 #include "tracklistcontextmenumodel.h"
 
+#include "settings.h"
 #include "types/translatablestring.h"
 
 using namespace mu::playback;
 using namespace muse;
 using namespace muse::uicomponents;
 
+static const Settings::Key CHANNEL_STRIP_VISIBLE_KEY("playback", "playback/trackList/channelStripVisible");
+static const QString TOGGLE_CHANNEL_STRIP_ID("toggle-channel-strip");
+
 TrackListContextMenuModel::TrackListContextMenuModel(QObject* parent)
     : ZoomableMenuModel(muse::Settings::Key("playback", "playback/trackList/zoom"), 0.9, parent)
 {
+    settings()->setDefaultValue(CHANNEL_STRIP_VISIBLE_KEY, Val(true));
+    settings()->valueChanged(CHANNEL_STRIP_VISIBLE_KEY).onReceive(this, [this](const Val&) {
+        if (m_channelStripItem) {
+            m_channelStripItem->setChecked(channelStripVisible());
+        }
+        emit channelStripVisibleChanged();
+    });
 }
 
 void TrackListContextMenuModel::load()
 {
     ZoomableMenuModel::load();
 
+    MenuItem* channelStripItem = new MenuItem(this);
+    channelStripItem->setId(TOGGLE_CHANNEL_STRIP_ID);
+    channelStripItem->setTitle(TranslatableString("playback", "Channel strip"));
+    channelStripItem->setCheckable(true);
+    channelStripItem->setChecked(channelStripVisible());
+    channelStripItem->setEnabled(true);
+    m_channelStripItem = channelStripItem;
+
     setItems({
         makeMenu(TranslatableString("playback", "View"), m_channelCategoriesMenu.makeItems(this)),
         makeSeparator(),
-        makeZoomMenu()
+        makeZoomMenu(),
+        makeSeparator(),
+        channelStripItem
     });
+}
+
+void TrackListContextMenuModel::handleMenuItem(const QString& itemId)
+{
+    if (itemId == TOGGLE_CHANNEL_STRIP_ID) {
+        settings()->setSharedValue(CHANNEL_STRIP_VISIBLE_KEY, Val(!channelStripVisible()));
+        return;
+    }
+
+    ZoomableMenuModel::handleMenuItem(itemId);
+}
+
+bool TrackListContextMenuModel::channelStripVisible() const
+{
+    return settings()->value(CHANNEL_STRIP_VISIBLE_KEY).toBool();
 }
 
 void TrackListContextMenuModel::onCommandStateChanged(const rcommand::Command& command, const rcommand::CommandState& state)

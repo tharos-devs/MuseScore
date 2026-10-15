@@ -19,13 +19,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
 
 import Muse.Ui
 import Muse.UiComponents
+import MuseScore.Playback
 
 MixerPanelSection {
     id: root
@@ -37,102 +37,23 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
-        height: contentRow.implicitHeight
+        height: control.height
         width: root.rowWidthFor(channelItem)
 
-        property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
-
-        readonly property bool condensedRow: root.isCondensedRow(channelItem)
-
-        Row {
-            id: contentRow
+        ChannelKnobControl {
+            id: control
 
             anchors.horizontalCenter: parent.horizontalCenter
 
-            spacing: 8
+            channelItem: content.channelItem
+            isGain: true
+            compact: root.isCondensedRow(content.channelItem)
 
-            KnobControl {
-                id: gainKnob
+            navigationRowStart: root.navigationRowStart
+            accessibleName: (Boolean(root.needReadChannelName) ? content.channelItem.title + " " : "") + root.headerTitle
 
-                from: content.channelItem.gainMin
-                to: content.channelItem.gainMax
-                value: content.channelItem.gain
-                stepSize: 1
-                isBalanceKnob: true
-                accentColor: content.channelItem.hasCustomColor ? content.channelItem.color : ui.theme.accentColor
-
-                //! NOTE: condensed view hides the always-on numeric field below, so this
-                //! is the only way left to read the exact value -- shown only while
-                //! actively dragging, same "reveal on interaction" precedent as
-                //! AuxSendControl's isDragging title swap.
-                KnobDragValueTooltip {
-                    visible: content.condensedRow && gainKnob.mouseArea.pressed
-                    text: Math.round(content.channelItem.gain) + "dB"
-                }
-
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart
-                navigation.accessible.name: content.accessibleName
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                onNewValueRequested: function(newValue) {
-                    content.channelItem.gain = newValue
-                }
-
-                Connections {
-                    target: gainKnob.mouseArea
-                    function onPressedChanged() {
-                        if (gainKnob.mouseArea.pressed) {
-                            content.channelItem.beginGainChange()
-                        } else {
-                            content.channelItem.endGainChange()
-                        }
-                    }
-                }
-            }
-
-            TextInputField {
-                id: gainTextInputField
-
-                visible: !content.condensedRow
-
-                anchors.verticalCenter: gainKnob.verticalCenter
-
-                height: 24
-                width: 36
-
-                textHorizontalAlignment: Qt.AlignHCenter
-                textSidePadding: 0
-                background.radius: 2
-
-                navigation.panel: content.channelItem.panel
-                navigation.row: root.navigationRowStart + 1
-                navigation.accessible.name: content.accessibleName + " " + currentText
-                navigation.onActiveChanged: {
-                    if (navigation.active) {
-                        root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                    }
-                }
-
-                validator: IntInputValidator {
-                    id: intInputValidator
-                    top: content.channelItem.gainMax
-                    bottom: content.channelItem.gainMin
-                }
-
-                currentText: content.channelItem.gain
-
-                onTextEdited: function(newTextValue) {
-                    if (content.channelItem.gain !== Number(newTextValue)) {
-                        content.channelItem.beginGainChange()
-                        content.channelItem.gain = Number(newTextValue)
-                        content.channelItem.endGainChange()
-                    }
-                }
+            onNavigateControlIndexChanged: function(index) {
+                root.navigateControlIndexChanged(index)
             }
         }
     }

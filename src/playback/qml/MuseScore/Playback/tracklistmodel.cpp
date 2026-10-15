@@ -30,6 +30,7 @@
 #include "async/notifylist.h"
 #include "containers.h"
 #include "log.h"
+#include "settings.h"
 #include "translation.h"
 #include "io/path.h"
 
@@ -51,6 +52,8 @@
 
 #include "project/inotationproject.h"
 
+#include "channeleditundo.h"
+
 using namespace muse;
 using namespace mu::playback;
 using namespace muse::audio;
@@ -58,9 +61,14 @@ using namespace mu::engraving;
 using namespace mu::notation;
 using namespace mu::project;
 
+static const muse::Settings::Key STRIP_HEIGHT_KEY("playback", "playback/trackList/stripHeight");
+//! NOTE: higher than any strip: all of it shown, even once it grows (see TrackListPanel.qml)
+static constexpr int DEFAULT_STRIP_HEIGHT = 100000;
+
 TrackListModel::TrackListModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
+    muse::settings()->setDefaultValue(STRIP_HEIGHT_KEY, muse::Val(DEFAULT_STRIP_HEIGHT));
 }
 
 TrackListModel::~TrackListModel()
@@ -408,7 +416,15 @@ void TrackListModel::reload()
         m_globalMuteSolo.clear();
     }
 
-    // the new items aren't selected
+    //! NOTE: the rows selected keep their selection (e.g. when a kind of channels is shown or hidden); the first
+    //! rows get the score's
+    const bool firstRows = m_rows.isEmpty();
+    std::vector<PartTracks> selectedTracks;
+    for (const Row& row : std::as_const(m_rows)) {
+        if (row.item->selected()) {
+            selectedTracks.push_back(row.tracks);
+        }
+    }
     m_selectionAnchorIndex = -1;
 
     m_rebuildRequired = false;
@@ -422,6 +438,17 @@ void TrackListModel::reload()
         row.tracks = partTracks;
         row.item = buildChannelItem(partTracks);
         updateRowState(row);
+
+        const bool wasSelected = std::any_of(selectedTracks.cbegin(), selectedTracks.cend(), [&partTracks](const PartTracks& t) {
+            return t.auxIndex ? t.auxIndex == partTracks.auxIndex : (!partTracks.auxIndex && t.instrumentTrackId == partTracks.instrumentTrackId);
+        });
+        if (wasSelected) {
+            row.item->setSelected(true);
+            if (m_selectionAnchorIndex < 0) {
+                m_selectionAnchorIndex = newRows.size();
+            }
+        }
+
         newRows.push_back(std::move(row));
     }
 
@@ -448,7 +475,10 @@ void TrackListModel::reload()
         item->deleteLater();
     }
 
-    selectRowsOfScoreSelection();
+    if (firstRows) {
+        selectRowsOfScoreSelection();
+    }
+    updateStripChannelItem();
 }
 
 //! NOTE: forceMute too, see GlobalMuteSoloToggle::muteEngaged()
@@ -466,6 +496,7 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
         item->bindAuxBus(*tracks.auxIndex);
         item->subscribeOnTrackAudioSignalChanges();
         connectGlobalMuteSolo(item);
+        connectMixerControls(item, tracks);
         return item;
     }
 
@@ -473,6 +504,7 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
     item->bindInstrumentTrack(tracks.instrumentTrackId);
 
     connectGlobalMuteSolo(item);
+    connectMixerControls(item, tracks);
     //! NOTE: the sound changed: whether it's a VST instrument (articulation map button) and has a window
     connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
         updateRowStates();
@@ -491,6 +523,30 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
     }
 
     return item;
+}
+
+void TrackListModel::connectMixerControls(MixerChannelItem* item, const PartTracks& tracks)
+{
+    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
+    ChannelEditUndo::connectPickedChanges(item, this, [this]() { return projectUndoStack(); }, [this]() { return channels(); });
+
+    item->showAllSlots();
+    connect(item, &MixerChannelItem::outputParamsReceived, item, &MixerChannelItem::showAllSlots);
+    connect(item, &MixerChannelItem::fxChainParamsChanged, item, &MixerChannelItem::showAllSlots);
+    connect(item, &MixerChannelItem::auxSendsParamsChanged, item, &MixerChannelItem::showAllSlots);
+
+    connect(item, &MixerChannelItem::selectedChanged, this, &TrackListModel::updateStripChannelItem);
+
+    //! NOTE: the volume and pan curves drawn on the score: shown by the fader and knob, which can't be moved then
+    if (!tracks.auxIndex) {
+        QPointer<MixerChannelItem> guard(item);
+        playback()->automatedControlParamsChanges(tracks.trackId)
+        .onResolve(this, [guard](muse::audio::AutomatedControlParamsChanges changes) {
+            if (guard) {
+                guard->subscribeOnAutomatedControlParamsChanges(changes);
+            }
+        });
+    }
 }
 
 bool TrackListModel::isInstrumentEditorOpened(const Row& row) const
@@ -746,18 +802,6 @@ const Part* TrackListModel::visibilityPart(const Row& row) const
     return part;
 }
 
-void TrackListModel::togglePartVisible(int row)
-{
-    if (row < 0 || row >= m_rows.size() || !m_notation) {
-        return;
-    }
-
-    //! NOTE: undoable, same as the Layout panel's eye
-    if (const Part* part = visibilityPart(m_rows.at(row))) {
-        m_notation->parts()->setPartVisible(part->id(), !part->show());
-    }
-}
-
 void TrackListModel::setTrackColor(int row, const QColor& color)
 {
     applyTrackColor(row, color, TranslatableString("undoableAction", "Change Mixer channel color"));
@@ -846,6 +890,42 @@ void TrackListModel::selectRowsOfScoreSelection()
             m_selectionAnchorIndex = i; // a Shift+click in the list extends from there
         }
     }
+}
+
+void TrackListModel::updateStripChannelItem()
+{
+    MixerChannelItem* item = nullptr;
+    for (const Row& row : std::as_const(m_rows)) {
+        if (row.item->selected()) {
+            item = row.item;
+            break;
+        }
+    }
+
+    if (m_stripChannelItem != item) {
+        m_stripChannelItem = item;
+        emit stripChannelItemChanged();
+    }
+}
+
+MixerChannelItem* TrackListModel::stripChannelItem() const
+{
+    return m_stripChannelItem;
+}
+
+int TrackListModel::stripHeight() const
+{
+    return muse::settings()->value(STRIP_HEIGHT_KEY).toInt();
+}
+
+void TrackListModel::setStripHeight(int height)
+{
+    if (height == stripHeight()) {
+        return;
+    }
+
+    muse::settings()->setSharedValue(STRIP_HEIGHT_KEY, muse::Val(height));
+    emit stripHeightChanged();
 }
 
 void TrackListModel::clearSelection()
