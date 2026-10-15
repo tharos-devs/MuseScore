@@ -1288,19 +1288,39 @@ StyledDialogView {
                 onClicked: prv.setAlwaysOnTop(!checked)
             }
 
-            Item { Layout.fillWidth: true }
+            ButtonBox {
+                Layout.fillWidth: true
 
-            FlatButton {
-                visible: editorModel.canReloadIntoTrack
-                icon: IconCode.UPDATE
-                toolTipTitle: qsTrc("notation", "Reload into the track")
-                toolTipDescription: qsTrc("notation", "Saves the changes, then plays the track with this map")
-                onClicked: editorModel.reloadIntoTrack()
-            }
+                buttons: [ ButtonBoxModel.Cancel ]
 
-            FlatButton {
-                text: qsTrc("global", "Close")
-                onClicked: editorModel.applyAndClose()
+                FlatButton {
+                    visible: editorModel.canApply
+                    text: qsTrc("global", "Apply")
+                    buttonRole: ButtonBoxModel.ApplyRole
+                    buttonId: ButtonBoxModel.Apply
+                    toolTipTitle: qsTrc("global", "Apply")
+                    toolTipDescription: qsTrc("notation", "Saves the map, then plays the track with it. Cancel doesn't undo it.")
+                    onClicked: editorModel.apply()
+                }
+
+                FlatButton {
+                    text: qsTrc("global", "OK")
+                    buttonRole: ButtonBoxModel.AcceptRole
+                    buttonId: ButtonBoxModel.Ok
+                    accentButton: true
+                    toolTipTitle: qsTrc("global", "OK")
+                    toolTipDescription: editorModel.canApply
+                                        ? qsTrc("notation", "Saves the map, plays the track with it and closes the editor")
+                                        : qsTrc("notation", "Saves the map and closes the editor")
+                    onClicked: editorModel.applyAndClose()
+                }
+
+                // like the window's close button and Escape: nothing applied, unsaved changes offered to be saved
+                onStandardButtonClicked: function(buttonId) {
+                    if (buttonId === ButtonBoxModel.Cancel) {
+                        root.close()
+                    }
+                }
             }
         }
     }

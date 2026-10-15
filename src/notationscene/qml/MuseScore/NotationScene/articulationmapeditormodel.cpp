@@ -591,7 +591,7 @@ void ArticulationMapEditorModel::newMap()
 }
 
 //! NOTE: "New" starts the track over: its map is removed (undoable, like its "Remove" menu item), the new one is
-//! attached by "Reload into the track"
+//! attached by Apply or OK
 void ArticulationMapEditorModel::removeTargetTrackMap()
 {
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
@@ -865,7 +865,7 @@ void ArticulationMapEditorModel::closeRequested()
 
 // ---- target track
 
-bool ArticulationMapEditorModel::canReloadIntoTrack() const
+bool ArticulationMapEditorModel::canApply() const
 {
     return m_targetTrack.has_value();
 }
@@ -881,7 +881,7 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
     const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
-    // a track without a map yet (New…) gets the edited one only through Reload into track
+    // a track without a map yet (New…) gets the edited one only through Apply or OK into track
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);
@@ -979,16 +979,23 @@ void ArticulationMapEditorModel::openInstrumentEditor()
     instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target);
 }
 
-void ArticulationMapEditorModel::reloadIntoTrack()
+void ArticulationMapEditorModel::apply()
 {
     applyToTrack();
 }
 
 void ArticulationMapEditorModel::applyAndClose()
 {
+    if (!m_targetTrack) {
+        if (!m_isDirty || saveMap()) {
+            emit closeAccepted();
+        }
+        return;
+    }
+
     //! NOTE: nothing to apply after "New" with nothing added (the track's map is already removed)
-    if (!m_targetTrack || (m_filePath.empty() && !m_isDirty)) {
-        closeRequested();
+    if (m_filePath.empty() && !m_isDirty) {
+        emit closeAccepted();
         return;
     }
 

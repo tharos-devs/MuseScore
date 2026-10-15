@@ -63,7 +63,7 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QString filePath READ filePath NOTIFY fileChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY fileChanged)
     Q_PROPERTY(bool isDirty READ isDirty NOTIFY dirtyChanged)
-    Q_PROPERTY(bool canReloadIntoTrack READ canReloadIntoTrack NOTIFY targetTrackChanged)
+    Q_PROPERTY(bool canApply READ canApply NOTIFY targetTrackChanged)
     //! NOTE: the target track's VST instrument window: whether it has one, and whether it's open
     Q_PROPERTY(bool hasInstrumentEditor READ hasInstrumentEditor NOTIFY instrumentEditorChanged)
     Q_PROPERTY(bool instrumentEditorOpened READ instrumentEditorOpened NOTIFY instrumentEditorChanged)
@@ -145,7 +145,7 @@ public:
     QString filePath() const;
     QString fileName() const;
     bool isDirty() const;
-    bool canReloadIntoTrack() const;
+    bool canApply() const;
     bool hasInstrumentEditor() const;
     bool instrumentEditorOpened() const;
 
@@ -190,13 +190,14 @@ public:
     //! NOTE: offers to save unsaved changes, then emits closeAccepted unless cancelled
     Q_INVOKABLE void closeRequested();
 
-    //! NOTE: set when opened from a Mixer track, see reloadIntoTrack
+    //! NOTE: set when opened from a Mixer track, see apply
     Q_INVOKABLE void setTargetTrack(const QString& partId, const QString& instrumentId);
-    //! NOTE: saves the changes if needed, then loads the file into the track, like the Mixer's "Reload"
-    //! (saving alone already reloads it into the tracks of the open score that use this file)
-    Q_INVOKABLE void reloadIntoTrack();
-    //! NOTE: the Close button: with a track, the editor's map is the track's once closed (saved, then reloaded
-    //! into it), so a map opened or started here isn't lost; without one, like closing the window
+    //! NOTE: the Apply button: saves the changes if needed, then loads the file into the track, like the Mixer's
+    //! "Reload" (saving alone already reloads it into the tracks of the open score that use this file, but doesn't
+    //! give it to a track using another file or none yet)
+    Q_INVOKABLE void apply();
+    //! NOTE: the OK button: with a track, the editor's map is the track's once closed (saved, then reloaded into it),
+    //! so a map opened or started here isn't lost; without one, the changes are saved
     Q_INVOKABLE void applyAndClose();
     //! NOTE: like the Mixer's and the Track list's button (comes to the front if already open)
     Q_INVOKABLE void openInstrumentEditor();
