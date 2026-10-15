@@ -219,6 +219,14 @@ public:
     //! as any other FX chain edit (add/remove/replace).
     Q_INVOKABLE void moveOutputResourceItem(int fromIndex, int toIndex);
 
+    //! NOTE: for an effect dragged from another channel (see MixerPanelModel::dropFx()): puts fxParams (effect and
+    //! settings) in this channel's first empty slot, moved to insertIndex (0..slot count: the slot it's dropped
+    //! before). False when there's no empty slot, or a previous change is still on its way to the engine
+    bool insertFx(int insertIndex, const muse::audio::AudioFxParams& fxParams);
+
+    //! NOTE: an empty slot to drop an effect from another channel in (see insertFx())
+    Q_INVOKABLE bool hasBlankOutputResourceItem() const;
+
     //! NOTE: an instrument channel's link to its engine track, the same in every panel showing one (Mixer, Track
     //! list): loads its params, sends its own changes to the engine (persisting volume/balance/gain, and solo/mute
     //! to the notation's state), and follows what the engine gets from elsewhere (sound, aux sends): one panel's
@@ -420,6 +428,9 @@ protected:
     InputResourceItem* buildInputResourceItem();
     OutputResourceItem* buildOutputResourceItem(const muse::audio::AudioFxParams& fxParams);
     AuxSendItem* buildAuxSendItem(muse::audio::aux_channel_idx_t index, const muse::audio::AuxSendParams& params);
+
+    //! NOTE: items in their new order: each one's chainOrder becomes its position, then sent to the engine
+    void applyOutputResourceItemsOrder(const QList<OutputResourceItem*>& items);
 
     void addBlankSlots(size_t count);
     void removeBlankSlotsFromEnd(size_t count);

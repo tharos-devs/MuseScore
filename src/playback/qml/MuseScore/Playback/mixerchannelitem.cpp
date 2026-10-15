@@ -383,6 +383,64 @@ void MixerChannelItem::moveOutputResourceItem(int fromIndex, int toIndex)
 
     items.move(fromIndex, toIndex);
 
+    applyOutputResourceItemsOrder(items);
+}
+
+bool MixerChannelItem::hasBlankOutputResourceItem() const
+{
+    for (const OutputResourceItem* item : std::as_const(m_outputResourceItems)) {
+        if (item->isBlank()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool MixerChannelItem::insertFx(int insertIndex, const AudioFxParams& fxParams)
+{
+    TRACEFUNC;
+
+    //! NOTE: see moveOutputResourceItem()
+    if (m_fxChainUpdatePending) {
+        return false;
+    }
+
+    QList<OutputResourceItem*> items = m_outputResourceItems.values();
+
+    int blankIndex = -1;
+    for (int i = 0; i < items.size(); ++i) {
+        if (items[i]->isBlank()) {
+            blankIndex = i;
+            break;
+        }
+    }
+
+    if (blankIndex < 0) {
+        return false;
+    }
+
+    AudioFxParams params = fxParams;
+    params.chainOrder = items[blankIndex]->params().chainOrder;
+
+    //! NOTE: not blocked: the slot's view shows the effect (when the slots keep their order, the list isn't rebuilt),
+    //! but not sent to the engine on its own (m_outputResourceItemsLoading): applyOutputResourceItemsOrder() does
+    m_outputResourceItemsLoading = true;
+    items[blankIndex]->setParams(params);
+    m_outputResourceItemsLoading = false;
+
+    //! NOTE: dropped before insertIndex: once the empty slot is taken out, that's one less after it
+    int toIndex = insertIndex > blankIndex ? insertIndex - 1 : insertIndex;
+    toIndex = std::clamp(toIndex, 0, static_cast<int>(items.size()) - 1);
+    items.move(blankIndex, toIndex);
+
+    applyOutputResourceItemsOrder(items);
+
+    return true;
+}
+
+void MixerChannelItem::applyOutputResourceItemsOrder(const QList<OutputResourceItem*>& items)
+{
     m_outputResourceItemsLoading = true;
     m_outputResourceItems.clear();
 

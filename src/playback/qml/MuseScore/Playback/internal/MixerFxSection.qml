@@ -36,6 +36,45 @@ MixerPanelSection {
     headerTitle: qsTrc("playback", "Audio FX")
     headerHeight: 24
 
+    //! NOTE: an effect dragged out of its channel's slots onto another channel's (any channel): moved there, or
+    //! copied with Cmd (Ctrl) held. Each channel's slots register here, to find the one under the mouse
+    property var fxDropTargets: []
+
+    function registerFxDropTarget(target) {
+        root.fxDropTargets = root.fxDropTargets.concat([ target ])
+    }
+
+    function unregisterFxDropTarget(target) {
+        root.fxDropTargets = root.fxDropTargets.filter(t => t !== target)
+    }
+
+    //! NOTE: the channel's slots under a scene position (with a margin above and below them), or null. The Master's
+    //! first: pinned at the right, it's above the channels scrolled under it. None under the pinned labels at the left
+    //! (channels scrolled under them)
+    function fxDropTargetAt(sceneX, sceneY) {
+        if (root.headerVisible && root.item) {
+            const posInSection = root.item.mapFromItem(null, sceneX, sceneY)
+            if (posInSection.x >= root.headerPinOffsetX && posInSection.x < root.headerPinOffsetX + root.headerWidth) {
+                return null
+            }
+        }
+
+        let found = null
+
+        for (const target of root.fxDropTargets) {
+            const pos = target.mapFromItem(null, sceneX, sceneY)
+            if (pos.x >= 0 && pos.x < target.width && pos.y >= -target.rowHeight / 2 && pos.y < target.height + target.rowHeight / 2) {
+                if (target.channelItem.type === MixerChannelItem.Master) {
+                    return target
+                }
+
+                found = found ?? target
+            }
+        }
+
+        return found
+    }
+
     Item {
         id: content
 
@@ -57,6 +96,26 @@ MixerPanelSection {
 
         property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
 
+        //! NOTE: an effect from another channel dragged over these slots: where it would go (0..count: before that
+        //! slot), -1 for none
+        property int fxDropIndex: -1
+
+        Component.onCompleted: root.registerFxDropTarget(content)
+        Component.onDestruction: root.unregisterFxDropTarget(content)
+
+        Rectangle {
+            visible: content.fxDropIndex >= 0
+            z: 20
+
+            x: 4
+            y: content.fxDropIndex * content.rowHeight - content.itemSpacing / 2 - height / 2
+            width: content.width - 8
+            height: 2
+            radius: 1
+
+            color: ui.theme.accentColor
+        }
+
         // NOTE: drag state lives here (not on the dragged delegate itself)
         // because the dragged delegate's Repeater instance is destroyed and
         // recreated once the reorder is actually committed to C++ (see
@@ -67,6 +126,39 @@ MixerPanelSection {
 
             property int draggedIndex: -1
             property int dropIndex: -1
+
+            //! NOTE: another channel's slots the dragged effect is over (see root.fxDropTargets), whether it can go
+            //! there (an empty slot), and whether it's copied (Cmd/Ctrl held at the last move)
+            property var foreignTarget: null
+            property bool foreignDropAllowed: false
+            property bool duplicate: false
+
+            function setForeignTarget(target, insertIndex) {
+                if (foreignTarget && foreignTarget !== target) {
+                    foreignTarget.fxDropIndex = -1
+                }
+
+                foreignTarget = target
+                foreignDropAllowed = Boolean(target) && target.channelItem.hasBlankOutputResourceItem()
+
+                if (target) {
+                    target.fxDropIndex = foreignDropAllowed ? insertIndex : -1
+                    root.model.setDragCursor(!foreignDropAllowed ? Qt.ForbiddenCursor
+                                                                 : duplicate ? Qt.DragCopyCursor : Qt.DragMoveCursor)
+                } else {
+                    root.model.restoreDragCursor()
+                }
+            }
+
+            //! NOTE: only while over another channel: the drag cursor is shared by every channel's slots
+            function clearForeignTarget() {
+                if (!foreignTarget) {
+                    return
+                }
+
+                setForeignTarget(null, -1)
+                duplicate = false
+            }
         }
 
         Repeater {
@@ -85,6 +177,7 @@ MixerPanelSection {
             onCountChanged: {
                 prv.draggedIndex = -1
                 prv.dropIndex = -1
+                prv.clearForeignTarget()
             }
 
             delegate: Item {
@@ -193,9 +286,29 @@ MixerPanelSection {
                         prv.dropIndex = slotRoot.index
                     }
 
-                    onReorderPositionChanged: function(globalX, globalY) {
+                    onReorderPositionChanged: function(globalX, globalY, modifiers) {
                         if (prv.draggedIndex !== slotRoot.index) {
                             return
+                        }
+
+                        //! NOTE: over another channel's slots: this one stays in its place, the other shows where the
+                        //! effect would go
+                        const target = root.fxDropTargetAt(globalX, globalY)
+                        if (target && target !== content) {
+                            const posInTarget = target.mapFromItem(null, globalX, globalY)
+                            const slotCount = target.channelItem.outputResourceItemList.length
+                            const insertIndex = Math.max(0, Math.min(slotCount, Math.round(posInTarget.y / target.rowHeight)))
+
+                            prv.duplicate = (modifiers & Qt.ControlModifier) !== 0
+                            prv.setForeignTarget(target, insertIndex)
+
+                            slotRoot.dragOffsetY = slotRoot.index * content.rowHeight
+                            prv.dropIndex = prv.draggedIndex
+                            return
+                        }
+
+                        if (prv.foreignTarget) {
+                            prv.clearForeignTarget()
                         }
 
                         var maxY = (repeater.count - 1) * content.rowHeight
@@ -208,8 +321,37 @@ MixerPanelSection {
                         prv.dropIndex = newIndex
                     }
 
+                    onReorderCanceled: {
+                        prv.clearForeignTarget()
+                        prv.draggedIndex = -1
+                        prv.dropIndex = -1
+                    }
+
                     onReorderReleased: {
                         if (prv.draggedIndex < 0) {
+                            return
+                        }
+
+                        if (prv.foreignTarget) {
+                            const fromChannel = content.channelItem
+                            const fromIndex = prv.draggedIndex
+                            const toChannel = prv.foreignTarget.channelItem
+                            const insertIndex = prv.foreignTarget.fxDropIndex
+                            const allowed = prv.foreignDropAllowed
+                            //! NOTE: also when Cmd/Ctrl was let go just before the mouse button
+                            const duplicate = prv.duplicate || (ui.keyboardModifiers() & Qt.ControlModifier) !== 0
+
+                            prv.clearForeignTarget()
+                            prv.draggedIndex = -1
+                            prv.dropIndex = -1
+
+                            //! NOTE: deferred, like a reorder below: the slots of both channels get rebuilt
+                            if (allowed && insertIndex >= 0) {
+                                Qt.callLater(function() {
+                                    root.model.dropFx(fromChannel, fromIndex, toChannel, insertIndex, duplicate)
+                                })
+                            }
+
                             return
                         }
 

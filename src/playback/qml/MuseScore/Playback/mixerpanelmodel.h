@@ -143,6 +143,17 @@ public:
     Q_INVOKABLE void toggleGlobalMute();
     Q_INVOKABLE void toggleGlobalSolo();
 
+    //! NOTE: an Audio FX slot's effect dropped on another channel's slots (any channels): moved there, or copied
+    //! (duplicate), with its settings, before the slot at insertIndex (0..slot count). Undoable. False when it can't
+    //! be dropped (no empty slot there)
+    Q_INVOKABLE bool dropFx(mu::playback::MixerChannelItem* source, int sourceIndex, mu::playback::MixerChannelItem* target,
+                            int insertIndex, bool duplicate);
+
+    //! NOTE: the mouse cursor while dragging an Audio FX slot's effect (e.g. a copy's), whatever is under the mouse,
+    //! until restoreDragCursor()
+    Q_INVOKABLE void setDragCursor(int cursorShape);
+    Q_INVOKABLE void restoreDragCursor();
+
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -229,6 +240,10 @@ private:
     //! NOTE: undo for a send slot pointed at another bus (and the fan-out to the other selected tracks)
     void connectAuxSendReassignment(MixerChannelItem* item);
     void connectFxChangeFanOut(MixerChannelItem* item);
+
+    //! NOTE: an undo step restoring the channels' FX chains changed since before (by track)
+    void pushFxChainsUndo(const muse::TranslatableString& actionName,
+                          const std::vector<std::pair<muse::audio::TrackId, muse::audio::AudioFxChain> >& before);
 
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem
@@ -322,5 +337,7 @@ private:
 
     void pushAddAuxBusUndoCommand(muse::audio::aux_channel_idx_t index, const muse::audio::TrackId& trackId, bool isGroupBus,
                                   const QList<muse::audio::TrackId>& assignedTrackIds);
+
+    bool m_dragCursorSet = false;
 };
 }
