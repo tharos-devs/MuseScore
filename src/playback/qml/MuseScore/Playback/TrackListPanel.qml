@@ -92,6 +92,12 @@ Item {
 
                     spacing: 4
 
+                    //! NOTE: the rows' sound column
+                    Item {
+                        width: 20
+                        height: 20
+                    }
+
                     GlobalMuteSoloButtons {
                         spacing: 4
 
@@ -100,17 +106,13 @@ Item {
 
                         navigationPanel: navPanel
                         navigationRow: 0
-                        navigationColumnStart: 0
+                        navigationColumnStart: 1
                     }
 
-                    //! NOTE: the rows' visibility, sound, articulation map and editor columns
-                    Repeater {
-                        model: 2
-
-                        Item {
-                            width: 20
-                            height: 20
-                        }
+                    //! NOTE: the rows' visibility, articulation map and editor columns
+                    Item {
+                        width: 20
+                        height: 20
                     }
 
                     Item {
@@ -201,6 +203,12 @@ Item {
 
                         spacing: 4
 
+                        //! NOTE: the parts' sound column
+                        Item {
+                            width: 20
+                            height: 20
+                        }
+
                         //! NOTE: Mute only (no Solo button for the metronome)
                         ChannelMuteSoloButtons {
                             spacing: 4
@@ -210,7 +218,7 @@ Item {
                             navigationPanel: navPanel
                             navigationName: "MetronomeRow"
                             muteNavigationRow: 1
-                            muteNavigationColumn: 0
+                            muteNavigationColumn: 1
                             accessibleName: qsTrc("playback", "Metronome")
 
                             onMuteToggled: function(muted) {
@@ -218,9 +226,9 @@ Item {
                             }
                         }
 
-                        //! NOTE: the parts' solo, visibility and sound columns
+                        //! NOTE: the parts' solo and visibility columns
                         Repeater {
-                            model: 3
+                            model: 2
 
                             Item {
                                 width: 20
@@ -353,6 +361,12 @@ Item {
 
                         spacing: 4
 
+                        //! NOTE: the parts' sound column
+                        Item {
+                            width: 20
+                            height: 20
+                        }
+
                         ChannelMuteSoloButtons {
                             spacing: 4
 
@@ -362,9 +376,9 @@ Item {
                             navigationPanel: navPanel
                             navigationName: "VideoRow"
                             muteNavigationRow: 2
-                            muteNavigationColumn: 0
+                            muteNavigationColumn: 1
                             soloNavigationRow: 2
-                            soloNavigationColumn: 1
+                            soloNavigationColumn: 2
                             accessibleName: qsTrc("playback", "Video")
 
                             onMuteToggled: function(muted) {
@@ -386,7 +400,7 @@ Item {
                             navigation.panel: navPanel
                             navigation.name: "LoadVideoButton"
                             navigation.row: 2
-                            navigation.column: 2
+                            navigation.column: 3
                             navigation.accessible.name: qsTrc("playback", "Load video")
 
                             onClicked: {
@@ -394,12 +408,7 @@ Item {
                             }
                         }
 
-                        //! NOTE: the parts' sound, articulation map and editor columns
-                        Item {
-                            width: 20
-                            height: 20
-                        }
-
+                        //! NOTE: the parts' articulation map and editor columns
                         Item {
                             width: 20
                             height: 20
@@ -572,6 +581,40 @@ Item {
 
                     spacing: 4
 
+                    //! NOTE: the Mixer's Sound menu (a bus has none: its column stays)
+                    FlatButton {
+                        id: soundButton
+
+                        width: 20
+                        height: 20
+                        visible: !rowItem.isAuxBus
+
+                        transparent: !soundMenu.isMenuOpened
+                        icon: IconCode.SMALL_ARROW_DOWN
+
+                        navigation.panel: navPanel
+                        navigation.name: "SoundButton" + rowItem.index
+                        navigation.row: rowItem.index + 3
+                        navigation.column: 0
+                        navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
+
+                        onClicked: {
+                            soundMenu.requestOpen()
+                        }
+
+                        AudioResourceMenuLoader {
+                            id: soundMenu
+
+                            resourceItemModel: rowItem.soundItem
+                        }
+                    }
+
+                    Item {
+                        width: 20
+                        height: 20
+                        visible: rowItem.isAuxBus
+                    }
+
                     ChannelMuteSoloButtons {
                         spacing: 4
 
@@ -580,9 +623,9 @@ Item {
                         navigationPanel: navPanel
                         navigationName: "Row" + rowItem.index
                         muteNavigationRow: rowItem.index + 3
-                        muteNavigationColumn: 0
+                        muteNavigationColumn: 1
                         soloNavigationRow: rowItem.index + 3
-                        soloNavigationColumn: 1
+                        soloNavigationColumn: 2
                         accessibleName: rowItem.channelItem.title
 
                         onMuteToggled: function(muted) {
@@ -602,14 +645,11 @@ Item {
                         }
                     }
 
-                    //! NOTE: a bus's row has no visibility and sound: their columns stay
-                    Repeater {
-                        model: rowItem.isAuxBus ? 2 : 0
-
-                        Item {
-                            width: 20
-                            height: 20
-                        }
+                    //! NOTE: a bus's row has no visibility: its column stays
+                    Item {
+                        width: 20
+                        height: 20
+                        visible: rowItem.isAuxBus
                     }
 
                     FlatButton {
@@ -623,39 +663,11 @@ Item {
                         navigation.panel: navPanel
                         navigation.name: "VisibilityButton" + rowItem.index
                         navigation.row: rowItem.index + 3
-                        navigation.column: 2
+                        navigation.column: 3
                         navigation.accessible.name: rowItem.channelItem.title + " " + (rowItem.partVisible ? qsTrc("playback", "Hide instrument") : qsTrc("playback", "Show instrument"))
 
                         onClicked: {
                             trackListModel.togglePartVisible(rowItem.index)
-                        }
-                    }
-
-                    //! NOTE: the Mixer's Sound menu
-                    FlatButton {
-                        id: soundButton
-
-                        width: 20
-                        height: 20
-                        visible: !rowItem.isAuxBus
-
-                        transparent: !soundMenu.isMenuOpened
-                        icon: IconCode.AUDIO
-
-                        navigation.panel: navPanel
-                        navigation.name: "SoundButton" + rowItem.index
-                        navigation.row: rowItem.index + 3
-                        navigation.column: 3
-                        navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
-
-                        onClicked: {
-                            soundMenu.requestOpen()
-                        }
-
-                        AudioResourceMenuLoader {
-                            id: soundMenu
-
-                            resourceItemModel: rowItem.soundItem
                         }
                     }
 
