@@ -34,7 +34,7 @@ StyledDialogView {
         return qsTrc("notation", "Articulation map editor") + " – " + name + (editorModel.isDirty ? " *" : "")
     }
 
-    contentWidth: 1000 // 880 + the Score markings column
+    contentWidth: 1120 // 880 + the Score markings and Short name columns
     contentHeight: 580
 
     modal: false
@@ -108,6 +108,7 @@ StyledDialogView {
         readonly property int numberColumnWidth: 32
         readonly property int colorColumnWidth: 24
         readonly property int nameColumnWidth: 175
+        readonly property int shortNameColumnWidth: 120
         readonly property int scoreMarkingsColumnWidth: 205
         readonly property int sidePanelWidth: 340
 
@@ -294,6 +295,15 @@ StyledDialogView {
                         }
 
                         StyledTextLabel {
+                            width: prv.shortNameColumnWidth
+                            height: parent.height
+                            horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
+                            text: qsTrc("notation", "Short name")
+                            font: ui.theme.bodyBoldFont
+                        }
+
+                        StyledTextLabel {
                             width: prv.scoreMarkingsColumnWidth
                             height: parent.height
                             horizontalAlignment: Text.AlignLeft
@@ -363,6 +373,7 @@ StyledDialogView {
                             required property bool isDisabled
                             required property bool isSelected
                             required property var scoreMarkings
+                            required property string shortName
 
                             width: listView.width
                             height: prv.rowHeight
@@ -600,6 +611,15 @@ StyledDialogView {
                                     }
                                 }
 
+                                StyledTextLabel {
+                                    height: parent.height
+                                    width: prv.shortNameColumnWidth
+                                    rightPadding: 8
+                                    horizontalAlignment: Text.AlignLeft
+                                    elide: Text.ElideRight
+                                    text: rowItem.shortName
+                                }
+
                                 //! NOTE: an overview, the details are in the side panel; a marking an articulation
                                 //! higher in the map has too is dimmed: that one is played for it
                                 StyledTextLabel {
@@ -621,7 +641,7 @@ StyledDialogView {
                                 StyledTextLabel {
                                     height: parent.height
                                     width: parent.width - prv.numberColumnWidth - prv.colorColumnWidth - prv.nameColumnWidth
-                                           - prv.scoreMarkingsColumnWidth
+                                           - prv.shortNameColumnWidth - prv.scoreMarkingsColumnWidth
                                     horizontalAlignment: Text.AlignLeft
                                     elide: Text.ElideRight
                                     text: rowItem.sequence
@@ -890,11 +910,41 @@ StyledDialogView {
                         }
                     }
 
+                    //! NOTE: shown in the articulation lane instead of the name, e.g. "Marcato" for
+                    //! "Long notes > Marcato > Senza vibrato"
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        //! NOTE: as wide as the Score markings label below: the field and the button start at the same x
+                        StyledTextLabel {
+                            id: shortNameLabel
+                            Layout.preferredWidth: Math.max(implicitWidth, scoreMarkingsLabel.implicitWidth)
+                            horizontalAlignment: Text.AlignLeft
+                            text: qsTrc("notation", "Short name")
+                        }
+
+                        TextInputField {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+
+                            currentText: editorModel.selectedShortName
+                            isIndeterminate: editorModel.selectedShortNameMixed
+                            hint: qsTrc("notation", "Shown in the articulation lane")
+                            maximumLength: 40
+
+                            onTextEditingFinished: function(newTextValue) {
+                                editorModel.setSelectedShortName(newTextValue)
+                            }
+                        }
+                    }
+
                     //! NOTE: what selects the articulation in the lane, without placing it there by hand
                     RowLayout {
                         Layout.fillWidth: true
 
                         StyledTextLabel {
+                            id: scoreMarkingsLabel
+                            Layout.preferredWidth: Math.max(implicitWidth, shortNameLabel.implicitWidth)
                             horizontalAlignment: Text.AlignLeft
                             text: qsTrc("notation", "Score markings")
                         }

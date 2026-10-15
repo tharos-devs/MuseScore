@@ -92,6 +92,38 @@ TEST_F(ArticulationMapWriter_Tests, RoundTrip_AllFeatures)
     expectSameFile(parsed, reparsed);
 }
 
+TEST_F(ArticulationMapWriter_Tests, ShortNames)
+{
+    const String text = u"C0 Long > Marcato > Senza vibrato short=\"Marcato\"\n"
+                        u"D0 Long > Marcato > Con vibrato = marcato short=\"Marc. = vib\" color=#a02828\n"
+                        u"E0 Short > Staccato SHORT = \"  Stacc  \" ks=-30ms\n"
+                        u"F0 Short > Spiccato\n";
+
+    const ArticulationMapParser::Result parsed = ArticulationMapParser::parse(text);
+    ASSERT_TRUE(parsed.errors.empty());
+    ASSERT_EQ(parsed.map.entries.size(), 4);
+
+    EXPECT_EQ(parsed.map.entries.at(0).id, u"Long > Marcato > Senza vibrato");
+    EXPECT_EQ(parsed.map.entries.at(0).shortName, u"Marcato");
+
+    // its quoted text isn't taken for the alias list, nor the other options for its text
+    EXPECT_EQ(parsed.map.entries.at(1).id, u"Long > Marcato > Con vibrato");
+    EXPECT_EQ(parsed.map.entries.at(1).shortName, u"Marc. = vib");
+    ASSERT_EQ(parsed.map.entries.at(1).aliases.size(), 1);
+    EXPECT_TRUE(parsed.map.entries.at(1).color.has_value());
+
+    EXPECT_EQ(parsed.map.entries.at(2).shortName, u"Stacc");
+    EXPECT_EQ(parsed.map.entries.at(2).keyswitchOffsetMs, -30);
+
+    EXPECT_TRUE(parsed.map.entries.at(3).shortName.empty());
+
+    const String written = ArticulationMapWriter::write(parsed);
+    const ArticulationMapParser::Result reparsed = ArticulationMapParser::parse(written);
+    ASSERT_TRUE(reparsed.errors.empty()) << written.toStdString();
+
+    expectSameFile(parsed, reparsed);
+}
+
 TEST_F(ArticulationMapWriter_Tests, ImplicitAliasesNotWritten)
 {
     const ArticulationMapParser::Result parsed = ArticulationMapParser::parse(u"C0 Strings > Pizzicato\n");

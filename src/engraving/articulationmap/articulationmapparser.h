@@ -41,6 +41,7 @@ namespace mu::engraving {
 //!     C#0       Staccatissimo      without '=', a name matching a score articulation is its own alias
 //!     -E0       Tremolo            '-' disables an articulation: kept, but never offered nor sent
 //!     @folder   Legato > Slow      a (sub)folder with no articulation yet
+//!     F0        Marcato > Senza vibrato  short="Marcato"   shown in the score instead of "Senza vibrato"
 //!
 //! Messages: note names (C0, F#-1, Bb2, optional velocity: C0v80), raw notes (n24),
 //! controllers (cc32=10) and program changes (pc3)

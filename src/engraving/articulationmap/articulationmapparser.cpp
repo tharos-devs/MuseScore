@@ -300,6 +300,7 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
     static const std::regex COLOR_REGEX(R"((^|\s)color\s*=\s*#([0-9a-f]{6}|[0-9a-f]{3})\b)", std::regex::icase);
     static const std::regex CHANNEL_REGEX(R"((^|\s)ch\s*=\s*(-?\d+)\b)", std::regex::icase);
     static const std::regex CHANNEL_CODE_REGEX(R"(^ch=(-?\d+)$)", std::regex::icase);
+    static const std::regex SHORT_NAME_REGEX(R"re((^|\s)short\s*=\s*"([^"]*)")re", std::regex::icase);
 
     Result result;
     ExpressionMap& map = result.map;
@@ -386,6 +387,12 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
         };
 
         std::smatch match;
+
+        //! NOTE: first: its quoted text may hold anything the other options are looked for with (e.g. "=")
+        if (std::regex_search(rest, match, SHORT_NAME_REGEX)) {
+            entry.shortName = String::fromStdString(trimmed(match[2].str()));
+            rest = match.prefix().str() + " " + match.suffix().str();
+        }
 
         if (std::regex_match(first, match, CHANNEL_CODE_REGEX)) {
             readChannel(match[1].str());
