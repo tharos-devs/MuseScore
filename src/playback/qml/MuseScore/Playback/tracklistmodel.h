@@ -194,6 +194,7 @@ private:
     void componentComplete() override;
 
     void onCurrentNotationChanged();
+    void selectRowsOfScoreSelection();
     bool isInstrumentEditorOpened(const Row& row) const;
     void subscribeOnUndoStack(const notation::INotationPtr& notation);
     void scheduleReload();
