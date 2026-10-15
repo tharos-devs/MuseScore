@@ -12,6 +12,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 - Articulation maps: when a score opens, the map files changed since it was saved are listed, to reload them (one undoable step) or keep the versions saved with the score.
 - Track list: the sound menu button (an arrow) is left of Mute; the global Mute/Solo buttons are lined up with the rows' ones.
 - View menu: Secondary palettes is above Secondary window.
+- Articulation maps: a score marking several articulations of a map are named after (e.g. the Legato variants in a Tremolo folder) no longer selects any of them on its own, and a marking chosen for an articulation (`= ...` in the file) wins over the same marking coming from another articulation's name, wherever it is in the map. A duplicated articulation keeps only the chosen markings of the original.
 
 ### 2026-10-14
 - 2nd Palettes: a narrow panel (View > Secondary palettes, docked at the left, hidden by default) showing the same palettes as the Palettes panel in two columns, to sit beside the Track list. The first column has an icon per palette (its first cell when there's no fitting icon, "TEXT" for Text), the second the clicked palette's cells at their size, as many per row as fit, with "More" at the bottom. Clicking the shown palette's icon folds the second column. "+" adds palettes (the new one is shown), right click on an icon hides or resets that palette, dragging an icon reorders the palettes (when palette dragging is allowed). Its width is fixed; the palette shown, the fold and the zoom are remembered.
