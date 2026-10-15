@@ -43,7 +43,7 @@ class MixerChannelItem;
 class ChannelEditUndo
 {
 public:
-    using UndoStackGetter = std::function<project::IProjectUndoStackPtr()>;
+    using UndoStackGetter = std::function<project::IProjectUndoStackPtr ()>;
     //! NOTE: the panel's channels: an effect or aux send picked on a selected one goes to the other selected ones
     using ChannelsGetter = std::function<QList<MixerChannelItem*>()>;
     //! NOTE: the channels that change their effects, and their chains before

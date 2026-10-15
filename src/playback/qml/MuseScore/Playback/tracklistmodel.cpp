@@ -63,12 +63,12 @@ using namespace mu::project;
 
 static const muse::Settings::Key STRIP_HEIGHT_KEY("playback", "playback/trackList/stripHeight");
 //! NOTE: higher than any strip: all of it shown, even once it grows (see TrackListPanel.qml)
-static constexpr int DEFAULT_STRIP_HEIGHT = 100000;
+static constexpr int FULL_STRIP_HEIGHT = 100000;
 
 TrackListModel::TrackListModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
-    muse::settings()->setDefaultValue(STRIP_HEIGHT_KEY, muse::Val(DEFAULT_STRIP_HEIGHT));
+    muse::settings()->setDefaultValue(STRIP_HEIGHT_KEY, muse::Val(FULL_STRIP_HEIGHT));
 }
 
 TrackListModel::~TrackListModel()
@@ -439,9 +439,13 @@ void TrackListModel::reload()
         row.item = buildChannelItem(partTracks);
         updateRowState(row);
 
-        const bool wasSelected = std::any_of(selectedTracks.cbegin(), selectedTracks.cend(), [&partTracks](const PartTracks& t) {
-            return t.auxIndex ? t.auxIndex == partTracks.auxIndex : (!partTracks.auxIndex && t.instrumentTrackId == partTracks.instrumentTrackId);
-        });
+        auto isSameChannel = [&partTracks](const PartTracks& tracks) {
+            if (tracks.auxIndex || partTracks.auxIndex) {
+                return tracks.auxIndex == partTracks.auxIndex;
+            }
+            return tracks.instrumentTrackId == partTracks.instrumentTrackId;
+        };
+        const bool wasSelected = std::any_of(selectedTracks.cbegin(), selectedTracks.cend(), isSameChannel);
         if (wasSelected) {
             row.item->setSelected(true);
             if (m_selectionAnchorIndex < 0) {
@@ -530,10 +534,15 @@ void TrackListModel::connectMixerControls(MixerChannelItem* item, const PartTrac
     ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
     ChannelEditUndo::connectPickedChanges(item, this, [this]() { return projectUndoStack(); }, [this]() { return channels(); });
 
-    item->showAllSlots();
-    connect(item, &MixerChannelItem::outputParamsReceived, item, &MixerChannelItem::showAllSlots);
-    connect(item, &MixerChannelItem::fxChainParamsChanged, item, &MixerChannelItem::showAllSlots);
-    connect(item, &MixerChannelItem::auxSendsParamsChanged, item, &MixerChannelItem::showAllSlots);
+    //! NOTE: only the strip shows slots (see updateStripChannelItem())
+    auto showAllSlotsInStrip = [this, item]() {
+        if (item == m_stripChannelItem) {
+            item->showAllSlots();
+        }
+    };
+    connect(item, &MixerChannelItem::outputParamsReceived, this, showAllSlotsInStrip);
+    connect(item, &MixerChannelItem::fxChainParamsChanged, this, showAllSlotsInStrip);
+    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, showAllSlotsInStrip);
 
     connect(item, &MixerChannelItem::selectedChanged, this, &TrackListModel::updateStripChannelItem);
 
@@ -904,6 +913,9 @@ void TrackListModel::updateStripChannelItem()
 
     if (m_stripChannelItem != item) {
         m_stripChannelItem = item;
+        if (item) {
+            item->showAllSlots();
+        }
         emit stripChannelItemChanged();
     }
 }
@@ -911,6 +923,11 @@ void TrackListModel::updateStripChannelItem()
 MixerChannelItem* TrackListModel::stripChannelItem() const
 {
     return m_stripChannelItem;
+}
+
+int TrackListModel::fullStripHeight() const
+{
+    return FULL_STRIP_HEIGHT;
 }
 
 int TrackListModel::stripHeight() const

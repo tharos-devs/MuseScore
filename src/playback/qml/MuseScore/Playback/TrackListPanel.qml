@@ -60,6 +60,17 @@ Item {
         enabled: root.visible
     }
 
+    //! NOTE: the channel strip's controls, after the list's
+    NavigationPanel {
+        id: stripNavPanel
+
+        name: "TrackListChannelStrip"
+        section: root.navigationSection
+        order: root.contentNavigationPanelOrderStart + 1
+        direction: NavigationPanel.Vertical
+        enabled: root.visible && stripLoader.active
+    }
+
     ZoomContainer {
         id: zoomContainer
 
@@ -776,7 +787,8 @@ Item {
                 //! NOTE: let go at its highest: stays at its highest, even once its controls take more room
                 onReleased: {
                     if (stripArea.draggedHeight >= 0) {
-                        trackListModel.stripHeight = stripArea.height >= stripArea.maxHeight ? 100000 : stripArea.height
+                        trackListModel.stripHeight = stripArea.height >= stripArea.maxHeight ? trackListModel.fullStripHeight
+                                                                                                     : stripArea.height
                         stripArea.draggedHeight = -1
                     }
                 }
@@ -815,6 +827,7 @@ Item {
 
                     sourceComponent: TrackListChannelStrip {
                         channelItem: stripLoader.channelItem
+                        navigationPanel: stripNavPanel
 
                         //! NOTE: like the rows' buttons: the first selected row's, so for the whole selection
                         onMuteToggled: function(muted) {

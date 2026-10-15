@@ -92,6 +92,8 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     Q_PROPERTY(MixerChannelItem * stripChannelItem READ stripChannelItem NOTIFY stripChannelItemChanged)
     //! NOTE: the height of that area, remembered (a height above its controls': all of them, whatever their height)
     Q_PROPERTY(int stripHeight READ stripHeight WRITE setStripHeight NOTIFY stripHeightChanged)
+    //! NOTE: the stripHeight meaning all of it
+    Q_PROPERTY(int fullStripHeight READ fullStripHeight CONSTANT)
 
     Q_PROPERTY(bool videoVisible READ videoVisible NOTIFY categoriesVisibleChanged)
     Q_PROPERTY(bool metronomeVisible READ metronomeVisible NOTIFY categoriesVisibleChanged)
@@ -110,7 +112,6 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
 public:
     explicit TrackListModel(QObject* parent = nullptr);
     ~TrackListModel() override;
-
 
     //! NOTE: like the Mixer's (see ChannelSelection): a click on a row selects it alone, Cmd/Ctrl+click adds or
     //! removes it, Shift+click selects the rows from the last clicked one
@@ -141,6 +142,7 @@ public:
 
     MixerChannelItem* stripChannelItem() const;
     int stripHeight() const;
+    int fullStripHeight() const;
     void setStripHeight(int height);
 
     bool videoVisible() const;

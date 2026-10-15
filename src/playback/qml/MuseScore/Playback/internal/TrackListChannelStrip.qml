@@ -34,6 +34,18 @@ Item {
     id: root
 
     required property MixerChannelItem channelItem
+    property NavigationPanel navigationPanel: null
+
+    //! NOTE: the controls' navigation rows, top to bottom: Gain and Pan (knob, field), volume field, fader,
+    //! Mute/Solo, EQ, then the slots (AudioResourceControl: 3 rows, AuxSendControl: 5)
+    readonly property int gainRow: 0
+    readonly property int panRow: 2
+    readonly property int volumeRow: 4
+    readonly property int faderRow: 5
+    readonly property int muteRow: 6
+    readonly property int eqRow: 8
+    readonly property int fxRow: 9
+    readonly property int auxSendsRow: root.fxRow + 3 * 5
 
     //! NOTE: what a click on Mute/Solo changes is up to the Track list (the selection, see ChannelMuteSoloButtons)
     signal muteToggled(bool muted)
@@ -121,6 +133,8 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         channelItem: root.channelItem
                         isGain: true
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.gainRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Gain")
                     }
                 }
@@ -136,6 +150,8 @@ Item {
                     ChannelKnobControl {
                         anchors.horizontalCenter: parent.horizontalCenter
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.panRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Pan")
                     }
                 }
@@ -151,12 +167,16 @@ Item {
                     ChannelVolumeField {
                         anchors.horizontalCenter: parent.horizontalCenter
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.volumeRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
                     }
 
                     ChannelFader {
                         anchors.horizontalCenter: parent.horizontalCenter
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.faderRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
                     }
 
@@ -173,6 +193,12 @@ Item {
                             spacing: 6
 
                             channelItem: root.channelItem
+                            navigationPanel: root.navigationPanel
+                            navigationName: "ChannelStrip"
+                            muteNavigationRow: root.muteRow
+                            muteNavigationColumn: 0
+                            soloNavigationRow: root.muteRow + 1
+                            soloNavigationColumn: 0
                             accessibleName: root.channelItem.title
 
                             onMuteToggled: function(muted) {
@@ -219,6 +245,8 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: root.slotWidth
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.eqRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "EQ")
                     }
                 }
@@ -235,6 +263,8 @@ Item {
                     ChannelFxSlots {
                         width: root.controlWidth
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.fxRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Audio FX")
                     }
                 }
@@ -250,6 +280,8 @@ Item {
                     ChannelAuxSends {
                         width: root.controlWidth
                         channelItem: root.channelItem
+                        navigationPanel: root.navigationPanel
+                        navigationRowStart: root.auxSendsRow
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "Aux sends")
                     }
                 }
