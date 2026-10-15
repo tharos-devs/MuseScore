@@ -4,6 +4,10 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-16
+- Track list: folders of tracks and buses (e.g. Woodwinds, Brass, FX), only the Track list's organization: the score's order isn't changed and a folder's tracks are in it. Created from the header's folder button (above the selected track, or first) or a row's menu (Add new folder; Move to folder > New folder takes the track or the selection), renamed by double click, collapsed, removed (its tracks stay), filled and moved by drag and drop or the row's "Move to folder" menu. Kept in the project; every change but collapsing is undoable. A folder's Mute/Solo engage all its tracks (an FX bus has no Solo) and put them back as they were.
+- Track list: the list keeps its scroll position when rebuilt, and scrolls to a track selected in the score only when it's out of view; the channel strip area is always there (the selected channel, else the one shown last or the first track, its name bar dimmed when not selected); the articulation map and plugin buttons close their open window; View menu with Metronome first, as in the list; larger color strips and meters.
+
 ### 2026-10-15
 - Mixer: an Audio FX slot's effect can be dragged to another channel's slots (instruments, Aux/Group buses, video, master): moved there, or copied with Cmd (Ctrl) held, with its settings and on/off state. An accent line shows where it goes; the cursor shows a move, a copy, or that it can't go there (no empty slot). One undo step restores both channels. A slot's plugin window now opens on the mouse release, and only without a drag.
 - Docked at the left or right of the score, the panels whose width can be changed (Track list, Video, Timeline) keep it when the main window is made wider or narrower: the score takes the difference.
