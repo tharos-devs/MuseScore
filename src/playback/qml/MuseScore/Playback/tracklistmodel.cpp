@@ -26,6 +26,7 @@
 #include <set>
 
 #include <QCoreApplication>
+#include <QUuid>
 
 #include "async/notifylist.h"
 #include "containers.h"
@@ -1300,6 +1301,15 @@ int TrackListModel::folderOfChannel(int channelRow) const
     return -1;
 }
 
+//! NOTE: a new folder, with its own id
+static TrackListFolder newFolder(const String& name)
+{
+    TrackListFolder folder;
+    folder.id = String::fromQString(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    folder.name = name;
+    return folder;
+}
+
 //! NOTE: "Folder 1", "Folder 2"...: the first number not taken
 static String nextFolderName(const TrackListFolders& folders)
 {
@@ -1354,11 +1364,8 @@ void TrackListModel::addFolderAbove(int row)
         }
     }
 
-    TrackListFolder folder;
-    folder.name = nextFolderName(m_folders);
-
     TrackListFolders folders = m_folders;
-    insertFolderBefore(folders, folder, beforeRow);
+    insertFolderBefore(folders, newFolder(nextFolderName(m_folders)), beforeRow);
     applyFolders(folders, TranslatableString("undoableAction", "Add Track list folder"));
 }
 
@@ -1372,7 +1379,9 @@ void TrackListModel::insertFolderBefore(TrackListFolders& folders, TrackListFold
     if (target && target->folder >= 0) {
         const TrackListFolder& other = m_folders.at(target->folder);
         folder.before = other.before;
-        folders.insert(std::find(folders.begin(), folders.end(), other), folder);
+        folders.insert(std::find_if(folders.begin(), folders.end(), [&other](const TrackListFolder& f) {
+            return f.id == other.id;
+        }), folder);
         return;
     }
 
@@ -1460,8 +1469,7 @@ void TrackListModel::moveRowToNewFolder(int row)
     const std::vector<int> moved = channelRowsToMove(channelRow);
 
     TrackListFolders folders = m_folders;
-    TrackListFolder folder;
-    folder.name = nextFolderName(folders);
+    TrackListFolder folder = newFolder(nextFolderName(folders));
     //! NOTE: re-anchored to the next row outside folders once they're in it (see foldersWithChannelsMoved())
     folder.before = folderOfChannel(moved.front()) < 0 ? channelKey(m_rows.at(moved.front()).tracks) : String();
     folders.push_back(folder);
@@ -1472,7 +1480,7 @@ void TrackListModel::moveRowToNewFolder(int row)
 
 //! NOTE: targetFolder -1: out of any folder
 TrackListFolders TrackListModel::foldersWithChannelsMoved(TrackListFolders folders, const std::vector<int>& moved,
-                                                         int targetFolder) const
+                                                          int targetFolder) const
 {
     std::vector<String> movedKeys;
     for (int i : moved) {
@@ -1610,11 +1618,11 @@ void TrackListModel::toggleFolderMute(int row)
         return;
     }
 
-    const String& name = m_folders.at(folder).name;
+    const String& id = m_folders.at(folder).id;
     const std::vector<MixerChannelItem*> channels = folderChannels(folder);
 
     if (!isFolderMuted(folder)) {
-        FolderMuteSolo& before = m_folderMuteSolo[name];
+        FolderMuteSolo& before = m_folderMuteSolo[id];
         before.muted.clear();
         for (MixerChannelItem* item : channels) {
             before.muted[item->trackId()] = item->muted();
@@ -1626,7 +1634,7 @@ void TrackListModel::toggleFolderMute(int row)
         return;
     }
 
-    const auto it = m_folderMuteSolo.find(name);
+    const auto it = m_folderMuteSolo.find(id);
     for (MixerChannelItem* item : channels) {
         const bool wasMuted = it != m_folderMuteSolo.end() && muse::value(it->second.muted, item->trackId(), false);
         if (!item->forceMute()) {
@@ -1645,11 +1653,11 @@ void TrackListModel::toggleFolderSolo(int row)
         return;
     }
 
-    const String& name = m_folders.at(folder).name;
+    const String& id = m_folders.at(folder).id;
     const std::vector<MixerChannelItem*> channels = folderChannels(folder);
 
     if (!isFolderSoloed(folder)) {
-        FolderMuteSolo& before = m_folderMuteSolo[name];
+        FolderMuteSolo& before = m_folderMuteSolo[id];
         before.soloed.clear();
         for (MixerChannelItem* item : channels) {
             if (canFolderSolo(item)) {
@@ -1660,7 +1668,7 @@ void TrackListModel::toggleFolderSolo(int row)
         return;
     }
 
-    const auto it = m_folderMuteSolo.find(name);
+    const auto it = m_folderMuteSolo.find(id);
     for (MixerChannelItem* item : channels) {
         if (canFolderSolo(item)) {
             item->setUserSolo(it != m_folderMuteSolo.end() && muse::value(it->second.soloed, item->trackId(), false));
@@ -1695,7 +1703,7 @@ QVariantMap TrackListModel::moveToFolderMenu(int row) const
             { "title", m_folders.at(folder).name.toQString() },
             { "checkable", true },
             { "checked", static_cast<int>(folder) == current }
-        };
+            };
     }
 
     if (!items.isEmpty()) {

@@ -328,7 +328,7 @@ private:
     project::TrackListFolders m_folders;
     std::vector<DisplayRow> m_displayRows;
 
-    //! NOTE: how a folder's tracks were before its Mute/Solo engaged them all, by folder name then track
+    //! NOTE: how a folder's tracks were before its Mute/Solo engaged them all, by folder id then track
     struct FolderMuteSolo {
         std::map<muse::audio::TrackId, bool> muted;
         std::map<muse::audio::TrackId, bool> soloed;

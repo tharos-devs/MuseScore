@@ -96,6 +96,7 @@ struct AudioOutputParams {
 //! where it is among the list's top-level rows: before the one with the key `before` (another folder's position when
 //! that one is in a folder too; empty: at the end). Only the Track list's organization: the score isn't changed
 struct TrackListFolder {
+    muse::String id; // stable, unique (the name may change, or be another folder's too)
     muse::String name;
     bool collapsed = false;
     muse::String before;

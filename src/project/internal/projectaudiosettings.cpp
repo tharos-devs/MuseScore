@@ -26,6 +26,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QUuid>
 
 #include "containers.h"
 #include "types/bytearray.h"
@@ -167,6 +168,15 @@ void ProjectAudioSettings::removeAuxOutputParams(aux_channel_idx_t index)
     m_auxDisplayNumberMap.erase(index);
     //! NOTE: same reasoning as m_auxDisplayNumberMap above, for sort order
     m_auxSortOrderMap.erase(index);
+
+    //! NOTE: out of its Track list folder: a new bus later created at this index isn't in it
+    const String busKey = u"aux:" + String::number(static_cast<int>(index));
+    for (TrackListFolder& folder : m_trackListFolders) {
+        muse::remove(folder.members, busKey);
+        if (folder.before == busKey) {
+            folder.before = String();
+        }
+    }
 
     m_settingsChanged.notify();
 }
@@ -563,6 +573,10 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         const QJsonObject folderObject = value.toObject();
 
         TrackListFolder folder;
+        folder.id = String::fromQString(folderObject.value("id").toString());
+        if (folder.id.empty()) {
+            folder.id = String::fromQString(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        }
         folder.name = String::fromQString(folderObject.value("name").toString());
         folder.collapsed = folderObject.value("collapsed").toBool(false);
         folder.before = String::fromQString(folderObject.value("before").toString());
@@ -617,6 +631,7 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
         QJsonArray foldersArray;
         for (const TrackListFolder& folder : m_trackListFolders) {
             QJsonObject folderObject;
+            folderObject["id"] = folder.id.toQString();
             folderObject["name"] = folder.name.toQString();
             folderObject["collapsed"] = folder.collapsed;
             folderObject["before"] = folder.before.toQString();
