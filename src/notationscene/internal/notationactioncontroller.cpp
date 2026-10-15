@@ -2907,7 +2907,7 @@ muse::Ret NotationActionController::newArticulationMap(const muse::rcommand::Par
         return muse::make_ret(Ret::Code::BadArgs);
     }
 
-    //! NOTE: an empty map, bound to this track - the editor's "Reload into the track" saves it
+    //! NOTE: an empty map, bound to this track - the editor's Apply or OK saves it
     //! and attaches it
     muse::UriQuery uri("musescore://notation/articulationmapeditor");
     uri.addParam("partId", muse::Val(std::to_string(trackId->partId.toUint64())));

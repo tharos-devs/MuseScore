@@ -240,9 +240,8 @@ QVariant ArticulationMapEditorModel::data(const QModelIndex& index, int role) co
     case ShortNameRole: return node->isFolder ? QString() : node->shortName;
     case IsFolderRole: return node->isFolder;
     case DepthRole: return m_rows.at(index.row()).depth;
-    case IsExpandedRole: return node->expanded;
+    case IsExpandedRole: return node->expanded || !m_filterText.isEmpty(); // a filter shows the folders open
     case HasChildrenRole: return !node->children.empty();
-    case NumberRole: return numberOf(node);
     case ColorRole: {
         if (node->isFolder) {
             return QColor();
@@ -274,7 +273,6 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
         { DepthRole, "depth" },
         { IsExpandedRole, "isExpanded" },
         { HasChildrenRole, "hasChildren" },
-        { NumberRole, "number" },
         { ColorRole, "articulationColor" },
         { HasColorRole, "hasOwnColor" },
         { SequenceRole, "sequence" },
@@ -293,14 +291,18 @@ void ArticulationMapEditorModel::rebuildRows()
     m_numbers.clear();
     int number = 0;
 
+    const bool filtered = !m_filterText.isEmpty();
+    const std::unordered_set<const Node*> matching = filtered ? nodesMatchingFilter() : std::unordered_set<const Node*> {};
+
     std::function<void(const Node*, int, bool)> visit = [&](const Node* parent, int depth, bool visible) {
         for (const auto& child : parent->children) {
-            if (visible) {
+            const bool shown = visible && (!filtered || matching.contains(child.get()));
+            if (shown) {
                 m_rows.push_back({ child.get(), depth });
             }
 
             if (child->isFolder) {
-                visit(child.get(), depth + 1, visible && child->expanded);
+                visit(child.get(), depth + 1, shown && (filtered || child->expanded));
             } else {
                 m_numbers[child.get()] = ++number;
             }
@@ -383,6 +385,40 @@ QString ArticulationMapEditorModel::pathOf(const Node* node) const
     }
 
     return names.join(FOLDER_SEPARATOR);
+}
+
+//! NOTE: the articulations matching the filter and the folders holding them, plus the (empty) folders matching it
+std::unordered_set<const ArticulationMapEditorModel::Node*> ArticulationMapEditorModel::nodesMatchingFilter() const
+{
+    const QStringList words = m_filterText.split(' ', Qt::SkipEmptyParts);
+    auto matches = [&words](const QString& text) {
+        return std::all_of(words.cbegin(), words.cend(), [&text](const QString& word) {
+            return text.contains(word, Qt::CaseInsensitive);
+        });
+    };
+
+    std::unordered_set<const Node*> result;
+    std::function<bool(const Node*, const QString&)> visit = [&](const Node* parent, const QString& parentPath) {
+        bool any = false;
+        for (const auto& child : parent->children) {
+            const QString path = parentPath.isEmpty() ? child->name : parentPath + FOLDER_SEPARATOR + child->name;
+            bool shown = m_shownWhileFiltered.contains(child.get());
+            if (child->isFolder) {
+                shown = visit(child.get(), path) || shown || matches(path);
+            } else {
+                shown = shown || matches(path + ' ' + child->shortName);
+            }
+
+            if (shown) {
+                result.insert(child.get());
+                any = true;
+            }
+        }
+        return any;
+    };
+    visit(m_root.get(), QString());
+
+    return result;
 }
 
 QString ArticulationMapEditorModel::sequenceText(const Node* node) const
@@ -591,7 +627,7 @@ void ArticulationMapEditorModel::newMap()
 }
 
 //! NOTE: "New" starts the track over: its map is removed (undoable, like its "Remove" menu item), the new one is
-//! attached by "Reload into the track"
+//! attached by Apply or OK
 void ArticulationMapEditorModel::removeTargetTrackMap()
 {
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
@@ -657,6 +693,7 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
     m_selectedNode = nullptr;
     m_selectedNodes.clear();
     m_selectionAnchor = nullptr;
+    m_shownWhileFiltered.clear();
 
     auto ensureFolder = [this](const QStringList& names) {
         Node* folder = m_root.get();
@@ -865,9 +902,27 @@ void ArticulationMapEditorModel::closeRequested()
 
 // ---- target track
 
-bool ArticulationMapEditorModel::canReloadIntoTrack() const
+bool ArticulationMapEditorModel::canApply() const
 {
     return m_targetTrack.has_value();
+}
+
+QString ArticulationMapEditorModel::filterText() const
+{
+    return m_filterText;
+}
+
+void ArticulationMapEditorModel::setFilterText(const QString& text)
+{
+    const QString simplified = text.simplified();
+    if (simplified == m_filterText) {
+        return;
+    }
+
+    m_filterText = simplified;
+    m_shownWhileFiltered.clear();
+    rebuildRows();
+    emit filterTextChanged();
 }
 
 void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QString& instrumentId)
@@ -881,7 +936,7 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
     const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
-    // a track without a map yet (New…) gets the edited one only through Reload into track
+    // a track without a map yet (New…) gets the edited one only through Apply or OK
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);
@@ -979,16 +1034,23 @@ void ArticulationMapEditorModel::openInstrumentEditor()
     instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target);
 }
 
-void ArticulationMapEditorModel::reloadIntoTrack()
+void ArticulationMapEditorModel::apply()
 {
     applyToTrack();
 }
 
 void ArticulationMapEditorModel::applyAndClose()
 {
+    if (!m_targetTrack) {
+        if (!m_isDirty || saveMap()) {
+            emit closeAccepted();
+        }
+        return;
+    }
+
     //! NOTE: nothing to apply after "New" with nothing added (the track's map is already removed)
-    if (!m_targetTrack || (m_filePath.empty() && !m_isDirty)) {
-        closeRequested();
+    if (m_filePath.empty() && !m_isDirty) {
+        emit closeAccepted();
         return;
     }
 
@@ -1296,11 +1358,6 @@ QString ArticulationMapEditorModel::selectedName() const
     return hasSelection() ? m_selectedNode->name : QString();
 }
 
-int ArticulationMapEditorModel::selectedNumber() const
-{
-    return hasSelection() ? numberOf(m_selectedNode) : 0;
-}
-
 bool ArticulationMapEditorModel::selectedIsDefault() const
 {
     return hasSelection() && m_selectedNode == m_defaultNode;
@@ -1567,6 +1624,7 @@ void ArticulationMapEditorModel::addArticulation()
     }
 
     m_selectedNode = added;
+    m_shownWhileFiltered.insert(added);
     rebuildRows();
     markDirty();
 }
@@ -1582,6 +1640,7 @@ void ArticulationMapEditorModel::addFolder()
     node->name = uniqueName(parent, muse::qtrc("notation", "New folder"));
 
     m_selectedNode = parent->addChild(std::move(node), index);
+    m_shownWhileFiltered.insert(m_selectedNode);
     rebuildRows();
     markDirty();
 }
@@ -1624,6 +1683,7 @@ void ArticulationMapEditorModel::copySelectedArticulation()
     }
 
     m_selectedNodes = copies;
+    m_shownWhileFiltered.insert(copies.cbegin(), copies.cend());
     m_selectedNode = copies.front();
     m_selectionAnchor = copies.front();
     rebuildRows();
@@ -1763,7 +1823,7 @@ void ArticulationMapEditorModel::move(int fromRow, int toRow, DropPosition posit
 void ArticulationMapEditorModel::toggleExpanded(int row)
 {
     Node* node = nodeAt(row);
-    if (!node || !node->isFolder) {
+    if (!node || !node->isFolder || !m_filterText.isEmpty()) { // a filter shows the folders open
         return;
     }
 

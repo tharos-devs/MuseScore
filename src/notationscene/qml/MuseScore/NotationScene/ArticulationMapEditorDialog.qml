@@ -105,9 +105,8 @@ StyledDialogView {
 
         readonly property int rowHeight: 26
         readonly property int indentWidth: 16
-        readonly property int numberColumnWidth: 32
         readonly property int colorColumnWidth: 24
-        readonly property int nameColumnWidth: 175
+        readonly property int nameColumnWidth: 207 // 175 + the former number column
         readonly property int shortNameColumnWidth: 120
         readonly property int scoreMarkingsColumnWidth: 205
         readonly property int sidePanelWidth: 340
@@ -278,12 +277,6 @@ StyledDialogView {
                     Row {
                         anchors.fill: parent
 
-                        StyledTextLabel {
-                            width: prv.numberColumnWidth
-                            height: parent.height
-                            text: "#"
-                        }
-
                         Item { width: prv.colorColumnWidth; height: 1 }
 
                         StyledTextLabel {
@@ -365,7 +358,6 @@ StyledDialogView {
                             required property int depth
                             required property bool isExpanded
                             required property bool hasChildren
-                            required property int number
                             required property color articulationColor
                             required property bool hasOwnColor
                             required property string sequence
@@ -517,12 +509,6 @@ StyledDialogView {
                                 anchors.fill: parent
                                 opacity: rowItem.isDisabled ? 0.4 : 1.0
 
-                                StyledTextLabel {
-                                    width: prv.numberColumnWidth
-                                    height: parent.height
-                                    text: rowItem.isFolder ? "" : rowItem.number
-                                }
-
                                 Item {
                                     width: prv.colorColumnWidth
                                     height: parent.height
@@ -582,7 +568,7 @@ StyledDialogView {
                                         }
 
                                         StyledTextLabel {
-                                            visible: prv.editingRow !== rowItem.index
+                                            visible: !nameEditor.active
                                             anchors.verticalCenter: parent.verticalCenter
                                             horizontalAlignment: Text.AlignLeft
                                             text: rowItem.name + (rowItem.isDefault ? "  ★" : "")
@@ -590,7 +576,11 @@ StyledDialogView {
                                         }
 
                                         Loader {
-                                            active: prv.editingRow === rowItem.index
+                                            id: nameEditor
+
+                                            // not with -1: the index of the rows being removed when the list is rebuilt
+                                            // (each would open its editor, which takes the focus)
+                                            active: prv.editingRow >= 0 && prv.editingRow === rowItem.index
                                             visible: active
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: prv.nameColumnWidth - rowItem.depth * prv.indentWidth - 24
@@ -640,7 +630,7 @@ StyledDialogView {
 
                                 StyledTextLabel {
                                     height: parent.height
-                                    width: parent.width - prv.numberColumnWidth - prv.colorColumnWidth - prv.nameColumnWidth
+                                    width: parent.width - prv.colorColumnWidth - prv.nameColumnWidth
                                            - prv.shortNameColumnWidth - prv.scoreMarkingsColumnWidth
                                     horizontalAlignment: Text.AlignLeft
                                     elide: Text.ElideRight
@@ -807,7 +797,7 @@ StyledDialogView {
                         font: ui.theme.largeBodyBoldFont
                         text: prv.multipleArticulations
                               ? qsTrc("notation", "%n articulation(s) selected", "", editorModel.selectedArticulationCount)
-                              : editorModel.selectedNumber + "   " + editorModel.selectedName
+                              : editorModel.selectedName
                     }
 
                     // side by side: room for the activation sequence below
@@ -1288,19 +1278,52 @@ StyledDialogView {
                 onClicked: prv.setAlwaysOnTop(!checked)
             }
 
-            Item { Layout.fillWidth: true }
+            SearchField {
+                Layout.preferredWidth: 240
+                Layout.leftMargin: 12
 
-            FlatButton {
-                visible: editorModel.canReloadIntoTrack
-                icon: IconCode.UPDATE
-                toolTipTitle: qsTrc("notation", "Reload into the track")
-                toolTipDescription: qsTrc("notation", "Saves the changes, then plays the track with this map")
-                onClicked: editorModel.reloadIntoTrack()
+                hint: qsTrc("notation", "Search articulations")
+
+                onSearchTextChanged: {
+                    editorModel.filterText = searchText
+                }
             }
 
-            FlatButton {
-                text: qsTrc("global", "Close")
-                onClicked: editorModel.applyAndClose()
+            ButtonBox {
+                Layout.fillWidth: true
+
+                buttons: [ ButtonBoxModel.Cancel ]
+                // Apply, Cancel, OK on every platform: Apply apart, OK last
+                buttonLayout: ButtonBoxModel.MacLayout
+
+                FlatButton {
+                    visible: editorModel.canApply
+                    text: qsTrc("global", "Apply")
+                    buttonRole: ButtonBoxModel.CustomRole
+                    buttonId: ButtonBoxModel.CustomButton + 1 // a standard id would take the Apply role, placed after OK
+                    toolTipTitle: qsTrc("global", "Apply")
+                    toolTipDescription: qsTrc("notation", "Saves the map, then plays the track with it. Cancel doesn't undo it.")
+                    onClicked: editorModel.apply()
+                }
+
+                FlatButton {
+                    text: qsTrc("global", "OK")
+                    buttonRole: ButtonBoxModel.AcceptRole
+                    buttonId: ButtonBoxModel.Ok
+                    accentButton: true
+                    toolTipTitle: qsTrc("global", "OK")
+                    toolTipDescription: editorModel.canApply
+                                        ? qsTrc("notation", "Saves the map, plays the track with it and closes the editor")
+                                        : qsTrc("notation", "Saves the map and closes the editor")
+                    onClicked: editorModel.applyAndClose()
+                }
+
+                // like the window's close button and Escape: nothing applied, unsaved changes offered to be saved
+                onStandardButtonClicked: function(buttonId) {
+                    if (buttonId === ButtonBoxModel.Cancel) {
+                        root.close()
+                    }
+                }
             }
         }
     }

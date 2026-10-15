@@ -27,6 +27,7 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <QAbstractListModel>
@@ -63,7 +64,9 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QString filePath READ filePath NOTIFY fileChanged)
     Q_PROPERTY(QString fileName READ fileName NOTIFY fileChanged)
     Q_PROPERTY(bool isDirty READ isDirty NOTIFY dirtyChanged)
-    Q_PROPERTY(bool canReloadIntoTrack READ canReloadIntoTrack NOTIFY targetTrackChanged)
+    Q_PROPERTY(bool canApply READ canApply NOTIFY targetTrackChanged)
+    //! NOTE: shows only the articulations whose path or short name has every word of it (case ignored)
+    Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     //! NOTE: the target track's VST instrument window: whether it has one, and whether it's open
     Q_PROPERTY(bool hasInstrumentEditor READ hasInstrumentEditor NOTIFY instrumentEditorChanged)
     Q_PROPERTY(bool instrumentEditorOpened READ instrumentEditorOpened NOTIFY instrumentEditorChanged)
@@ -80,7 +83,6 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsFolder READ selectedIsFolder NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedName READ selectedName NOTIFY selectionChanged)
-    Q_PROPERTY(int selectedNumber READ selectedNumber NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDefault READ selectedIsDefault NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDisabled READ selectedIsDisabled NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDisabledMixed READ selectedIsDisabledMixed NOTIFY selectionChanged)
@@ -145,7 +147,9 @@ public:
     QString filePath() const;
     QString fileName() const;
     bool isDirty() const;
-    bool canReloadIntoTrack() const;
+    bool canApply() const;
+    QString filterText() const;
+    void setFilterText(const QString& text);
     bool hasInstrumentEditor() const;
     bool instrumentEditorOpened() const;
 
@@ -163,7 +167,6 @@ public:
     bool hasSelection() const;
     bool selectedIsFolder() const;
     QString selectedName() const;
-    int selectedNumber() const;
     bool selectedIsDefault() const;
     bool selectedIsDisabled() const;
     bool selectedIsDisabledMixed() const;
@@ -190,13 +193,14 @@ public:
     //! NOTE: offers to save unsaved changes, then emits closeAccepted unless cancelled
     Q_INVOKABLE void closeRequested();
 
-    //! NOTE: set when opened from a Mixer track, see reloadIntoTrack
+    //! NOTE: set when opened from a Mixer track, see apply
     Q_INVOKABLE void setTargetTrack(const QString& partId, const QString& instrumentId);
-    //! NOTE: saves the changes if needed, then loads the file into the track, like the Mixer's "Reload"
-    //! (saving alone already reloads it into the tracks of the open score that use this file)
-    Q_INVOKABLE void reloadIntoTrack();
-    //! NOTE: the Close button: with a track, the editor's map is the track's once closed (saved, then reloaded
-    //! into it), so a map opened or started here isn't lost; without one, like closing the window
+    //! NOTE: the Apply button: saves the changes if needed, then loads the file into the track, like the Mixer's
+    //! "Reload" (saving alone already reloads it into the tracks of the open score that use this file, but doesn't
+    //! give it to a track using another file or none yet)
+    Q_INVOKABLE void apply();
+    //! NOTE: the OK button: with a track, the editor's map is the track's once closed (saved, then reloaded into it),
+    //! so a map opened or started here isn't lost; without one, the changes are saved
     Q_INVOKABLE void applyAndClose();
     //! NOTE: like the Mixer's and the Track list's button (comes to the front if already open)
     Q_INVOKABLE void openInstrumentEditor();
@@ -247,6 +251,7 @@ public:
 
 signals:
     void fileChanged();
+    void filterTextChanged();
     void dirtyChanged();
     void headerChanged();
     void selectionChanged();
@@ -262,7 +267,6 @@ private:
         DepthRole,
         IsExpandedRole,
         HasChildrenRole,
-        NumberRole,
         ColorRole,
         HasColorRole,
         SequenceRole,
@@ -311,6 +315,7 @@ private:
 
     QString uniqueName(const Node* parent, const QString& name, const Node* except = nullptr) const;
     QString pathOf(const Node* node) const;
+    std::unordered_set<const Node*> nodesMatchingFilter() const;
     QString sequenceText(const Node* node) const;
     std::set<muse::mpe::ArticulationType> ambiguousImplicitAliases() const;
     static std::vector<muse::mpe::ArticulationType> scoreArticulationsOf(const Node* node,
@@ -327,7 +332,10 @@ private:
 
     std::unique_ptr<Node> m_root;
     std::vector<Row> m_rows;
-    std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded
+    // 1-based articulation numbers, folders excluded: the palette color of those without their own
+    std::unordered_map<const Node*, int> m_numbers;
+    QString m_filterText;
+    std::unordered_set<const Node*> m_shownWhileFiltered; // added since the filter was set: shown even when not matching
     const Node* m_defaultNode = nullptr;
     const Node* m_selectedNode = nullptr;
     std::vector<const Node*> m_selectedNodes; // m_selectedNode and the others selected with it
