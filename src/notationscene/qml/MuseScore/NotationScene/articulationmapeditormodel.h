@@ -83,7 +83,6 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsFolder READ selectedIsFolder NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedName READ selectedName NOTIFY selectionChanged)
-    Q_PROPERTY(int selectedNumber READ selectedNumber NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDefault READ selectedIsDefault NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDisabled READ selectedIsDisabled NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedIsDisabledMixed READ selectedIsDisabledMixed NOTIFY selectionChanged)
@@ -168,7 +167,6 @@ public:
     bool hasSelection() const;
     bool selectedIsFolder() const;
     QString selectedName() const;
-    int selectedNumber() const;
     bool selectedIsDefault() const;
     bool selectedIsDisabled() const;
     bool selectedIsDisabledMixed() const;
@@ -269,7 +267,6 @@ private:
         DepthRole,
         IsExpandedRole,
         HasChildrenRole,
-        NumberRole,
         ColorRole,
         HasColorRole,
         SequenceRole,
@@ -335,7 +332,7 @@ private:
 
     std::unique_ptr<Node> m_root;
     std::vector<Row> m_rows;
-    std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded
+    std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded: the palette color of those without their own
     QString m_filterText;
     std::unordered_set<const Node*> m_shownWhileFiltered; // added since the filter was set: shown even when not matching
     const Node* m_defaultNode = nullptr;

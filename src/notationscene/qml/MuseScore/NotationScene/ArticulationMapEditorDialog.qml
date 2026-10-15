@@ -105,9 +105,8 @@ StyledDialogView {
 
         readonly property int rowHeight: 26
         readonly property int indentWidth: 16
-        readonly property int numberColumnWidth: 32
         readonly property int colorColumnWidth: 24
-        readonly property int nameColumnWidth: 175
+        readonly property int nameColumnWidth: 207 // 175 + the former number column
         readonly property int shortNameColumnWidth: 120
         readonly property int scoreMarkingsColumnWidth: 205
         readonly property int sidePanelWidth: 340
@@ -278,12 +277,6 @@ StyledDialogView {
                     Row {
                         anchors.fill: parent
 
-                        StyledTextLabel {
-                            width: prv.numberColumnWidth
-                            height: parent.height
-                            text: "#"
-                        }
-
                         Item { width: prv.colorColumnWidth; height: 1 }
 
                         StyledTextLabel {
@@ -365,7 +358,6 @@ StyledDialogView {
                             required property int depth
                             required property bool isExpanded
                             required property bool hasChildren
-                            required property int number
                             required property color articulationColor
                             required property bool hasOwnColor
                             required property string sequence
@@ -517,12 +509,6 @@ StyledDialogView {
                                 anchors.fill: parent
                                 opacity: rowItem.isDisabled ? 0.4 : 1.0
 
-                                StyledTextLabel {
-                                    width: prv.numberColumnWidth
-                                    height: parent.height
-                                    text: rowItem.isFolder ? "" : rowItem.number
-                                }
-
                                 Item {
                                     width: prv.colorColumnWidth
                                     height: parent.height
@@ -644,7 +630,7 @@ StyledDialogView {
 
                                 StyledTextLabel {
                                     height: parent.height
-                                    width: parent.width - prv.numberColumnWidth - prv.colorColumnWidth - prv.nameColumnWidth
+                                    width: parent.width - prv.colorColumnWidth - prv.nameColumnWidth
                                            - prv.shortNameColumnWidth - prv.scoreMarkingsColumnWidth
                                     horizontalAlignment: Text.AlignLeft
                                     elide: Text.ElideRight
@@ -811,7 +797,7 @@ StyledDialogView {
                         font: ui.theme.largeBodyBoldFont
                         text: prv.multipleArticulations
                               ? qsTrc("notation", "%n articulation(s) selected", "", editorModel.selectedArticulationCount)
-                              : editorModel.selectedNumber + "   " + editorModel.selectedName
+                              : editorModel.selectedName
                     }
 
                     // side by side: room for the activation sequence below

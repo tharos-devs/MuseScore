@@ -242,7 +242,6 @@ QVariant ArticulationMapEditorModel::data(const QModelIndex& index, int role) co
     case DepthRole: return m_rows.at(index.row()).depth;
     case IsExpandedRole: return node->expanded || !m_filterText.isEmpty(); // a filter shows the folders open
     case HasChildrenRole: return !node->children.empty();
-    case NumberRole: return numberOf(node);
     case ColorRole: {
         if (node->isFolder) {
             return QColor();
@@ -274,8 +273,7 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
         { DepthRole, "depth" },
         { IsExpandedRole, "isExpanded" },
         { HasChildrenRole, "hasChildren" },
-        { NumberRole, "number" },
-        { ColorRole, "articulationColor" },
+            { ColorRole, "articulationColor" },
         { HasColorRole, "hasOwnColor" },
         { SequenceRole, "sequence" },
         { IsDefaultRole, "isDefault" },
@@ -1358,11 +1356,6 @@ bool ArticulationMapEditorModel::selectedIsFolder() const
 QString ArticulationMapEditorModel::selectedName() const
 {
     return hasSelection() ? m_selectedNode->name : QString();
-}
-
-int ArticulationMapEditorModel::selectedNumber() const
-{
-    return hasSelection() ? numberOf(m_selectedNode) : 0;
 }
 
 bool ArticulationMapEditorModel::selectedIsDefault() const
