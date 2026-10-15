@@ -4,6 +4,15 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-15
+- Mixer: an Audio FX slot's effect can be dragged to another channel's slots (instruments, Aux/Group buses, video, master): moved there, or copied with Cmd (Ctrl) held, with its settings and on/off state. An accent line shows where it goes; the cursor shows a move, a copy, or that it can't go there (no empty slot). One undo step restores both channels. A slot's plugin window now opens on the mouse release, and only without a drag.
+- Docked at the left or right of the score, the panels whose width can be changed (Track list, Video, Timeline) keep it when the main window is made wider or narrower: the score takes the difference.
+- Project loading window: a Cancel button stops loading the plugins not loaded yet and closes the project (back to the home page), e.g. after opening the wrong project.
+- Articulation maps: a Short name per articulation (a Short name column and field in the editor, `short="..."` in the file), shown in the articulation lane instead of the last part of the name (e.g. "Marcato" for "Long notes > Marcato > Senza vibrato").
+- Articulation maps: when a score opens, the map files changed since it was saved are listed, to reload them (one undoable step) or keep the versions saved with the score.
+- Track list: the sound menu button (an arrow) is left of Mute; the global Mute/Solo buttons are lined up with the rows' ones.
+- View menu: Secondary palettes is above Secondary window.
+
 ### 2026-10-14
 - 2nd Palettes: a narrow panel (View > Secondary palettes, docked at the left, hidden by default) showing the same palettes as the Palettes panel in two columns, to sit beside the Track list. The first column has an icon per palette (its first cell when there's no fitting icon, "TEXT" for Text), the second the clicked palette's cells at their size, as many per row as fit, with "More" at the bottom. Clicking the shown palette's icon folds the second column. "+" adds palettes (the new one is shown), right click on an icon hides or resets that palette, dragging an icon reorders the palettes (when palette dragging is allowed). Its width is fixed; the palette shown, the fold and the zoom are remembered.
 - Track list: the meters are at the right edge of each row, the buttons left of them; the name starts right after the color strip.
