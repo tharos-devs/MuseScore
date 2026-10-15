@@ -273,7 +273,7 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
         { DepthRole, "depth" },
         { IsExpandedRole, "isExpanded" },
         { HasChildrenRole, "hasChildren" },
-            { ColorRole, "articulationColor" },
+        { ColorRole, "articulationColor" },
         { HasColorRole, "hasOwnColor" },
         { SequenceRole, "sequence" },
         { IsDefaultRole, "isDefault" },
@@ -936,7 +936,7 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
     const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
-    // a track without a map yet (New…) gets the edited one only through Apply or OK into track
+    // a track without a map yet (New…) gets the edited one only through Apply or OK
     const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);

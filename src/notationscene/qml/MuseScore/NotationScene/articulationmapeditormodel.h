@@ -332,7 +332,8 @@ private:
 
     std::unique_ptr<Node> m_root;
     std::vector<Row> m_rows;
-    std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded: the palette color of those without their own
+    // 1-based articulation numbers, folders excluded: the palette color of those without their own
+    std::unordered_map<const Node*, int> m_numbers;
     QString m_filterText;
     std::unordered_set<const Node*> m_shownWhileFiltered; // added since the filter was set: shown even when not matching
     const Node* m_defaultNode = nullptr;
