@@ -23,6 +23,7 @@
 #include "tracklistmodel.h"
 
 #include <algorithm>
+#include <set>
 
 #include <QCoreApplication>
 
@@ -32,6 +33,7 @@
 #include "translation.h"
 #include "io/path.h"
 
+#include "engraving/dom/engravingitem.h"
 #include "engraving/dom/part.h"
 #include "engraving/dom/sharedpart.h"
 
@@ -39,6 +41,9 @@
 #include "notation/inotationplayback.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/inotation.h"
+#include "notation/inotationinteraction.h"
+#include "notation/inotationselection.h"
+#include "notation/inotationselectionrange.h"
 #include "notation/inotationparts.h"
 #include "notation/inotationsolomutestate.h"
 #include "notation/inotationundostack.h"
@@ -158,6 +163,7 @@ void TrackListModel::onCurrentNotationChanged()
 
     if (m_notation) {
         m_notation->parts()->partsChanged().disconnect(this);
+        m_notation->interaction()->selectionChanged().disconnect(this);
         if (m_notation->soloMuteState()) {
             m_notation->soloMuteState()->trackSoloMuteStateChanged().disconnect(this);
         }
@@ -196,6 +202,10 @@ void TrackListModel::onCurrentNotationChanged()
 
         m_notation->parts()->partsChanged().onNotify(this, [this]() {
             scheduleReload();
+        });
+
+        m_notation->interaction()->selectionChanged().onNotify(this, [this]() {
+            selectRowsOfScoreSelection();
         });
 
         if (m_notation->soloMuteState()) {
@@ -437,6 +447,8 @@ void TrackListModel::reload()
     for (MixerChannelItem* item : oldItems) {
         item->deleteLater();
     }
+
+    selectRowsOfScoreSelection();
 }
 
 //! NOTE: forceMute too, see GlobalMuteSoloToggle::muteEngaged()
@@ -789,6 +801,51 @@ void TrackListModel::selectRow(int row, bool toggle, bool range)
 
     ChannelSelection::select(channels(), m_rows.at(row).item, toggle, range, m_selectionAnchorIndex,
                              [](const MixerChannelItem*) { return true; });
+}
+
+//! NOTE: the rows of the parts with something selected in the score (a stave sharing combined part: the parts
+//! it combines), none without a selection or with the whole score's elements only
+void TrackListModel::selectRowsOfScoreSelection()
+{
+    if (!m_notation) {
+        return;
+    }
+
+    std::set<ID> partIds;
+    const INotationSelectionPtr selection = m_notation->interaction()->selection();
+    if (selection->isRange()) {
+        for (const Part* part : selection->range()->selectedParts()) {
+            partIds.insert(part->id());
+        }
+    } else {
+        for (const EngravingItem* element : selection->elements()) {
+            // a tempo, a rehearsal mark, a system text... is the whole score's, though on the first staff
+            if (!element || element->systemFlag()) {
+                continue;
+            }
+            if (const Part* part = element->part()) {
+                partIds.insert(part->id());
+            }
+        }
+    }
+
+    m_selectionAnchorIndex = -1;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const Row& row = m_rows.at(i);
+        bool selected = false;
+        if (!row.tracks.auxIndex) {
+            const Part* shownPart = visibilityPart(row);
+            selected = muse::contains(partIds, row.tracks.instrumentTrackId.partId)
+                       || (shownPart && muse::contains(partIds, shownPart->id()));
+        }
+
+        if (row.item->selected() != selected) {
+            row.item->setSelected(selected);
+        }
+        if (selected && m_selectionAnchorIndex < 0) {
+            m_selectionAnchorIndex = i; // a Shift+click in the list extends from there
+        }
+    }
 }
 
 void TrackListModel::clearSelection()
