@@ -77,6 +77,29 @@ StyledDialogView {
         editorModel.closeRequested()
     }
 
+    // a vertical line per folder level, from each folder's arrow down along its content
+    component TreeGuides: Item {
+        id: guides
+
+        property int depth: 0
+        property int indentWidth: 16
+
+        Repeater {
+            model: guides.depth
+
+            Rectangle {
+                required property int index
+
+                x: index * guides.indentWidth + 7 // under the middle of the folder's arrow
+                width: 1
+                height: guides.height
+                // the text color, faint: visible on light and dark themes alike (strokeColor is near the background)
+                color: ui.theme.fontPrimaryColor
+                opacity: 0.2
+            }
+        }
+    }
+
     ArticulationMapEditorModel {
         id: editorModel
 
@@ -549,18 +572,26 @@ StyledDialogView {
                                     width: prv.nameColumnWidth
                                     height: parent.height
 
+                                    TreeGuides {
+                                        anchors.fill: parent
+                                        depth: rowItem.depth
+                                        indentWidth: prv.indentWidth
+                                    }
+
                                     Row {
                                         anchors.fill: parent
                                         anchors.leftMargin: rowItem.depth * prv.indentWidth
                                         spacing: 4
 
+                                        // its room kept on articulations: their names line up with their folder's subfolders
                                         StyledIconLabel {
-                                            visible: rowItem.isFolder
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: 16
-                                            iconCode: rowItem.isExpanded ? IconCode.SMALL_ARROW_DOWN : IconCode.SMALL_ARROW_RIGHT
+                                            iconCode: !rowItem.isFolder ? IconCode.NONE
+                                                      : (rowItem.isExpanded ? IconCode.SMALL_ARROW_DOWN : IconCode.SMALL_ARROW_RIGHT)
 
                                             MouseArea {
+                                                enabled: rowItem.isFolder
                                                 anchors.fill: parent
                                                 anchors.margins: -4
                                                 onClicked: editorModel.toggleExpanded(rowItem.index)
@@ -637,6 +668,137 @@ StyledDialogView {
                                     text: rowItem.sequence
                                 }
                             }
+                        }
+                    }
+
+                    // the folders of the rows at the top, pinned while their content is scrolled through
+                    Column {
+                        id: pinnedFolders
+
+                        anchors.top: listView.top
+                        anchors.left: listView.left
+                        anchors.right: listView.right
+                        anchors.rightMargin: listView.visualScrollBarInset // the scroll bar stays reachable
+                        z: 1
+                        visible: !prv.isDragging // the rows below them can be drop targets
+
+                        property var folders: []
+
+                        // level by level: each pinned row hides one more row, whose folders may go deeper
+                        function update() {
+                            let pinned = []
+                            const top = listView.contentY - listView.originY
+                            for (;;) {
+                                const row = Math.floor((top + pinned.length * prv.rowHeight) / prv.rowHeight)
+                                if (row < 0 || row >= listView.count) {
+                                    break
+                                }
+
+                                const rowFolders = editorModel.foldersOfRow(row)
+                                if (rowFolders.length <= pinned.length) {
+                                    break
+                                }
+
+                                pinned = rowFolders.slice(0, pinned.length + 1)
+                            }
+
+                            // only the folders of the first row shown below them (not one whose content went under them)
+                            const below = Math.floor((top + pinned.length * prv.rowHeight) / prv.rowHeight)
+                            const belowFolders = below >= 0 && below < listView.count ? editorModel.foldersOfRow(below) : []
+                            let kept = 0
+                            while (kept < pinned.length && kept < belowFolders.length && pinned[kept].row === belowFolders[kept].row) {
+                                ++kept
+                            }
+
+                            folders = belowFolders.slice(0, kept) // fresh: names, selection
+                        }
+
+                        // the folder's row right below its own pinned folders
+                        function show(row, depth) {
+                            editorModel.selectedRow = row
+                            const maxY = Math.max(0, listView.contentHeight - listView.height)
+                            listView.contentY = listView.originY + Math.min(maxY, Math.max(0, (row - depth) * prv.rowHeight))
+                        }
+
+                        Connections {
+                            target: listView
+
+                            function onContentYChanged() { pinnedFolders.update() }
+                            function onCountChanged() { pinnedFolders.update() }
+                        }
+
+                        Connections {
+                            target: editorModel
+
+                            function onModelReset() { pinnedFolders.update() }
+                            function onDataChanged() { pinnedFolders.update() }
+                        }
+
+                        Repeater {
+                            model: pinnedFolders.folders
+
+                            Rectangle {
+                                id: pinnedRow
+
+                                required property var modelData
+
+                                width: pinnedFolders.width
+                                height: prv.rowHeight
+                                color: ui.theme.textFieldColor // opaque: the rows scrolled below don't show through
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: pinnedRow.modelData.isSelected || pinnedMouseArea.containsMouse
+                                    color: pinnedRow.modelData.isSelected ? ui.theme.accentColor : ui.theme.buttonColor
+                                    opacity: pinnedRow.modelData.isSelected ? 0.5 : 0.6
+                                }
+
+                                Item {
+                                    x: prv.colorColumnWidth // lined up with the list's names
+                                    width: pinnedFolders.width - x
+                                    height: parent.height
+
+                                    TreeGuides {
+                                        anchors.fill: parent
+                                        depth: pinnedRow.modelData.depth
+                                        indentWidth: prv.indentWidth
+                                    }
+
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: pinnedRow.modelData.depth * prv.indentWidth
+                                        spacing: 4
+
+                                        StyledIconLabel {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 16
+                                            iconCode: IconCode.SMALL_ARROW_DOWN
+                                        }
+
+                                        StyledTextLabel {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            horizontalAlignment: Text.AlignLeft
+                                            text: pinnedRow.modelData.name
+                                            font: ui.theme.bodyBoldFont
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: pinnedMouseArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: pinnedFolders.show(pinnedRow.modelData.row, pinnedRow.modelData.depth)
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            visible: pinnedFolders.folders.length > 0
+                            width: parent.width
+                            height: 1
+                            color: ui.theme.strokeColor
                         }
                     }
                 }
@@ -1279,6 +1441,8 @@ StyledDialogView {
             }
 
             SearchField {
+                id: articulationSearchField
+
                 Layout.preferredWidth: 240
                 Layout.leftMargin: 12
 
@@ -1286,6 +1450,17 @@ StyledDialogView {
 
                 onSearchTextChanged: {
                     editorModel.filterText = searchText
+                }
+
+                // a map loaded is shown whole (the filter typed for another one would hide most of it)
+                Connections {
+                    target: editorModel
+
+                    function onFilterTextChanged() {
+                        if (editorModel.filterText === "" && articulationSearchField.searchText !== "") {
+                            articulationSearchField.clear()
+                        }
+                    }
                 }
             }
 
