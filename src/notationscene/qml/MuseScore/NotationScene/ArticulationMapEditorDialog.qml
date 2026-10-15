@@ -582,7 +582,7 @@ StyledDialogView {
                                         }
 
                                         StyledTextLabel {
-                                            visible: prv.editingRow !== rowItem.index
+                                            visible: !nameEditor.active
                                             anchors.verticalCenter: parent.verticalCenter
                                             horizontalAlignment: Text.AlignLeft
                                             text: rowItem.name + (rowItem.isDefault ? "  ★" : "")
@@ -590,7 +590,11 @@ StyledDialogView {
                                         }
 
                                         Loader {
-                                            active: prv.editingRow === rowItem.index
+                                            id: nameEditor
+
+                                            // not with -1: the index of the rows being removed when the list is rebuilt
+                                            // (each would open its editor, which takes the focus)
+                                            active: prv.editingRow >= 0 && prv.editingRow === rowItem.index
                                             visible: active
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: prv.nameColumnWidth - rowItem.depth * prv.indentWidth - 24
@@ -1310,7 +1314,7 @@ StyledDialogView {
                     visible: editorModel.canApply
                     text: qsTrc("global", "Apply")
                     buttonRole: ButtonBoxModel.CustomRole
-                    buttonId: ButtonBoxModel.Apply
+                    buttonId: ButtonBoxModel.CustomButton + 1 // a standard id would take the Apply role, placed after OK
                     toolTipTitle: qsTrc("global", "Apply")
                     toolTipDescription: qsTrc("notation", "Saves the map, then plays the track with it. Cancel doesn't undo it.")
                     onClicked: editorModel.apply()
