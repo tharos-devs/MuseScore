@@ -21,6 +21,7 @@
  */
 #pragma once
 
+#include <set>
 #include <vector>
 
 #include "articulationmaptypes.h"
@@ -39,6 +40,7 @@ namespace mu::engraving {
 //!     ch=3      Harmonics          a channel alone, no message: e.g. one instrument per channel in Kontakt
 //!     C0D1cc3=64 Legato > Fast     chained messages; '>' nests submenus
 //!     C#0       Staccatissimo      without '=', a name matching a score articulation is its own alias
+//!                                  (unless several names of the map end with it, e.g. "Tremolo > Legato" and "Legato")
 //!     -E0       Tremolo            '-' disables an articulation: kept, but never offered nor sent
 //!     @folder   Legato > Slow      a (sub)folder with no articulation yet
 //!     F0        Marcato > Senza vibrato  short="Marcato"   shown in the score instead of "Senza vibrato"
@@ -73,8 +75,17 @@ public:
 
     static Result parse(const muse::String& text);
 
-    //! NOTE: the score articulations an entry is selected by when its line has no "= ..." list
-    static std::vector<muse::mpe::ArticulationType> implicitAliases(const muse::String& label);
+    //! NOTE: the score articulations an entry is selected by when its line has no "= ..." list: the one its name's
+    //! last segment is named after, unless it is ambiguous (see ambiguousImplicitAliases())
+    static std::vector<muse::mpe::ArticulationType> implicitAliases(const muse::String& label,
+                                                                    const std::set<muse::mpe::ArticulationType>& ambiguous);
+
+    //! NOTE: the score articulations several labels of a map end with (e.g. "Tremolo > Fast > Legato" and
+    //! "Tremolo > Slow > Legato"): none of them is selected by it on its own then
+    static std::set<muse::mpe::ArticulationType> ambiguousImplicitAliases(const std::vector<muse::String>& labels);
+
+    //! NOTE: gives the entries without explicit aliases their implicit ones
+    static void applyImplicitAliases(std::vector<ExpressionMapEntry>& entries);
 
     //! NOTE: a score articulation by its name in a "= ..." list (case ignored, e.g. "SnapPizzicato"), and its name
     static std::optional<muse::mpe::ArticulationType> scoreArticulationType(const muse::String& name);

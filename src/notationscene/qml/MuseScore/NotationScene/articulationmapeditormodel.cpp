@@ -61,7 +61,7 @@ struct ArticulationMapEditorModel::Node {
     QString shortName; // shown in the score instead of the name, when set
     std::vector<mpe::MidiMessage> messages;
     std::vector<mpe::ArticulationType> aliases;
-    bool hasImplicitAliases = true; // re-derived from the name when saving, see ArticulationMapParser::implicitAliases
+    bool hasImplicitAliases = true; // derived from the name (and the others'), see ArticulationMapParser::implicitAliases
     std::optional<int> keyswitchOffsetMs;
     int notesOffsetMs = 0;
     std::optional<int> channel; // 0-based, unset = the track's
@@ -415,32 +415,64 @@ QString ArticulationMapEditorModel::sequenceText(const Node* node) const
     return parts.join(" | ");
 }
 
-//! NOTE: only the name's last segment counts for its own (see ArticulationMapParser::implicitAliases()): the node's name,
-//! without building its path - this runs for every row and every row above it (see scoreMarkingsOf())
-std::vector<mpe::ArticulationType> ArticulationMapEditorModel::scoreArticulationsOf(const Node* node) const
+//! NOTE: only the names' last segment counts (see ArticulationMapParser::ambiguousImplicitAliases()): the nodes' names,
+//! without building their paths
+std::set<mpe::ArticulationType> ArticulationMapEditorModel::ambiguousImplicitAliases() const
 {
-    return node->hasImplicitAliases ? ArticulationMapParser::implicitAliases(String::fromQString(node->name)) : node->aliases;
+    std::vector<String> names;
+    std::function<void(const Node*)> visit = [&](const Node* parent) {
+        for (const auto& child : parent->children) {
+            if (child->isFolder) {
+                visit(child.get());
+            } else {
+                names.push_back(String::fromQString(child->name));
+            }
+        }
+    };
+    visit(m_root.get());
+
+    return ArticulationMapParser::ambiguousImplicitAliases(names);
+}
+
+//! NOTE: the node's name rather than its path, only its last segment counts - this runs for every row of the map for
+//! each row shown (see scoreMarkingsOf())
+std::vector<mpe::ArticulationType> ArticulationMapEditorModel::scoreArticulationsOf(const Node* node,
+                                                                                    const std::set<mpe::ArticulationType>& ambiguous)
+{
+    return node->hasImplicitAliases ? ArticulationMapParser::implicitAliases(String::fromQString(node->name), ambiguous) : node->aliases;
 }
 
 QVariantList ArticulationMapEditorModel::scoreMarkingsOf(const Node* node) const
 {
-    //! NOTE: like ExpressionMap::entryForArticulations(): the first enabled articulation of the map with the marking
-    std::vector<mpe::ArticulationType> takenAbove;
+    //! NOTE: like ExpressionMap::entryForArticulations(): the first enabled articulation of the map with the marking,
+    //! the ones with chosen markings first
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
+    const bool isExplicit = !node->hasImplicitAliases;
+
+    std::vector<mpe::ArticulationType> takenBefore;
     bool found = false;
     std::function<void(const Node*)> visit = [&](const Node* parent) {
         for (const auto& child : parent->children) {
-            if (found) {
-                return;
+            if (found && isExplicit) {
+                return; // nothing below comes first
             }
             if (child.get() == node) {
                 found = true;
-                return;
+                continue;
             }
             if (child->isFolder) {
                 visit(child.get());
-            } else if (!child->disabled) {
-                for (const mpe::ArticulationType type : scoreArticulationsOf(child.get())) {
-                    takenAbove.push_back(type);
+                continue;
+            }
+            if (child->disabled) {
+                continue;
+            }
+
+            const bool childExplicit = !child->hasImplicitAliases;
+            const bool comesFirst = childExplicit == isExplicit ? !found : childExplicit;
+            if (comesFirst) {
+                for (const mpe::ArticulationType type : scoreArticulationsOf(child.get(), ambiguous)) {
+                    takenBefore.push_back(type);
                 }
             }
         }
@@ -448,10 +480,10 @@ QVariantList ArticulationMapEditorModel::scoreMarkingsOf(const Node* node) const
     visit(m_root.get());
 
     QVariantList result;
-    for (const mpe::ArticulationType type : scoreArticulationsOf(node)) {
+    for (const mpe::ArticulationType type : scoreArticulationsOf(node, ambiguous)) {
         QVariantMap marking;
         marking["name"] = ArticulationMapParser::scoreArticulationName(type).toQString();
-        marking["shadowed"] = std::find(takenAbove.cbegin(), takenAbove.cend(), type) != takenAbove.cend();
+        marking["shadowed"] = std::find(takenBefore.cbegin(), takenBefore.cend(), type) != takenBefore.cend();
         result << marking;
     }
 
@@ -459,9 +491,10 @@ QVariantList ArticulationMapEditorModel::scoreMarkingsOf(const Node* node) const
 }
 
 //! NOTE: back to the name's own when they're that: they follow a rename then, and aren't written in the file
-void ArticulationMapEditorModel::setScoreArticulations(Node* node, const std::vector<mpe::ArticulationType>& types)
+void ArticulationMapEditorModel::setScoreArticulations(Node* node, const std::vector<mpe::ArticulationType>& types,
+                                                       const std::set<mpe::ArticulationType>& ambiguous)
 {
-    node->hasImplicitAliases = types == ArticulationMapParser::implicitAliases(String::fromQString(node->name));
+    node->hasImplicitAliases = types == ArticulationMapParser::implicitAliases(String::fromQString(node->name), ambiguous);
     node->aliases = node->hasImplicitAliases ? std::vector<mpe::ArticulationType> {} : types;
 }
 
@@ -668,8 +701,8 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
         node->name = leafName;
         node->shortName = entry.shortName.toQString();
         node->messages = entry.messages;
-        node->aliases = entry.aliases;
-        node->hasImplicitAliases = entry.aliases == ArticulationMapParser::implicitAliases(entry.id);
+        node->hasImplicitAliases = !entry.explicitAliases;
+        node->aliases = entry.explicitAliases ? entry.aliases : std::vector<mpe::ArticulationType> {};
         node->keyswitchOffsetMs = entry.keyswitchOffsetMs;
         node->notesOffsetMs = entry.notesOffsetMs;
         node->channel = entry.channel;
@@ -734,7 +767,8 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
             entry.id = path;
             entry.shortName = muse::String::fromQString(child->shortName);
             entry.messages = child->messages;
-            entry.aliases = child->hasImplicitAliases ? ArticulationMapParser::implicitAliases(path) : child->aliases;
+            entry.aliases = child->aliases;
+            entry.explicitAliases = !child->hasImplicitAliases;
             entry.keyswitchOffsetMs = child->keyswitchOffsetMs;
             entry.notesOffsetMs = child->notesOffsetMs;
             entry.channel = child->channel;
@@ -749,6 +783,7 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
         }
     };
     visit(m_root.get());
+    ArticulationMapParser::applyImplicitAliases(file.map.entries);
 
     if (!withoutMessages.empty()) {
         interactive()->error(muse::trc("notation", "Some articulations have no activation sequence"),
@@ -1376,9 +1411,10 @@ QString ArticulationMapEditorModel::selectedScoreArticulationsText() const
         return QString();
     }
 
-    const std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entries.front());
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
+    const std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entries.front(), ambiguous);
     for (const Node* entry : entries) {
-        if (scoreArticulationsOf(entry) != types) {
+        if (scoreArticulationsOf(entry, ambiguous) != types) {
             //: Shown when the selected articulations are selected by different score markings
             return muse::qtrc("notation", "Various");
         }
@@ -1402,8 +1438,9 @@ QVariantMap ArticulationMapEditorModel::selectedScoreArticulationStates() const
     QVariantMap result;
 
     const std::vector<Node*> entries = selectedEntries();
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
     for (const Node* entry : entries) {
-        for (const mpe::ArticulationType type : scoreArticulationsOf(entry)) {
+        for (const mpe::ArticulationType type : scoreArticulationsOf(entry, ambiguous)) {
             const QString name = ArticulationMapParser::scoreArticulationName(type).toQString();
             result[name] = result.value(name).toInt() + 1;
         }
@@ -1568,6 +1605,7 @@ void ArticulationMapEditorModel::copySelectedArticulation()
         }
     }
 
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
     std::vector<const Node*> copies;
     for (const auto& [parent, groupEntries] : groups) {
         size_t index = 0;
@@ -1579,7 +1617,7 @@ void ArticulationMapEditorModel::copySelectedArticulation()
             std::unique_ptr<Node> copy = copyOfArticulation(*entry);
             copy->name = uniqueName(parent, entry->name);
             // what selects it, even when it came from the name ("Staccato" copied as "Staccato 2")
-            setScoreArticulations(copy.get(), scoreArticulationsOf(entry));
+            setScoreArticulations(copy.get(), scoreArticulationsOf(entry, ambiguous), ambiguous);
             copies.push_back(parent->addChild(std::move(copy), index++));
         }
     }
@@ -1989,9 +2027,10 @@ void ArticulationMapEditorModel::setSelectedScoreArticulation(const QString& nam
         return;
     }
 
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
     bool changed = false;
     for (Node* entry : selectedEntries()) {
-        std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entry);
+        std::vector<mpe::ArticulationType> types = scoreArticulationsOf(entry, ambiguous);
         const bool has = std::find(types.cbegin(), types.cend(), *type) != types.cend();
         if (has == selects) {
             continue;
@@ -2003,7 +2042,7 @@ void ArticulationMapEditorModel::setSelectedScoreArticulation(const QString& nam
             std::erase(types, *type);
         }
 
-        setScoreArticulations(entry, types);
+        setScoreArticulations(entry, types, ambiguous);
         changed = true;
     }
 

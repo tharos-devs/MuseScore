@@ -25,6 +25,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -311,9 +312,13 @@ private:
     QString uniqueName(const Node* parent, const QString& name, const Node* except = nullptr) const;
     QString pathOf(const Node* node) const;
     QString sequenceText(const Node* node) const;
-    std::vector<muse::mpe::ArticulationType> scoreArticulationsOf(const Node* node) const;
-    static void setScoreArticulations(Node* node, const std::vector<muse::mpe::ArticulationType>& types);
-    //! NOTE: [{ name, shadowed }]: shadowed, an articulation higher in the map has it too, and is played for it
+    std::set<muse::mpe::ArticulationType> ambiguousImplicitAliases() const;
+    static std::vector<muse::mpe::ArticulationType> scoreArticulationsOf(const Node* node,
+                                                                         const std::set<muse::mpe::ArticulationType>& ambiguous);
+    static void setScoreArticulations(Node* node, const std::vector<muse::mpe::ArticulationType>& types,
+                                      const std::set<muse::mpe::ArticulationType>& ambiguous);
+    //! NOTE: [{ name, shadowed }]: shadowed, another articulation has it too, and is played for it (one with chosen
+    //! markings, or one higher in the map)
     QVariantList scoreMarkingsOf(const Node* node) const;
 
     void markDirty();

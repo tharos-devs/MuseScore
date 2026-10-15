@@ -198,10 +198,10 @@ String ArticulationMapParser::scoreArticulationName(mpe::ArticulationType type)
     return it == mpe::ARTICULATION_TYPE_NAMES.cend() ? String() : String::fromQString(it->second);
 }
 
-std::vector<mpe::ArticulationType> ArticulationMapParser::implicitAliases(const String& labelStr)
+//! NOTE: an articulation named like a score articulation (e.g. "Staccatissimo",
+//! "Strings > Pizzicato") is selected by it automatically
+static std::optional<mpe::ArticulationType> leafArticulationType(const String& labelStr)
 {
-    //! NOTE: an articulation named like a score articulation (e.g. "Staccatissimo",
-    //! "Strings > Pizzicato") is selected by it automatically
     const std::string label = labelStr.toStdString();
     const size_t leafPos = label.rfind('>');
     std::string leaf = trimmed(leafPos == std::string::npos ? label : label.substr(leafPos + 1));
@@ -209,10 +209,52 @@ std::vector<mpe::ArticulationType> ArticulationMapParser::implicitAliases(const 
 
     const std::optional<mpe::ArticulationType> type = articulationTypeFromName(leaf);
     if (type && *type != mpe::ArticulationType::Standard && *type != mpe::ArticulationType::Undefined) {
+        return type;
+    }
+
+    return std::nullopt;
+}
+
+std::vector<mpe::ArticulationType> ArticulationMapParser::implicitAliases(const String& label,
+                                                                          const std::set<mpe::ArticulationType>& ambiguous)
+{
+    const std::optional<mpe::ArticulationType> type = leafArticulationType(label);
+    if (type && !ambiguous.contains(*type)) {
         return { *type };
     }
 
     return {};
+}
+
+std::set<mpe::ArticulationType> ArticulationMapParser::ambiguousImplicitAliases(const std::vector<String>& labels)
+{
+    std::set<mpe::ArticulationType> seen;
+    std::set<mpe::ArticulationType> ambiguous;
+    for (const String& label : labels) {
+        if (const std::optional<mpe::ArticulationType> type = leafArticulationType(label)) {
+            if (!seen.insert(*type).second) {
+                ambiguous.insert(*type);
+            }
+        }
+    }
+
+    return ambiguous;
+}
+
+void ArticulationMapParser::applyImplicitAliases(std::vector<ExpressionMapEntry>& entries)
+{
+    std::vector<String> labels;
+    labels.reserve(entries.size());
+    for (const ExpressionMapEntry& entry : entries) {
+        labels.push_back(entry.id);
+    }
+
+    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases(labels);
+    for (ExpressionMapEntry& entry : entries) {
+        if (!entry.explicitAliases) {
+            entry.aliases = implicitAliases(entry.id, ambiguous);
+        }
+    }
 }
 
 bool ArticulationMapParser::parseMessages(const String& codeStr, int middleCOctave, std::vector<mpe::MidiMessage>& messages)
@@ -470,9 +512,9 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
             continue;
         }
 
-        if (aliasPos == std::string::npos) {
-            entry.aliases = implicitAliases(entry.id);
-        } else {
+        // without "= ...", see applyImplicitAliases() once all the entries are known
+        if (aliasPos != std::string::npos) {
+            entry.explicitAliases = true;
             for (const std::string& aliasName : split(remaining.substr(aliasPos + 1), ',')) {
                 const std::string alias = trimmed(aliasName);
                 if (alias.empty()) {
@@ -497,6 +539,8 @@ ArticulationMapParser::Result ArticulationMapParser::parse(const String& text)
 
         map.entries.push_back(std::move(entry));
     }
+
+    applyImplicitAliases(map.entries);
 
     return result;
 }

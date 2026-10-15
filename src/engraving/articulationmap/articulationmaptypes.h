@@ -40,6 +40,7 @@ struct ExpressionMapEntry {
     muse::String shortName; // shown instead of the label's last part in the score (e.g. "Marcato" for "Marcato > Senza vibrato")
     std::vector<muse::mpe::MidiMessage> messages;
     std::vector<muse::mpe::ArticulationType> aliases; // score articulations that select this entry automatically
+    bool explicitAliases = false; // chosen in the file ("= ..."), not derived from the name: they take precedence
     std::optional<int> keyswitchOffsetMs; // overrides ExpressionMap::keyswitchOffsetMs
     int notesOffsetMs = 0; // shifts the notes played with this articulation (e.g. slow legato attacks)
     std::optional<int> channel; // 0-based MIDI channel of its messages and notes (e.g. one instrument per channel in Kontakt)
@@ -49,8 +50,8 @@ struct ExpressionMapEntry {
     bool operator==(const ExpressionMapEntry& e) const
     {
         return id == e.id && shortName == e.shortName && messages == e.messages && aliases == e.aliases
-               && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && channel == e.channel
-               && color == e.color && disabled == e.disabled;
+               && explicitAliases == e.explicitAliases && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs
+               && channel == e.channel && color == e.color && disabled == e.disabled;
     }
 };
 
@@ -75,7 +76,8 @@ struct ExpressionMap {
         return nullptr;
     }
 
-    //! NOTE: entry order is the priority order when a chord has several score articulations.
+    //! NOTE: the entries with explicit aliases come first, then the entry order is the priority order (also when a chord
+    //! has several score articulations).
     //! playingTechnique: the staff's playing technique in effect (e.g. "pizz."), checked like a score articulation
     const ExpressionMapEntry* entryForArticulations(const muse::mpe::ArticulationMap& articulations,
                                                     muse::mpe::ArticulationType playingTechnique = muse::mpe::ArticulationType::Undefined)
@@ -83,14 +85,16 @@ struct ExpressionMap {
     {
         const bool hasTechnique = playingTechnique != muse::mpe::ArticulationType::Undefined;
 
-        for (const ExpressionMapEntry& e : entries) {
-            if (e.disabled) {
-                continue;
-            }
+        for (const bool explicitAliases : { true, false }) {
+            for (const ExpressionMapEntry& e : entries) {
+                if (e.disabled || e.explicitAliases != explicitAliases) {
+                    continue;
+                }
 
-            for (const muse::mpe::ArticulationType type : e.aliases) {
-                if (articulations.contains(type) || (hasTechnique && type == playingTechnique)) {
-                    return &e;
+                for (const muse::mpe::ArticulationType type : e.aliases) {
+                    if (articulations.contains(type) || (hasTechnique && type == playingTechnique)) {
+                        return &e;
+                    }
                 }
             }
         }

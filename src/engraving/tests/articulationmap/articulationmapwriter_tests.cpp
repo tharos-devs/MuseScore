@@ -133,3 +133,23 @@ TEST_F(ArticulationMapWriter_Tests, ImplicitAliasesNotWritten)
     const String written = ArticulationMapWriter::write(parsed);
     EXPECT_FALSE(written.contains(u"=")) << written.toStdString();
 }
+
+TEST_F(ArticulationMapWriter_Tests, ExplicitAliasesKept)
+{
+    // [GIVEN] An explicit list the name would give anyway, and an ambiguous name given an explicit list
+    const ArticulationMapParser::Result parsed = ArticulationMapParser::parse(u"C0 Pizzicato = pizzicato\n"
+                                                                              u"D0 Tremolo > Legato = legato\n"
+                                                                              u"E0 Long > Legato\n");
+    ASSERT_EQ(parsed.map.entries.size(), 3);
+
+    // [THEN] Both stay explicit, so they keep their precedence
+    const String written = ArticulationMapWriter::write(parsed);
+    const ArticulationMapParser::Result reparsed = ArticulationMapParser::parse(written);
+    ASSERT_TRUE(reparsed.errors.empty()) << written.toStdString();
+    EXPECT_TRUE(reparsed.map.entries.at(0).explicitAliases);
+    EXPECT_TRUE(reparsed.map.entries.at(1).explicitAliases);
+    EXPECT_FALSE(reparsed.map.entries.at(2).explicitAliases);
+    EXPECT_TRUE(reparsed.map.entries.at(2).aliases.empty());
+
+    expectSameFile(parsed, reparsed);
+}
