@@ -202,6 +202,10 @@ public:
     //! NOTE: the OK button: with a track, the editor's map is the track's once closed (saved, then reloaded into it),
     //! so a map opened or started here isn't lost; without one, the changes are saved
     Q_INVOKABLE void applyAndClose();
+
+    //! NOTE: [{ row, name, depth, isSelected }]: the folders the row is in, outermost first (pinned at the top of the list
+    //! while their content is scrolled through)
+    Q_INVOKABLE QVariantList foldersOfRow(int row) const;
     //! NOTE: like the Mixer's and the Track list's button (comes to the front if already open)
     Q_INVOKABLE void openInstrumentEditor();
     //! NOTE: sends the row's articulation (its messages and channel, as edited) to the target track's VST instrument,

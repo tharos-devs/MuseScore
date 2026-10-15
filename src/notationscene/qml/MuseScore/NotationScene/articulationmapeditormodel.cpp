@@ -387,6 +387,31 @@ QString ArticulationMapEditorModel::pathOf(const Node* node) const
     return names.join(FOLDER_SEPARATOR);
 }
 
+QVariantList ArticulationMapEditorModel::foldersOfRow(int row) const
+{
+    const Node* node = nodeAt(row);
+    if (!node) {
+        return {};
+    }
+
+    QVariantList result;
+    for (const Node* folder = node->parent; folder && folder != m_root.get(); folder = folder->parent) {
+        const int folderRow = rowOf(folder);
+        if (folderRow < 0) {
+            continue;
+        }
+
+        QVariantMap item;
+        item["row"] = folderRow;
+        item["name"] = folder->name;
+        item["depth"] = m_rows.at(folderRow).depth;
+        item["isSelected"] = isSelected(folder);
+        result.prepend(item);
+    }
+
+    return result;
+}
+
 //! NOTE: the articulations matching the filter and the folders holding them, plus the (empty) folders matching it
 std::unordered_set<const ArticulationMapEditorModel::Node*> ArticulationMapEditorModel::nodesMatchingFilter() const
 {
@@ -695,6 +720,10 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
     m_selectionAnchor = nullptr;
     m_shownWhileFiltered.clear();
 
+    // a map loaded is shown whole: the filter typed for another one would hide most of it
+    const bool wasFiltered = !m_filterText.isEmpty();
+    m_filterText.clear();
+
     auto ensureFolder = [this](const QStringList& names) {
         Node* folder = m_root.get();
         for (const QString& name : names) {
@@ -768,6 +797,10 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
     emit fileChanged();
     emit headerChanged();
     emit dirtyChanged();
+
+    if (wasFiltered) {
+        emit filterTextChanged();
+    }
 }
 
 //! NOTE: the tracks of the open score keep their own copy of the map, so they get the saved file right away
