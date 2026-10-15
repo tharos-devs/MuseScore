@@ -40,6 +40,7 @@
 #include "engraving/dom/sig.h"
 #include "engraving/editing/noteinput.h"
 #include "engraving/articulationmap/articulationmapparser.h"
+#include "notation/inotationparts.h"
 #include "engraving/articulationmap/articulationmapdata.h"
 
 #include "notation/imasternotation.h"
@@ -1154,6 +1155,10 @@ void NotationActionController::init()
 
         rcommand::registerActionToCommand(this, actionToCommand, commandDispatcher(), dispatcher());
     }
+
+    globalContext()->currentMasterNotationChanged().onNotify(this, [this]() {
+        checkArticulationMapFilesChanged();
+    });
 
     // listen on state changes
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
@@ -2995,6 +3000,163 @@ void NotationActionController::loadArticulationMapFile(const mu::engraving::Inst
     changes.maps.emplace(trackId, std::move(result.map));
     maps->edit(changes, isReload ? muse::TranslatableString("undoableAction", "Reload articulation map")
                : muse::TranslatableString("undoableAction", "Load articulation map"));
+}
+
+//! NOTE: see PROJECT_LOADING_URI in OpenProjectScenario
+static const muse::Uri PROJECT_LOADING_URI("musescore://playback/projectloading");
+static constexpr int ARTICULATION_MAP_FILES_CHECK_INTERVAL_MS = 250;
+
+void NotationActionController::checkArticulationMapFilesChanged()
+{
+    m_articulationMapFilesCheckTimer.stop();
+    m_articulationMapFilesCheckTimer.disconnect();
+
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
+    if (!maps || !maps->data()) {
+        return;
+    }
+
+    //! NOTE: the map a track got from a file, compared with that file now (a file gone: nothing to reload). Per
+    //! track: two tracks of the same file can have different copies (e.g. one reloaded since, not the other)
+    std::map<muse::io::path_t, std::vector<mu::engraving::InstrumentTrackId> > changed;
+    std::map<muse::io::path_t, std::optional<muse::String> > fileTexts;
+    for (const auto& [trackId, map] : maps->data()->maps()) {
+        if (map.sourcePath.empty()) {
+            continue;
+        }
+
+        const muse::io::path_t path(map.sourcePath);
+        auto it = fileTexts.find(path);
+        if (it == fileTexts.end()) {
+            std::optional<muse::String> text;
+            if (fileSystem()->exists(path)) {
+                const muse::RetVal<muse::ByteArray> file = fileSystem()->readFile(path);
+                if (file.ret) {
+                    text = muse::String::fromUtf8(file.val);
+                }
+            }
+            it = fileTexts.emplace(path, std::move(text)).first;
+        }
+
+        if (it->second && *it->second != map.sourceText) {
+            changed[path].push_back(trackId);
+        }
+    }
+
+    if (changed.empty()) {
+        return;
+    }
+
+    //! NOTE: the question would open over the loading window, while the score isn't ready yet
+    const std::weak_ptr<IMasterNotation> weakMasterNotation = masterNotation;
+    m_articulationMapFilesCheckTimer.setInterval(ARTICULATION_MAP_FILES_CHECK_INTERVAL_MS);
+    QObject::connect(&m_articulationMapFilesCheckTimer, &QTimer::timeout, [this, weakMasterNotation, changed]() {
+        if (weakMasterNotation.lock() != currentMasterNotation()) {
+            m_articulationMapFilesCheckTimer.stop();
+            return;
+        }
+
+        if (interactive()->isOpened(PROJECT_LOADING_URI).val) {
+            return;
+        }
+
+        m_articulationMapFilesCheckTimer.stop();
+        askToReloadChangedArticulationMaps(changed);
+    });
+    m_articulationMapFilesCheckTimer.start();
+}
+
+void NotationActionController::askToReloadChangedArticulationMaps(
+    const std::map<muse::io::path_t, std::vector<mu::engraving::InstrumentTrackId> >& changed)
+{
+    const IMasterNotationPtr masterNotation = currentMasterNotation();
+    if (!masterNotation) {
+        return;
+    }
+
+    std::string details;
+    for (const auto& [path, trackIds] : changed) {
+        QStringList partNames;
+        for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
+            if (const mu::engraving::Part* part = masterNotation->parts()->part(trackId.partId)) {
+                const QString name = part->partName().toQString();
+                if (!partNames.contains(name)) {
+                    partNames << name;
+                }
+            }
+        }
+
+        details += "• " + muse::io::filename(path).toStdString();
+        if (!partNames.isEmpty()) {
+            details += " (" + partNames.join(", ").toStdString() + ")";
+        }
+        details += "\n";
+    }
+
+    static constexpr int reloadButton = int(IInteractive::Button::CustomButton) + 1;
+    static constexpr int keepButton = reloadButton + 1;
+
+    const std::string title = muse::trc("notation", "Articulation map files changed");
+    const std::string text = muse::trc("notation", "These articulation map files changed since this score was saved:")
+                             + "\n" + details + "\n"
+                             + muse::trc("notation", "Reload them? Otherwise the score keeps the versions saved with it.");
+
+    const std::weak_ptr<IMasterNotation> weakMasterNotation = masterNotation;
+    interactive()->question(title, text, {
+        IInteractive::ButtonData(keepButton, muse::trc("notation", "Keep saved versions")),
+        IInteractive::ButtonData(reloadButton, muse::trc("notation", "Reload"), true /*accent*/)
+    }, reloadButton)
+    .onResolve(this, [this, weakMasterNotation, changed](const IInteractive::Result& res) {
+        const IMasterNotationPtr current = currentMasterNotation();
+        if (!res.isButton(reloadButton) || !current || weakMasterNotation.lock() != current) {
+            return;
+        }
+
+        const INotationArticulationMapsPtr maps = current->articulationMaps();
+        if (!maps) {
+            return;
+        }
+
+        //! NOTE: one undoable action for all of them
+        EditArticulationMapChanges changes;
+        for (const auto& [path, trackIds] : changed) {
+            const muse::RetVal<muse::ByteArray> file = fileSystem()->readFile(path);
+            if (!file.ret) {
+                continue;
+            }
+
+            mu::engraving::ArticulationMapParser::Result result = mu::engraving::ArticulationMapParser::parse(
+                muse::String::fromUtf8(file.val));
+            if (result.map.entries.empty()) {
+                LOGW() << "no articulation in the changed map file, kept the score's version: " << path;
+                continue;
+            }
+
+            //! NOTE: like a reload from the menu (see loadArticulationMapFile())
+            if (!result.errors.empty()) {
+                std::string errorDetails = muse::io::filename(path).toStdString() + "\n";
+                for (const mu::engraving::ArticulationMapParser::Error& error : result.errors) {
+                    errorDetails += muse::qtrc("playback", "Line %1: %2").arg(error.line).arg(error.message.toQString()).toStdString()
+                                    + "\n";
+                }
+                interactive()->warning(muse::trc("playback", "Some lines of the articulation map were ignored"), errorDetails);
+            }
+
+            if (result.map.name.empty()) {
+                result.map.name = muse::io::completeBasename(path).toString();
+            }
+            result.map.sourcePath = path.toString();
+
+            for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
+                changes.maps.emplace(trackId, result.map);
+            }
+        }
+
+        if (!changes.maps.empty()) {
+            maps->edit(changes, muse::TranslatableString("undoableAction", "Reload articulation maps"));
+        }
+    });
 }
 
 muse::Ret NotationActionController::editArticulationMap(const muse::rcommand::Params& params)
