@@ -551,6 +551,7 @@ void NotationActionController::init()
     registerCommandWithParams(EDIT_ARTICULATION_MAP_COMMAND, &Controller::editArticulationMap);
     registerCommandWithParams(RELOAD_ARTICULATION_MAP_COMMAND, &Controller::reloadArticulationMap);
     registerCommandWithParams(REMOVE_ARTICULATION_MAP_COMMAND, &Controller::removeArticulationMap);
+    registerCommandWithParams(CLOSE_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::closeArticulationMapEditor);
     registerCommand(OPEN_REALIZECHORDSYMBOLS_COMMAND, &Controller::openRealizeChordSymbolsDialog);
 
     // style commands
@@ -3231,6 +3232,22 @@ void NotationActionController::openArticulationMapEditor(const mu::engraving::In
     }).onReject(this, [onClosed](int, const std::string&) {
         onClosed();
     });
+}
+
+//! NOTE: like its window's close button (unsaved changes are offered to be saved)
+muse::Ret NotationActionController::closeArticulationMapEditor(const muse::rcommand::Params& params)
+{
+    const std::optional<mu::engraving::InstrumentTrackId> trackId = articulationMapTrackId(params);
+    if (!trackId) {
+        return muse::make_ret(Ret::Code::BadArgs);
+    }
+
+    const auto it = m_articulationMapEditors.find(*trackId);
+    if (it != m_articulationMapEditors.end() && interactive()->isOpened(it->second.uri).val) {
+        interactive()->close(it->second.uri);
+    }
+
+    return muse::make_ok();
 }
 
 muse::Ret NotationActionController::removeArticulationMap(const muse::rcommand::Params& params)

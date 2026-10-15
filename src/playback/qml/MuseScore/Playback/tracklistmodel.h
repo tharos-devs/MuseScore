@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <map>
 #include <optional>
 
 #include <QAbstractListModel>
@@ -88,12 +89,16 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     //! NOTE: the Metronome row, above the Video row: its mute only
     Q_PROPERTY(MixerChannelItem * metronomeChannelItem READ metronomeChannelItem NOTIFY metronomeChannelItemChanged)
 
-    //! NOTE: the channel shown below the list, with the Mixer's controls: the first selected row's (a track or a bus)
+    //! NOTE: the channel shown below the list, with the Mixer's controls: the first selected row's (a track or a bus);
+    //! with none selected, the one shown last, or the first instrument track's (see updateStripChannelItem())
     Q_PROPERTY(MixerChannelItem * stripChannelItem READ stripChannelItem NOTIFY stripChannelItemChanged)
+    Q_PROPERTY(bool stripChannelSelected READ stripChannelSelected NOTIFY stripChannelItemChanged)
     //! NOTE: the height of that area, remembered (a height above its controls': all of them, whatever their height)
     Q_PROPERTY(int stripHeight READ stripHeight WRITE setStripHeight NOTIFY stripHeightChanged)
     //! NOTE: the stripHeight meaning all of it
     Q_PROPERTY(int fullStripHeight READ fullStripHeight CONSTANT)
+    //! NOTE: the height of all of the strip's controls, last measured (remembered): the strip keeps it with no channel
+    Q_PROPERTY(int stripContentHeight READ stripContentHeight WRITE setStripContentHeight NOTIFY stripContentHeightChanged)
 
     Q_PROPERTY(bool videoVisible READ videoVisible NOTIFY categoriesVisibleChanged)
     Q_PROPERTY(bool metronomeVisible READ metronomeVisible NOTIFY categoriesVisibleChanged)
@@ -125,6 +130,30 @@ public:
     Q_INVOKABLE void setTrackColor(int row, const QColor& color);
     Q_INVOKABLE void resetTrackColor(int row);
 
+    //! NOTE: folders of tracks and buses (see project::TrackListFolder), only the Track list's organization: the
+    //! score's order isn't changed (a folder's tracks are in the score's order). All undoable. A row: as shown.
+    //! A new folder: above the first selected track or bus (above its folder when it's in one), or first
+    Q_INVOKABLE void addFolder();
+    Q_INVOKABLE void renameFolder(int row, const QString& name);
+    Q_INVOKABLE void removeFolder(int row);
+    Q_INVOKABLE void toggleFolderCollapsed(int row);
+    //! NOTE: the row's track or bus (on a selected row, the selection's) into the folder of folderRow (-1: out of
+    //! any folder)
+    Q_INVOKABLE void moveRowToFolder(int row, int folderRow);
+    //! NOTE: the folder of row before the top-level row beforeRow (the end: rowCount())
+    Q_INVOKABLE void moveFolder(int row, int beforeRow);
+    //! NOTE: whether moveFolder() can put it there: before a row that isn't in a folder, or at the end
+    Q_INVOKABLE bool canMoveFolderBefore(int row, int beforeRow) const;
+    //! NOTE: a row's menu items for folders: "Add new folder" (an empty one above the row), the "Move to folder"
+    //! submenu; handleMoveToFolderMenuItem() returns false for another item
+    Q_INVOKABLE QVariantList folderMenuItems(int row) const;
+    Q_INVOKABLE bool handleMoveToFolderMenuItem(int row, const QString& itemId);
+
+    //! NOTE: a folder's Mute/Solo: all its tracks and buses muted/soloed (Solo: those that have one; a track muted by
+    //! another's solo isn't touched), remembering how they were; a click again puts them back (see FolderMuteSolo)
+    Q_INVOKABLE void toggleFolderMute(int row);
+    Q_INVOKABLE void toggleFolderSolo(int row);
+
     //! NOTE: the Mixer's global Mute/Solo (see GlobalMuteSoloToggle), on the listed tracks
     Q_INVOKABLE void toggleGlobalMute();
     Q_INVOKABLE void toggleGlobalSolo();
@@ -141,8 +170,11 @@ public:
     MixerChannelItem* metronomeChannelItem() const;
 
     MixerChannelItem* stripChannelItem() const;
+    bool stripChannelSelected() const;
     int stripHeight() const;
     int fullStripHeight() const;
+    int stripContentHeight() const;
+    void setStripContentHeight(int height);
     void setStripHeight(int height);
 
     bool videoVisible() const;
@@ -168,6 +200,9 @@ signals:
     void categoriesVisibleChanged();
     void stripChannelItemChanged();
     void stripHeightChanged();
+    void stripContentHeightChanged();
+    //! NOTE: the score's selection got rows selected: the first one is to be scrolled to if it's out of view
+    void rowShowRequested(int row);
 
 private:
     enum Roles {
@@ -176,7 +211,20 @@ private:
         HasArticulationMapRole,
         IsVstInstrumentRole,
         ArticulationMapEditorOpenedRole,
-        InstrumentEditorOpenedRole
+        InstrumentEditorOpenedRole,
+        IsFolderRole,
+        FolderNameRole,
+        FolderCollapsedRole,
+        FolderMutedRole,
+        FolderSoloedRole,
+        InFolderRole
+    };
+
+    //! NOTE: a row as shown: a channel (index in m_rows, in the score's order) or a folder (index in m_folders)
+    struct DisplayRow {
+        int channelRow = -1;
+        int folder = -1;
+        bool inFolder = false;
     };
 
     //! NOTE: a part's tracks: its first instrument's, whose sound, instrument window and articulation map the row
@@ -211,6 +259,31 @@ private:
     void onCurrentNotationChanged();
     void selectRowsOfScoreSelection();
     void updateStripChannelItem();
+    static bool isSameChannel(const PartTracks& tracks1, const PartTracks& tracks2);
+    void requestFirstSelectedRowShown();
+
+    static muse::String channelKey(const PartTracks& tracks);
+    //! NOTE: m_displayRows from m_rows and m_folders (inside a model reset)
+    void rebuildDisplayRows();
+    //! NOTE: the project's folders, when they changed (here, or undone/redone)
+    void loadFolders();
+    void applyFolders(const project::TrackListFolders& folders, const muse::TranslatableString& actionName);
+    int channelRowAt(int row) const;
+    int folderAt(int row) const;
+    int displayRowOfChannel(int channelRow) const;
+    int folderOfChannel(int channelRow) const;
+    std::vector<int> channelRowsToMove(int channelRow) const;
+    std::vector<MixerChannelItem*> folderChannels(int folder) const;
+    static bool canFolderSolo(const MixerChannelItem* item);
+    bool isFolderMuted(int folder) const;
+    bool isFolderSoloed(int folder) const;
+    void notifyFolderRowsChanged();
+    project::TrackListFolders foldersWithChannelsMoved(project::TrackListFolders folders, const std::vector<int>& moved,
+                                                       int targetFolder) const;
+    void moveRowToNewFolder(int row);
+    void addFolderAbove(int row);
+    QVariantMap moveToFolderMenu(int row) const;
+    void insertFolderBefore(project::TrackListFolders& folders, project::TrackListFolder folder, int beforeRow) const;
     //! NOTE: what the Mixer's channels have too: undo, the fan-out of a picked effect/aux send to the selection,
     //! all their slots (see MixerChannelItem::showAllSlots()), the automation
     void connectMixerControls(MixerChannelItem* item, const PartTracks& tracks);
@@ -251,7 +324,19 @@ private:
 
     GlobalMuteSoloToggle m_globalMuteSolo;
     int m_selectionAnchorIndex = -1;
+
+    project::TrackListFolders m_folders;
+    std::vector<DisplayRow> m_displayRows;
+
+    //! NOTE: how a folder's tracks were before its Mute/Solo engaged them all, by folder id then track
+    struct FolderMuteSolo {
+        std::map<muse::audio::TrackId, bool> muted;
+        std::map<muse::audio::TrackId, bool> soloed;
+    };
+    std::map<muse::String, FolderMuteSolo> m_folderMuteSolo;
     QPointer<MixerChannelItem> m_stripChannelItem;
+    std::optional<PartTracks> m_stripTracks;
+    bool m_stripChannelSelected = false;
 
     //! NOTE: see updateColumns()
     bool m_hasArticulationMapColumn = false;

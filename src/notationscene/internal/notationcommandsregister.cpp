@@ -1663,6 +1663,16 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo{
+        CLOSE_ARTICULATION_MAP_EDITOR_COMMAND,
+        TranslatableString("action", "Close"),
+        TranslatableString("action", "Close articulation map editor"),
+        InputSchema({
+            { "partId", Arg(DataType::String, u"Part ID") },
+            { "instrumentId", Arg(DataType::String, u"Instrument ID") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
         OPEN_EDITGRIDSIZE_COMMAND,
         TranslatableString("action", "&Grid size…"),
         TranslatableString("action", "Grid size"),

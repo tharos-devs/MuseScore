@@ -232,6 +232,7 @@ private:
     muse::Ret editArticulationMap(const muse::rcommand::Params& params);
     muse::Ret reloadArticulationMap(const muse::rcommand::Params& params);
     muse::Ret removeArticulationMap(const muse::rcommand::Params& params);
+    muse::Ret closeArticulationMapEditor(const muse::rcommand::Params& params);
     void loadArticulationMapFile(const engraving::InstrumentTrackId& trackId, const muse::io::path_t& path, bool isReload);
     void openArticulationMapEditor(const engraving::InstrumentTrackId& trackId, const muse::UriQuery& uri);
 

@@ -64,7 +64,14 @@ MenuItemList ChannelCategoriesMenu::makeItems(QObject* parent)
     MenuItemList items;
     m_items.clear();
 
-    for (ChannelCategory category : allChannelCategories()) {
+    //! NOTE: in the panel's own order: the Track list's Metronome row is above its Video row
+    QList<ChannelCategory> categories = allChannelCategories();
+    if (m_panel == ChannelListPanel::TrackList) {
+        categories.removeOne(ChannelCategory::Metronome);
+        categories.prepend(ChannelCategory::Metronome);
+    }
+
+    for (ChannelCategory category : std::as_const(categories)) {
         MenuItem* item = new MenuItem(parent);
         item->setTitle(channelCategoryTitle(category));
         item->setCheckable(true);

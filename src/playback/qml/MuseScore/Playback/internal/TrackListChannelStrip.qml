@@ -34,6 +34,8 @@ Item {
     id: root
 
     required property MixerChannelItem channelItem
+    //! NOTE: not selected: the channel shown last (or the first one), its name bar dimmed
+    property bool channelSelected: true
     property NavigationPanel navigationPanel: null
 
     //! NOTE: the controls' navigation rows, top to bottom: Gain and Pan (knob, field), volume field, fader,
@@ -96,6 +98,7 @@ Item {
                 radius: 2
 
                 color: root.trackColor
+                opacity: root.channelSelected ? 1.0 : 0.5
 
                 StyledTextLabel {
                     anchors.fill: parent
