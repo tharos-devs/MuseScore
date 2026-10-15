@@ -1288,15 +1288,28 @@ StyledDialogView {
                 onClicked: prv.setAlwaysOnTop(!checked)
             }
 
+            SearchField {
+                Layout.preferredWidth: 240
+                Layout.leftMargin: 12
+
+                hint: qsTrc("notation", "Search articulations")
+
+                onSearchTextChanged: {
+                    editorModel.filterText = searchText
+                }
+            }
+
             ButtonBox {
                 Layout.fillWidth: true
 
                 buttons: [ ButtonBoxModel.Cancel ]
+                // Apply, Cancel, OK on every platform: Apply apart, OK last
+                buttonLayout: ButtonBoxModel.MacLayout
 
                 FlatButton {
                     visible: editorModel.canApply
                     text: qsTrc("global", "Apply")
-                    buttonRole: ButtonBoxModel.ApplyRole
+                    buttonRole: ButtonBoxModel.CustomRole
                     buttonId: ButtonBoxModel.Apply
                     toolTipTitle: qsTrc("global", "Apply")
                     toolTipDescription: qsTrc("notation", "Saves the map, then plays the track with it. Cancel doesn't undo it.")

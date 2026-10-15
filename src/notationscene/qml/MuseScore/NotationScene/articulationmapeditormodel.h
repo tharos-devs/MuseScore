@@ -27,6 +27,7 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <QAbstractListModel>
@@ -64,6 +65,8 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QString fileName READ fileName NOTIFY fileChanged)
     Q_PROPERTY(bool isDirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(bool canApply READ canApply NOTIFY targetTrackChanged)
+    //! NOTE: shows only the articulations whose path or short name has every word of it (case ignored)
+    Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     //! NOTE: the target track's VST instrument window: whether it has one, and whether it's open
     Q_PROPERTY(bool hasInstrumentEditor READ hasInstrumentEditor NOTIFY instrumentEditorChanged)
     Q_PROPERTY(bool instrumentEditorOpened READ instrumentEditorOpened NOTIFY instrumentEditorChanged)
@@ -146,6 +149,8 @@ public:
     QString fileName() const;
     bool isDirty() const;
     bool canApply() const;
+    QString filterText() const;
+    void setFilterText(const QString& text);
     bool hasInstrumentEditor() const;
     bool instrumentEditorOpened() const;
 
@@ -248,6 +253,7 @@ public:
 
 signals:
     void fileChanged();
+    void filterTextChanged();
     void dirtyChanged();
     void headerChanged();
     void selectionChanged();
@@ -312,6 +318,7 @@ private:
 
     QString uniqueName(const Node* parent, const QString& name, const Node* except = nullptr) const;
     QString pathOf(const Node* node) const;
+    std::unordered_set<const Node*> nodesMatchingFilter() const;
     QString sequenceText(const Node* node) const;
     std::set<muse::mpe::ArticulationType> ambiguousImplicitAliases() const;
     static std::vector<muse::mpe::ArticulationType> scoreArticulationsOf(const Node* node,
@@ -329,6 +336,8 @@ private:
     std::unique_ptr<Node> m_root;
     std::vector<Row> m_rows;
     std::unordered_map<const Node*, int> m_numbers; // 1-based articulation numbers, folders excluded
+    QString m_filterText;
+    std::unordered_set<const Node*> m_shownWhileFiltered; // added since the filter was set: shown even when not matching
     const Node* m_defaultNode = nullptr;
     const Node* m_selectedNode = nullptr;
     std::vector<const Node*> m_selectedNodes; // m_selectedNode and the others selected with it
