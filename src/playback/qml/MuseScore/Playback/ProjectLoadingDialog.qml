@@ -37,7 +37,7 @@ StyledDialogView {
     title: root.projectName
 
     contentWidth: 360
-    contentHeight: 72
+    contentHeight: 120
 
     closeOnEscape: false
 
@@ -71,6 +71,20 @@ StyledDialogView {
             text: loadingModel.message
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
+        }
+    }
+
+    //! NOTE: stops the loading and closes the project (e.g. the wrong one, or a loading that doesn't end). It can
+    //! only be clicked between two plugins: one blocks the application while it loads
+    FlatButton {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 16
+
+        text: qsTrc("global", "Cancel")
+
+        onClicked: {
+            loadingModel.cancel()
         }
     }
 }

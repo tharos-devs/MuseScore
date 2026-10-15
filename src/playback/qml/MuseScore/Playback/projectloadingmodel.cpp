@@ -24,6 +24,7 @@
 
 #include <algorithm>
 
+#include "async/async.h"
 #include "async/notifylist.h"
 
 #include "engraving/dom/part.h"
@@ -66,6 +67,21 @@ void ProjectLoadingModel::load()
     m_checkTimer.setInterval(CHECK_INTERVAL_MS);
     connect(&m_checkTimer, &QTimer::timeout, this, &ProjectLoadingModel::checkFinished);
     m_checkTimer.start();
+}
+
+void ProjectLoadingModel::cancel()
+{
+    pluginsMainThreadTasks()->cancelPending();
+
+    //! NOTE: the project's closing closes this window too (with the other dialogs, waiting for each one to be
+    //! closed): not closed here, it could still be closing then, and the project's closing would never end. If the
+    //! project isn't closed (e.g. no project yet), this window closes once nothing is left to load (see
+    //! checkFinished()). Later: not from the window's button click
+    muse::async::Async::call(this, [this]() {
+        if (context()->currentProject()) {
+            dispatcher()->dispatch("file-close");
+        }
+    });
 }
 
 QString ProjectLoadingModel::message() const
