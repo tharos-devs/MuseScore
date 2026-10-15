@@ -58,6 +58,7 @@ struct ArticulationMapEditorModel::Node {
     bool expanded = true;
 
     // articulation only
+    QString shortName; // shown in the score instead of the name, when set
     std::vector<mpe::MidiMessage> messages;
     std::vector<mpe::ArticulationType> aliases;
     bool hasImplicitAliases = true; // re-derived from the name when saving, see ArticulationMapParser::implicitAliases
@@ -210,6 +211,7 @@ std::unique_ptr<ArticulationMapEditorModel::Node> ArticulationMapEditorModel::co
     copy->messages = entry.messages;
     copy->keyswitchOffsetMs = entry.keyswitchOffsetMs;
     copy->notesOffsetMs = entry.notesOffsetMs;
+    copy->shortName = entry.shortName;
     copy->channel = entry.channel;
     copy->color = entry.color;
     copy->disabled = entry.disabled;
@@ -235,6 +237,7 @@ QVariant ArticulationMapEditorModel::data(const QModelIndex& index, int role) co
 
     switch (role) {
     case NameRole: return node->name;
+    case ShortNameRole: return node->isFolder ? QString() : node->shortName;
     case IsFolderRole: return node->isFolder;
     case DepthRole: return m_rows.at(index.row()).depth;
     case IsExpandedRole: return node->expanded;
@@ -266,6 +269,7 @@ QHash<int, QByteArray> ArticulationMapEditorModel::roleNames() const
 {
     return {
         { NameRole, "name" },
+        { ShortNameRole, "shortName" },
         { IsFolderRole, "isFolder" },
         { DepthRole, "depth" },
         { IsExpandedRole, "isExpanded" },
@@ -662,6 +666,7 @@ void ArticulationMapEditorModel::setFile(const ArticulationMapParser::Result& fi
 
         auto node = std::make_unique<Node>();
         node->name = leafName;
+        node->shortName = entry.shortName.toQString();
         node->messages = entry.messages;
         node->aliases = entry.aliases;
         node->hasImplicitAliases = entry.aliases == ArticulationMapParser::implicitAliases(entry.id);
@@ -727,6 +732,7 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
 
             ExpressionMapEntry entry;
             entry.id = path;
+            entry.shortName = muse::String::fromQString(child->shortName);
             entry.messages = child->messages;
             entry.aliases = child->hasImplicitAliases ? ArticulationMapParser::implicitAliases(path) : child->aliases;
             entry.keyswitchOffsetMs = child->keyswitchOffsetMs;
@@ -1298,6 +1304,20 @@ int ArticulationMapEditorModel::selectedKeyswitchOffsetMs() const
 {
     const Node* entry = selectedEntry();
     return entry ? entry->keyswitchOffsetMs.value_or(m_keyswitchOffsetMs) : 0;
+}
+
+QString ArticulationMapEditorModel::selectedShortName() const
+{
+    const Node* entry = selectedEntry();
+    return entry ? entry->shortName : QString();
+}
+
+bool ArticulationMapEditorModel::selectedShortNameMixed() const
+{
+    const std::vector<Node*> entries = selectedEntries();
+    return std::any_of(entries.cbegin(), entries.cend(), [&entries](const Node* entry) {
+        return entry->shortName != entries.front()->shortName;
+    });
 }
 
 int ArticulationMapEditorModel::selectedNotesOffsetMs() const
@@ -1989,6 +2009,28 @@ void ArticulationMapEditorModel::setSelectedScoreArticulation(const QString& nam
 
     if (changed) {
         notifyAllRowsChanged();
+        markDirty();
+        emit selectionChanged();
+    }
+}
+
+void ArticulationMapEditorModel::setSelectedShortName(const QString& name)
+{
+    //! NOTE: ';' starts a comment and '"' ends the name in the file (see ArticulationMapParser)
+    QString shortName = name;
+    shortName.remove(u';').remove(u'"');
+    shortName = shortName.trimmed();
+
+    bool changed = false;
+    for (Node* entry : selectedEntries()) {
+        if (entry->shortName != shortName) {
+            entry->shortName = shortName;
+            notifyRowChanged(entry);
+            changed = true;
+        }
+    }
+
+    if (changed) {
         markDirty();
         emit selectionChanged();
     }

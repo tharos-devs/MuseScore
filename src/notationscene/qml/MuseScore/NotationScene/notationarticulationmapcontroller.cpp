@@ -83,8 +83,15 @@ static QColor artMapEntryColor(const ExpressionMap& map, const muse::String& ent
     return artMapPaletteColor(index);
 }
 
-static QString artMapLeafName(const muse::String& entryId)
+//! NOTE: the entry's short name if it has one, else the last part of its label (e.g. "Fast" for "Legato > Fast")
+static QString artMapLaneLabel(const ExpressionMap& map, const muse::String& entryId)
 {
+    for (const ExpressionMapEntry& entry : map.entries) {
+        if (entry.id == entryId && !entry.shortName.empty()) {
+            return entry.shortName.toQString();
+        }
+    }
+
     const QString id = entryId.toQString();
     const qsizetype pos = id.lastIndexOf('>');
     return (pos < 0 ? id : id.mid(pos + 1)).trimmed();
@@ -452,7 +459,7 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
         if (isOwnMark && entry.mark && entry.mark->tickOffset != 0) {
             chip.xN = toN(entry.canvasX + entry.mark->tickOffset / ticksPerCanvasUnit(entry.chord));
         }
-        chip.label = artMapLeafName(entry.entryId);
+        chip.label = artMapLaneLabel(*map, entry.entryId);
         chip.fullName = entry.entryId.toQString();
         chip.color = color;
         chip.kind = isOwnMark ? ArticulationMapOverlay::ChipData::Kind::Mark

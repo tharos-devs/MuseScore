@@ -103,8 +103,11 @@ Item {
     signal navigateControlIndexChanged(var index)
 
     signal reorderPressed(real globalX, real globalY)
-    signal reorderPositionChanged(real globalX, real globalY)
+    //! NOTE: modifiers: the keyboard's (Qt.KeyboardModifiers) at that move, e.g. to copy instead of moving
+    signal reorderPositionChanged(real globalX, real globalY, int modifiers)
     signal reorderReleased()
+    //! NOTE: the drag stopped without a release (e.g. the mouse taken by something else)
+    signal reorderCanceled()
 
     //! NOTE For a caller to restore keyboard/accessibility focus onto this
     //! specific slot's title after a reorder -- reordering (like any other
@@ -135,6 +138,8 @@ Item {
         readonly property bool isSelectorButtonHovered: rootMouseArea.containsMouse && selectorLoader.visible && selectorLoader.contains(rootMouseArea.mapToItem(selectorLoader, rootMouseArea.mouseX, rootMouseArea.mouseY))
 
         property bool dragThresholdExceeded: false
+        //! NOTE: the title button's last press came from the mouse, not the keyboard (see its onClicked)
+        property bool lastPressedByMouse: false
         property point pressGlobalPos
     }
 
@@ -259,6 +264,10 @@ Item {
                         root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
                     }
                 }
+                //! NOTE: before the click it makes (see onClicked)
+                navigation.onTriggered: {
+                    prv.lastPressedByMouse = false
+                }
 
                 backgroundItem: RoundedRectangle {
                     id: titleButtonBackground
@@ -327,8 +336,17 @@ Item {
                 }
 
                 mouseArea.cursorShape: root.reorderingActive ? Qt.SizeVerCursor : Qt.ArrowCursor
+                //! NOTE: or a scrollable view around (e.g. the Mixer's, with more channels than shown) takes the
+                //! mouse once it moves its way, ending the drag
+                mouseArea.preventStealing: root.reorderingActive
 
+                //! NOTE: a slot that can be dragged opens its editor on the mouse release instead (see onReleased
+                //! below); the keyboard still goes through here
                 onClicked: {
+                    if (root.reorderingActive && prv.lastPressedByMouse) {
+                        return
+                    }
+
                     if (!prv.dragThresholdExceeded && !root.nativeEditorUnavailable) {
                         root.titleClicked()
                     }
@@ -346,6 +364,7 @@ Item {
                     enabled: root.reorderingActive
 
                     function onPressed(mouse) {
+                        prv.lastPressedByMouse = true
                         prv.dragThresholdExceeded = false
                         prv.pressGlobalPos = titleButton.mouseArea.mapToItem(null, mouse.x, mouse.y)
                     }
@@ -365,12 +384,28 @@ Item {
                             root.reorderPressed(prv.pressGlobalPos.x, prv.pressGlobalPos.y)
                         }
 
-                        root.reorderPositionChanged(globalPos.x, globalPos.y)
+                        root.reorderPositionChanged(globalPos.x, globalPos.y, mouse.modifiers)
                     }
 
                     function onReleased(mouse) {
                         if (prv.dragThresholdExceeded) {
+                            //! NOTE: or the keyboard couldn't open the editor anymore (see onClicked)
+                            prv.dragThresholdExceeded = false
                             root.reorderReleased()
+                            return
+                        }
+
+                        //! NOTE: no drag: a click, released on the slot
+                        const inside = mouse.x >= 0 && mouse.y >= 0 && mouse.x < titleButton.width && mouse.y < titleButton.height
+                        if (inside && !root.nativeEditorUnavailable) {
+                            root.titleClicked()
+                        }
+                    }
+
+                    function onCanceled() {
+                        if (prv.dragThresholdExceeded) {
+                            prv.dragThresholdExceeded = false
+                            root.reorderCanceled()
                         }
                     }
                 }

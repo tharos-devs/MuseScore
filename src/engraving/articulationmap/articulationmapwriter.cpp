@@ -94,6 +94,10 @@ static String entryLine(const ExpressionMapEntry& entry, bool isDefault, int mid
         line += u" color=#" + String::fromAscii(hex);
     }
 
+    if (!entry.shortName.empty()) {
+        line += u" short=\"" + entry.shortName + u"\"";
+    }
+
     return line;
 }
 

@@ -26,6 +26,8 @@
 #include <cmath>
 
 #include <QCoreApplication>
+#include <QCursor>
+#include <QGuiApplication>
 #include <QPointer>
 #include <QTimer>
 
@@ -65,6 +67,9 @@ MixerPanelModel::MixerPanelModel(QObject* parent)
 
 MixerPanelModel::~MixerPanelModel()
 {
+    //! NOTE: closed while dragging an effect
+    restoreDragCursor();
+
     //! NOTE: the channel items are children of this model, but the views only deleteLater() the delegates showing
     //! them once destroyed themselves, i.e. after this model (declared first in MixerPanel.qml) - so the items are
     //! detached from it, and only queued for deletion one event loop iteration later, behind those delegates
@@ -336,38 +341,96 @@ void MixerPanelModel::connectFxChangeFanOut(MixerChannelItem* item)
                 }
             }
 
-            std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > changedBefore;
-            std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > changedAfter;
-            for (const auto& [trackId, chain] : before) {
-                MixerChannelItem* channel = guard->findChannelItem(trackId);
-                if (channel && channel->outputParams().fxChain != chain) {
-                    changedBefore.push_back({ trackId, chain });
-                    changedAfter.push_back({ trackId, channel->outputParams().fxChain });
-                }
-            }
-
-            IProjectUndoStackPtr undoStack = guard->projectUndoStack();
-            if (!undoStack || changedBefore.empty()) {
-                return;
-            }
-
-            auto restore = [guard](const std::vector<std::pair<muse::audio::TrackId, AudioFxChain> >& chains) {
-                if (!guard) {
-                    return;
-                }
-
-                for (const auto& [trackId, chain] : chains) {
-                    if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
-                        channel->restoreFxChain(chain);
-                    }
-                }
-            };
-
-            undoStack->push(muse::TranslatableString("undoableAction", "Change Mixer audio effect"),
-                            [restore, changedAfter]() { restore(changedAfter); },
-                            [restore, changedBefore]() { restore(changedBefore); });
+            guard->pushFxChainsUndo(muse::TranslatableString("undoableAction", "Change Mixer audio effect"), before);
         });
     });
+}
+
+void MixerPanelModel::pushFxChainsUndo(const muse::TranslatableString& actionName, const TrackFxChains& before)
+{
+    TrackFxChains changedBefore;
+    TrackFxChains changedAfter;
+    for (const auto& [trackId, chain] : before) {
+        MixerChannelItem* channel = findChannelItem(trackId);
+        if (channel && channel->outputParams().fxChain != chain) {
+            changedBefore.push_back({ trackId, chain });
+            changedAfter.push_back({ trackId, channel->outputParams().fxChain });
+        }
+    }
+
+    IProjectUndoStackPtr undoStack = projectUndoStack();
+    if (!undoStack || changedBefore.empty()) {
+        return;
+    }
+
+    QPointer<MixerPanelModel> guard(this);
+    auto restore = [guard](const TrackFxChains& chains) {
+        if (!guard) {
+            return;
+        }
+
+        for (const auto& [trackId, chain] : chains) {
+            if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
+                channel->restoreFxChain(chain);
+            }
+        }
+    };
+
+    undoStack->push(actionName,
+                    [restore, changedAfter]() { restore(changedAfter); },
+                    [restore, changedBefore]() { restore(changedBefore); });
+}
+
+bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerChannelItem* target, int insertIndex, bool duplicate)
+{
+    if (!source || !target || source == target) {
+        return false;
+    }
+
+    const QList<OutputResourceItem*> sourceItems = source->outputResourceItemList();
+    if (sourceIndex < 0 || sourceIndex >= sourceItems.size() || sourceItems[sourceIndex]->isBlank()) {
+        return false;
+    }
+
+    OutputResourceItem* sourceItem = sourceItems[sourceIndex];
+
+    const TrackFxChains before {
+        { source->trackId(), source->outputParams().fxChain },
+        { target->trackId(), target->outputParams().fxChain },
+    };
+
+    //! NOTE: the effect with its settings (and on/off state): the target's own instance is created with them
+    if (!target->insertFx(insertIndex, sourceItem->params())) {
+        return false;
+    }
+
+    if (!duplicate) {
+        sourceItem->setFx(muse::audio::AudioResourceMeta());
+    }
+
+    pushFxChainsUndo(duplicate ? muse::TranslatableString("undoableAction", "Copy Mixer audio effect")
+                     : muse::TranslatableString("undoableAction", "Move Mixer audio effect"), before);
+
+    return true;
+}
+
+void MixerPanelModel::setDragCursor(int cursorShape)
+{
+    const QCursor cursor(static_cast<Qt::CursorShape>(cursorShape));
+    if (m_dragCursorSet) {
+        QGuiApplication::changeOverrideCursor(cursor);
+    } else {
+        QGuiApplication::setOverrideCursor(cursor);
+        m_dragCursorSet = true;
+    }
+}
+
+void MixerPanelModel::restoreDragCursor()
+{
+    if (m_dragCursorSet) {
+        QGuiApplication::restoreOverrideCursor();
+        m_dragCursorSet = false;
+    }
 }
 
 void MixerPanelModel::connectAuxSendReassignment(MixerChannelItem* item)

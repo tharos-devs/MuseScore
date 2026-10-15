@@ -32,6 +32,7 @@
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
 
+#include "actions/iactionsdispatcher.h"
 #include "audio/main/iplayback.h"
 #include "audioplugins/iaudiopluginsmainthreadtasks.h"
 #include "context/iglobalcontext.h"
@@ -54,11 +55,16 @@ class ProjectLoadingModel : public QObject, public muse::async::Asyncable, publi
     muse::ContextInject<muse::audio::IPlayback> audioPlayback = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
 
 public:
     explicit ProjectLoadingModel(QObject* parent = nullptr);
 
     Q_INVOKABLE void load();
+
+    //! NOTE: the window's Cancel: the plugins not loaded yet won't be, and the project closes with this window
+    //! (the main window goes back to the home page)
+    Q_INVOKABLE void cancel();
 
     QString message() const;
 

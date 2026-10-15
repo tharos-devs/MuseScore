@@ -87,6 +87,10 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(bool selectedHasKeyswitchOffsetMixed READ selectedHasKeyswitchOffsetMixed NOTIFY selectionChanged)
     Q_PROPERTY(int selectedKeyswitchOffsetMs READ selectedKeyswitchOffsetMs NOTIFY selectionChanged)
     Q_PROPERTY(int selectedNotesOffsetMs READ selectedNotesOffsetMs NOTIFY selectionChanged)
+    //! NOTE: shown in the score instead of the name (e.g. "Marcato" for "Marcato > Senza vibrato"); mixed: the selected
+    //! articulations have different ones
+    Q_PROPERTY(QString selectedShortName READ selectedShortName NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedShortNameMixed READ selectedShortNameMixed NOTIFY selectionChanged)
     //! NOTE: 1-16, 0 = the track's channel
     Q_PROPERTY(int selectedChannel READ selectedChannel NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList selectedMessages READ selectedMessages NOTIFY selectionChanged)
@@ -165,6 +169,8 @@ public:
     bool selectedHasKeyswitchOffset() const;
     bool selectedHasKeyswitchOffsetMixed() const;
     int selectedKeyswitchOffsetMs() const;
+    QString selectedShortName() const;
+    bool selectedShortNameMixed() const;
     int selectedNotesOffsetMs() const;
     int selectedChannel() const;
     QVariantList selectedMessages() const;
@@ -226,6 +232,7 @@ public:
     Q_INVOKABLE void setSelectedHasKeyswitchOffset(bool has);
     Q_INVOKABLE void setSelectedKeyswitchOffsetMs(int ms);
     Q_INVOKABLE void setSelectedNotesOffsetMs(int ms);
+    Q_INVOKABLE void setSelectedShortName(const QString& name);
     Q_INVOKABLE void setSelectedChannel(int channel);
     //! NOTE: adds/removes the score articulation (by name) to/from what selects each selected articulation
     Q_INVOKABLE void setSelectedScoreArticulation(const QString& name, bool selects);
@@ -249,6 +256,7 @@ signals:
 private:
     enum Roles {
         NameRole = Qt::UserRole + 1,
+        ShortNameRole,
         IsFolderRole,
         DepthRole,
         IsExpandedRole,

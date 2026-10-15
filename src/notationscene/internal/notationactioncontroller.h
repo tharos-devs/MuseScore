@@ -42,6 +42,8 @@
 #include "playback/iplaybackcontroller.h"
 #include "engraving/iengravingconfiguration.h"
 #include "notation/inotationconfiguration.h"
+#include <QTimer>
+
 #include "notationscene/inotationsceneconfiguration.h"
 
 #include "notation/inotation_fwd.h"
@@ -232,6 +234,11 @@ private:
     muse::Ret removeArticulationMap(const muse::rcommand::Params& params);
     void loadArticulationMapFile(const engraving::InstrumentTrackId& trackId, const muse::io::path_t& path, bool isReload);
     void openArticulationMapEditor(const engraving::InstrumentTrackId& trackId, const muse::UriQuery& uri);
+
+    //! NOTE: a score just opened: the tracks whose articulation map file changed since the score was saved (its
+    //! copy of the map differs from the file), to reload after asking - once the project's loading window is closed
+    void checkArticulationMapFilesChanged();
+    void askToReloadChangedArticulationMaps(const std::map<muse::io::path_t, std::vector<engraving::InstrumentTrackId> >& changed);
     void openTupletOtherDialog();
     void openStaffTextPropertiesDialog();
     void openMeasurePropertiesDialog();
@@ -363,5 +370,8 @@ private:
     };
     std::map<engraving::InstrumentTrackId, OpenArticulationMapEditor> m_articulationMapEditors;
     int m_lastArticulationMapEditorOpeningId = 0;
+
+    //! NOTE: see checkArticulationMapFilesChanged(): waits for the project's loading window to be closed
+    QTimer m_articulationMapFilesCheckTimer;
 };
 }

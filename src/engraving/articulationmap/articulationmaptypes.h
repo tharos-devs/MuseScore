@@ -37,6 +37,7 @@ namespace mu::engraving {
 //! NOTE: one articulation of a sample library, and the raw MIDI messages that select it
 struct ExpressionMapEntry {
     muse::String id; // full label path, e.g. "Legato > Fast"
+    muse::String shortName; // shown instead of the label's last part in the score (e.g. "Marcato" for "Marcato > Senza vibrato")
     std::vector<muse::mpe::MidiMessage> messages;
     std::vector<muse::mpe::ArticulationType> aliases; // score articulations that select this entry automatically
     std::optional<int> keyswitchOffsetMs; // overrides ExpressionMap::keyswitchOffsetMs
@@ -47,7 +48,7 @@ struct ExpressionMapEntry {
 
     bool operator==(const ExpressionMapEntry& e) const
     {
-        return id == e.id && messages == e.messages && aliases == e.aliases
+        return id == e.id && shortName == e.shortName && messages == e.messages && aliases == e.aliases
                && keyswitchOffsetMs == e.keyswitchOffsetMs && notesOffsetMs == e.notesOffsetMs && channel == e.channel
                && color == e.color && disabled == e.disabled;
     }
