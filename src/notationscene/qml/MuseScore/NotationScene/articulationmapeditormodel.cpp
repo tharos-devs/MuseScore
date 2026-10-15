@@ -490,12 +490,11 @@ QVariantList ArticulationMapEditorModel::scoreMarkingsOf(const Node* node) const
     return result;
 }
 
-//! NOTE: back to the name's own when they're that: they follow a rename then, and aren't written in the file
-void ArticulationMapEditorModel::setScoreArticulations(Node* node, const std::vector<mpe::ArticulationType>& types,
-                                                       const std::set<mpe::ArticulationType>& ambiguous)
+//! NOTE: chosen, even when the name gives the same: they keep their precedence over the ones coming from a name
+void ArticulationMapEditorModel::setScoreArticulations(Node* node, const std::vector<mpe::ArticulationType>& types)
 {
-    node->hasImplicitAliases = types == ArticulationMapParser::implicitAliases(String::fromQString(node->name), ambiguous);
-    node->aliases = node->hasImplicitAliases ? std::vector<mpe::ArticulationType> {} : types;
+    node->hasImplicitAliases = false;
+    node->aliases = types;
 }
 
 QString ArticulationMapEditorModel::uniqueName(const Node* parent, const QString& name, const Node* except) const
@@ -1605,7 +1604,6 @@ void ArticulationMapEditorModel::copySelectedArticulation()
         }
     }
 
-    const std::set<mpe::ArticulationType> ambiguous = ambiguousImplicitAliases();
     std::vector<const Node*> copies;
     for (const auto& [parent, groupEntries] : groups) {
         size_t index = 0;
@@ -1616,8 +1614,11 @@ void ArticulationMapEditorModel::copySelectedArticulation()
         for (const Node* entry : groupEntries) {
             std::unique_ptr<Node> copy = copyOfArticulation(*entry);
             copy->name = uniqueName(parent, entry->name);
-            // what selects it, even when it came from the name ("Staccato" copied as "Staccato 2")
-            setScoreArticulations(copy.get(), scoreArticulationsOf(entry, ambiguous), ambiguous);
+            // the chosen markings only: the ones of the name would take precedence over the original as chosen
+            // ("Staccato" copied as "Staccato 2" doesn't take the dots from it)
+            if (!entry->hasImplicitAliases) {
+                setScoreArticulations(copy.get(), entry->aliases);
+            }
             copies.push_back(parent->addChild(std::move(copy), index++));
         }
     }
@@ -2042,7 +2043,7 @@ void ArticulationMapEditorModel::setSelectedScoreArticulation(const QString& nam
             std::erase(types, *type);
         }
 
-        setScoreArticulations(entry, types, ambiguous);
+        setScoreArticulations(entry, types);
         changed = true;
     }
 

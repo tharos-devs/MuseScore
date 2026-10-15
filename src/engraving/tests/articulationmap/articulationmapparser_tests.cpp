@@ -337,4 +337,34 @@ TEST_F(ArticulationMapParser_Tests, EntryForArticulations_ExplicitFirst)
     entry = map.entryForArticulations(accent);
     ASSERT_TRUE(entry);
     EXPECT_EQ(entry->id, u"Accent");
+
+    // [THEN] Between different score articulations too, even when the later one is explicit
+    mpe::ArticulationMap both = staccato;
+    both.emplace(mpe::ArticulationType::Accent, mpe::ArticulationAppliedData());
+    entry = map.entryForArticulations(both);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Accent");
+}
+
+TEST_F(ArticulationMapParser_Tests, EntryForArticulations_ExplicitOnlyForItsOwnMarking)
+{
+    // [GIVEN] A pizzicato selected by its name, above a spiccato explicitly selected by staccato dots
+    const ExpressionMap map = ArticulationMapParser::parse(u"*C0 Sustain\n"
+                                                           u"D0 Strings > Pizzicato\n"
+                                                           u"E0 Spiccato = staccato\n").map;
+
+    mpe::ArticulationMap staccato;
+    staccato.emplace(mpe::ArticulationType::Staccato, mpe::ArticulationAppliedData());
+
+    // [THEN] Staccato dots under "pizz." still play the pizzicato: the explicit list only wins over the same marking
+    const ExpressionMapEntry* entry = map.entryForArticulations(staccato, mpe::ArticulationType::Pizzicato);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Strings > Pizzicato");
+
+    // [THEN] Disabled, the explicit entry no longer overrides the name of another one
+    const ExpressionMap withStaccato = ArticulationMapParser::parse(u"C0 Short > Staccato\n"
+                                                                    u"-D0 Spiccato = staccato\n").map;
+    entry = withStaccato.entryForArticulations(staccato);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Short > Staccato");
 }

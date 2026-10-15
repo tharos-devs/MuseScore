@@ -21,6 +21,7 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -76,8 +77,8 @@ struct ExpressionMap {
         return nullptr;
     }
 
-    //! NOTE: the entries with explicit aliases come first, then the entry order is the priority order (also when a chord
-    //! has several score articulations).
+    //! NOTE: entry order is the priority order when a chord has several score articulations, but a score articulation
+    //! an entry has explicitly isn't taken from the name of another one (wherever they are).
     //! playingTechnique: the staff's playing technique in effect (e.g. "pizz."), checked like a score articulation
     const ExpressionMapEntry* entryForArticulations(const muse::mpe::ArticulationMap& articulations,
                                                     muse::mpe::ArticulationType playingTechnique = muse::mpe::ArticulationType::Undefined)
@@ -85,16 +86,21 @@ struct ExpressionMap {
     {
         const bool hasTechnique = playingTechnique != muse::mpe::ArticulationType::Undefined;
 
-        for (const bool explicitAliases : { true, false }) {
-            for (const ExpressionMapEntry& e : entries) {
-                if (e.disabled || e.explicitAliases != explicitAliases) {
-                    continue;
-                }
+        auto isExplicitAlias = [this](muse::mpe::ArticulationType type) {
+            return std::any_of(entries.cbegin(), entries.cend(), [type](const ExpressionMapEntry& e) {
+                return !e.disabled && e.explicitAliases && std::find(e.aliases.cbegin(), e.aliases.cend(), type) != e.aliases.cend();
+            });
+        };
 
-                for (const muse::mpe::ArticulationType type : e.aliases) {
-                    if (articulations.contains(type) || (hasTechnique && type == playingTechnique)) {
-                        return &e;
-                    }
+        for (const ExpressionMapEntry& e : entries) {
+            if (e.disabled) {
+                continue;
+            }
+
+            for (const muse::mpe::ArticulationType type : e.aliases) {
+                const bool matches = articulations.contains(type) || (hasTechnique && type == playingTechnique);
+                if (matches && (e.explicitAliases || !isExplicitAlias(type))) {
+                    return &e;
                 }
             }
         }

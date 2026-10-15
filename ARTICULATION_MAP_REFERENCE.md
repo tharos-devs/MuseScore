@@ -12,10 +12,10 @@ sélectionne automatiquement dans l'articulation lane.
 - **Liste explicite** (`Nom = a, b, c`, ou les déclencheurs de l'éditeur) : casse ignorée, mais **pas d'espaces** :
   écrire `SnapPizzicato`, pas `snap pizzicato` (sinon erreur « unknown score articulation »). Une liste explicite
   remplace le nom implicite.
-- **Priorité** : les entrées à **liste explicite** passent avant celles à nom implicite, quel que soit leur ordre ;
-  ensuite, si une note porte plusieurs signes (ex. accent + staccato, ou staccato sous « pizz. ») ou que plusieurs
-  entrées ont le même signe, c'est la **première entrée de la map** qui correspond qui gagne. Une entrée désactivée
-  (`-`) est ignorée.
+- **Priorité** : pour un même signe, une entrée qui l'a en **liste explicite** passe avant celles qui l'ont par leur
+  nom, quel que soit leur ordre. Sinon (plusieurs entrées explicites avec le même signe, ou une note qui porte
+  plusieurs signes, ex. accent + staccato, ou staccato sous « pizz. »), c'est la **première entrée de la map** qui
+  correspond qui gagne. Une entrée désactivée (`-`) est ignorée.
 - **Ordre de résolution** pour chaque note : marque posée dans la lane > signe détecté (ce document) > marque
   latched précédente > articulation par défaut (`*`).
 - Un nom absent de ce document (`Spiccato`, `Flautando`…) n'est jamais détecté seul : soit on le pose à la main dans
