@@ -429,6 +429,7 @@ inline static const muse::rcommand::Command LOAD_ARTICULATION_MAP_COMMAND("comma
 inline static const muse::rcommand::Command EDIT_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-edit");
 inline static const muse::rcommand::Command RELOAD_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-reload");
 inline static const muse::rcommand::Command REMOVE_ARTICULATION_MAP_COMMAND("command://notation/articulation-map-remove");
+inline static const muse::rcommand::Command CLOSE_ARTICULATION_MAP_EDITOR_COMMAND("command://notation/articulation-map-close-editor");
 inline static const muse::rcommand::Command OPEN_REALIZECHORDSYMBOLS_COMMAND("command://notation/open-realizechordsymbols");
 
 // style commands

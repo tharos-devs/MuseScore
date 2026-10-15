@@ -23,6 +23,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <QColor>
 #include <QJsonObject>
@@ -90,6 +91,19 @@ struct AudioOutputParams {
         eq = control.eq;
     }
 };
+
+//! NOTE: a folder of the Track list: the tracks and buses it holds, by key ("part:<part id>", "aux:<bus index>"), and
+//! where it is among the list's top-level rows: before the one with the key `before` (another folder's position when
+//! that one is in a folder too; empty: at the end). Only the Track list's organization: the score isn't changed
+struct TrackListFolder {
+    muse::String name;
+    bool collapsed = false;
+    muse::String before;
+    std::vector<muse::String> members;
+
+    bool operator==(const TrackListFolder& other) const = default;
+};
+using TrackListFolders = std::vector<TrackListFolder>;
 
 class IProjectAudioSettings
 {
@@ -175,6 +189,9 @@ public:
     virtual int takeNextAuxSortOrder(bool isGroupBus, bool notifySettingsChanged = true) = 0;
 
     virtual void removeTrackParams(const engraving::InstrumentTrackId& trackId) = 0;
+
+    virtual const TrackListFolders& trackListFolders() const = 0;
+    virtual void setTrackListFolders(const TrackListFolders& folders) = 0;
 
     virtual const playback::SoundProfileName& activeSoundProfile() const = 0;
     virtual void setActiveSoundProfile(const playback::SoundProfileName& profileName) = 0;

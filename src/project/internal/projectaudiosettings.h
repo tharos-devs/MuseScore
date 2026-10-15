@@ -89,6 +89,9 @@ public:
 
     void removeTrackParams(const engraving::InstrumentTrackId& partId) override;
 
+    const TrackListFolders& trackListFolders() const override;
+    void setTrackListFolders(const TrackListFolders& folders) override;
+
     const playback::SoundProfileName& activeSoundProfile() const override;
     void setActiveSoundProfile(const playback::SoundProfileName& profileName) override;
 
@@ -148,6 +151,8 @@ private:
     std::unordered_map<muse::audio::aux_channel_idx_t, bool> m_auxIsGroupBusMap;
 
     std::unordered_map<muse::audio::aux_channel_idx_t, muse::String> m_auxNamesMap;
+
+    TrackListFolders m_trackListFolders;
 
     std::unordered_map<muse::audio::aux_channel_idx_t, muse::audio::aux_channel_idx_t> m_auxDisplayNumberMap;
     muse::audio::aux_channel_idx_t m_nextFxDisplayNumber = 1;

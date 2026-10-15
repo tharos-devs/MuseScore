@@ -64,11 +64,15 @@ using namespace mu::project;
 static const muse::Settings::Key STRIP_HEIGHT_KEY("playback", "playback/trackList/stripHeight");
 //! NOTE: higher than any strip: all of it shown, even once it grows (see TrackListPanel.qml)
 static constexpr int FULL_STRIP_HEIGHT = 100000;
+static const muse::Settings::Key STRIP_CONTENT_HEIGHT_KEY("playback", "playback/trackList/stripContentHeight");
+//! NOTE: about the strip's controls, until a channel is shown once
+static constexpr int DEFAULT_STRIP_CONTENT_HEIGHT = 330;
 
 TrackListModel::TrackListModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
     muse::settings()->setDefaultValue(STRIP_HEIGHT_KEY, muse::Val(FULL_STRIP_HEIGHT));
+    muse::settings()->setDefaultValue(STRIP_CONTENT_HEIGHT_KEY, muse::Val(DEFAULT_STRIP_CONTENT_HEIGHT));
 }
 
 TrackListModel::~TrackListModel()
@@ -214,6 +218,7 @@ void TrackListModel::onCurrentNotationChanged()
 
         m_notation->interaction()->selectionChanged().onNotify(this, [this]() {
             selectRowsOfScoreSelection();
+            requestFirstSelectedRowShown();
         });
 
         if (m_notation->soloMuteState()) {
@@ -258,6 +263,7 @@ void TrackListModel::onCurrentNotationChanged()
         m_audioSettings->settingsChanged().onNotify(this, [this]() {
             updateColors();
             updateAuxBusTitles();
+            loadFolders();
         });
     }
 
@@ -439,13 +445,9 @@ void TrackListModel::reload()
         row.item = buildChannelItem(partTracks);
         updateRowState(row);
 
-        auto isSameChannel = [&partTracks](const PartTracks& tracks) {
-            if (tracks.auxIndex || partTracks.auxIndex) {
-                return tracks.auxIndex == partTracks.auxIndex;
-            }
-            return tracks.instrumentTrackId == partTracks.instrumentTrackId;
-        };
-        const bool wasSelected = std::any_of(selectedTracks.cbegin(), selectedTracks.cend(), isSameChannel);
+        const bool wasSelected = std::any_of(selectedTracks.cbegin(), selectedTracks.cend(), [&partTracks](const PartTracks& tracks) {
+            return isSameChannel(tracks, partTracks);
+        });
         if (wasSelected) {
             row.item->setSelected(true);
             if (m_selectionAnchorIndex < 0) {
@@ -464,6 +466,8 @@ void TrackListModel::reload()
         oldItems.push_back(row.item);
     }
     m_rows = std::move(newRows);
+    m_folders = m_audioSettings ? m_audioSettings->trackListFolders() : TrackListFolders();
+    rebuildDisplayRows();
 
     endResetModel();
 
@@ -491,6 +495,10 @@ void TrackListModel::connectGlobalMuteSolo(MixerChannelItem* item)
     connect(item, &MixerChannelItem::mutedChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::forceMuteChanged, this, &TrackListModel::globalMuteEngagedChanged);
     connect(item, &MixerChannelItem::soloChanged, this, &TrackListModel::globalSoloEngagedChanged);
+
+    //! NOTE: the folders' Mute/Solo show their tracks'
+    connect(item, &MixerChannelItem::mutedChanged, this, &TrackListModel::notifyFolderRowsChanged);
+    connect(item, &MixerChannelItem::soloChanged, this, &TrackListModel::notifyFolderRowsChanged);
 }
 
 MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
@@ -631,9 +639,12 @@ void TrackListModel::updateRowStates()
     bool changed = false;
     for (int i = 0; i < m_rows.size(); ++i) {
         if (updateRowState(m_rows[i])) {
-            const QModelIndex modelIndex = index(i);
-            emit dataChanged(modelIndex, modelIndex, { PartVisibleRole, HasArticulationMapRole, IsVstInstrumentRole,
-                                                       ArticulationMapEditorOpenedRole, InstrumentEditorOpenedRole });
+            const int displayRow = displayRowOfChannel(i);
+            if (displayRow >= 0) {
+                const QModelIndex modelIndex = index(displayRow);
+                emit dataChanged(modelIndex, modelIndex, { PartVisibleRole, HasArticulationMapRole, IsVstInstrumentRole,
+                                                           ArticulationMapEditorOpenedRole, InstrumentEditorOpenedRole });
+            }
             changed = true;
         }
     }
@@ -822,9 +833,10 @@ void TrackListModel::resetTrackColor(int row)
 }
 
 //! NOTE: the whole part: its other instruments' tracks too
-void TrackListModel::applyTrackColor(int row, const QColor& color, const TranslatableString& actionName)
+void TrackListModel::applyTrackColor(int displayRow, const QColor& color, const TranslatableString& actionName)
 {
-    if (row < 0 || row >= m_rows.size()) {
+    const int row = channelRowAt(displayRow);
+    if (row < 0) {
         return;
     }
 
@@ -846,9 +858,10 @@ void TrackListModel::applyTrackColor(int row, const QColor& color, const Transla
     ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
 }
 
-void TrackListModel::selectRow(int row, bool toggle, bool range)
+void TrackListModel::selectRow(int displayRow, bool toggle, bool range)
 {
-    if (row < 0 || row >= m_rows.size()) {
+    const int row = channelRowAt(displayRow);
+    if (row < 0) {
         return;
     }
 
@@ -901,22 +914,88 @@ void TrackListModel::selectRowsOfScoreSelection()
     }
 }
 
+//! NOTE: the same track (its part's) or bus, whatever its row's channel item
+bool TrackListModel::isSameChannel(const PartTracks& tracks1, const PartTracks& tracks2)
+{
+    if (tracks1.auxIndex || tracks2.auxIndex) {
+        return tracks1.auxIndex == tracks2.auxIndex;
+    }
+
+    return tracks1.instrumentTrackId == tracks2.instrumentTrackId;
+}
+
+//! NOTE: the first selected row's channel; with none selected, the one shown last (found again in the rebuilt rows),
+//! or the first instrument track's: the strip is never empty while there's a channel
 void TrackListModel::updateStripChannelItem()
 {
-    MixerChannelItem* item = nullptr;
+    const Row* shown = nullptr;
     for (const Row& row : std::as_const(m_rows)) {
         if (row.item->selected()) {
-            item = row.item;
+            shown = &row;
             break;
         }
     }
 
-    if (m_stripChannelItem != item) {
-        m_stripChannelItem = item;
-        if (item) {
+    for (const Row& row : std::as_const(m_rows)) {
+        if (shown) {
+            break;
+        }
+        if (m_stripTracks && isSameChannel(row.tracks, *m_stripTracks)) {
+            shown = &row;
+        }
+    }
+
+    for (const Row& row : std::as_const(m_rows)) {
+        if (shown) {
+            break;
+        }
+        if (!row.tracks.auxIndex) {
+            shown = &row;
+        }
+    }
+
+    if (!shown && !m_rows.isEmpty()) {
+        shown = &m_rows.front();
+    }
+
+    MixerChannelItem* item = shown ? shown->item : nullptr;
+    if (shown) {
+        m_stripTracks = shown->tracks;
+    }
+
+    const bool selected = item && item->selected();
+    if (m_stripChannelItem != item || m_stripChannelSelected != selected) {
+        if (item && m_stripChannelItem != item) {
             item->showAllSlots();
         }
+        m_stripChannelItem = item;
+        m_stripChannelSelected = selected;
         emit stripChannelItemChanged();
+    }
+}
+
+bool TrackListModel::stripChannelSelected() const
+{
+    return m_stripChannelSelected;
+}
+
+//! NOTE: the first selected track or bus's row, or its collapsed folder's
+void TrackListModel::requestFirstSelectedRowShown()
+{
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (!m_rows.at(i).item->selected()) {
+            continue;
+        }
+
+        const int folder = folderOfChannel(i);
+        for (size_t row = 0; row < m_displayRows.size(); ++row) {
+            const DisplayRow& displayRow = m_displayRows.at(row);
+            if (displayRow.channelRow == i || (folder >= 0 && displayRow.folder == folder && m_folders.at(folder).collapsed)) {
+                emit rowShowRequested(static_cast<int>(row));
+                return;
+            }
+        }
+        return;
     }
 }
 
@@ -928,6 +1007,21 @@ MixerChannelItem* TrackListModel::stripChannelItem() const
 int TrackListModel::fullStripHeight() const
 {
     return FULL_STRIP_HEIGHT;
+}
+
+int TrackListModel::stripContentHeight() const
+{
+    return muse::settings()->value(STRIP_CONTENT_HEIGHT_KEY).toInt();
+}
+
+void TrackListModel::setStripContentHeight(int height)
+{
+    if (height <= 0 || height == stripContentHeight()) {
+        return;
+    }
+
+    muse::settings()->setSharedValue(STRIP_CONTENT_HEIGHT_KEY, muse::Val(height));
+    emit stripContentHeightChanged();
 }
 
 int TrackListModel::stripHeight() const
@@ -1018,13 +1112,36 @@ int TrackListModel::rowOf(const InstrumentTrackId& instrumentTrackId) const
 
 QVariant TrackListModel::data(const QModelIndex& index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_rows.size()) {
+    if (!index.isValid() || index.row() >= static_cast<int>(m_displayRows.size())) {
         return QVariant();
     }
 
-    const Row& row = m_rows.at(index.row());
+    const DisplayRow& displayRow = m_displayRows.at(index.row());
+
+    if (displayRow.folder >= 0) {
+        const TrackListFolder& folder = m_folders.at(displayRow.folder);
+        switch (role) {
+        case ChannelItemRole: return QVariant::fromValue<MixerChannelItem*>(nullptr);
+        case IsFolderRole: return true;
+        case FolderNameRole: return folder.name.toQString();
+        case FolderCollapsedRole: return folder.collapsed;
+        case FolderMutedRole: return isFolderMuted(displayRow.folder);
+        case FolderSoloedRole: return isFolderSoloed(displayRow.folder);
+        case InFolderRole: return false;
+        case PartVisibleRole: return true;
+        default: return QVariant();
+        }
+    }
+
+    const Row& row = m_rows.at(displayRow.channelRow);
 
     switch (role) {
+    case IsFolderRole: return false;
+    case FolderNameRole: return QString();
+    case FolderCollapsedRole: return false;
+    case FolderMutedRole: return false;
+    case FolderSoloedRole: return false;
+    case InFolderRole: return displayRow.inFolder;
     case ChannelItemRole: return QVariant::fromValue(row.item);
     case PartVisibleRole: return row.partVisible;
     case HasArticulationMapRole: return row.hasArticulationMap;
@@ -1038,7 +1155,7 @@ QVariant TrackListModel::data(const QModelIndex& index, int role) const
 
 int TrackListModel::rowCount(const QModelIndex&) const
 {
-    return m_rows.size();
+    return static_cast<int>(m_displayRows.size());
 }
 
 QHash<int, QByteArray> TrackListModel::roleNames() const
@@ -1049,10 +1166,585 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         { HasArticulationMapRole, "hasArticulationMap" },
         { IsVstInstrumentRole, "isVstInstrument" },
         { ArticulationMapEditorOpenedRole, "articulationMapEditorOpened" },
-        { InstrumentEditorOpenedRole, "instrumentEditorOpened" }
+        { InstrumentEditorOpenedRole, "instrumentEditorOpened" },
+        { IsFolderRole, "isFolder" },
+        { FolderNameRole, "folderName" },
+        { FolderCollapsedRole, "folderCollapsed" },
+        { FolderMutedRole, "folderMuted" },
+        { FolderSoloedRole, "folderSoloed" },
+        { InFolderRole, "inFolder" }
     };
 
     return roles;
+}
+
+// ---- folders
+
+String TrackListModel::channelKey(const PartTracks& tracks)
+{
+    if (tracks.auxIndex) {
+        return u"aux:" + String::number(static_cast<int>(*tracks.auxIndex));
+    }
+
+    return u"part:" + String::fromStdString(std::to_string(tracks.instrumentTrackId.partId.toUint64()));
+}
+
+//! NOTE: the rows outside folders in the score's order (then the buses), each folder before the row it's anchored to
+//! (at the end when that one isn't there or is in a folder itself), followed by its tracks unless it's collapsed
+void TrackListModel::rebuildDisplayRows()
+{
+    m_displayRows.clear();
+
+    std::vector<bool> emitted(m_folders.size(), false);
+    auto emitFolder = [this, &emitted](int folder) {
+        emitted[folder] = true;
+        m_displayRows.push_back({ -1, folder, false });
+        if (m_folders.at(folder).collapsed) {
+            return;
+        }
+        for (int i = 0; i < m_rows.size(); ++i) {
+            if (folderOfChannel(i) == folder) {
+                m_displayRows.push_back({ i, -1, true });
+            }
+        }
+    };
+
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (folderOfChannel(i) >= 0) {
+            continue;
+        }
+
+        const String key = channelKey(m_rows.at(i).tracks);
+        for (size_t folder = 0; folder < m_folders.size(); ++folder) {
+            if (!emitted[folder] && m_folders.at(folder).before == key) {
+                emitFolder(static_cast<int>(folder));
+            }
+        }
+
+        m_displayRows.push_back({ i, -1, false });
+    }
+
+    for (size_t folder = 0; folder < m_folders.size(); ++folder) {
+        if (!emitted[folder]) {
+            emitFolder(static_cast<int>(folder));
+        }
+    }
+}
+
+void TrackListModel::loadFolders()
+{
+    const TrackListFolders folders = m_audioSettings ? m_audioSettings->trackListFolders() : TrackListFolders();
+    if (folders == m_folders) {
+        return;
+    }
+
+    beginResetModel();
+    m_folders = folders;
+    rebuildDisplayRows();
+    endResetModel();
+
+    emit rowCountChanged();
+}
+
+void TrackListModel::applyFolders(const TrackListFolders& folders, const TranslatableString& actionName)
+{
+    const IProjectAudioSettingsPtr settings = m_audioSettings;
+    if (!settings) {
+        return;
+    }
+
+    const TrackListFolders before = settings->trackListFolders();
+    if (before == folders) {
+        return;
+    }
+
+    settings->setTrackListFolders(folders);
+
+    if (const IProjectUndoStackPtr undoStack = projectUndoStack()) {
+        undoStack->push(actionName,
+                        [settings, folders]() { settings->setTrackListFolders(folders); },
+                        [settings, before]() { settings->setTrackListFolders(before); });
+    }
+}
+
+int TrackListModel::channelRowAt(int row) const
+{
+    return row >= 0 && row < static_cast<int>(m_displayRows.size()) ? m_displayRows.at(row).channelRow : -1;
+}
+
+int TrackListModel::folderAt(int row) const
+{
+    return row >= 0 && row < static_cast<int>(m_displayRows.size()) ? m_displayRows.at(row).folder : -1;
+}
+
+int TrackListModel::displayRowOfChannel(int channelRow) const
+{
+    for (size_t i = 0; i < m_displayRows.size(); ++i) {
+        if (m_displayRows.at(i).channelRow == channelRow) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+int TrackListModel::folderOfChannel(int channelRow) const
+{
+    const String key = channelKey(m_rows.at(channelRow).tracks);
+    for (size_t folder = 0; folder < m_folders.size(); ++folder) {
+        if (muse::contains(m_folders.at(folder).members, key)) {
+            return static_cast<int>(folder);
+        }
+    }
+
+    return -1;
+}
+
+//! NOTE: "Folder 1", "Folder 2"...: the first number not taken
+static String nextFolderName(const TrackListFolders& folders)
+{
+    auto isTaken = [&folders](const String& name) {
+        return std::any_of(folders.cbegin(), folders.cend(), [&name](const TrackListFolder& folder) {
+            return folder.name == name;
+        });
+    };
+
+    int number = 1;
+    while (isTaken(muse::mtrc("playback", "Folder %1").arg(number))) {
+        ++number;
+    }
+
+    return muse::mtrc("playback", "Folder %1").arg(number);
+}
+
+//! NOTE: above the first selected track or bus, or first
+void TrackListModel::addFolder()
+{
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (!m_rows.at(i).item->selected()) {
+            continue;
+        }
+
+        //! NOTE: not shown in a collapsed folder: above that folder
+        const int folder = folderOfChannel(i);
+        for (size_t row = 0; row < m_displayRows.size(); ++row) {
+            const DisplayRow& displayRow = m_displayRows.at(row);
+            if (displayRow.channelRow == i || (folder >= 0 && displayRow.folder == folder)) {
+                addFolderAbove(static_cast<int>(row));
+                return;
+            }
+        }
+    }
+
+    addFolderAbove(0);
+}
+
+//! NOTE: above its folder when it's in one
+void TrackListModel::addFolderAbove(int row)
+{
+    int beforeRow = std::max(0, row);
+    const int channelRow = channelRowAt(row);
+    const int containingFolder = channelRow >= 0 ? folderOfChannel(channelRow) : -1;
+    if (containingFolder >= 0) {
+        for (size_t i = 0; i < m_displayRows.size(); ++i) {
+            if (m_displayRows.at(i).folder == containingFolder) {
+                beforeRow = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+
+    TrackListFolder folder;
+    folder.name = nextFolderName(m_folders);
+
+    TrackListFolders folders = m_folders;
+    insertFolderBefore(folders, folder, beforeRow);
+    applyFolders(folders, TranslatableString("undoableAction", "Add Track list folder"));
+}
+
+//! NOTE: before the top-level row beforeRow (as shown now; the end: rowCount()). Before a folder: the same anchor, just
+//! before it among the folders sharing it; before a track or bus: after the folders already before it
+void TrackListModel::insertFolderBefore(TrackListFolders& folders, TrackListFolder folder, int beforeRow) const
+{
+    const DisplayRow* target = beforeRow >= 0 && beforeRow < static_cast<int>(m_displayRows.size())
+                               ? &m_displayRows.at(beforeRow) : nullptr;
+
+    if (target && target->folder >= 0) {
+        const TrackListFolder& other = m_folders.at(target->folder);
+        folder.before = other.before;
+        folders.insert(std::find(folders.begin(), folders.end(), other), folder);
+        return;
+    }
+
+    folder.before = target ? channelKey(m_rows.at(target->channelRow).tracks) : String();
+    folders.push_back(folder);
+}
+
+void TrackListModel::renameFolder(int row, const QString& name)
+{
+    const int folder = folderAt(row);
+    const String newName = String::fromQString(name.simplified());
+    if (folder < 0 || newName.empty() || newName == m_folders.at(folder).name) {
+        return;
+    }
+
+    TrackListFolders folders = m_folders;
+    folders[folder].name = newName;
+    applyFolders(folders, TranslatableString("undoableAction", "Rename Track list folder"));
+}
+
+//! NOTE: its tracks stay, out of any folder
+void TrackListModel::removeFolder(int row)
+{
+    const int folder = folderAt(row);
+    if (folder < 0) {
+        return;
+    }
+
+    TrackListFolders folders = m_folders;
+    folders.erase(folders.begin() + folder);
+    applyFolders(folders, TranslatableString("undoableAction", "Remove Track list folder"));
+}
+
+//! NOTE: not an undo step (like a collapsed folder of the Timeline or the map editor)
+void TrackListModel::toggleFolderCollapsed(int row)
+{
+    const int folder = folderAt(row);
+    if (folder < 0 || !m_audioSettings) {
+        return;
+    }
+
+    TrackListFolders folders = m_folders;
+    folders[folder].collapsed = !folders[folder].collapsed;
+    m_audioSettings->setTrackListFolders(folders);
+}
+
+//! NOTE: the row's channel, or the selection's when it's selected
+std::vector<int> TrackListModel::channelRowsToMove(int channelRow) const
+{
+    std::vector<int> result;
+    if (m_rows.at(channelRow).item->selected()) {
+        for (int i = 0; i < m_rows.size(); ++i) {
+            if (m_rows.at(i).item->selected()) {
+                result.push_back(i);
+            }
+        }
+    } else {
+        result.push_back(channelRow);
+    }
+
+    return result;
+}
+
+void TrackListModel::moveRowToFolder(int row, int folderRow)
+{
+    const int channelRow = channelRowAt(row);
+    const int targetFolder = folderRow < 0 ? -1 : folderAt(folderRow);
+    if (channelRow < 0 || (folderRow >= 0 && targetFolder < 0)) {
+        return;
+    }
+
+    applyFolders(foldersWithChannelsMoved(m_folders, channelRowsToMove(channelRow), targetFolder),
+                 targetFolder >= 0 ? TranslatableString("undoableAction", "Move to Track list folder")
+                 : TranslatableString("undoableAction", "Remove from Track list folder"));
+}
+
+//! NOTE: a new folder where the first of them is, with them
+void TrackListModel::moveRowToNewFolder(int row)
+{
+    const int channelRow = channelRowAt(row);
+    if (channelRow < 0) {
+        return;
+    }
+
+    const std::vector<int> moved = channelRowsToMove(channelRow);
+
+    TrackListFolders folders = m_folders;
+    TrackListFolder folder;
+    folder.name = nextFolderName(folders);
+    //! NOTE: re-anchored to the next row outside folders once they're in it (see foldersWithChannelsMoved())
+    folder.before = folderOfChannel(moved.front()) < 0 ? channelKey(m_rows.at(moved.front()).tracks) : String();
+    folders.push_back(folder);
+
+    applyFolders(foldersWithChannelsMoved(folders, moved, static_cast<int>(folders.size()) - 1),
+                 TranslatableString("undoableAction", "Move to Track list folder"));
+}
+
+//! NOTE: targetFolder -1: out of any folder
+TrackListFolders TrackListModel::foldersWithChannelsMoved(TrackListFolders folders, const std::vector<int>& moved,
+                                                         int targetFolder) const
+{
+    std::vector<String> movedKeys;
+    for (int i : moved) {
+        const String key = channelKey(m_rows.at(i).tracks);
+        movedKeys.push_back(key);
+        for (TrackListFolder& folder : folders) {
+            muse::remove(folder.members, key);
+        }
+        if (targetFolder >= 0) {
+            folders[targetFolder].members.push_back(key);
+        }
+    }
+
+    //! NOTE: a folder anchored to a track now in a folder stays where it was: before the next row outside folders
+    if (targetFolder >= 0) {
+        auto inAFolder = [&folders](const String& key) {
+            return std::any_of(folders.cbegin(), folders.cend(), [&key](const TrackListFolder& folder) {
+                return muse::contains(folder.members, key);
+            });
+        };
+
+        for (TrackListFolder& folder : folders) {
+            if (!muse::contains(movedKeys, folder.before)) {
+                continue;
+            }
+
+            int anchorRow = -1;
+            for (int i = 0; i < m_rows.size(); ++i) {
+                if (channelKey(m_rows.at(i).tracks) == folder.before) {
+                    anchorRow = i;
+                    break;
+                }
+            }
+
+            folder.before = String();
+            for (int i = anchorRow + 1; anchorRow >= 0 && i < m_rows.size(); ++i) {
+                const String key = channelKey(m_rows.at(i).tracks);
+                if (!inAFolder(key)) {
+                    folder.before = key;
+                    break;
+                }
+            }
+        }
+    }
+
+    return folders;
+}
+
+bool TrackListModel::canMoveFolderBefore(int row, int beforeRow) const
+{
+    const int folder = folderAt(row);
+    if (folder < 0 || beforeRow < 0 || beforeRow > static_cast<int>(m_displayRows.size())) {
+        return false;
+    }
+
+    if (beforeRow == static_cast<int>(m_displayRows.size())) {
+        return true;
+    }
+
+    const DisplayRow& target = m_displayRows.at(beforeRow);
+    return !target.inFolder && target.folder != folder;
+}
+
+void TrackListModel::moveFolder(int row, int beforeRow)
+{
+    if (!canMoveFolderBefore(row, beforeRow)) {
+        return;
+    }
+
+    const int folder = folderAt(row);
+    TrackListFolders folders = m_folders;
+    const TrackListFolder moved = folders.at(folder);
+    folders.erase(folders.begin() + folder);
+
+    insertFolderBefore(folders, moved, beforeRow);
+    applyFolders(folders, TranslatableString("undoableAction", "Move Track list folder"));
+}
+
+std::vector<MixerChannelItem*> TrackListModel::folderChannels(int folder) const
+{
+    std::vector<MixerChannelItem*> result;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (folderOfChannel(i) == folder) {
+            result.push_back(m_rows.at(i).item);
+        }
+    }
+
+    return result;
+}
+
+//! NOTE: like the rows' Solo buttons: not an Aux FX bus's
+bool TrackListModel::canFolderSolo(const MixerChannelItem* item)
+{
+    return item->type() != MixerChannelItem::Type::Aux || item->isGroupBus();
+}
+
+bool TrackListModel::isFolderMuted(int folder) const
+{
+    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
+    return !channels.empty() && std::all_of(channels.cbegin(), channels.cend(), [](const MixerChannelItem* item) {
+        return item->muted();
+    });
+}
+
+bool TrackListModel::isFolderSoloed(int folder) const
+{
+    bool any = false;
+    for (const MixerChannelItem* item : folderChannels(folder)) {
+        if (!canFolderSolo(item)) {
+            continue;
+        }
+        if (!item->solo()) {
+            return false;
+        }
+        any = true;
+    }
+
+    return any;
+}
+
+void TrackListModel::notifyFolderRowsChanged()
+{
+    for (size_t row = 0; row < m_displayRows.size(); ++row) {
+        if (m_displayRows.at(row).folder >= 0) {
+            const QModelIndex modelIndex = index(static_cast<int>(row));
+            emit dataChanged(modelIndex, modelIndex, { FolderMutedRole, FolderSoloedRole });
+        }
+    }
+}
+
+void TrackListModel::toggleFolderMute(int row)
+{
+    const int folder = folderAt(row);
+    if (folder < 0) {
+        return;
+    }
+
+    const String& name = m_folders.at(folder).name;
+    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
+
+    if (!isFolderMuted(folder)) {
+        FolderMuteSolo& before = m_folderMuteSolo[name];
+        before.muted.clear();
+        for (MixerChannelItem* item : channels) {
+            before.muted[item->trackId()] = item->muted();
+            //! NOTE: muted by another track's solo: left alone (see ChannelSelection::setMuted())
+            if (!(item->muted() && item->forceMute())) {
+                item->setMuted(true);
+            }
+        }
+        return;
+    }
+
+    const auto it = m_folderMuteSolo.find(name);
+    for (MixerChannelItem* item : channels) {
+        const bool wasMuted = it != m_folderMuteSolo.end() && muse::value(it->second.muted, item->trackId(), false);
+        if (!item->forceMute()) {
+            item->setMuted(wasMuted);
+        }
+    }
+    if (it != m_folderMuteSolo.end()) {
+        it->second.muted.clear();
+    }
+}
+
+void TrackListModel::toggleFolderSolo(int row)
+{
+    const int folder = folderAt(row);
+    if (folder < 0) {
+        return;
+    }
+
+    const String& name = m_folders.at(folder).name;
+    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
+
+    if (!isFolderSoloed(folder)) {
+        FolderMuteSolo& before = m_folderMuteSolo[name];
+        before.soloed.clear();
+        for (MixerChannelItem* item : channels) {
+            if (canFolderSolo(item)) {
+                before.soloed[item->trackId()] = item->solo();
+                item->setUserSolo(true);
+            }
+        }
+        return;
+    }
+
+    const auto it = m_folderMuteSolo.find(name);
+    for (MixerChannelItem* item : channels) {
+        if (canFolderSolo(item)) {
+            item->setUserSolo(it != m_folderMuteSolo.end() && muse::value(it->second.soloed, item->trackId(), false));
+        }
+    }
+    if (it != m_folderMuteSolo.end()) {
+        it->second.soloed.clear();
+    }
+}
+
+static const QString ADD_FOLDER_ITEM_ID("addNewFolder");
+static const QString MOVE_TO_FOLDER_ITEM_PREFIX("moveToFolder:");
+static const QString NEW_FOLDER_ITEM_ID("moveToNewFolder");
+
+QVariantList TrackListModel::folderMenuItems(int row) const
+{
+    return {
+        QVariantMap { { "id", ADD_FOLDER_ITEM_ID }, { "title", muse::qtrc("playback", "Add new folder") } },
+        moveToFolderMenu(row)
+    };
+}
+
+QVariantMap TrackListModel::moveToFolderMenu(int row) const
+{
+    const int channelRow = channelRowAt(row);
+    const int current = channelRow >= 0 ? folderOfChannel(channelRow) : -1;
+
+    QVariantList items;
+    for (size_t folder = 0; folder < m_folders.size(); ++folder) {
+        items << QVariantMap {
+            { "id", MOVE_TO_FOLDER_ITEM_PREFIX + QString::number(folder) },
+            { "title", m_folders.at(folder).name.toQString() },
+            { "checkable", true },
+            { "checked", static_cast<int>(folder) == current }
+        };
+    }
+
+    if (!items.isEmpty()) {
+        items << QVariantMap { { "id", "" }, { "title", "" } }; // separator
+    }
+
+    items << QVariantMap { { "id", NEW_FOLDER_ITEM_ID }, { "title", muse::qtrc("playback", "New folder") } };
+
+    if (current >= 0) {
+        items << QVariantMap { { "id", MOVE_TO_FOLDER_ITEM_PREFIX + "-1" }, { "title", muse::qtrc("playback", "Remove from folder") } };
+    }
+
+    return QVariantMap {
+        { "id", "moveToFolderMenu" },
+        { "title", muse::qtrc("playback", "Move to folder") },
+        { "subitems", items }
+    };
+}
+
+bool TrackListModel::handleMoveToFolderMenuItem(int row, const QString& itemId)
+{
+    if (itemId == ADD_FOLDER_ITEM_ID) {
+        addFolderAbove(row);
+        return true;
+    }
+
+    if (itemId == NEW_FOLDER_ITEM_ID) {
+        moveRowToNewFolder(row);
+        return true;
+    }
+
+    if (!itemId.startsWith(MOVE_TO_FOLDER_ITEM_PREFIX)) {
+        return false;
+    }
+
+    const int folder = itemId.mid(MOVE_TO_FOLDER_ITEM_PREFIX.size()).toInt();
+    if (folder < 0) {
+        moveRowToFolder(row, -1);
+        return true;
+    }
+
+    for (size_t i = 0; i < m_displayRows.size(); ++i) {
+        if (m_displayRows.at(i).folder == folder) {
+            moveRowToFolder(row, static_cast<int>(i));
+            break;
+        }
+    }
+
+    return true;
 }
 
 INotationPtr TrackListModel::currentNotation() const

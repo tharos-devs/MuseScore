@@ -1458,6 +1458,7 @@ static const std::map<QString, std::string> ARTICULATION_MAP_COMMANDS {
     { "editArticulationMap", "command://notation/articulation-map-edit" },
     { "reloadArticulationMap", "command://notation/articulation-map-reload" },
     { "removeArticulationMap", "command://notation/articulation-map-remove" },
+    { "closeArticulationMapEditor", "command://notation/articulation-map-close-editor" },
 };
 
 QVariantList MixerChannelItem::articulationMapMenuItems() const
@@ -2125,6 +2126,23 @@ void MixerChannelItem::openEditor(AbstractAudioResourceItem* item, const actions
             settings->markAsChanged();
         }
     }
+}
+
+//! NOTE: whichever panel opened it: the close action is the track's and sound's, not the item's (see closeEditor()).
+//! Not "sync": a synchronous close from a click left no window able to open any more, and the app unable to quit
+void MixerChannelItem::closeInstrumentEditor()
+{
+    if (!m_inputResourceItem || m_inputResourceItem->params().type() != AudioSourceType::Vsti) {
+        return;
+    }
+
+    actions::ActionQuery closeAction(VSTI_EDITOR_ACTION);
+    closeAction.addParam(TRACK_ID_KEY, Val(m_trackId));
+    closeAction.addParam(RESOURCE_ID_KEY, Val(m_inputResourceItem->params().resourceMeta.id));
+    closeAction.addParam("operation", Val("close"));
+    dispatcher()->dispatch(closeAction);
+
+    m_inputResourceItem->setEditorAction(UriQuery());
 }
 
 void MixerChannelItem::closeEditor(AbstractAudioResourceItem* item)

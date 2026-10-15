@@ -204,6 +204,9 @@ public:
     Q_INVOKABLE QVariantList articulationMapMenuItems() const;
     Q_INVOKABLE bool handleArticulationMapMenuItem(const QString& itemId) const;
 
+    //! NOTE: its VST instrument's window, opened from any panel
+    Q_INVOKABLE void closeInstrumentEditor();
+
     //! NOTE: "Save as track preset…" and "Load track preset…" (see TrackPresets), in the Mixer's and the Track list's
     //! menus. handleTrackPresetMenuItem() returns false for an item that isn't one of them
     Q_INVOKABLE QVariantList trackPresetMenuItems() const;

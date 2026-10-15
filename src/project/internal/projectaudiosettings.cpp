@@ -449,6 +449,21 @@ void ProjectAudioSettings::setActiveSoundProfile(const playback::SoundProfileNam
     m_settingsChanged.notify();
 }
 
+const TrackListFolders& ProjectAudioSettings::trackListFolders() const
+{
+    return m_trackListFolders;
+}
+
+void ProjectAudioSettings::setTrackListFolders(const TrackListFolders& folders)
+{
+    if (m_trackListFolders == folders) {
+        return;
+    }
+
+    m_trackListFolders = folders;
+    m_settingsChanged.notify();
+}
+
 muse::async::Notification ProjectAudioSettings::settingsChanged() const
 {
     return m_settingsChanged;
@@ -544,6 +559,20 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         m_trackOutputParamsMap.emplace(id, std::move(outParams));
     }
 
+    for (const QJsonValue value : rootObj.value("trackListFolders").toArray()) {
+        const QJsonObject folderObject = value.toObject();
+
+        TrackListFolder folder;
+        folder.name = String::fromQString(folderObject.value("name").toString());
+        folder.collapsed = folderObject.value("collapsed").toBool(false);
+        folder.before = String::fromQString(folderObject.value("before").toString());
+        for (const QJsonValue member : folderObject.value("members").toArray()) {
+            folder.members.push_back(String::fromQString(member.toString()));
+        }
+
+        m_trackListFolders.push_back(std::move(folder));
+    }
+
     m_activeSoundProfileName = rootObj.value("activeSoundProfile").toString();
     if (m_activeSoundProfileName.empty()) {
         m_activeSoundProfileName = playbackConfig()->defaultProfileForNewProjects();
@@ -583,6 +612,25 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
     rootObj["nextGroupDisplayNumber"] = static_cast<int>(m_nextGroupDisplayNumber);
     rootObj["nextFxSortOrder"] = m_nextFxSortOrder;
     rootObj["nextGroupSortOrder"] = m_nextGroupSortOrder;
+
+    if (!m_trackListFolders.empty()) {
+        QJsonArray foldersArray;
+        for (const TrackListFolder& folder : m_trackListFolders) {
+            QJsonObject folderObject;
+            folderObject["name"] = folder.name.toQString();
+            folderObject["collapsed"] = folder.collapsed;
+            folderObject["before"] = folder.before.toQString();
+
+            QJsonArray membersArray;
+            for (const String& member : folder.members) {
+                membersArray.append(member.toQString());
+            }
+            folderObject["members"] = membersArray;
+
+            foldersArray.append(folderObject);
+        }
+        rootObj["trackListFolders"] = foldersArray;
+    }
 
     QByteArray json = QJsonDocument(rootObj).toJson();
     writer.writeAudioSettingsJsonFile(ByteArray::fromQByteArrayNoCopy(json));

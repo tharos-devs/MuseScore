@@ -88,6 +88,101 @@ Item {
 
             model: trackListModel
 
+            //! NOTE: a track selected in the score: its row comes into view, only when it's out of view and as little as
+            //! possible (not under the header staying at the top either)
+            Connections {
+                target: trackListModel
+
+                function onRowShowRequested(row) {
+                    listView.positionViewAtIndex(row, ListView.Contain)
+
+                    const item = listView.itemAtIndex(row)
+                    const header = listView.headerItem
+                    if (item && header) {
+                        const hidden = header.height - item.mapToItem(listView, 0, 0).y
+                        if (hidden > 0) {
+                            listView.contentY -= hidden
+                        }
+                    }
+                }
+            }
+
+            //! NOTE: the list keeps its scroll position when it's rebuilt (e.g. a folder added, a track moved into one)
+            Connections {
+                target: trackListModel
+
+                property real savedContentY: 0
+
+                function onModelAboutToBeReset() {
+                    savedContentY = listView.contentY - listView.originY
+                }
+
+                function onModelReset() {
+                    const contentY = savedContentY
+                    Qt.callLater(function() {
+                        const maxY = Math.max(0, listView.contentHeight - listView.height)
+                        listView.contentY = listView.originY + Math.min(contentY, maxY)
+                    })
+                }
+            }
+
+            //! NOTE: a row dragged by its name: a track or bus into a folder (or out of its folder), a folder elsewhere
+            //! among the rows outside folders (see TrackListModel::moveRowToFolder()/moveFolder())
+            QtObject {
+                id: dragPrv
+
+                property int draggedRow: -1
+                property bool draggingFolder: false
+                //! NOTE: a folder's row the dragged track goes into; the row the dragged folder goes before; -1: none
+                property int targetRow: -1
+                //! NOTE: a dragged track out of its folder
+                property bool outOfFolder: false
+
+                readonly property bool active: draggedRow >= 0
+
+                function update(sceneY) {
+                    const y = listView.contentItem.mapFromItem(null, 0, sceneY).y
+                    let row = listView.indexAt(10, y)
+
+                    if (draggingFolder) {
+                        if (row < 0) {
+                            row = y > 0 ? listView.count : -1
+                        } else {
+                            const item = listView.itemAtIndex(row)
+                            if (item && y > item.y + item.height / 2) {
+                                row += 1
+                            }
+                        }
+                        targetRow = trackListModel.canMoveFolderBefore(draggedRow, row) ? row : -1
+                        return
+                    }
+
+                    const item = row >= 0 ? listView.itemAtIndex(row) : null
+                    targetRow = item && item.isFolder ? row : -1
+                    outOfFolder = targetRow < 0 && listView.itemAtIndex(draggedRow)?.inFolder === true
+                                  && !(item && item.inFolder)
+                }
+
+                function drop() {
+                    if (draggingFolder) {
+                        if (targetRow >= 0) {
+                            trackListModel.moveFolder(draggedRow, targetRow)
+                        }
+                    } else if (targetRow >= 0) {
+                        trackListModel.moveRowToFolder(draggedRow, targetRow)
+                    } else if (outOfFolder) {
+                        trackListModel.moveRowToFolder(draggedRow, -1)
+                    }
+                    cancel()
+                }
+
+                function cancel() {
+                    draggedRow = -1
+                    targetRow = -1
+                    outOfFolder = false
+                }
+            }
+
             //! NOTE: stays at the top; its global Mute/Solo buttons are in the same columns as the rows' ones
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
@@ -96,6 +191,36 @@ Item {
                 z: 2
 
                 color: ui.theme.backgroundSecondaryColor
+
+                //! NOTE: a new folder, above the selected track or first (see TrackListModel::addFolder())
+                FlatButton {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    anchors.verticalCenter: globalButtonsRow.verticalCenter
+
+                    width: 24
+                    height: 20
+
+                    transparent: true
+                    icon: IconCode.OPEN_FILE
+
+                    navigation.panel: navPanel
+                    navigation.name: "NewFolderButton"
+                    navigation.row: 0
+                    navigation.column: 0
+                    navigation.accessible.name: qsTrc("playback", "New folder")
+
+                    onClicked: {
+                        trackListModel.addFolder()
+                    }
+
+                    StyledIconLabel {
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        iconCode: IconCode.PLUS
+                        font.pixelSize: 9
+                    }
+                }
 
                 Row {
                     id: globalButtonsRow
@@ -115,6 +240,7 @@ Item {
                     }
 
                     GlobalMuteSoloButtons {
+                        anchors.verticalCenter: parent.verticalCenter
                         spacing: 4
 
                         model: trackListModel
@@ -164,8 +290,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
 
                         width: 8
-                        height: 20
-                        radius: 2
+                        height: 24
 
                         color: ui.theme.accentColor
                     }
@@ -180,14 +305,14 @@ Item {
                         spacing: 1
 
                         VolumePressureMeter {
-                            meterLength: 18
+                            meterLength: 22
                             meterThickness: 3
                             overloadLength: 2
                             currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.leftChannelPressure : -60
                         }
 
                         VolumePressureMeter {
-                            meterLength: 18
+                            meterLength: 22
                             meterThickness: 3
                             overloadLength: 2
                             currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.rightChannelPressure : -60
@@ -283,8 +408,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
 
                         width: 8
-                        height: 20
-                        radius: 2
+                        height: 24
 
                         color: videoRow.trackColor
 
@@ -333,14 +457,14 @@ Item {
                         spacing: 1
 
                         VolumePressureMeter {
-                            meterLength: 18
+                            meterLength: 22
                             meterThickness: 3
                             overloadLength: 2
                             currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.leftChannelPressure : -60
                         }
 
                         VolumePressureMeter {
-                            meterLength: 18
+                            meterLength: 22
                             meterThickness: 3
                             overloadLength: 2
                             currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.rightChannelPressure : -60
@@ -439,6 +563,12 @@ Item {
                 required property bool isVstInstrument
                 required property bool articulationMapEditorOpened
                 required property bool instrumentEditorOpened
+                required property bool isFolder
+                required property string folderName
+                required property bool folderCollapsed
+                required property bool folderMuted
+                required property bool folderSoloed
+                required property bool inFolder
 
                 readonly property InputResourceItem soundItem: channelItem ? channelItem.inputResourceItem : null
                 //! NOTE: an Aux FX/Aux Group bus's row: color, Mute and Solo only (Solo disabled for an FX bus)
@@ -448,287 +578,571 @@ Item {
                 width: ListView.view.width
                 height: 28
 
-                //! NOTE: selection, like the Mixer's (click, Cmd/Ctrl+click, Shift+click): the color, Mute and Solo of
-                //! a selected row apply to the whole selection
+                //! NOTE: a dragged track's target folder, or where a dragged folder goes (a line above the row, or below
+                //! the last one)
                 Rectangle {
                     anchors.fill: parent
-                    color: ui.theme.accentColor
-                    opacity: 0.3
-                    visible: rowItem.channelItem ? rowItem.channelItem.selected : false
+                    z: 2
+                    visible: dragPrv.active && !dragPrv.draggingFolder && dragPrv.targetRow === rowItem.index
+                    color: "transparent"
+                    border.color: ui.theme.accentColor
+                    border.width: 2
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                Rectangle {
+                    z: 2
+                    visible: dragPrv.active && dragPrv.draggingFolder
+                             && (dragPrv.targetRow === rowItem.index
+                                 || (dragPrv.targetRow === listView.count && rowItem.index === listView.count - 1))
+                    y: dragPrv.targetRow === rowItem.index ? 0 : parent.height - height
+                    width: parent.width
+                    height: 2
+                    color: ui.theme.accentColor
+                }
 
-                    onClicked: function(mouse) {
-                        //! NOTE: right click: the track presets menu, like in the Mixer
-                        if (mouse.button === Qt.RightButton) {
-                            if (rowItem.isAuxBus) {
-                                return
-                            }
-                            trackPresetMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.trackPresetMenuItems())
+                //! NOTE: drags the row (a press on its name, see dragPrv)
+                function dragPositionChanged(mouseArea, mouse, pressY) {
+                    if (!dragPrv.active) {
+                        if (Math.abs(mouse.y - pressY) < 6) {
                             return
                         }
-
-                        // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux
-                        trackListModel.selectRow(rowItem.index, (mouse.modifiers & Qt.ControlModifier) !== 0,
-                                                 (mouse.modifiers & Qt.ShiftModifier) !== 0)
+                        dragPrv.draggedRow = rowItem.index
+                        dragPrv.draggingFolder = rowItem.isFolder
                     }
-
-                    ContextMenuLoader {
-                        id: trackPresetMenu
-
-                        onHandleMenuItem: function(itemId) {
-                            rowItem.channelItem.handleTrackPresetMenuItem(itemId)
-                        }
-                    }
+                    dragPrv.update(mouseArea.mapToItem(null, mouse.x, mouse.y).y)
                 }
 
-                //! NOTE: the track's color, its menu on a left click (like the Timeline's color strips)
-                Rectangle {
-                    id: colorStrip
-
-                    anchors.left: parent.left
-                    anchors.leftMargin: 4
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    width: 8
-                    height: 20
-                    radius: 2
-
-                    color: rowItem.trackColor
-
-                    MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -2
-
-                        onClicked: function(mouse) {
-                            colorMenu.show(Qt.point(mouse.x, mouse.y))
-                        }
-                    }
-
-                    ContextMenuLoader {
-                        id: colorMenu
-
-                        items: [
-                            { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                            //! NOTE: on a selected row, for the whole selection, whose other rows may have a color
-                            { id: "resetColor", title: qsTrc("playback", "Reset color"),
-                                enabled: rowItem.channelItem.hasCustomColor || rowItem.channelItem.selected }
-                        ]
-
-                        onHandleMenuItem: function(itemId) {
-                            if (itemId === "editColor") {
-                                colorPickerModel.selectColor(rowItem.trackColor, false)
-                            } else if (itemId === "resetColor") {
-                                trackListModel.resetTrackColor(rowItem.index)
-                            }
-                        }
-                    }
-
-                    ColorPickerModel {
-                        id: colorPickerModel
-
-                        onColorSelected: function(color) {
-                            trackListModel.setTrackColor(rowItem.index, color)
-                        }
-                    }
+                Loader {
+                    anchors.fill: parent
+                    active: rowItem.isFolder
+                    sourceComponent: folderRowComponent
                 }
 
-                //! NOTE: the track's level, the Mixer's meters in small
-                Row {
-                    id: meter
-
-                    anchors.right: parent.right
-                    anchors.rightMargin: 4
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    spacing: 1
-
-                    VolumePressureMeter {
-                        meterLength: 18
-                        meterThickness: 3
-                        overloadLength: 2
-                        currentVolumePressure: rowItem.channelItem.leftChannelPressure
-                    }
-
-                    VolumePressureMeter {
-                        meterLength: 18
-                        meterThickness: 3
-                        overloadLength: 2
-                        currentVolumePressure: rowItem.channelItem.rightChannelPressure
-                    }
+                Loader {
+                    anchors.fill: parent
+                    active: !rowItem.isFolder
+                    sourceComponent: channelRowComponent
                 }
 
-                StyledTextLabel {
-                    anchors.left: colorStrip.right
-                    anchors.leftMargin: 6
-                    anchors.right: buttonsRow.left
-                    anchors.rightMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter
+                //! NOTE: a folder's row: collapse, its name (double click: rename); dragged elsewhere
+                Component {
+                    id: folderRowComponent
 
-                    horizontalAlignment: Text.AlignLeft
-                    text: rowItem.channelItem ? rowItem.channelItem.title : ""
-                    opacity: rowItem.partVisible ? 1 : 0.5
-                }
+                    Rectangle {
+                        color: ui.theme.backgroundSecondaryColor
 
-                Row {
-                    id: buttonsRow
+                        MouseArea {
+                            id: folderMouseArea
 
-                    anchors.right: meter.left
-                    anchors.rightMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter
+                            property real pressY: 0
 
-                    spacing: 4
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            preventStealing: true
 
-                    //! NOTE: the Mixer's Sound menu (a bus has none: its column stays)
-                    FlatButton {
-                        id: soundButton
-
-                        width: 20
-                        height: 20
-                        visible: !rowItem.isAuxBus
-
-                        transparent: !soundMenu.isMenuOpened
-                        icon: IconCode.SMALL_ARROW_DOWN
-
-                        navigation.panel: navPanel
-                        navigation.name: "SoundButton" + rowItem.index
-                        navigation.row: rowItem.index + 3
-                        navigation.column: 0
-                        navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
-
-                        onClicked: {
-                            soundMenu.requestOpen()
-                        }
-
-                        AudioResourceMenuLoader {
-                            id: soundMenu
-
-                            resourceItemModel: rowItem.soundItem
-                        }
-                    }
-
-                    Item {
-                        width: 20
-                        height: 20
-                        visible: rowItem.isAuxBus
-                    }
-
-                    ChannelMuteSoloButtons {
-                        spacing: 4
-
-                        channelItem: rowItem.channelItem
-
-                        navigationPanel: navPanel
-                        navigationName: "Row" + rowItem.index
-                        muteNavigationRow: rowItem.index + 3
-                        muteNavigationColumn: 1
-                        soloNavigationRow: rowItem.index + 3
-                        soloNavigationColumn: 2
-                        accessibleName: rowItem.channelItem.title
-
-                        onMuteToggled: function(muted) {
-                            if (rowItem.channelItem.selected) {
-                                trackListModel.setMutedForSelectedRows(muted)
-                            } else {
-                                rowItem.channelItem.muted = muted
-                            }
-                        }
-
-                        onSoloToggled: function(solo) {
-                            if (rowItem.channelItem.selected) {
-                                trackListModel.setSoloForSelectedRows(solo)
-                            } else {
-                                rowItem.channelItem.setUserSolo(solo)
-                            }
-                        }
-                    }
-
-                    //! NOTE: fixed slots, so the buttons stay in columns whatever the track has; a column no track
-                    //! of the list uses takes no room
-                    Item {
-                        width: 20
-                        height: 20
-                        visible: trackListModel.hasArticulationMapColumn
-
-                        FlatButton {
-                            width: 20
-                            height: 20
-
-                            //! NOTE: a VST instrument without a map has it too, looking disabled, for its right click menu
-                            visible: rowItem.hasArticulationMap || rowItem.isVstInstrument
-                            opacity: rowItem.hasArticulationMap || rowItem.articulationMapEditorOpened ? 1 : ui.theme.itemOpacityDisabled
-
-                            transparent: true
-                            icon: IconCode.ARTICULATION
-                            //! NOTE: colored while the track's editor is open
-                            iconColor: rowItem.articulationMapEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
-
-                            navigation.panel: navPanel
-                            navigation.name: "ArticulationMapButton" + rowItem.index
-                            navigation.row: rowItem.index + 3
-                            navigation.column: 3
-                            navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
-
-                            //! NOTE: without a map (dimmed), opens the editor on a new one for the track
-                            onClicked: {
-                                rowItem.channelItem.handleArticulationMapMenuItem(rowItem.hasArticulationMap ? "editArticulationMap"
-                                                                                                             : "newArticulationMap")
+                            onPressed: function(mouse) {
+                                pressY = mouse.y
                             }
 
-                            //! NOTE: right click: the Mixer's "Articulation map" menu
-                            MouseArea {
-                                anchors.fill: parent
-                                acceptedButtons: Qt.RightButton
+                            onPositionChanged: function(mouse) {
+                                if (pressed && (mouse.buttons & Qt.LeftButton)) {
+                                    rowItem.dragPositionChanged(folderMouseArea, mouse, pressY)
+                                }
+                            }
 
-                                onClicked: function(mouse) {
-                                    articulationMapMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.articulationMapMenuItems())
+                            onReleased: {
+                                if (dragPrv.active) {
+                                    dragPrv.drop()
+                                }
+                            }
+
+                            onCanceled: dragPrv.cancel()
+
+                            onClicked: function(mouse) {
+                                if (mouse.button === Qt.RightButton) {
+                                    folderMenu.show(Qt.point(mouse.x, mouse.y))
+                                }
+                            }
+
+                            onDoubleClicked: function(mouse) {
+                                if (mouse.button === Qt.LeftButton) {
+                                    nameEditor.active = true
                                 }
                             }
 
                             ContextMenuLoader {
-                                id: articulationMapMenu
+                                id: folderMenu
+
+                                items: [
+                                    { id: "rename", title: qsTrc("playback", "Rename") },
+                                    { id: "remove", title: qsTrc("playback", "Remove folder") }
+                                ]
 
                                 onHandleMenuItem: function(itemId) {
-                                    rowItem.channelItem.handleArticulationMapMenuItem(itemId)
+                                    if (itemId === "rename") {
+                                        nameEditor.active = true
+                                    } else if (itemId === "remove") {
+                                        trackListModel.removeFolder(rowItem.index)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Item {
-                        width: 20
-                        height: 20
-                        visible: trackListModel.hasEditorColumn
+                        StyledIconLabel {
+                            id: collapseArrow
 
-                        FlatButton {
-                            width: 20
-                            height: 20
+                            anchors.left: parent.left
+                            anchors.leftMargin: 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 16
 
-                            visible: rowItem.soundItem ? rowItem.soundItem.hasNativeEditorSupport : false
+                            iconCode: rowItem.folderCollapsed ? IconCode.SMALL_ARROW_RIGHT : IconCode.SMALL_ARROW_DOWN
 
-                            transparent: true
-                            icon: IconCode.PLUGIN
-                            //! NOTE: colored while the instrument's window is open
-                            iconColor: rowItem.instrumentEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
-
-                            navigation.panel: navPanel
-                            navigation.name: "EditorButton" + rowItem.index
-                            navigation.row: rowItem.index + 3
-                            navigation.column: 4
-                            navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
-
-                            onClicked: {
-                                rowItem.soundItem.requestToLaunchNativeEditorView()
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                onClicked: trackListModel.toggleFolderCollapsed(rowItem.index)
                             }
+                        }
+
+                        //! NOTE: in the rows' Mute/Solo columns (left of their meters: 2 × 3 px + 1, then 6)
+                        Row {
+                            id: folderButtonsRow
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4 + 7 + 6
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            spacing: 4
+
+                            //! NOTE: the rows' sound column
+                            Item {
+                                width: 20
+                                height: 20
+                            }
+
+                            FlatToggleButton {
+                                width: 20
+                                height: 20
+
+                                icon: IconCode.MUTE
+                                checked: rowItem.folderMuted
+
+                                navigation.panel: navPanel
+                                navigation.name: "FolderMuteButton" + rowItem.index
+                                navigation.row: rowItem.index + 3
+                                navigation.column: 1
+                                navigation.accessible.name: rowItem.folderName + " " + qsTrc("playback", "Mute")
+
+                                onToggled: trackListModel.toggleFolderMute(rowItem.index)
+                            }
+
+                            FlatToggleButton {
+                                width: 20
+                                height: 20
+
+                                icon: IconCode.SOLO
+                                checked: rowItem.folderSoloed
+
+                                navigation.panel: navPanel
+                                navigation.name: "FolderSoloButton" + rowItem.index
+                                navigation.row: rowItem.index + 3
+                                navigation.column: 2
+                                navigation.accessible.name: rowItem.folderName + " " + qsTrc("playback", "Solo")
+
+                                onToggled: trackListModel.toggleFolderSolo(rowItem.index)
+                            }
+
+                            //! NOTE: the rows' articulation map and editor columns
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: trackListModel.hasArticulationMapColumn
+                            }
+
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: trackListModel.hasEditorColumn
+                            }
+                        }
+
+                        StyledTextLabel {
+                            visible: !nameEditor.active
+                            anchors.left: collapseArrow.right
+                            anchors.leftMargin: 6
+                            anchors.right: folderButtonsRow.left
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            horizontalAlignment: Text.AlignLeft
+                            font: ui.theme.bodyBoldFont
+                            text: rowItem.folderName
+                        }
+
+                        Loader {
+                            id: nameEditor
+
+                            active: false
+                            anchors.left: collapseArrow.right
+                            anchors.leftMargin: 6
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            sourceComponent: TextInputField {
+                                currentText: rowItem.folderName
+                                Component.onCompleted: {
+                                    ensureActiveFocus()
+                                    selectAll()
+                                }
+                                onTextEditingFinished: function(newTextValue) {
+                                    trackListModel.renameFolder(rowItem.index, newTextValue)
+                                    nameEditor.active = false
+                                }
+                                onEscaped: nameEditor.active = false
+                            }
+                        }
+
+                        SeparatorLine {
+                            anchors.bottom: parent.bottom
                         }
                     }
                 }
 
-                SeparatorLine {
-                    anchors.bottom: parent.bottom
+                Component {
+                    id: channelRowComponent
+
+                    Item {
+
+                        //! NOTE: selection, like the Mixer's (click, Cmd/Ctrl+click, Shift+click): the color, Mute and Solo of
+                        //! a selected row apply to the whole selection
+                        Rectangle {
+                            anchors.fill: parent
+                            color: ui.theme.accentColor
+                            opacity: 0.3
+                            visible: rowItem.channelItem ? rowItem.channelItem.selected : false
+                        }
+
+                        MouseArea {
+                            id: channelMouseArea
+
+                            property real pressY: 0
+                            //! NOTE: the release of a drag isn't a click (no selection change)
+                            property bool dragged: false
+
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            preventStealing: true
+
+                            onPressed: function(mouse) {
+                                pressY = mouse.y
+                                dragged = false
+                            }
+
+                            onPositionChanged: function(mouse) {
+                                if (pressed && (mouse.buttons & Qt.LeftButton)) {
+                                    rowItem.dragPositionChanged(channelMouseArea, mouse, pressY)
+                                }
+                            }
+
+                            onReleased: {
+                                if (dragPrv.active) {
+                                    dragged = true
+                                    dragPrv.drop()
+                                }
+                            }
+
+                            onCanceled: dragPrv.cancel()
+
+                            onClicked: function(mouse) {
+                                if (dragged) {
+                                    return
+                                }
+
+                                //! NOTE: right click: the track presets menu, like in the Mixer, and "Move to folder"
+                                if (mouse.button === Qt.RightButton) {
+                                    let items = rowItem.isAuxBus ? [] : rowItem.channelItem.trackPresetMenuItems()
+                                    if (items.length > 0) {
+                                        items.push({ id: "", title: "" }) // separator
+                                    }
+                                    items = items.concat(trackListModel.folderMenuItems(rowItem.index))
+                                    rowMenu.show(Qt.point(mouse.x, mouse.y), items)
+                                    return
+                                }
+
+                                // Qt.ControlModifier is Cmd on macOS and Ctrl on Windows/Linux
+                                trackListModel.selectRow(rowItem.index, (mouse.modifiers & Qt.ControlModifier) !== 0,
+                                                         (mouse.modifiers & Qt.ShiftModifier) !== 0)
+                            }
+
+                            ContextMenuLoader {
+                                id: rowMenu
+
+                                onHandleMenuItem: function(itemId) {
+                                    if (!trackListModel.handleMoveToFolderMenuItem(rowItem.index, itemId)) {
+                                        rowItem.channelItem.handleTrackPresetMenuItem(itemId)
+                                    }
+                                }
+                            }
+                        }
+
+                        //! NOTE: the track's color, its menu on a left click (like the Timeline's color strips)
+                        Rectangle {
+                            id: colorStrip
+
+                            anchors.left: parent.left
+                            //! NOTE: a folder's tracks are indented
+                            anchors.leftMargin: rowItem.inFolder ? 18 : 4
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: 8
+                            height: 24
+
+                            color: rowItem.trackColor
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -2
+
+                                onClicked: function(mouse) {
+                                    colorMenu.show(Qt.point(mouse.x, mouse.y))
+                                }
+                            }
+
+                            ContextMenuLoader {
+                                id: colorMenu
+
+                                items: [
+                                    { id: "editColor", title: qsTrc("playback", "Edit color…") },
+                                    //! NOTE: on a selected row, for the whole selection, whose other rows may have a color
+                                    { id: "resetColor", title: qsTrc("playback", "Reset color"),
+                                        enabled: rowItem.channelItem.hasCustomColor || rowItem.channelItem.selected }
+                                ]
+
+                                onHandleMenuItem: function(itemId) {
+                                    if (itemId === "editColor") {
+                                        colorPickerModel.selectColor(rowItem.trackColor, false)
+                                    } else if (itemId === "resetColor") {
+                                        trackListModel.resetTrackColor(rowItem.index)
+                                    }
+                                }
+                            }
+
+                            ColorPickerModel {
+                                id: colorPickerModel
+
+                                onColorSelected: function(color) {
+                                    trackListModel.setTrackColor(rowItem.index, color)
+                                }
+                            }
+                        }
+
+                        //! NOTE: the track's level, the Mixer's meters in small
+                        Row {
+                            id: meter
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            spacing: 1
+
+                            VolumePressureMeter {
+                                meterLength: 22
+                                meterThickness: 3
+                                overloadLength: 2
+                                currentVolumePressure: rowItem.channelItem.leftChannelPressure
+                            }
+
+                            VolumePressureMeter {
+                                meterLength: 22
+                                meterThickness: 3
+                                overloadLength: 2
+                                currentVolumePressure: rowItem.channelItem.rightChannelPressure
+                            }
+                        }
+
+                        StyledTextLabel {
+                            anchors.left: colorStrip.right
+                            anchors.leftMargin: 6
+                            anchors.right: buttonsRow.left
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            horizontalAlignment: Text.AlignLeft
+                            text: rowItem.channelItem ? rowItem.channelItem.title : ""
+                            opacity: rowItem.partVisible ? 1 : 0.5
+                        }
+
+                        Row {
+                            id: buttonsRow
+
+                            anchors.right: meter.left
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            spacing: 4
+
+                            //! NOTE: the Mixer's Sound menu (a bus has none: its column stays)
+                            FlatButton {
+                                id: soundButton
+
+                                width: 20
+                                height: 20
+                                visible: !rowItem.isAuxBus
+
+                                transparent: !soundMenu.isMenuOpened
+                                icon: IconCode.SMALL_ARROW_DOWN
+
+                                navigation.panel: navPanel
+                                navigation.name: "SoundButton" + rowItem.index
+                                navigation.row: rowItem.index + 3
+                                navigation.column: 0
+                                navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
+
+                                onClicked: {
+                                    soundMenu.requestOpen()
+                                }
+
+                                AudioResourceMenuLoader {
+                                    id: soundMenu
+
+                                    resourceItemModel: rowItem.soundItem
+                                }
+                            }
+
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: rowItem.isAuxBus
+                            }
+
+                            ChannelMuteSoloButtons {
+                                spacing: 4
+
+                                channelItem: rowItem.channelItem
+
+                                navigationPanel: navPanel
+                                navigationName: "Row" + rowItem.index
+                                muteNavigationRow: rowItem.index + 3
+                                muteNavigationColumn: 1
+                                soloNavigationRow: rowItem.index + 3
+                                soloNavigationColumn: 2
+                                accessibleName: rowItem.channelItem.title
+
+                                onMuteToggled: function(muted) {
+                                    if (rowItem.channelItem.selected) {
+                                        trackListModel.setMutedForSelectedRows(muted)
+                                    } else {
+                                        rowItem.channelItem.muted = muted
+                                    }
+                                }
+
+                                onSoloToggled: function(solo) {
+                                    if (rowItem.channelItem.selected) {
+                                        trackListModel.setSoloForSelectedRows(solo)
+                                    } else {
+                                        rowItem.channelItem.setUserSolo(solo)
+                                    }
+                                }
+                            }
+
+                            //! NOTE: fixed slots, so the buttons stay in columns whatever the track has; a column no track
+                            //! of the list uses takes no room
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: trackListModel.hasArticulationMapColumn
+
+                                FlatButton {
+                                    width: 20
+                                    height: 20
+
+                                    //! NOTE: a VST instrument without a map has it too, looking disabled, for its right click menu
+                                    visible: rowItem.hasArticulationMap || rowItem.isVstInstrument
+                                    opacity: rowItem.hasArticulationMap || rowItem.articulationMapEditorOpened ? 1 : ui.theme.itemOpacityDisabled
+
+                                    transparent: true
+                                    icon: IconCode.ARTICULATION
+                                    //! NOTE: colored while the track's editor is open
+                                    iconColor: rowItem.articulationMapEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
+
+                                    navigation.panel: navPanel
+                                    navigation.name: "ArticulationMapButton" + rowItem.index
+                                    navigation.row: rowItem.index + 3
+                                    navigation.column: 3
+                                    navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
+
+                                    //! NOTE: without a map (dimmed), opens the editor on a new one for the track; its editor
+                                    //! open: closes it
+                                    onClicked: {
+                                        if (rowItem.articulationMapEditorOpened) {
+                                            rowItem.channelItem.handleArticulationMapMenuItem("closeArticulationMapEditor")
+                                            return
+                                        }
+                                        rowItem.channelItem.handleArticulationMapMenuItem(rowItem.hasArticulationMap ? "editArticulationMap"
+                                                                                                                     : "newArticulationMap")
+                                    }
+
+                                    //! NOTE: right click: the Mixer's "Articulation map" menu
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        acceptedButtons: Qt.RightButton
+
+                                        onClicked: function(mouse) {
+                                            articulationMapMenu.show(Qt.point(mouse.x, mouse.y), rowItem.channelItem.articulationMapMenuItems())
+                                        }
+                                    }
+
+                                    ContextMenuLoader {
+                                        id: articulationMapMenu
+
+                                        onHandleMenuItem: function(itemId) {
+                                            rowItem.channelItem.handleArticulationMapMenuItem(itemId)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: trackListModel.hasEditorColumn
+
+                                FlatButton {
+                                    width: 20
+                                    height: 20
+
+                                    visible: rowItem.soundItem ? rowItem.soundItem.hasNativeEditorSupport : false
+
+                                    transparent: true
+                                    icon: IconCode.PLUGIN
+                                    //! NOTE: colored while the instrument's window is open
+                                    iconColor: rowItem.instrumentEditorOpened ? ui.theme.accentColor : ui.theme.fontPrimaryColor
+
+                                    navigation.panel: navPanel
+                                    navigation.name: "EditorButton" + rowItem.index
+                                    navigation.row: rowItem.index + 3
+                                    navigation.column: 4
+                                    navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
+
+                                    //! NOTE: its window open (from here or elsewhere): closes it
+                                    onClicked: {
+                                        if (rowItem.instrumentEditorOpened) {
+                                            rowItem.channelItem.closeInstrumentEditor()
+                                            return
+                                        }
+                                        rowItem.soundItem.requestToLaunchNativeEditorView()
+                                    }
+                                }
+                            }
+                        }
+
+                        SeparatorLine {
+                            anchors.bottom: parent.bottom
+                        }
+                    }
                 }
             }
         }
@@ -739,8 +1153,15 @@ Item {
             id: stripArea
 
             readonly property real stripZoom: 0.85
-            //! NOTE: all of its controls shown: no higher
-            readonly property int maxHeight: stripLoader.item ? Math.ceil(stripLoader.item.naturalHeight * stripZoom) + 1 : 0
+            //! NOTE: all of its controls shown: no higher. Without a channel (none selected): their last height, so
+            //! the list above doesn't jump
+            readonly property int maxHeight: stripLoader.item ? Math.ceil(stripLoader.item.naturalHeight * stripZoom) + 1
+                                                              : trackListModel.stripContentHeight
+            onMaxHeightChanged: {
+                if (stripLoader.item) {
+                    trackListModel.stripContentHeight = maxHeight
+                }
+            }
             readonly property int minHeight: Math.min(120, maxHeight)
             //! NOTE: while its edge is dragged; then remembered (see TrackListModel::stripHeight)
             property int draggedHeight: -1
@@ -749,7 +1170,7 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
 
-            visible: stripLoader.active
+            visible: contextMenuModel.channelStripVisible
             height: !visible ? 0
                              : Math.max(minHeight, Math.min(draggedHeight >= 0 ? draggedHeight : trackListModel.stripHeight,
                                                             maxHeight, zoomContainer.contentItem.height - 80))
@@ -827,6 +1248,7 @@ Item {
 
                     sourceComponent: TrackListChannelStrip {
                         channelItem: stripLoader.channelItem
+                        channelSelected: trackListModel.stripChannelSelected
                         navigationPanel: stripNavPanel
 
                         //! NOTE: like the rows' buttons: the first selected row's, so for the whole selection
