@@ -68,7 +68,7 @@ static String entryLine(const ExpressionMapEntry& entry, bool isDefault, int mid
     const String code = channelOnly ? channel : ArticulationMapWriter::messagesCode(entry.messages, middleCOctave);
     String line = String(isDefault ? u"*" : u"") + (entry.disabled ? u"-" : u"") + code + u" " + entry.id;
 
-    if (entry.aliases != ArticulationMapParser::implicitAliases(entry.id)) {
+    if (entry.explicitAliases) {
         StringList names;
         for (const mpe::ArticulationType type : entry.aliases) {
             names << String::fromQString(mpe::ARTICULATION_TYPE_NAMES.at(type)).toLower();

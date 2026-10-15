@@ -290,3 +290,81 @@ TEST_F(ArticulationMapParser_Tests, EntryForArticulations_PlayingTechnique)
     ASSERT_TRUE(both);
     EXPECT_EQ(both->id, u"Staccato");
 }
+
+TEST_F(ArticulationMapParser_Tests, ImplicitAliases_Ambiguous)
+{
+    // [GIVEN] Several articulations named after the same score marking, as variants of another technique
+    const ExpressionMap map = ArticulationMapParser::parse(u"C0 Tremolo > Fast > Legato\n"
+                                                           u"D0 Tremolo > Slow > legato\n"
+                                                           u"E0 Perf. legato > Normal\n"
+                                                           u"F0 Strings > Pizzicato\n"
+                                                           u"G0 Tremolo > Fast > Staccato = staccato\n"
+                                                           u"A0 Short > Staccato\n").map;
+    ASSERT_EQ(map.entries.size(), 6);
+
+    // [THEN] None of them is selected by it on their own
+    EXPECT_TRUE(map.entries.at(0).aliases.empty());
+    EXPECT_TRUE(map.entries.at(1).aliases.empty());
+    EXPECT_FALSE(map.entries.at(0).explicitAliases);
+
+    // [THEN] A name of its own still is
+    EXPECT_EQ(map.entries.at(3).aliases, std::vector<mpe::ArticulationType> { mpe::ArticulationType::Pizzicato });
+
+    // [THEN] An explicit list counts, the name of another articulation still being ambiguous
+    EXPECT_EQ(map.entries.at(4).aliases, std::vector<mpe::ArticulationType> { mpe::ArticulationType::Staccato });
+    EXPECT_TRUE(map.entries.at(4).explicitAliases);
+    EXPECT_TRUE(map.entries.at(5).aliases.empty());
+}
+
+TEST_F(ArticulationMapParser_Tests, EntryForArticulations_ExplicitFirst)
+{
+    // [GIVEN] An articulation selected by its name, above one selected by an explicit list
+    const ExpressionMap map = ArticulationMapParser::parse(u"C0 Short > Staccato\n"
+                                                           u"D0 Accent\n"
+                                                           u"E0 Spiccato = staccato\n").map;
+
+    mpe::ArticulationMap staccato;
+    staccato.emplace(mpe::ArticulationType::Staccato, mpe::ArticulationAppliedData());
+
+    // [THEN] The explicit list wins, wherever it is
+    const ExpressionMapEntry* entry = map.entryForArticulations(staccato);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Spiccato");
+
+    // [THEN] Among the implicit ones, the entry order still decides
+    mpe::ArticulationMap accent;
+    accent.emplace(mpe::ArticulationType::Accent, mpe::ArticulationAppliedData());
+    entry = map.entryForArticulations(accent);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Accent");
+
+    // [THEN] Between different score articulations too, even when the later one is explicit
+    mpe::ArticulationMap both = staccato;
+    both.emplace(mpe::ArticulationType::Accent, mpe::ArticulationAppliedData());
+    entry = map.entryForArticulations(both);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Accent");
+}
+
+TEST_F(ArticulationMapParser_Tests, EntryForArticulations_ExplicitOnlyForItsOwnMarking)
+{
+    // [GIVEN] A pizzicato selected by its name, above a spiccato explicitly selected by staccato dots
+    const ExpressionMap map = ArticulationMapParser::parse(u"*C0 Sustain\n"
+                                                           u"D0 Strings > Pizzicato\n"
+                                                           u"E0 Spiccato = staccato\n").map;
+
+    mpe::ArticulationMap staccato;
+    staccato.emplace(mpe::ArticulationType::Staccato, mpe::ArticulationAppliedData());
+
+    // [THEN] Staccato dots under "pizz." still play the pizzicato: the explicit list only wins over the same marking
+    const ExpressionMapEntry* entry = map.entryForArticulations(staccato, mpe::ArticulationType::Pizzicato);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Strings > Pizzicato");
+
+    // [THEN] Disabled, the explicit entry no longer overrides the name of another one
+    const ExpressionMap withStaccato = ArticulationMapParser::parse(u"C0 Short > Staccato\n"
+                                                                    u"-D0 Spiccato = staccato\n").map;
+    entry = withStaccato.entryForArticulations(staccato);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->id, u"Short > Staccato");
+}

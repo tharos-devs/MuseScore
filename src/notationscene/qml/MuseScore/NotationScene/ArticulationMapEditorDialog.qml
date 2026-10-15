@@ -1023,7 +1023,7 @@ StyledDialogView {
                                                 width: parent.width
                                                 horizontalAlignment: Text.AlignLeft
                                                 wrapMode: Text.WordWrap
-                                                text: qsTrc("notation", "By default, an articulation is selected by the score marking it's named like.")
+                                                text: qsTrc("notation", "By default, an articulation is selected by the score marking it's named like, unless other articulations of the map are named like it too. Chosen markings take precedence over the ones that come from a name.")
                                             }
 
                                             Repeater {
