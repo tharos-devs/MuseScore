@@ -346,11 +346,10 @@ void MixerPanelModel::connectFxChangeFanOut(MixerChannelItem* item)
     });
 }
 
-void MixerPanelModel::pushFxChainsUndo(const muse::TranslatableString& actionName,
-                                       const std::vector<std::pair<muse::audio::TrackId, AudioFxChain> >& before)
+void MixerPanelModel::pushFxChainsUndo(const muse::TranslatableString& actionName, const TrackFxChains& before)
 {
-    std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > changedBefore;
-    std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > changedAfter;
+    TrackFxChains changedBefore;
+    TrackFxChains changedAfter;
     for (const auto& [trackId, chain] : before) {
         MixerChannelItem* channel = findChannelItem(trackId);
         if (channel && channel->outputParams().fxChain != chain) {
@@ -365,7 +364,7 @@ void MixerPanelModel::pushFxChainsUndo(const muse::TranslatableString& actionNam
     }
 
     QPointer<MixerPanelModel> guard(this);
-    auto restore = [guard](const std::vector<std::pair<muse::audio::TrackId, AudioFxChain> >& chains) {
+    auto restore = [guard](const TrackFxChains& chains) {
         if (!guard) {
             return;
         }
@@ -395,7 +394,7 @@ bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerCha
 
     OutputResourceItem* sourceItem = sourceItems[sourceIndex];
 
-    const std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > before {
+    const TrackFxChains before {
         { source->trackId(), source->outputParams().fxChain },
         { target->trackId(), target->outputParams().fxChain },
     };

@@ -242,8 +242,8 @@ private:
     void connectFxChangeFanOut(MixerChannelItem* item);
 
     //! NOTE: an undo step restoring the channels' FX chains changed since before (by track)
-    void pushFxChainsUndo(const muse::TranslatableString& actionName,
-                          const std::vector<std::pair<muse::audio::TrackId, muse::audio::AudioFxChain> >& before);
+    using TrackFxChains = std::vector<std::pair<muse::audio::TrackId, muse::audio::AudioFxChain> >;
+    void pushFxChainsUndo(const muse::TranslatableString& actionName, const TrackFxChains& before);
 
     //! NOTE: shared by connectContinuousChangeUndo()'s volume/balance/gain wiring - each
     //! pushes a single undo command that just re-invokes the given MixerChannelItem
