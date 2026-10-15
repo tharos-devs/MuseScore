@@ -139,8 +139,20 @@ DockPage {
         return withFixedPanel ? root.verticalPanelDefaultWidth : root.panelMaxDimension
     }
 
+    //! NOTE: a fixed width, narrower than the other side panels' (the instruments' names and its strip's two columns
+    //! still fit) when alone in its column; theirs beside them (a column has one width)
+    readonly property int trackListPanelWidth: 256
+
+    function updateTrackListPanelWidthLimits() {
+        const width = resizableSidePanelMaximumWidth(trackListPanel) === root.verticalPanelDefaultWidth
+                    ? root.verticalPanelDefaultWidth : root.trackListPanelWidth
+        trackListPanel.minimumWidth = Math.min(trackListPanel.minimumWidth, width)
+        trackListPanel.maximumWidth = width
+        trackListPanel.minimumWidth = width
+    }
+
     function updateResizableSidePanelsMaximumWidth() {
-        trackListPanel.maximumWidth = resizableSidePanelMaximumWidth(trackListPanel)
+        updateTrackListPanelWidthLimits()
         for (const panel of [ videoPanel, timelinePanel ]) {
             if (panel.dockPlacementUpdater) {
                 panel.dockPlacementUpdater()
@@ -527,10 +539,10 @@ DockPage {
 
             navigationSection: root.navigationPanelSec(trackListPanel.location)
 
-            width: root.verticalPanelDefaultWidth
-            minimumWidth: root.verticalPanelDefaultWidth
-            //! NOTE: resizable, or the side panels' fixed width, see updateMaximumWidth() below
-            maximumWidth: root.panelMaxDimension
+            width: root.trackListPanelWidth
+            //! NOTE: fixed, see updateTrackListPanelWidthLimits()
+            minimumWidth: root.trackListPanelWidth
+            maximumWidth: root.trackListPanelWidth
 
             minimumHeight: root.panelMinDimension
             maximumHeight: root.panelMaxDimension
@@ -550,7 +562,7 @@ DockPage {
                 //! NOTE: like the Video panel's (see resizableSidePanelMaximumWidth()): a move always changes the
                 //! panel's size (or window)
                 function updateMaximumWidth() {
-                    trackListPanel.maximumWidth = root.resizableSidePanelMaximumWidth(trackListPanel)
+                    root.updateTrackListPanelWidthLimits()
                 }
 
                 readonly property var hostWindow: Window.window

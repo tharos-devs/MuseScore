@@ -41,6 +41,8 @@ qt_add_qml_module(playback_qml
         channelcategoriesmenu.h
         channelcolorchange.cpp
         channelcolorchange.h
+    channeleditundo.cpp
+    channeleditundo.h
         channelselection.cpp
         channelselection.h
         globalmutesolotoggle.cpp
@@ -92,7 +94,13 @@ qt_add_qml_module(playback_qml
         internal/AudioResourceControl.qml
         internal/AudioResourceMenuLoader.qml
         internal/AuxSendControl.qml
+        internal/ChannelAuxSends.qml
+        internal/ChannelEqThumbnail.qml
+        internal/ChannelFader.qml
+        internal/ChannelFxSlots.qml
+        internal/ChannelKnobControl.qml
         internal/ChannelMuteSoloButtons.qml
+        internal/ChannelVolumeField.qml
         internal/GlobalMuteSoloButtons.qml
         internal/KnobControl.qml
         internal/KnobDragValueTooltip.qml
@@ -116,6 +124,7 @@ qt_add_qml_module(playback_qml
         internal/PlaybackToolBarActions.qml
         internal/SoundFlag/MuseSoundsParams.qml
         internal/SoundFlag/ParamsGridView.qml
+        internal/TrackListChannelStrip.qml
         internal/VideoHitPointRow.qml
         internal/VideoHitPointsPanel.qml
         internal/VolumePressureMeter.qml

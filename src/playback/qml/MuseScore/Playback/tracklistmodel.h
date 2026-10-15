@@ -27,6 +27,7 @@
 #include <QAbstractListModel>
 #include <QColor>
 #include <QList>
+#include <QPointer>
 #include <QQmlParserStatus>
 #include <qqmlintegration.h>
 
@@ -38,6 +39,7 @@
 #include "vst/ivstpluginstateprovider.h"
 #endif
 
+#include "audio/main/iplayback.h"
 #include "context/iglobalcontext.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
@@ -57,7 +59,7 @@ class Part;
 
 namespace mu::playback {
 //! NOTE: the Track list panel: one row per part, with the part's Mixer controls that fit in a row (color, mute,
-//! solo, sound, VST editor, articulation map) and the part's visibility, then one row per Aux FX/Aux Group bus
+//! solo, sound, VST editor, articulation map; a hidden part dimmed), then one row per Aux FX/Aux Group bus
 //! (color, mute, solo), in the Mixer's order. Each row's channel item is a Mixer channel item of its own (not the
 //! Mixer's), bound to the part's first instrument's track or to the bus like the Mixer's (see
 //! MixerChannelItem::bindInstrumentTrack()/bindAuxBus()): everything goes through the same services as the Mixer
@@ -86,12 +88,20 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     //! NOTE: the Metronome row, above the Video row: its mute only
     Q_PROPERTY(MixerChannelItem * metronomeChannelItem READ metronomeChannelItem NOTIFY metronomeChannelItemChanged)
 
+    //! NOTE: the channel shown below the list, with the Mixer's controls: the first selected row's (a track or a bus)
+    Q_PROPERTY(MixerChannelItem * stripChannelItem READ stripChannelItem NOTIFY stripChannelItemChanged)
+    //! NOTE: the height of that area, remembered (a height above its controls': all of them, whatever their height)
+    Q_PROPERTY(int stripHeight READ stripHeight WRITE setStripHeight NOTIFY stripHeightChanged)
+    //! NOTE: the stripHeight meaning all of it
+    Q_PROPERTY(int fullStripHeight READ fullStripHeight CONSTANT)
+
     Q_PROPERTY(bool videoVisible READ videoVisible NOTIFY categoriesVisibleChanged)
     Q_PROPERTY(bool metronomeVisible READ metronomeVisible NOTIFY categoriesVisibleChanged)
 
     QML_ELEMENT
 
     muse::ContextInject<IPlaybackController> controller = { this };
+    muse::ContextInject<muse::audio::IPlayback> playback = { this };
     muse::ContextInject<context::IGlobalContext> context = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
@@ -102,8 +112,6 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
 public:
     explicit TrackListModel(QObject* parent = nullptr);
     ~TrackListModel() override;
-
-    Q_INVOKABLE void togglePartVisible(int row);
 
     //! NOTE: like the Mixer's (see ChannelSelection): a click on a row selects it alone, Cmd/Ctrl+click adds or
     //! removes it, Shift+click selects the rows from the last clicked one
@@ -132,6 +140,11 @@ public:
 
     MixerChannelItem* metronomeChannelItem() const;
 
+    MixerChannelItem* stripChannelItem() const;
+    int stripHeight() const;
+    int fullStripHeight() const;
+    void setStripHeight(int height);
+
     bool videoVisible() const;
     bool metronomeVisible() const;
 
@@ -153,6 +166,8 @@ signals:
     void hasVideoChanged();
     void metronomeChannelItemChanged();
     void categoriesVisibleChanged();
+    void stripChannelItemChanged();
+    void stripHeightChanged();
 
 private:
     enum Roles {
@@ -195,6 +210,10 @@ private:
 
     void onCurrentNotationChanged();
     void selectRowsOfScoreSelection();
+    void updateStripChannelItem();
+    //! NOTE: what the Mixer's channels have too: undo, the fan-out of a picked effect/aux send to the selection,
+    //! all their slots (see MixerChannelItem::showAllSlots()), the automation
+    void connectMixerControls(MixerChannelItem* item, const PartTracks& tracks);
     bool isInstrumentEditorOpened(const Row& row) const;
     void subscribeOnUndoStack(const notation::INotationPtr& notation);
     void scheduleReload();
@@ -232,6 +251,7 @@ private:
 
     GlobalMuteSoloToggle m_globalMuteSolo;
     int m_selectionAnchorIndex = -1;
+    QPointer<MixerChannelItem> m_stripChannelItem;
 
     //! NOTE: see updateColumns()
     bool m_hasArticulationMapColumn = false;

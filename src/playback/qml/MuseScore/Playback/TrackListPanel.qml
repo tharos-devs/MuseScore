@@ -60,7 +60,20 @@ Item {
         enabled: root.visible
     }
 
+    //! NOTE: the channel strip's controls, after the list's
+    NavigationPanel {
+        id: stripNavPanel
+
+        name: "TrackListChannelStrip"
+        section: root.navigationSection
+        order: root.contentNavigationPanelOrderStart + 1
+        direction: NavigationPanel.Vertical
+        enabled: root.visible && stripLoader.active
+    }
+
     ZoomContainer {
+        id: zoomContainer
+
         anchors.fill: parent
 
         zoom: contextMenuModel.zoom
@@ -68,7 +81,10 @@ Item {
         StyledListView {
             id: listView
 
-            anchors.fill: parent
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: stripArea.top
 
             model: trackListModel
 
@@ -109,12 +125,7 @@ Item {
                         navigationColumnStart: 1
                     }
 
-                    //! NOTE: the rows' visibility, articulation map and editor columns
-                    Item {
-                        width: 20
-                        height: 20
-                    }
-
+                    //! NOTE: the rows' articulation map and editor columns
                     Item {
                         width: 20
                         height: 20
@@ -226,14 +237,10 @@ Item {
                             }
                         }
 
-                        //! NOTE: the parts' solo and visibility columns
-                        Repeater {
-                            model: 2
-
-                            Item {
-                                width: 20
-                                height: 20
-                            }
+                        //! NOTE: the parts' solo column
+                        Item {
+                            width: 20
+                            height: 20
                         }
 
                         Item {
@@ -254,7 +261,7 @@ Item {
                     }
                 }
 
-                //! NOTE: the video's row: its buttons in the parts' columns (Load video in the visibility one)
+                //! NOTE: the video's row: its buttons in the parts' columns (Load video in the sound one)
                 Rectangle {
                     id: videoRow
 
@@ -361,10 +368,22 @@ Item {
 
                         spacing: 4
 
-                        //! NOTE: the parts' sound column
-                        Item {
+                        FlatButton {
                             width: 20
                             height: 20
+
+                            transparent: true
+                            icon: IconCode.OPEN_FILE
+
+                            navigation.panel: navPanel
+                            navigation.name: "LoadVideoButton"
+                            navigation.row: 2
+                            navigation.column: 0
+                            navigation.accessible.name: qsTrc("playback", "Load video")
+
+                            onClicked: {
+                                trackListModel.chooseVideoFile()
+                            }
                         }
 
                         ChannelMuteSoloButtons {
@@ -387,24 +406,6 @@ Item {
 
                             onSoloToggled: function(solo) {
                                 videoRow.channelItem.solo = solo
-                            }
-                        }
-
-                        FlatButton {
-                            width: 20
-                            height: 20
-
-                            transparent: true
-                            icon: IconCode.OPEN_FILE
-
-                            navigation.panel: navPanel
-                            navigation.name: "LoadVideoButton"
-                            navigation.row: 2
-                            navigation.column: 3
-                            navigation.accessible.name: qsTrc("playback", "Load video")
-
-                            onClicked: {
-                                trackListModel.chooseVideoFile()
                             }
                         }
 
@@ -645,32 +646,6 @@ Item {
                         }
                     }
 
-                    //! NOTE: a bus's row has no visibility: its column stays
-                    Item {
-                        width: 20
-                        height: 20
-                        visible: rowItem.isAuxBus
-                    }
-
-                    FlatButton {
-                        width: 20
-                        height: 20
-                        visible: !rowItem.isAuxBus
-
-                        transparent: true
-                        icon: rowItem.partVisible ? IconCode.EYE_OPEN : IconCode.EYE_CLOSED
-
-                        navigation.panel: navPanel
-                        navigation.name: "VisibilityButton" + rowItem.index
-                        navigation.row: rowItem.index + 3
-                        navigation.column: 3
-                        navigation.accessible.name: rowItem.channelItem.title + " " + (rowItem.partVisible ? qsTrc("playback", "Hide instrument") : qsTrc("playback", "Show instrument"))
-
-                        onClicked: {
-                            trackListModel.togglePartVisible(rowItem.index)
-                        }
-                    }
-
                     //! NOTE: fixed slots, so the buttons stay in columns whatever the track has; a column no track
                     //! of the list uses takes no room
                     Item {
@@ -694,7 +669,7 @@ Item {
                             navigation.panel: navPanel
                             navigation.name: "ArticulationMapButton" + rowItem.index
                             navigation.row: rowItem.index + 3
-                            navigation.column: 4
+                            navigation.column: 3
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
                             //! NOTE: without a map (dimmed), opens the editor on a new one for the track
@@ -742,7 +717,7 @@ Item {
                             navigation.panel: navPanel
                             navigation.name: "EditorButton" + rowItem.index
                             navigation.row: rowItem.index + 3
-                            navigation.column: 5
+                            navigation.column: 4
                             navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
 
                             onClicked: {
@@ -754,6 +729,115 @@ Item {
 
                 SeparatorLine {
                     anchors.bottom: parent.bottom
+                }
+            }
+        }
+
+        //! NOTE: the first selected row's channel with the Mixer's controls, below the list (hidden from the "…" menu);
+        //! its top edge is dragged to change its height (remembered), up to all of it
+        Item {
+            id: stripArea
+
+            readonly property real stripZoom: 0.85
+            //! NOTE: all of its controls shown: no higher
+            readonly property int maxHeight: stripLoader.item ? Math.ceil(stripLoader.item.naturalHeight * stripZoom) + 1 : 0
+            readonly property int minHeight: Math.min(120, maxHeight)
+            //! NOTE: while its edge is dragged; then remembered (see TrackListModel::stripHeight)
+            property int draggedHeight: -1
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+
+            visible: stripLoader.active
+            height: !visible ? 0
+                             : Math.max(minHeight, Math.min(draggedHeight >= 0 ? draggedHeight : trackListModel.stripHeight,
+                                                            maxHeight, zoomContainer.contentItem.height - 80))
+
+            SeparatorLine {
+                anchors.top: parent.top
+            }
+
+            MouseArea {
+                id: resizeArea
+
+                property real pressY: 0
+                property int pressHeight: 0
+
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 6
+                z: 1
+
+                cursorShape: Qt.SizeVerCursor
+
+                onPressed: function(mouse) {
+                    pressY = mapToItem(zoomContainer.contentItem, mouse.x, mouse.y).y
+                    pressHeight = stripArea.height
+                }
+
+                onPositionChanged: function(mouse) {
+                    if (pressed) {
+                        const y = mapToItem(zoomContainer.contentItem, mouse.x, mouse.y).y
+                        stripArea.draggedHeight = Math.round(pressHeight - (y - pressY))
+                    }
+                }
+
+                //! NOTE: let go at its highest: stays at its highest, even once its controls take more room
+                onReleased: {
+                    if (stripArea.draggedHeight >= 0) {
+                        trackListModel.stripHeight = stripArea.height >= stripArea.maxHeight ? trackListModel.fullStripHeight
+                                                                                                     : stripArea.height
+                        stripArea.draggedHeight = -1
+                    }
+                }
+            }
+
+            ZoomContainer {
+                anchors.fill: parent
+                anchors.topMargin: 1
+
+                zoom: stripArea.stripZoom
+
+                Loader {
+                    id: stripLoader
+
+                    //! NOTE: only ever a channel: the controls never see none while the strip goes away
+                    property MixerChannelItem channelItem: null
+
+                    anchors.fill: parent
+
+                    active: contextMenuModel.channelStripVisible && Boolean(trackListModel.stripChannelItem)
+                            && Boolean(stripLoader.channelItem)
+
+                    Component.onCompleted: {
+                        stripLoader.channelItem = trackListModel.stripChannelItem
+                    }
+
+                    Connections {
+                        target: trackListModel
+
+                        function onStripChannelItemChanged() {
+                            if (trackListModel.stripChannelItem) {
+                                stripLoader.channelItem = trackListModel.stripChannelItem
+                            }
+                        }
+                    }
+
+                    sourceComponent: TrackListChannelStrip {
+                        channelItem: stripLoader.channelItem
+                        navigationPanel: stripNavPanel
+
+                        //! NOTE: like the rows' buttons: the first selected row's, so for the whole selection
+                        onMuteToggled: function(muted) {
+                            trackListModel.setMutedForSelectedRows(muted)
+                        }
+
+                        onSoloToggled: function(solo) {
+                            trackListModel.setSoloForSelectedRows(solo)
+                        }
+                    }
                 }
             }
         }

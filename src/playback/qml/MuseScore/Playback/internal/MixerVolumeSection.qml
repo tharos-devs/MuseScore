@@ -5,7 +5,7 @@
  * MuseScore Studio
  * Music Composition & Notation
  *
- * Copyright (C) 2021 MuseScore Limited and others
+ * Copyright (C) 2026 MuseScore Limited and others
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
@@ -19,13 +19,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
 
 import Muse.Ui
 import Muse.UiComponents
+import MuseScore.Playback
 
 MixerPanelSection {
     id: root
@@ -37,50 +37,21 @@ MixerPanelSection {
 
         required property MixerChannelItem channelItem
 
-        height: childrenRect.height
+        height: field.height
         width: root.rowWidthFor(channelItem)
 
-        property string accessibleName: (Boolean(root.needReadChannelName) ? channelItem.title + " " : "") + root.headerTitle
-
-        TextInputField {
-            id: volumeTextInputField
+        ChannelVolumeField {
+            id: field
 
             anchors.horizontalCenter: parent.horizontalCenter
 
-            height: 24
-            width: 46
+            channelItem: content.channelItem
 
-            enabled: !content.channelItem.hasVolumeAutomation
+            navigationRowStart: root.navigationRowStart
+            accessibleName: (Boolean(root.needReadChannelName) ? content.channelItem.title + " " : "") + root.headerTitle
 
-            textHorizontalAlignment: Qt.AlignHCenter
-            textSidePadding: 0
-            background.radius: 2
-
-            navigation.name: "VolumeInputField"
-            navigation.panel: content.channelItem.panel
-            navigation.row: root.navigationRowStart
-            navigation.accessible.name: content.accessibleName + " " + currentText
-            navigation.onActiveChanged: {
-                if (navigation.active) {
-                    root.navigateControlIndexChanged({row: navigation.row, column: navigation.column})
-                }
-            }
-
-            validator: DoubleInputValidator {
-                id: doubleInputValidator
-                top: content.channelItem.volumeLevelMax
-                bottom: content.channelItem.volumeLevelMin
-                decimal: 1
-            }
-
-            currentText: Math.round(content.channelItem.volumeLevel * 10) / 10
-
-            onTextEdited: function(newTextValue) {
-                if (content.channelItem.volumeLevel !== Number(newTextValue)) {
-                    content.channelItem.beginVolumeChange()
-                    content.channelItem.volumeLevel = Number(newTextValue)
-                    content.channelItem.endVolumeChange()
-                }
+            onNavigateControlIndexChanged: function(index) {
+                root.navigateControlIndexChanged(index)
             }
         }
     }

@@ -36,6 +36,8 @@
 #include "log.h"
 #include "translation.h"
 
+#include "channeleditundo.h"
+
 #include "notation/imasternotation.h"
 #include "notation/inotation.h"
 #include "notation/inotationsolomutestate.h"
@@ -53,12 +55,6 @@ using namespace mu::notation;
 using namespace mu::project;
 
 static constexpr int INVALID_INDEX = -1;
-
-static bool isInstrumentChannel(const MixerChannelItem* channel)
-{
-    return channel->type() == MixerChannelItem::Type::PrimaryInstrument
-           || channel->type() == MixerChannelItem::Type::SecondaryInstrument;
-}
 
 MixerPanelModel::MixerPanelModel(QObject* parent)
     : QAbstractListModel(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
@@ -218,169 +214,6 @@ void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const mu
     ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
 }
 
-template<typename T>
-void MixerPanelModel::pushChannelFieldUndoCommand(const TrackId& trackId, const muse::TranslatableString& actionName,
-                                                  void (MixerChannelItem::* setter)(T), T oldValue, T newValue)
-{
-    IProjectUndoStackPtr undoStack = projectUndoStack();
-    if (!undoStack) {
-        return;
-    }
-
-    QPointer<MixerPanelModel> guard(this);
-
-    undoStack->push(actionName, [guard, trackId, setter, newValue]() {
-        if (!guard) {
-            return;
-        }
-
-        if (MixerChannelItem* item = guard->findChannelItem(trackId)) {
-            (item->*setter)(newValue);
-        }
-    }, [guard, trackId, setter, oldValue]() {
-        if (!guard) {
-            return;
-        }
-
-        if (MixerChannelItem* item = guard->findChannelItem(trackId)) {
-            (item->*setter)(oldValue);
-        }
-    });
-}
-
-void MixerPanelModel::connectContinuousChangeUndo(MixerChannelItem* item)
-{
-    connect(item, &MixerChannelItem::volumeChangeCommitted, this, [this, item](float oldValue, float newValue) {
-        pushChannelFieldUndoCommand<float>(item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel volume"),
-                                           &MixerChannelItem::setVolumeLevel, oldValue, newValue);
-    });
-
-    connect(item, &MixerChannelItem::balanceChangeCommitted, this, [this, item](int oldValue, int newValue) {
-        pushChannelFieldUndoCommand<int>(item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel pan"),
-                                         &MixerChannelItem::setBalance, oldValue, newValue);
-    });
-
-    connect(item, &MixerChannelItem::gainChangeCommitted, this, [this, item](int oldValue, int newValue) {
-        pushChannelFieldUndoCommand<int>(item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel gain"),
-                                         &MixerChannelItem::setGain, oldValue, newValue);
-    });
-
-    connect(item, &MixerChannelItem::eqChangeCommitted, this, [this, item](const EqParams& oldValue, const EqParams& newValue) {
-        pushChannelFieldUndoCommand<EqParams>(item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel EQ"),
-                                              &MixerChannelItem::setEqParams, oldValue, newValue);
-    });
-
-    connect(item, &MixerChannelItem::auxSendLevelChangeCommitted, this,
-            [this, item](aux_channel_idx_t busIndex, int oldValue, int newValue) {
-        IProjectUndoStackPtr undoStack = projectUndoStack();
-        if (!undoStack) {
-            return;
-        }
-
-        QPointer<MixerPanelModel> guard(this);
-        TrackId trackId = item->trackId();
-
-        undoStack->push(muse::TranslatableString("undoableAction", "Change Mixer aux send level"),
-                        [guard, trackId, busIndex, newValue]() {
-            if (!guard) {
-                return;
-            }
-
-            if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
-                if (AuxSendItem* send = channel->auxSendItemForBus(busIndex)) {
-                    send->setAudioSignalPercentage(newValue);
-                }
-            }
-        }, [guard, trackId, busIndex, oldValue]() {
-            if (!guard) {
-                return;
-            }
-
-            if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
-                if (AuxSendItem* send = channel->auxSendItemForBus(busIndex)) {
-                    send->setAudioSignalPercentage(oldValue);
-                }
-            }
-        });
-    });
-}
-
-void MixerPanelModel::connectFxChangeFanOut(MixerChannelItem* item)
-{
-    //! NOTE: an effect (or "No effect") picked in a selected instrument track's FX slot is applied to the
-    //! other selected instrument tracks too, like the aux-send fan-out below. Undoable as a whole: each
-    //! changed channel's FX chain before and after is restored
-    connect(item, &MixerChannelItem::fxChangedByUser, this,
-            [this, item](const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta) {
-        QList<QPointer<MixerChannelItem> > others;
-        if (item->selected() && isInstrumentChannel(item)) {
-            for (MixerChannelItem* other : std::as_const(m_mixerChannelList)) {
-                if (other != item && other->selected() && isInstrumentChannel(other)) {
-                    others.push_back(other);
-                }
-            }
-        }
-
-        //! NOTE: emitted before the change: these are the chains before it
-        std::vector<std::pair<muse::audio::TrackId, AudioFxChain> > before;
-        before.push_back({ item->trackId(), item->outputParams().fxChain });
-        for (const QPointer<MixerChannelItem>& other : std::as_const(others)) {
-            before.push_back({ other->trackId(), other->outputParams().fxChain });
-        }
-
-        //! NOTE: after the slot's dropdown is done with its click (and has changed its own slot)
-        QPointer<MixerPanelModel> guard(this);
-        QTimer::singleShot(0, this, [guard, others, oldResourceId, newMeta, before]() {
-            if (!guard) {
-                return;
-            }
-
-            for (const QPointer<MixerChannelItem>& other : others) {
-                if (other) {
-                    other->applyFxChange(oldResourceId, newMeta);
-                }
-            }
-
-            guard->pushFxChainsUndo(muse::TranslatableString("undoableAction", "Change Mixer audio effect"), before);
-        });
-    });
-}
-
-void MixerPanelModel::pushFxChainsUndo(const muse::TranslatableString& actionName, const TrackFxChains& before)
-{
-    TrackFxChains changedBefore;
-    TrackFxChains changedAfter;
-    for (const auto& [trackId, chain] : before) {
-        MixerChannelItem* channel = findChannelItem(trackId);
-        if (channel && channel->outputParams().fxChain != chain) {
-            changedBefore.push_back({ trackId, chain });
-            changedAfter.push_back({ trackId, channel->outputParams().fxChain });
-        }
-    }
-
-    IProjectUndoStackPtr undoStack = projectUndoStack();
-    if (!undoStack || changedBefore.empty()) {
-        return;
-    }
-
-    QPointer<MixerPanelModel> guard(this);
-    auto restore = [guard](const TrackFxChains& chains) {
-        if (!guard) {
-            return;
-        }
-
-        for (const auto& [trackId, chain] : chains) {
-            if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
-                channel->restoreFxChain(chain);
-            }
-        }
-    };
-
-    undoStack->push(actionName,
-                    [restore, changedAfter]() { restore(changedAfter); },
-                    [restore, changedBefore]() { restore(changedBefore); });
-}
-
 bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerChannelItem* target, int insertIndex, bool duplicate)
 {
     if (!source || !target || source == target) {
@@ -394,9 +227,9 @@ bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerCha
 
     OutputResourceItem* sourceItem = sourceItems[sourceIndex];
 
-    const TrackFxChains before {
-        { source->trackId(), source->outputParams().fxChain },
-        { target->trackId(), target->outputParams().fxChain },
+    const ChannelEditUndo::ChannelFxChains before {
+        { source, source->outputParams().fxChain },
+        { target, target->outputParams().fxChain },
     };
 
     //! NOTE: the effect with its settings (and on/off state): the target's own instance is created with them
@@ -408,8 +241,9 @@ bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerCha
         sourceItem->setFx(muse::audio::AudioResourceMeta());
     }
 
-    pushFxChainsUndo(duplicate ? muse::TranslatableString("undoableAction", "Copy Mixer audio effect")
-                     : muse::TranslatableString("undoableAction", "Move Mixer audio effect"), before);
+    ChannelEditUndo::pushFxChainsUndo(projectUndoStack(),
+                                      duplicate ? muse::TranslatableString("undoableAction", "Copy Mixer audio effect")
+                                      : muse::TranslatableString("undoableAction", "Move Mixer audio effect"), before);
 
     return true;
 }
@@ -433,68 +267,10 @@ void MixerPanelModel::restoreDragCursor()
     }
 }
 
-void MixerPanelModel::connectAuxSendReassignment(MixerChannelItem* item)
+void MixerPanelModel::connectPickedChangeUndo(MixerChannelItem* item)
 {
-    //! NOTE: fans a user-picked aux-send bus (or "No aux send": that bus removed) out to every OTHER
-    //! selected instrument track, mirroring the multi-select behavior color/drag-reorder/mute/solo
-    //! already have - a no-op unless this item itself is a currently selected instrument
-    //! track (picking a bus on an unselected channel affects only that one channel, same as
-    //! clicking its own Mute/Solo button would; on a bus, only that bus: the bus picked
-    //! there was checked against routing loops for that bus alone).
-    connect(item, &MixerChannelItem::auxSendReassignedByUser, this,
-            [this, item](aux_channel_idx_t oldBusIndex, aux_channel_idx_t newBusIndex, const ChannelAuxSendsState& stateBefore) {
-        //! NOTE: each changed channel's sends before and after, restored as a whole by undo/redo - levels,
-        //! on/off states and slot positions come back exactly (re-assigning a bus would reset its level)
-        std::vector<std::pair<muse::audio::TrackId, ChannelAuxSendsState> > before;
-        std::vector<std::pair<muse::audio::TrackId, ChannelAuxSendsState> > after;
-        before.push_back({ item->trackId(), stateBefore });
-        after.push_back({ item->trackId(), item->auxSendsState() });
-
-        if (item->selected() && isInstrumentChannel(item)) {
-            for (MixerChannelItem* other : std::as_const(m_mixerChannelList)) {
-                if (other == item || !other->selected() || !isInstrumentChannel(other)) {
-                    continue;
-                }
-
-                ChannelAuxSendsState otherBefore = other->auxSendsState();
-
-                //! NOTE: "No aux send" removes the same bus from the other selected tracks
-                if (newBusIndex == AuxSendItem::NO_BUS) {
-                    other->clearAuxSendsTargeting(oldBusIndex);
-                } else {
-                    other->assignAuxSend(newBusIndex);
-                }
-
-                ChannelAuxSendsState otherAfter = other->auxSendsState();
-                if (!(otherAfter == otherBefore)) {
-                    before.push_back({ other->trackId(), otherBefore });
-                    after.push_back({ other->trackId(), otherAfter });
-                }
-            }
-        }
-
-        IProjectUndoStackPtr undoStack = projectUndoStack();
-        if (!undoStack) {
-            return;
-        }
-
-        QPointer<MixerPanelModel> guard(this);
-        auto restore = [guard](const std::vector<std::pair<muse::audio::TrackId, ChannelAuxSendsState> >& states) {
-            if (!guard) {
-                return;
-            }
-
-            for (const auto& [trackId, state] : states) {
-                if (MixerChannelItem* channel = guard->findChannelItem(trackId)) {
-                    channel->restoreAuxSendsState(state);
-                }
-            }
-        };
-
-        undoStack->push(muse::TranslatableString("undoableAction", "Assign Mixer aux send"),
-                        [restore, after]() { restore(after); },
-                        [restore, before]() { restore(before); });
-    });
+    ChannelEditUndo::connectPickedChanges(item, this, [this]() { return projectUndoStack(); },
+                                          [this]() { return m_mixerChannelList; });
 }
 
 void MixerPanelModel::setMutedForSelectedChannels(bool muted)
@@ -1733,11 +1509,10 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         updateAuxSendItemCount();
     });
 
-    connectAuxSendReassignment(item);
-    connectFxChangeFanOut(item);
+    connectPickedChangeUndo(item);
 
     connectGlobalMuteSoloAggregate(item);
-    connectContinuousChangeUndo(item);
+    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
 
     return item;
 }
@@ -1768,49 +1543,27 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
         }
     });
 
-    AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
-
-    //! NOTE: auxOutputParams() never tracks solo/muted/forceMute - they're deliberately
-    //! excluded from persistence (see updateAuxMuteStates()'s own comment: "muted" isn't
-    //! even written to the project file). Without seeding them here from their real sources,
-    //! this loadOutputParams() call would immediately clobber the correct solo/mute state
-    //! already applied a few lines up via loadSoloMuteState() back to its default false -
-    //! e.g. a Group bus that was actually soloed would show its Solo button unchecked right
-    //! after the Mixer panel is (re)built (mirrors the analogous fix in
-    //! buildInstrumentChannelItem() for instrument tracks' solo/forceMute).
-    const notation::INotationSoloMuteState::SoloMuteState& soloMuteState = audioSettings()->auxSoloMuteState(index);
-    bool forceMute = controller()->isAuxForceMuted(index);
-    outParams.solo = soloMuteState.solo;
-    outParams.muted = soloMuteState.mute || forceMute;
-    outParams.forceMute = forceMute;
-
-    loadOutputParams(item, outParams);
+    //! NOTE: its output params, and their way to the engine and the project, are the item's (see bindAuxBus()):
+    //! only its slots are lined up with the other channels' here
+    updateOutputResourceItemCount();
+    updateAuxSendItemCount();
 
     item->subscribeOnTrackAudioSignalChanges();
 
-    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId, index](const AudioOutputParams& params) {
-        playback()->setControlParams(trackId, params.control());
-
-        AudioOutputParams outParams = audioSettings()->auxOutputParams(index);
-        outParams.volume = params.volume;
-        outParams.balance = params.balance;
-        outParams.gain = params.gain;
-        outParams.eq = params.eq;
-        audioSettings()->setAuxOutputParams(index, outParams);
-    });
-    connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+    connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this]() {
         updateOutputResourceItemCount();
-        playback()->setFxChainParams(trackId, params.fxChain);
     });
-    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
-        playback()->setAuxSendsParams(trackId, params.auxSends);
+    connect(item, &MixerChannelItem::auxSendsParamsChanged, this, [this]() {
         updateAuxSendItemCount();
     });
-    connectAuxSendReassignment(item);
-    connectFxChangeFanOut(item);
+    connect(item, &MixerChannelItem::outputParamsReceived, this, [this]() {
+        updateOutputResourceItemCount();
+        updateAuxSendItemCount();
+    });
+    connectPickedChangeUndo(item);
 
     connectGlobalMuteSoloAggregate(item);
-    connectContinuousChangeUndo(item);
+    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
 
     return item;
 }
@@ -1868,7 +1621,7 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
     });
 
     connectGlobalMuteSoloAggregate(item);
-    connectContinuousChangeUndo(item);
+    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
 
     return item;
 }
@@ -1917,7 +1670,7 @@ MixerChannelItem* MixerPanelModel::buildMasterChannelItem()
     });
 
     connectGlobalMuteSoloAggregate(item);
-    connectContinuousChangeUndo(item);
+    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
 
     return item;
 }

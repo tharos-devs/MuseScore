@@ -22,22 +22,32 @@
 
 #pragma once
 
+#include <QPointer>
+
 #include "uicomponents/qml/Muse/UiComponents/zoomablemenumodel.h"
 
 #include "channelcategoriesmenu.h"
 
 namespace mu::playback {
-//! NOTE: the Track list panel's "…" menu: the kinds of channels listed (View) and its zoom (one step smaller than
-//! 100% by default), applied to the list
+//! NOTE: the Track list panel's "…" menu: the kinds of channels listed (View), its zoom (one step smaller than
+//! 100% by default), applied to the list, and whether the selected channel's controls are shown below it
 class TrackListContextMenuModel : public muse::uicomponents::ZoomableMenuModel
 {
     Q_OBJECT
     QML_ELEMENT
 
+    Q_PROPERTY(bool channelStripVisible READ channelStripVisible NOTIFY channelStripVisibleChanged)
+
 public:
     explicit TrackListContextMenuModel(QObject* parent = nullptr);
 
     Q_INVOKABLE void load() override;
+    Q_INVOKABLE void handleMenuItem(const QString& itemId) override;
+
+    bool channelStripVisible() const;
+
+signals:
+    void channelStripVisibleChanged();
 
 protected:
     //! NOTE: see MixerPanelContextMenuModel's: the View items' check marks are kept by ChannelCategoriesMenu
@@ -48,5 +58,6 @@ protected:
 
 private:
     ChannelCategoriesMenu m_channelCategoriesMenu { ChannelListPanel::TrackList };
+    QPointer<muse::uicomponents::MenuItem> m_channelStripItem;
 };
 }
