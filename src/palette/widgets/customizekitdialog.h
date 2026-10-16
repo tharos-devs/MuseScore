@@ -22,7 +22,12 @@
 
 #pragma once
 
+#include <map>
+#include <optional>
+
 #include "ui/view/widgetdialog.h"
+
+#include "async/asyncable.h"
 
 #include "ui_customizekitdialog.h"
 
@@ -43,7 +48,7 @@ namespace mu::palette {
 //   CustomizeKitDialog
 //---------------------------------------------------------
 
-class CustomizeKitDialog : public muse::ui::WidgetDialog, private Ui::CustomizeKitDialog
+class CustomizeKitDialog : public muse::ui::WidgetDialog, private Ui::CustomizeKitDialog, public muse::async::Asyncable
 {
     Q_OBJECT
 
@@ -60,6 +65,12 @@ public:
 
     void componentComplete() override;
 
+    //! NOTE: like Cancel: the window's close button and Escape revert the changes
+    void reject() override;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private slots:
     void bboxClicked(QAbstractButton* button);
     void itemChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
@@ -71,6 +82,7 @@ private slots:
     void customQuarterChanged(int);
 
     void defineShortcut();
+    void setAlwaysOnTop(bool on);
 
 private:
     void initDrumsetAndKey();
@@ -78,7 +90,12 @@ private:
     void apply();
     void cancel();
 
-    QTreeWidgetItem* loadPitchesList(); // Returns a tree item to select, if applicable...
+    const engraving::Drumset* scoreDrumset() const;
+    void replaceScoreDrumset(const engraving::Drumset& drumset);
+    void syncWithScore();
+    void closeWithoutReverting();
+
+    void loadPitchesList(int pitchToSelect); // Selects the first item if pitchToSelect isn't found
 
     void updateExample();
 
@@ -93,7 +110,14 @@ private:
     notation::INotationPtr m_notation;
     notation::InstrumentKey m_instrumentKey;
 
-    engraving::Drumset m_originDrumset;
+    //! NOTE: what Cancel reverts: the pitches the dialog changed since it was opened or applied, each as it
+    //! was before the dialog's first change (the other pitches may have been edited elsewhere meanwhile)
+    std::map<int, engraving::DrumInstrument> m_originDrums;
+    std::optional<size_t> m_originPercussionPanelColumns;
     engraving::Drumset m_editedDrumset;
+
+    //! NOTE: the score's drumset as last set or read by the dialog: a different one in the score
+    //! was changed elsewhere (undo/redo, Percussion panel) while the dialog is open
+    engraving::Drumset m_scoreDrumset;
 };
 }
