@@ -9,7 +9,7 @@ sélectionne automatiquement dans l'articulation lane.
   `Staccato`), **casse et espaces ignorés**. `Snap Pizzicato`, `snappizzicato` et `SnapPizzicato` sont équivalents.
   **Ambiguïté** : si plusieurs entrées de la map finissent par le même signe (`Tremolo > Fast > Legato` et
   `Tremolo > Slow > Legato`), aucune n'est sélectionnée par ce signe implicitement — il faut une liste explicite.
-- **Liste explicite** (`Nom = a, b, c`, ou les déclencheurs de l'éditeur) : casse ignorée, mais **pas d'espaces** :
+- **Liste explicite** (`Nom = a, b, c`, ou les Score markings de l'éditeur) : casse ignorée, mais **pas d'espaces** :
   écrire `SnapPizzicato`, pas `snap pizzicato` (sinon erreur « unknown score articulation »). Une liste explicite
   remplace le nom implicite.
 - **Priorité** : pour un même signe, une entrée qui l'a en **liste explicite** passe avant celles qui l'ont par leur
