@@ -37,7 +37,9 @@
 #include "engraving/dom/chord.h"
 #include "engraving/dom/factory.h"
 #include "engraving/dom/masterscore.h"
+#include "engraving/dom/instrument.h"
 #include "engraving/dom/note.h"
+#include "engraving/dom/part.h"
 #include "engraving/dom/score.h"
 #include "engraving/dom/utils.h"
 
@@ -45,12 +47,14 @@
 #include "notation/inotationinteraction.h"
 #include "notation/inotationnoteinput.h" // IWYU pragma: keep
 #include "notation/inotationparts.h" // IWYU pragma: keep
+#include "notation/inotationundostack.h"
 
 #include "modularity/ioc.h"
 #include "notationscene/utilities/percussionutilities.h"
 
 #include "draw/types/geometry.h"
 
+#include <QCloseEvent>
 #include <QMessageBox>
 
 using namespace mu::palette;
@@ -174,6 +178,10 @@ CustomizeKitDialog::CustomizeKitDialog(QWidget* parent)
     connect(shortcut, &QPushButton::clicked, this, &CustomizeKitDialog::defineShortcut);
     connect(loadButton, &QPushButton::clicked, this, &CustomizeKitDialog::load);
     connect(saveButton, &QPushButton::clicked, this, &CustomizeKitDialog::save);
+    connect(alwaysOnTopCheckBox, &QCheckBox::toggled, this, &CustomizeKitDialog::setAlwaysOnTop);
+
+    // on by default, like the articulation map editor: the dialog is not modal and is used next to the score
+    alwaysOnTopCheckBox->setChecked(true);
     pitchList->setColumnWidth(0, 40);
     pitchList->setColumnWidth(1, 60);
     pitchList->setColumnWidth(2, 30);
@@ -281,11 +289,45 @@ void CustomizeKitDialog::componentComplete()
 
     initDrumsetAndKey();
 
-    QTreeWidgetItem* itemToSelect = loadPitchesList();
-    itemToSelect = itemToSelect ? itemToSelect : pitchList->topLevelItem(0);
+    const mu::engraving::Note* note = dynamic_cast<mu::engraving::Note*>(m_notation->interaction()->contextItem());
+    loadPitchesList(note ? note->pitch() : -1);
 
-    if (itemToSelect) {
-        pitchList->setCurrentItem(itemToSelect);
+    m_notation->undoStack()->stackChanged().onNotify(this, [this]() {
+        syncWithScore();
+    });
+
+    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+        if (globalContext()->currentNotation() != m_notation) {
+            closeWithoutReverting();
+        }
+    });
+}
+
+void CustomizeKitDialog::reject()
+{
+    cancel();
+    WidgetDialog::reject();
+}
+
+void CustomizeKitDialog::closeEvent(QCloseEvent* event)
+{
+    //! NOTE: not from the window's close button: the score is being closed (after the question about
+    //! saving it), there is nothing to revert
+    if (!event->spontaneous()) {
+        m_notation = nullptr;
+    }
+
+    WidgetDialog::closeEvent(event);
+}
+
+void CustomizeKitDialog::setAlwaysOnTop(bool on)
+{
+    const bool visible = isVisible();
+    setWindowFlag(Qt::WindowStaysOnTopHint, on);
+
+    //! NOTE: changing the window flags hides a shown window
+    if (visible) {
+        show();
     }
 }
 
@@ -303,12 +345,8 @@ void CustomizeKitDialog::customGboxToggled(bool checked)
     }
 }
 
-QTreeWidgetItem* CustomizeKitDialog::loadPitchesList()
+void CustomizeKitDialog::loadPitchesList(int pitchToSelect)
 {
-    const INotationInteractionPtr interaction = m_notation->interaction();
-    const mu::engraving::Note* note = dynamic_cast<mu::engraving::Note*>(interaction->contextItem());
-    const int originPitch = note ? note->pitch() : -1;
-
     pitchList->blockSignals(true);
     pitchList->clear();
     pitchList->blockSignals(false);
@@ -322,14 +360,17 @@ QTreeWidgetItem* CustomizeKitDialog::loadPitchesList()
         item->setText(Column::SHORTCUT, m_editedDrumset.shortcut(i));
         item->setText(Column::NAME, m_editedDrumset.translatedName(i));
         item->setData(Column::PITCH, Qt::UserRole, i);
-        if (i == originPitch) {
+        if (i == pitchToSelect) {
             itemToSelect = item;
         }
     }
 
     pitchList->sortItems(3, Qt::SortOrder::DescendingOrder);
 
-    return itemToSelect;
+    itemToSelect = itemToSelect ? itemToSelect : pitchList->topLevelItem(0);
+    if (itemToSelect) {
+        pitchList->setCurrentItem(itemToSelect);
+    }
 }
 
 void CustomizeKitDialog::setEnabledPitchControls(bool enable)
@@ -379,9 +420,6 @@ void CustomizeKitDialog::bboxClicked(QAbstractButton* button)
     case QDialogButtonBox::AcceptRole:
         apply();
         break;
-    case QDialogButtonBox::RejectRole:
-        cancel();
-        break;
     default:
         break;
     }
@@ -409,8 +447,11 @@ void CustomizeKitDialog::initDrumsetAndKey()
 
     m_instrumentKey = { inst->id(), part->id(), tick };
 
-    m_originDrumset = *inst->drumset();
-    m_editedDrumset = m_originDrumset;
+    m_editedDrumset = *inst->drumset();
+    m_scoreDrumset = m_editedDrumset;
+
+    //! NOTE: tells which instrument the dialog edits: it is not modal, other staves can be selected meanwhile
+    setWindowTitle(QString("%1 – %2").arg(windowTitle(), part->partName().toQString()));
 }
 
 void CustomizeKitDialog::apply()
@@ -420,6 +461,10 @@ void CustomizeKitDialog::apply()
     //! NOTE: The note input state changes inside valueChanged,
     //! so to update the state of the drumset panel view, need to notify the change
     notifyAboutNoteInputStateChanged();
+
+    // nothing for Cancel to revert anymore
+    m_originDrums.clear();
+    m_originPercussionPanelColumns.reset();
 }
 
 void CustomizeKitDialog::notifyAboutNoteInputStateChanged()
@@ -429,7 +474,96 @@ void CustomizeKitDialog::notifyAboutNoteInputStateChanged()
 
 void CustomizeKitDialog::cancel()
 {
-    m_notation->parts()->replaceDrumset(m_instrumentKey, m_originDrumset);
+    if (!m_notation) {
+        return;
+    }
+
+    const Drumset* drumset = scoreDrumset();
+    if (!drumset) {
+        return;
+    }
+
+    Drumset reverted = *drumset;
+    for (const auto& [pitch, drum] : m_originDrums) {
+        reverted.setDrum(pitch, drum);
+    }
+
+    if (m_originPercussionPanelColumns) {
+        reverted.setPercussionPanelColumns(*m_originPercussionPanelColumns);
+    }
+
+    if (reverted != *drumset) {
+        replaceScoreDrumset(reverted);
+    }
+}
+
+const Drumset* CustomizeKitDialog::scoreDrumset() const
+{
+    const Part* part = m_notation->parts()->part(m_instrumentKey.partId);
+    const Instrument* instrument = part ? part->instrument(m_instrumentKey.tick) : nullptr;
+    if (!instrument || instrument->id() != m_instrumentKey.instrumentId) {
+        return nullptr;
+    }
+
+    return instrument->drumset();
+}
+
+void CustomizeKitDialog::replaceScoreDrumset(const Drumset& drumset)
+{
+    if (!m_notation) {
+        return;
+    }
+
+    // what Cancel reverts: the state before the dialog's first change (kept by the following changes)
+    for (int pitch = 0; pitch < DRUM_INSTRUMENTS; ++pitch) {
+        if (!(drumset.drum(pitch) == m_scoreDrumset.drum(pitch))) {
+            m_originDrums.try_emplace(pitch, m_scoreDrumset.drum(pitch));
+        }
+    }
+
+    if (drumset.percussionPanelColumns() != m_scoreDrumset.percussionPanelColumns() && !m_originPercussionPanelColumns) {
+        m_originPercussionPanelColumns = m_scoreDrumset.percussionPanelColumns();
+    }
+
+    //! NOTE: before replacing: the undo stack notifies its change from inside
+    m_scoreDrumset = drumset;
+    m_notation->parts()->replaceDrumset(m_instrumentKey, drumset);
+}
+
+//! NOTE: the drumset was changed elsewhere while the dialog is open (undo/redo, Percussion panel...):
+//! show the score's one, or close if the instrument is gone
+void CustomizeKitDialog::syncWithScore()
+{
+    if (!m_notation) {
+        return;
+    }
+
+    const Drumset* drumset = scoreDrumset();
+    if (!drumset) {
+        closeWithoutReverting();
+        return;
+    }
+
+    if (*drumset == m_scoreDrumset) {
+        return;
+    }
+
+    m_scoreDrumset = *drumset;
+    m_editedDrumset = *drumset;
+
+    const QTreeWidgetItem* current = pitchList->currentItem();
+    loadPitchesList(current ? current->data(Column::PITCH, Qt::UserRole).toInt() : -1);
+}
+
+//! NOTE: the score is no longer the current one, or the instrument is gone: nothing to revert
+void CustomizeKitDialog::closeWithoutReverting()
+{
+    if (!m_notation) {
+        return;
+    }
+
+    m_notation = nullptr;
+    done(QDialog::Rejected);
 }
 
 //---------------------------------------------------------
@@ -562,7 +696,7 @@ void CustomizeKitDialog::valueChanged()
 
     updateExample();
 
-    m_notation->parts()->replaceDrumset(m_instrumentKey, m_editedDrumset);
+    replaceScoreDrumset(m_editedDrumset);
 }
 
 //---------------------------------------------------------
@@ -649,8 +783,7 @@ void CustomizeKitDialog::load()
         }
     }
     fp.close();
-    loadPitchesList();
-    pitchList->setCurrentItem(pitchList->topLevelItem(0));
+    loadPitchesList(-1);
 }
 
 //---------------------------------------------------------
