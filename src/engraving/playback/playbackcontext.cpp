@@ -899,6 +899,35 @@ std::optional<ArticulationMark> PlaybackContext::latchedArticulationMark(const s
     return it->second;
 }
 
+std::optional<ArticulationMark> PlaybackContext::allFollowingNotesArticulationMark(const ExpressionMap& map, const staff_idx_t staffIdx,
+                                                                                   const track_idx_t trackIdx, const int tick,
+                                                                                   const int tickOffset) const
+{
+    auto staffIt = m_latchedArticulationMarksByStaff.find(staffIdx);
+    if (staffIt == m_latchedArticulationMarksByStaff.cend()) {
+        return std::nullopt;
+    }
+
+    auto markIt = findLessOrEqual(staffIt->second, tick);
+    if (markIt == staffIt->second.cend() || markIt->second.scope != ArticulationMark::Scope::AllFollowingNotes) {
+        return std::nullopt;
+    }
+
+    // A playing technique written after the mark is a new instruction of the score: it takes over
+    const mpe::ArticulationType technique = playingTechniqueArticulation(trackIdx, tick + tickOffset);
+    if (technique != mpe::ArticulationType::Undefined && map.entryForArticulations({}, technique)) {
+        auto techniquesIt = m_playTechniquesByTrack.find(trackIdx);
+        if (techniquesIt != m_playTechniquesByTrack.cend()) {
+            auto techniqueIt = findLessOrEqual(techniquesIt->second, tick + tickOffset);
+            if (techniqueIt != techniquesIt->second.cend() && techniqueIt->first > markIt->first + tickOffset) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    return markIt->second;
+}
+
 const ExpressionMapEntry* PlaybackContext::articulationInEffect(const InstrumentTrackId& trackId, const staff_idx_t firstStaffIdx,
                                                                 const int tick) const
 {
@@ -908,6 +937,13 @@ const ExpressionMapEntry* PlaybackContext::articulationInEffect(const Instrument
     }
 
     const int utick = m_score->repeatList().tick2utick(tick);
+    if (const std::optional<ArticulationMark> mark = allFollowingNotesArticulationMark(*map, firstStaffIdx, staff2track(firstStaffIdx),
+                                                                                       tick, utick - tick)) {
+        if (const ExpressionMapEntry* entry = map->entry(mark->entryId)) {
+            return entry;
+        }
+    }
+
     const mpe::ArticulationType technique = playingTechniqueArticulation(staff2track(firstStaffIdx), utick);
     if (technique != mpe::ArticulationType::Undefined) {
         if (const ExpressionMapEntry* entry = map->entryForArticulations({}, technique)) {
@@ -935,7 +971,7 @@ void PlaybackContext::updateLatchedArticulationMarks()
     }
 
     for (const auto& [chordId, mark] : data->marks()) {
-        if (mark.scope != ArticulationMark::Scope::Latched) {
+        if (mark.scope == ArticulationMark::Scope::SingleChord) {
             continue;
         }
 

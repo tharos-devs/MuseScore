@@ -52,7 +52,7 @@ public:
         QString fullName;
         QColor color;
         Kind kind = Kind::Inherited;
-        bool singleChord = false; // a mark applying to its chord only
+        bool allFollowingNotes = false; // a mark applying to the following chords over their score articulations
     };
 
     struct LineData {

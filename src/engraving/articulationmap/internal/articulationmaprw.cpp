@@ -43,6 +43,7 @@ static constexpr const char* SCOPE_KEY = "scope";
 static constexpr const char* TICK_OFFSET_KEY = "tickOffset";
 
 static const std::string SCOPE_SINGLE_CHORD = "singleChord";
+static const std::string SCOPE_ALL_FOLLOWING_NOTES = "allFollowingNotes";
 
 void ArticulationMapRW::read(ArticulationMapData& data, const muse::ByteArray& json)
 {
@@ -93,8 +94,10 @@ void ArticulationMapRW::read(ArticulationMapData& data, const muse::ByteArray& j
 
         ArticulationMark mark;
         mark.entryId = markObj.value(ENTRY_KEY).toString();
-        mark.scope = markObj.value(SCOPE_KEY).toStdString() == SCOPE_SINGLE_CHORD
-                     ? ArticulationMark::Scope::SingleChord
+        //! NOTE: an unknown scope (from a newer version) reads as latched
+        const std::string scope = markObj.value(SCOPE_KEY).toStdString();
+        mark.scope = scope == SCOPE_SINGLE_CHORD ? ArticulationMark::Scope::SingleChord
+                     : scope == SCOPE_ALL_FOLLOWING_NOTES ? ArticulationMark::Scope::AllFollowingNotes
                      : ArticulationMark::Scope::Latched;
         mark.tickOffset = markObj.value(TICK_OFFSET_KEY).toInt();
 
@@ -132,6 +135,8 @@ muse::ByteArray ArticulationMapRW::write(const ArticulationMapData& data, const 
         markObj[ENTRY_KEY] = mark.entryId;
         if (mark.scope == ArticulationMark::Scope::SingleChord) {
             markObj[SCOPE_KEY] = SCOPE_SINGLE_CHORD;
+        } else if (mark.scope == ArticulationMark::Scope::AllFollowingNotes) {
+            markObj[SCOPE_KEY] = SCOPE_ALL_FOLLOWING_NOTES;
         }
         if (mark.tickOffset != 0) {
             markObj[TICK_OFFSET_KEY] = mark.tickOffset;

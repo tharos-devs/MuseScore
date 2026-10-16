@@ -381,7 +381,7 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
         if (entry.source == Source::Alias) {
             return false;
         }
-        return entry.source != Source::OwnMark || (entry.mark && entry.mark->scope == ArticulationMark::Scope::Latched);
+        return entry.source != Source::OwnMark || (entry.mark && entry.mark->scope != ArticulationMark::Scope::SingleChord);
     };
 
     std::optional<muse::String> inEffect;
@@ -465,7 +465,7 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
         chip.kind = isOwnMark ? ArticulationMapOverlay::ChipData::Kind::Mark
                     : isAlias ? ArticulationMapOverlay::ChipData::Kind::Alias
                     : ArticulationMapOverlay::ChipData::Kind::Inherited;
-        chip.singleChord = isOwnMark && entry.mark && entry.mark->scope == ArticulationMark::Scope::SingleChord;
+        chip.allFollowingNotes = isOwnMark && entry.mark && entry.mark->scope == ArticulationMark::Scope::AllFollowingNotes;
 
         chips.push_back(chip);
         data.chipChords.push_back(i);
@@ -640,17 +640,36 @@ std::optional<ArticulationChoices> NotationArticulationMapController::articulati
             setMarks(targets, mark, muse::TranslatableString("undoableAction", "Change articulation scope"));
         };
         choices.actions.push_back(std::move(singleChord));
+    }
 
-        if (ownMark->tickOffset != 0) {
-            ArticulationChoiceAction resetOffset;
-            resetOffset.title = muse::qtrc("notation", "Reset position");
-            resetOffset.trigger = [this, targets, ownMark]() {
-                ArticulationMark mark = *ownMark;
-                mark.tickOffset = 0;
-                setMarks(targets, mark, muse::TranslatableString("undoableAction", "Reset articulation position"));
-            };
-            choices.actions.push_back(std::move(resetOffset));
-        }
+    if (ownMark) {
+        ArticulationChoiceAction allFollowingNotes;
+        allFollowingNotes.title = muse::qtrc("notation", "All following notes");
+        allFollowingNotes.checkable = true;
+        allFollowingNotes.checked = ownMark->scope == ArticulationMark::Scope::AllFollowingNotes;
+        allFollowingNotes.trigger = [this, targets, ownMark]() {
+            ArticulationMark mark = *ownMark;
+            mark.scope = mark.scope == ArticulationMark::Scope::AllFollowingNotes ? ArticulationMark::Scope::Latched
+                         : ArticulationMark::Scope::AllFollowingNotes;
+            setMarks(targets, mark, muse::TranslatableString("undoableAction", "Change articulation scope"));
+        };
+        choices.actions.push_back(std::move(allFollowingNotes));
+
+        ArticulationChoiceAction allFollowingNotesHint;
+        allFollowingNotesHint.title = muse::qtrc("notation", "Even with staccato, accents… until the next change");
+        allFollowingNotesHint.enabled = false;
+        choices.actions.push_back(std::move(allFollowingNotesHint));
+    }
+
+    if (ownMark && !isRest && ownMark->tickOffset != 0) {
+        ArticulationChoiceAction resetOffset;
+        resetOffset.title = muse::qtrc("notation", "Reset position");
+        resetOffset.trigger = [this, targets, ownMark]() {
+            ArticulationMark mark = *ownMark;
+            mark.tickOffset = 0;
+            setMarks(targets, mark, muse::TranslatableString("undoableAction", "Reset articulation position"));
+        };
+        choices.actions.push_back(std::move(resetOffset));
     }
 
     if (ownMark) {

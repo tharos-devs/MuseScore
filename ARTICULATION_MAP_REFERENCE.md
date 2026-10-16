@@ -16,8 +16,11 @@ sélectionne automatiquement dans l'articulation lane.
   nom, quel que soit leur ordre. Sinon (plusieurs entrées explicites avec le même signe, ou une note qui porte
   plusieurs signes, ex. accent + staccato, ou staccato sous « pizz. »), c'est la **première entrée de la map** qui
   correspond qui gagne. Une entrée désactivée (`-`) est ignorée.
-- **Ordre de résolution** pour chaque note : marque posée dans la lane > signe détecté (ce document) > marque
-  latched précédente > articulation par défaut (`*`).
+- **Ordre de résolution** pour chaque note : marque posée dans la lane > marque précédente réglée sur « All following
+  notes » > signe détecté (ce document) > marque latched précédente > articulation par défaut (`*`).
+- **« All following notes »** (menu d'une marque de la lane) : la marque s'applique aux notes suivantes même si elles
+  portent un signe détecté (staccato, accent…), jusqu'à la marque suivante. Une technique de jeu de la map écrite
+  **après** la marque (« pizz. »…) reprend la main ; une marque « This note only » ne vaut que pour sa note.
 - Un nom absent de ce document (`Spiccato`, `Flautando`…) n'est jamais détecté seul : soit on le pose à la main dans
   la lane, soit on lui donne une liste explicite (`Spiccato = Staccato, Staccatissimo`).
 - Dans l'éditeur de map, le bouton **Score markings** du panneau de droite coche les signes qui sélectionnent
