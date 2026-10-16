@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-16
+- Mixer (normal and condensed views) and Track list: a channel's left and right meters have the same width at any panel zoom (at 90 % the right one looked narrower); the meters no longer redraw a canvas at every level change.
 - Mixer and Track list channel strip: a channel's Aux send slots can be reordered by dragging their bus button, like the Audio FX slots. Only how they're shown (the sends are parallel, the sound doesn't change): the same order in both panels, saved with the project, undoable; empty slots stay last.
 - Project loading window: once a project opened from the Home page is loaded, Space starts playback again instead of switching back to the Home tab (the window gave the keyboard back to the Home tab when it closed).
 - Track list: a row's right click menu has the Mixer's Add FX channel / Add Group channel (and, on a track, the same "for selected tracks"), Delete channel on an FX or Group bus (not the Reverb one), then the track presets items last. Bus rows show the Mixer's FX / GRP label between Solo and the meter. Adding or deleting a bus can be undone whichever of the Mixer and the Track list is open, and opening a project no longer leaves an undo step per bus (an undo right after opening could delete one).
