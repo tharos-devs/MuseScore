@@ -47,7 +47,14 @@ Item {
     property string navigationName: ""
     property string accessibleName: ""
 
+    //! NOTE: the slot can be dragged by its bus button (see AudioResourceControl's own)
+    property alias reorderable: resourceControl.reorderable
+
     signal navigateControlIndexChanged(var index)
+    signal reorderPressed(real globalX, real globalY)
+    signal reorderPositionChanged(real globalX, real globalY, int modifiers)
+    signal reorderReleased()
+    signal reorderCanceled()
 
     height: 24
     width: 96
@@ -149,6 +156,17 @@ Item {
             onNavigateControlIndexChanged: function(index) {
                 root.navigateControlIndexChanged(index)
             }
+
+            onReorderPressed: function(globalX, globalY) {
+                root.reorderPressed(globalX, globalY)
+            }
+
+            onReorderPositionChanged: function(globalX, globalY, modifiers) {
+                root.reorderPositionChanged(globalX, globalY, modifiers)
+            }
+
+            onReorderReleased: root.reorderReleased()
+            onReorderCanceled: root.reorderCanceled()
         }
     }
 }

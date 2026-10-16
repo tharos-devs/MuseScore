@@ -281,6 +281,7 @@ void ProjectAudioSettings::setTrackOutputParams(const InstrumentTrackId& partId,
         paramsChanged |= (it->second.fxChain != params.fxChain);
         paramsChanged |= (it->second.auxSends != params.auxSends);
         paramsChanged |= (it->second.color != params.color);
+        paramsChanged |= (it->second.auxSendsOrder != params.auxSendsOrder);
     }
 
     m_trackOutputParamsMap.insert_or_assign(partId, params);
@@ -686,6 +687,10 @@ AudioOutputParams ProjectAudioSettings::outputParamsFromJson(const QJsonObject& 
         result.color = QColor(colorName);
     }
 
+    for (const QJsonValue& index : object.value("auxSendsOrder").toArray()) {
+        result.auxSendsOrder.push_back(static_cast<aux_channel_idx_t>(index.toInt()));
+    }
+
     return result;
 }
 
@@ -888,6 +893,14 @@ QJsonObject ProjectAudioSettings::outputParamsToJson(const AudioOutputParams& pa
 
     if (params.color.isValid()) {
         result.insert("color", params.color.name());
+    }
+
+    if (!params.auxSendsOrder.empty()) {
+        QJsonArray order;
+        for (const aux_channel_idx_t index : params.auxSendsOrder) {
+            order.append(static_cast<int>(index));
+        }
+        result.insert("auxSendsOrder", order);
     }
 
     return result;

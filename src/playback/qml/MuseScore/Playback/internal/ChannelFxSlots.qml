@@ -97,11 +97,12 @@ Item {
     // recreated once the reorder is actually committed to C++ (see
     // onReleased below) -- this QtObject is a stable sibling that
     // survives that rebuild.
+    SlotReorderState {
+        id: reorder
+    }
+
     QtObject {
         id: prv
-
-        property int draggedIndex: -1
-        property int dropIndex: -1
 
         //! NOTE: another channel's slots the dragged effect is over (see dragHost), whether it can go
         //! there (an empty slot), and whether it's copied (Cmd/Ctrl held at the last move)
@@ -151,8 +152,7 @@ Item {
         // draggedIndex/dropIndex stuck and displayIndex permanently
         // misapplying a stale shift to every remaining slot.
         onCountChanged: {
-            prv.draggedIndex = -1
-            prv.dropIndex = -1
+            reorder.clear()
             prv.clearForeignTarget()
         }
 
@@ -167,25 +167,13 @@ Item {
             // see onReorderReleased below.
             property alias resourceControl: resourceControl
 
-            readonly property bool dragging: prv.draggedIndex === index
+            readonly property bool dragging: reorder.draggedIndex === index
 
             // NOTE: where this slot should currently be drawn, in terms
-            // of row position -- normally just its own index, but while
-            // another slot is being dragged past it, it shifts by one row
-            // to visually make room, exactly mirroring what
+            // of row position -- see SlotReorderState, mirroring what
             // MixerChannelItem::moveOutputResourceItem() will do to the
             // real model once the drag actually ends (see the C++ side).
-            readonly property int displayIndex: {
-                if (prv.draggedIndex < 0 || index === prv.draggedIndex) {
-                    return index
-                }
-
-                if (prv.draggedIndex < prv.dropIndex) {
-                    return (index > prv.draggedIndex && index <= prv.dropIndex) ? index - 1 : index
-                } else {
-                    return (index >= prv.dropIndex && index < prv.draggedIndex) ? index + 1 : index
-                }
-            }
+            readonly property int displayIndex: reorder.displayIndex(index)
 
             property real dragOffsetY: 0
             property real pressOffsetInItem: 0
@@ -258,12 +246,12 @@ Item {
 
                     slotRoot.pressOffsetInItem = posInContent.y - slotRoot.y
                     slotRoot.dragOffsetY = slotRoot.y
-                    prv.draggedIndex = slotRoot.index
-                    prv.dropIndex = slotRoot.index
+                    reorder.draggedIndex = slotRoot.index
+                    reorder.dropIndex = slotRoot.index
                 }
 
                 onReorderPositionChanged: function(globalX, globalY, modifiers) {
-                    if (prv.draggedIndex !== slotRoot.index) {
+                    if (reorder.draggedIndex !== slotRoot.index) {
                         return
                     }
 
@@ -279,7 +267,7 @@ Item {
                         prv.setForeignTarget(target, insertIndex)
 
                         slotRoot.dragOffsetY = slotRoot.index * content.rowHeight
-                        prv.dropIndex = prv.draggedIndex
+                        reorder.dropIndex = reorder.draggedIndex
                         return
                     }
 
@@ -294,23 +282,22 @@ Item {
                     slotRoot.dragOffsetY = newY
 
                     var newIndex = Math.max(0, Math.min(Math.round(newY / content.rowHeight), repeater.count - 1))
-                    prv.dropIndex = newIndex
+                    reorder.dropIndex = newIndex
                 }
 
                 onReorderCanceled: {
                     prv.clearForeignTarget()
-                    prv.draggedIndex = -1
-                    prv.dropIndex = -1
+                    reorder.clear()
                 }
 
                 onReorderReleased: {
-                    if (prv.draggedIndex < 0) {
+                    if (reorder.draggedIndex < 0) {
                         return
                     }
 
                     if (prv.foreignTarget) {
                         const fromChannel = content.channelItem
-                        const fromIndex = prv.draggedIndex
+                        const fromIndex = reorder.draggedIndex
                         const toChannel = prv.foreignTarget.channelItem
                         const insertIndex = prv.foreignTarget.fxDropIndex
                         const allowed = prv.foreignDropAllowed
@@ -318,8 +305,7 @@ Item {
                         const duplicate = prv.duplicate || (ui.keyboardModifiers() & Qt.ControlModifier) !== 0
 
                         prv.clearForeignTarget()
-                        prv.draggedIndex = -1
-                        prv.dropIndex = -1
+                        reorder.clear()
 
                         //! NOTE: deferred, like a reorder below: the slots of both channels get rebuilt
                         if (allowed && insertIndex >= 0) {
@@ -331,9 +317,9 @@ Item {
                         return
                     }
 
-                    if (prv.draggedIndex !== prv.dropIndex) {
-                        var from = prv.draggedIndex
-                        var to = prv.dropIndex
+                    if (reorder.draggedIndex !== reorder.dropIndex) {
+                        var from = reorder.draggedIndex
+                        var to = reorder.dropIndex
 
                         // NOTE: deferred so this event handler (on an item
                         // that's about to be destroyed by the reorder it
@@ -351,8 +337,7 @@ Item {
                             // briefly computes a phantom shift, then visibly
                             // slides to its real position once these two lines
                             // ran (a spurious extra animation on the wrong slot).
-                            prv.draggedIndex = -1
-                            prv.dropIndex = -1
+                            reorder.clear()
                             content.channelItem.moveOutputResourceItem(from, to)
 
                             // NOTE: deferred a second time -- the Repeater
@@ -367,8 +352,7 @@ Item {
                             })
                         })
                     } else {
-                        prv.draggedIndex = -1
-                        prv.dropIndex = -1
+                        reorder.clear()
                     }
                 }
             }

@@ -229,6 +229,12 @@ public:
     //! as any other FX chain edit (add/remove/replace).
     Q_INVOKABLE void moveOutputResourceItem(int fromIndex, int toIndex);
 
+    //! NOTE: an aux send slot dragged elsewhere among this channel's: only how they're shown (the sends are parallel),
+    //! the same in every panel showing this channel, saved with the project and undoable. The empty slots come last
+    Q_INVOKABLE void moveAuxSendItem(int fromIndex, int toIndex);
+    //! NOTE: the buses of the sends, in their slots' order
+    std::vector<muse::audio::aux_channel_idx_t> auxSendsOrder() const;
+
     //! NOTE: for an effect dragged from another channel (see MixerPanelModel::dropFx()): puts fxParams (effect and
     //! settings) in this channel's first empty slot, moved to insertIndex (0..slot count: the slot it's dropped
     //! before). False when there's no empty slot, or a previous change is still on its way to the engine
@@ -357,6 +363,8 @@ public slots:
     void setBalance(int balance);
     void setGain(int gain);
     void setEqParams(muse::audio::EqParams eq);
+    //! NOTE: see moveAuxSendItem()
+    void setAuxSendsOrder(std::vector<muse::audio::aux_channel_idx_t> order);
     void setSolo(bool solo);
     void setMuted(bool mute);
     void setColor(QColor color);
@@ -418,6 +426,9 @@ signals:
     //! MixerPanelModel can wire ALL of this channel's continuous-change undo in one
     //! place, the same way it already does for volume/balance/gain above.
     void auxSendLevelChangeCommitted(muse::audio::aux_channel_idx_t busIndex, int oldPercentage, int newPercentage);
+    //! NOTE: see moveAuxSendItem()
+    void auxSendsOrderChangeCommitted(const std::vector<muse::audio::aux_channel_idx_t>& oldOrder,
+                                      const std::vector<muse::audio::aux_channel_idx_t>& newOrder);
 
     void inputResourceItemChanged();
     void outputResourceItemListChanged();
@@ -434,6 +445,8 @@ protected:
     void changeEq(const std::function<void(muse::audio::EqParams&)>& change);
     void loadOutputResourceItems(const muse::audio::AudioFxChain& fxChain);
     void loadAuxSendItems(const muse::audio::AuxSendsParams& auxSends);
+    void applyAuxSendsOrder(const std::vector<muse::audio::aux_channel_idx_t>& order);
+    void persistAuxSendsOrder(const std::vector<muse::audio::aux_channel_idx_t>& order);
     void followEngineOutputParams();
 
     InputResourceItem* buildInputResourceItem();
