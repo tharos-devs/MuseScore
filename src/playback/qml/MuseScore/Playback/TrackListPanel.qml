@@ -263,6 +263,13 @@ Item {
                         height: 20
                         visible: trackListModel.hasEditorColumn
                     }
+
+                    //! NOTE: the rows' bus label room (see the rows' own)
+                    Item {
+                        width: 20
+                        height: 20
+                        visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
+                    }
                 }
 
                 SeparatorLine {
@@ -378,6 +385,13 @@ Item {
                             width: 20
                             height: 20
                             visible: trackListModel.hasEditorColumn
+                        }
+
+                        //! NOTE: the rows' bus label room (see the rows' own)
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
                         }
                     }
 
@@ -544,6 +558,13 @@ Item {
                             width: 20
                             height: 20
                             visible: trackListModel.hasEditorColumn
+                        }
+
+                        //! NOTE: the rows' bus label room (see the rows' own)
+                        Item {
+                            width: 20
+                            height: 20
+                            visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
                         }
                     }
 
@@ -765,6 +786,13 @@ Item {
                                 height: 20
                                 visible: trackListModel.hasEditorColumn
                             }
+
+                            //! NOTE: the rows' bus label room (see the rows' own)
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
+                            }
                         }
 
                         StyledTextLabel {
@@ -860,13 +888,20 @@ Item {
                                     return
                                 }
 
-                                //! NOTE: right click: the track presets menu, like in the Mixer, and "Move to folder"
+                                //! NOTE: right click: "Move to folder", the Mixer's "Add FX/Group channel" ones, then
+                                //! the track presets menu, like in the Mixer
                                 if (mouse.button === Qt.RightButton) {
-                                    let items = rowItem.isAuxBus ? [] : rowItem.channelItem.trackPresetMenuItems()
-                                    if (items.length > 0) {
-                                        items.push({ id: "", title: "" }) // separator
+                                    let items = trackListModel.folderMenuItems(rowItem.index)
+                                    const groups = [
+                                        trackListModel.auxBusMenuItems(rowItem.index),
+                                        rowItem.isAuxBus ? [] : rowItem.channelItem.trackPresetMenuItems()
+                                    ]
+                                    for (const group of groups) {
+                                        if (group.length > 0) {
+                                            items.push({ id: "", title: "" }) // separator
+                                            items = items.concat(group)
+                                        }
                                     }
-                                    items = items.concat(trackListModel.folderMenuItems(rowItem.index))
                                     rowMenu.show(Qt.point(mouse.x, mouse.y), items)
                                     return
                                 }
@@ -880,7 +915,8 @@ Item {
                                 id: rowMenu
 
                                 onHandleMenuItem: function(itemId) {
-                                    if (!trackListModel.handleMoveToFolderMenuItem(rowItem.index, itemId)) {
+                                    if (!trackListModel.handleMoveToFolderMenuItem(rowItem.index, itemId)
+                                            && !trackListModel.handleAuxBusMenuItem(rowItem.index, itemId)) {
                                         rowItem.channelItem.handleTrackPresetMenuItem(itemId)
                                     }
                                 }
@@ -1019,6 +1055,8 @@ Item {
                             }
 
                             ChannelMuteSoloButtons {
+                                id: rowMuteSolo
+
                                 spacing: 4
 
                                 channelItem: rowItem.channelItem
@@ -1137,6 +1175,30 @@ Item {
                                     }
                                 }
                             }
+
+                            //! NOTE: without the articulation map and plugin columns, room for a bus's "FX"/"GRP" label
+                            Item {
+                                width: 20
+                                height: 20
+                                visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
+                            }
+                        }
+
+                        //! NOTE: a bus's kind, like in the Mixer: centered between its Solo button and the meter
+                        StyledTextLabel {
+                            readonly property real start: buttonsRow.x + rowMuteSolo.x + rowMuteSolo.width
+
+                            visible: rowItem.isAuxBus
+
+                            x: start + (meter.x - start - width) / 2
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: rowItem.channelItem && rowItem.channelItem.isGroupBus ? qsTrc("playback", "GRP") : qsTrc("playback", "FX")
+
+                            font.pixelSize: 10
+                            font.capitalization: Font.AllUppercase
+                            color: ui.theme.fontSecondaryColor
+                            opacity: 0.5
                         }
 
                         SeparatorLine {
