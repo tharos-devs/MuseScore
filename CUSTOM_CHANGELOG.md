@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-16
+- Customize kit (percussion staves): the window no longer blocks MuseScore. It stays on top by default (Always on top checkbox, like the articulation map editor) and its title names the instrument; the kit changed meanwhile by undo/redo or the Percussion panel shows in it. Cancel, the close button and Escape revert only what the window changed since it was opened or applied (Apply now validates); closing the score reverts nothing.
 - Track list: the Metronome row's color can be changed (Edit color… / Reset color on its color strip, undoable), and the Mixer shows it in the Metronome's title.
 - Mixer (normal and condensed views) and Track list: a channel's left and right meters have the same width at any panel zoom (at 90 % the right one looked narrower); the meters no longer redraw a canvas at every level change.
 - Mixer and Track list channel strip: a channel's Aux send slots can be reordered by dragging their bus button, like the Audio FX slots. Only how they're shown (the sends are parallel, the sound doesn't change): the same order in both panels, saved with the project, undoable; empty slots stay last.
