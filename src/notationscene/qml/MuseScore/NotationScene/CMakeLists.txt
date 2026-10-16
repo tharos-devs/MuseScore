@@ -205,6 +205,7 @@ qt_add_qml_module(notationscene_qml
     QML_FILES
         AbstractElementPopup.qml
         ArticulationMapEditorDialog.qml
+        ChangedArticulationMapsDialog.qml
         ConcertPitchControl.qml
         EditGridSizeDialog.qml
         EditPercussionShortcutDialog.qml

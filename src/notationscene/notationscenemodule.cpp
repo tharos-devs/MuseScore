@@ -88,6 +88,7 @@ void NotationSceneModule::resolveImports()
         ir->registerQmlUri(Uri("musescore://notation/selectmidicc"), "MuseScore.NotationScene", "SelectMidiCcDialog");
         ir->registerQmlUri(Uri("musescore://notation/editgridsize"), "MuseScore.NotationScene", "EditGridSizeDialog");
         ir->registerQmlUri(Uri("musescore://notation/articulationmapeditor"), "MuseScore.NotationScene", "ArticulationMapEditorDialog");
+        ir->registerQmlUri(Uri("musescore://notation/changedarticulationmaps"), "MuseScore.NotationScene", "ChangedArticulationMapsDialog");
         ir->registerQmlUri(Uri("musescore://notation/percussionpanelpadswap"), "MuseScore.NotationScene", "PercussionPanelPadSwapDialog");
         ir->registerQmlUri(Uri("musescore://notation/editpercussionshortcut"), "MuseScore.NotationScene", "EditPercussionShortcutDialog");
     }
