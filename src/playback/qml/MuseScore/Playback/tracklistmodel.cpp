@@ -101,6 +101,8 @@ TrackListModel::~TrackListModel()
 
 void TrackListModel::componentComplete()
 {
+    m_auxBusEditor = AuxBusEditor::shared(iocContext());
+
     controller()->playbackInitedChanged().onReceive(this, [this](bool) {
         scheduleReload();
     });
@@ -1682,6 +1684,86 @@ void TrackListModel::toggleFolderSolo(int row)
 static const QString ADD_FOLDER_ITEM_ID("addNewFolder");
 static const QString MOVE_TO_FOLDER_ITEM_PREFIX("moveToFolder:");
 static const QString NEW_FOLDER_ITEM_ID("moveToNewFolder");
+static const QString ADD_FX_CHANNEL_ITEM_ID("addFxChannel");
+static const QString ADD_GROUP_CHANNEL_ITEM_ID("addGroupChannel");
+static const QString ADD_FX_CHANNEL_FOR_SELECTED_ITEM_ID("addFxChannelForSelectedTracks");
+static const QString ADD_GROUP_CHANNEL_FOR_SELECTED_ITEM_ID("addGroupChannelForSelectedTracks");
+static const QString DELETE_CHANNEL_ITEM_ID("deleteChannel");
+
+//! NOTE: like the Mixer's channel menus: the "for selected tracks" ones on an instrument track only, "Delete channel" on a
+//! bus (not the Reverb one, see IPlaybackController::removeAuxBus)
+QVariantList TrackListModel::auxBusMenuItems(int row) const
+{
+    const int channelRow = channelRowAt(row);
+    const MixerChannelItem* item = channelRow >= 0 ? m_rows.at(channelRow).item : nullptr;
+    if (!item || !m_auxBusEditor) {
+        return {};
+    }
+
+    const bool isInstrument = item->type() == MixerChannelItem::Type::PrimaryInstrument
+                              || item->type() == MixerChannelItem::Type::SecondaryInstrument;
+    if (!isInstrument && item->type() != MixerChannelItem::Type::Aux) {
+        return {};
+    }
+
+    const bool canAdd = m_auxBusEditor->canAddAuxBus();
+    QVariantList items {
+        QVariantMap { { "id", ADD_FX_CHANNEL_ITEM_ID }, { "title", muse::qtrc("playback", "Add FX channel") }, { "enabled", canAdd } },
+        QVariantMap { { "id", ADD_GROUP_CHANNEL_ITEM_ID }, { "title", muse::qtrc("playback", "Add Group channel") },
+            { "enabled", canAdd } },
+    };
+
+    if (isInstrument) {
+        items << QVariantMap { { "id", "" }, { "title", "" } }; // separator
+        items << QVariantMap { { "id", ADD_FX_CHANNEL_FOR_SELECTED_ITEM_ID },
+            { "title", muse::qtrc("playback", "Add FX channel for selected tracks") }, { "enabled", canAdd } };
+        items << QVariantMap { { "id", ADD_GROUP_CHANNEL_FOR_SELECTED_ITEM_ID },
+            { "title", muse::qtrc("playback", "Add Group channel for selected tracks") }, { "enabled", canAdd } };
+    } else {
+        items << QVariantMap { { "id", "" }, { "title", "" } }; // separator
+        items << QVariantMap { { "id", DELETE_CHANNEL_ITEM_ID }, { "title", muse::qtrc("playback", "Delete channel") },
+            { "enabled", !item->isReverbBus() } };
+    }
+
+    return items;
+}
+
+bool TrackListModel::handleAuxBusMenuItem(int row, const QString& itemId)
+{
+    if (!m_auxBusEditor) {
+        return false;
+    }
+
+    if (itemId == ADD_FX_CHANNEL_ITEM_ID || itemId == ADD_GROUP_CHANNEL_ITEM_ID) {
+        m_auxBusEditor->addAuxBus(itemId == ADD_GROUP_CHANNEL_ITEM_ID);
+        return true;
+    }
+
+    if (itemId == ADD_FX_CHANNEL_FOR_SELECTED_ITEM_ID || itemId == ADD_GROUP_CHANNEL_FOR_SELECTED_ITEM_ID) {
+        QList<TrackId> trackIds;
+        for (const Row& row : m_rows) {
+            const bool isInstrument = row.item->type() == MixerChannelItem::Type::PrimaryInstrument
+                                      || row.item->type() == MixerChannelItem::Type::SecondaryInstrument;
+            if (isInstrument && row.item->selected()) {
+                trackIds.push_back(row.item->trackId());
+            }
+        }
+
+        m_auxBusEditor->addAuxBusForTracks(itemId == ADD_GROUP_CHANNEL_FOR_SELECTED_ITEM_ID, trackIds);
+        return true;
+    }
+
+    if (itemId == DELETE_CHANNEL_ITEM_ID) {
+        const int channelRow = channelRowAt(row);
+        const MixerChannelItem* item = channelRow >= 0 ? m_rows.at(channelRow).item : nullptr;
+        if (item && item->type() == MixerChannelItem::Type::Aux) {
+            m_auxBusEditor->deleteAuxBus(item->auxBusIndex());
+        }
+        return true;
+    }
+
+    return false;
+}
 
 QVariantList TrackListModel::folderMenuItems(int row) const
 {

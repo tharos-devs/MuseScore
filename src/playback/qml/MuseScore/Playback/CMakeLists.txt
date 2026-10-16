@@ -33,6 +33,8 @@ qt_add_qml_module(playback_qml
     SOURCES
         abstractaudioresourceitem.cpp
         abstractaudioresourceitem.h
+        auxbuseditor.cpp
+        auxbuseditor.h
         auxsenditem.cpp
         auxsenditem.h
         auxsenditemlistmodel.cpp

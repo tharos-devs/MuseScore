@@ -49,6 +49,7 @@
 
 #include "iplaybackcontroller.h"
 #include "iplaybackconfiguration.h"
+#include "auxbuseditor.h"
 #include "channelcolorchange.h"
 #include "channelselection.h"
 #include "globalmutesolotoggle.h"
@@ -124,6 +125,10 @@ public:
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void setMutedForSelectedRows(bool muted);
     Q_INVOKABLE void setSoloForSelectedRows(bool solo);
+
+    //! NOTE: the Mixer's "Add FX/Group channel (for selected tracks)" and a bus's "Delete channel" (see AuxBusEditor)
+    Q_INVOKABLE QVariantList auxBusMenuItems(int row) const;
+    Q_INVOKABLE bool handleAuxBusMenuItem(int row, const QString& itemId);
 
     //! NOTE: undoable, like the Mixer's "Edit color…"/"Reset color" (see ChannelColorChange); on a selected row,
     //! the whole selection, as one undo step
@@ -337,6 +342,8 @@ private:
     QPointer<MixerChannelItem> m_stripChannelItem;
     std::optional<PartTracks> m_stripTracks;
     bool m_stripChannelSelected = false;
+
+    std::shared_ptr<AuxBusEditor> m_auxBusEditor;
 
     //! NOTE: see updateColumns()
     bool m_hasArticulationMapColumn = false;

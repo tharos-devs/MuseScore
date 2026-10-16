@@ -37,6 +37,8 @@
 
 #include "project/inotationproject.h"
 
+#include "auxbuseditor.h"
+
 using namespace mu::playback;
 using namespace muse;
 using namespace muse::audio;
@@ -1876,13 +1878,9 @@ void MixerChannelItem::handleAuxSendMenuItem(AuxSendItem* item, const QString& m
         return;
     }
 
-    if (menuItemId == "addAuxBus") {
-        playbackController()->addNewAuxBus();
-        return;
-    }
-
-    if (menuItemId == "addGroupBus") {
-        playbackController()->addNewGroupBus();
+    //! NOTE: undoable, like the panels' "Add FX/Group channel"
+    if (menuItemId == "addAuxBus" || menuItemId == "addGroupBus") {
+        AuxBusEditor::shared(iocContext())->addAuxBus(menuItemId == "addGroupBus");
         return;
     }
 
