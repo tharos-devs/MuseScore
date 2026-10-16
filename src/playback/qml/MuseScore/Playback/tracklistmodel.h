@@ -154,8 +154,8 @@ public:
     Q_INVOKABLE QVariantList folderMenuItems(int row) const;
     Q_INVOKABLE bool handleMoveToFolderMenuItem(int row, const QString& itemId);
 
-    //! NOTE: a folder's Mute/Solo: all its tracks and buses muted/soloed (Solo: those that have one; a track muted by
-    //! another's solo isn't touched), remembering how they were; a click again puts them back (see FolderMuteSolo)
+    //! NOTE: a folder's Mute/Solo, engaged while any of its tracks and buses is muted/soloed: a click then unmutes/unsolos
+    //! them all, else mutes/solos them all (Solo: those that have one; a track muted by another's solo isn't touched)
     Q_INVOKABLE void toggleFolderMute(int row);
     Q_INVOKABLE void toggleFolderSolo(int row);
 
@@ -281,7 +281,7 @@ private:
     int displayRowOfChannel(int channelRow) const;
     int folderOfChannel(int channelRow) const;
     std::vector<int> channelRowsToMove(int channelRow) const;
-    std::vector<MixerChannelItem*> folderChannels(int folder) const;
+    GlobalMuteSoloToggle::Channels folderChannels(int folder) const;
     static bool canFolderSolo(const MixerChannelItem* item);
     bool isFolderMuted(int folder) const;
     bool isFolderSoloed(int folder) const;
@@ -337,12 +337,6 @@ private:
     project::TrackListFolders m_folders;
     std::vector<DisplayRow> m_displayRows;
 
-    //! NOTE: how a folder's tracks were before its Mute/Solo engaged them all, by folder id then track
-    struct FolderMuteSolo {
-        std::map<muse::audio::TrackId, bool> muted;
-        std::map<muse::audio::TrackId, bool> soloed;
-    };
-    std::map<muse::String, FolderMuteSolo> m_folderMuteSolo;
     QPointer<MixerChannelItem> m_stripChannelItem;
     std::optional<PartTracks> m_stripTracks;
     bool m_stripChannelSelected = false;

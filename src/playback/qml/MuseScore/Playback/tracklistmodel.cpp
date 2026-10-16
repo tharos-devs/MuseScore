@@ -1585,9 +1585,9 @@ void TrackListModel::moveFolder(int row, int beforeRow)
     applyFolders(folders, TranslatableString("undoableAction", "Move Track list folder"));
 }
 
-std::vector<MixerChannelItem*> TrackListModel::folderChannels(int folder) const
+GlobalMuteSoloToggle::Channels TrackListModel::folderChannels(int folder) const
 {
-    std::vector<MixerChannelItem*> result;
+    GlobalMuteSoloToggle::Channels result;
     for (int i = 0; i < m_rows.size(); ++i) {
         if (folderOfChannel(i) == folder) {
             result.push_back(m_rows.at(i).item);
@@ -1605,26 +1605,12 @@ bool TrackListModel::canFolderSolo(const MixerChannelItem* item)
 
 bool TrackListModel::isFolderMuted(int folder) const
 {
-    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
-    return !channels.empty() && std::all_of(channels.cbegin(), channels.cend(), [](const MixerChannelItem* item) {
-        return item->muted();
-    });
+    return GlobalMuteSoloToggle::muteEngaged(folderChannels(folder));
 }
 
 bool TrackListModel::isFolderSoloed(int folder) const
 {
-    bool any = false;
-    for (const MixerChannelItem* item : folderChannels(folder)) {
-        if (!canFolderSolo(item)) {
-            continue;
-        }
-        if (!item->solo()) {
-            return false;
-        }
-        any = true;
-    }
-
-    return any;
+    return GlobalMuteSoloToggle::soloEngaged(folderChannels(folder));
 }
 
 void TrackListModel::notifyFolderRowsChanged()
@@ -1644,31 +1630,12 @@ void TrackListModel::toggleFolderMute(int row)
         return;
     }
 
-    const String& id = m_folders.at(folder).id;
-    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
-
-    if (!isFolderMuted(folder)) {
-        FolderMuteSolo& before = m_folderMuteSolo[id];
-        before.muted.clear();
-        for (MixerChannelItem* item : channels) {
-            before.muted[item->trackId()] = item->muted();
-            //! NOTE: muted by another track's solo: left alone (see ChannelSelection::setMuted())
-            if (!(item->muted() && item->forceMute())) {
-                item->setMuted(true);
-            }
+    const bool muted = isFolderMuted(folder);
+    for (MixerChannelItem* item : folderChannels(folder)) {
+        //! NOTE: muted by another track's solo: left alone (see ChannelSelection::setMuted())
+        if (muted ? !item->forceMute() : !(item->muted() && item->forceMute())) {
+            item->setMuted(!muted);
         }
-        return;
-    }
-
-    const auto it = m_folderMuteSolo.find(id);
-    for (MixerChannelItem* item : channels) {
-        const bool wasMuted = it != m_folderMuteSolo.end() && muse::value(it->second.muted, item->trackId(), false);
-        if (!item->forceMute()) {
-            item->setMuted(wasMuted);
-        }
-    }
-    if (it != m_folderMuteSolo.end()) {
-        it->second.muted.clear();
     }
 }
 
@@ -1679,29 +1646,11 @@ void TrackListModel::toggleFolderSolo(int row)
         return;
     }
 
-    const String& id = m_folders.at(folder).id;
-    const std::vector<MixerChannelItem*> channels = folderChannels(folder);
-
-    if (!isFolderSoloed(folder)) {
-        FolderMuteSolo& before = m_folderMuteSolo[id];
-        before.soloed.clear();
-        for (MixerChannelItem* item : channels) {
-            if (canFolderSolo(item)) {
-                before.soloed[item->trackId()] = item->solo();
-                item->setUserSolo(true);
-            }
-        }
-        return;
-    }
-
-    const auto it = m_folderMuteSolo.find(id);
-    for (MixerChannelItem* item : channels) {
+    const bool soloed = isFolderSoloed(folder);
+    for (MixerChannelItem* item : folderChannels(folder)) {
         if (canFolderSolo(item)) {
-            item->setUserSolo(it != m_folderMuteSolo.end() && muse::value(it->second.soloed, item->trackId(), false));
+            item->setUserSolo(!soloed);
         }
-    }
-    if (it != m_folderMuteSolo.end()) {
-        it->second.soloed.clear();
     }
 }
 
