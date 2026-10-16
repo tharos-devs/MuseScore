@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-16
+- macOS: a VST3 plugin's window (and an extension's) no longer disappears when another app becomes active: it stays shown, behind that app's windows, and comes back above the score when MuseScore is active again. It's hidden while MuseScore's window is minimized and comes back with it (Windows already behaved this way).
 - Articulation lane: a mark's menu has "All following notes" (next to "This note only"): the following notes play the mark's articulation even when they carry a staccato dot, an accent…, until the next mark — e.g. a staccato passage played spiccato from one mark. A playing technique written after it ("pizz."…) takes over; the mark's chip is outlined.
 - Customize kit (percussion staves): the window no longer blocks MuseScore. It stays on top by default (Always on top checkbox, like the articulation map editor) and its title names the instrument; the kit changed meanwhile by undo/redo or the Percussion panel shows in it. Cancel, the close button and Escape revert only what the window changed since it was opened or applied (Apply now validates); closing the score reverts nothing.
 - Track list: the Metronome row's color can be changed (Edit color… / Reset color on its color strip, undoable), and the Mixer shows it in the Metronome's title.
