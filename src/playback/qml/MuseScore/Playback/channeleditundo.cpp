@@ -98,6 +98,13 @@ void ChannelEditUndo::connectContinuousChanges(MixerChannelItem* item, QObject* 
                     [setLevel, newValue]() { setLevel(newValue); },
                     [setLevel, oldValue]() { setLevel(oldValue); });
     });
+
+    QObject::connect(item, &MixerChannelItem::auxSendsOrderChangeCommitted, context,
+                     [item, undoStack](const std::vector<aux_channel_idx_t>& oldOrder, const std::vector<aux_channel_idx_t>& newOrder) {
+        pushChannelFieldUndo<std::vector<aux_channel_idx_t> >(undoStack(), item->trackId(),
+                                                              muse::TranslatableString("undoableAction", "Reorder Mixer aux sends"),
+                                                              &MixerChannelItem::setAuxSendsOrder, oldOrder, newOrder);
+    });
 }
 
 void ChannelEditUndo::connectPickedChanges(MixerChannelItem* item, QObject* context, const UndoStackGetter& undoStack,

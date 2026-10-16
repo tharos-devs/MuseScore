@@ -409,6 +409,127 @@ void MixerChannelItem::moveOutputResourceItem(int fromIndex, int toIndex)
     applyOutputResourceItemsOrder(items);
 }
 
+void MixerChannelItem::moveAuxSendItem(int fromIndex, int toIndex)
+{
+    QList<AuxSendItem*> items = m_auxSendItems.values();
+
+    IF_ASSERT_FAILED(fromIndex >= 0 && fromIndex < items.size() && toIndex >= 0 && toIndex < items.size()) {
+        return;
+    }
+
+    if (fromIndex == toIndex || items.at(fromIndex)->isBlank()) {
+        return;
+    }
+
+    items.move(fromIndex, toIndex);
+
+    std::vector<aux_channel_idx_t> newOrder;
+    for (const AuxSendItem* item : std::as_const(items)) {
+        if (!item->isBlank()) {
+            newOrder.push_back(item->auxIndex());
+        }
+    }
+
+    const std::vector<aux_channel_idx_t> oldOrder = auxSendsOrder();
+    if (newOrder == oldOrder) {
+        return;
+    }
+
+    setAuxSendsOrder(newOrder);
+    emit auxSendsOrderChangeCommitted(oldOrder, newOrder);
+}
+
+std::vector<aux_channel_idx_t> MixerChannelItem::auxSendsOrder() const
+{
+    std::vector<aux_channel_idx_t> order;
+    for (const AuxSendItem* item : m_auxSendItems) {
+        if (!item->isBlank()) {
+            order.push_back(item->auxIndex());
+        }
+    }
+
+    return order;
+}
+
+void MixerChannelItem::setAuxSendsOrder(std::vector<aux_channel_idx_t> order)
+{
+    //! NOTE: every panel's channel of this track (see findBoundChannel())
+    for (MixerChannelItem* item : std::as_const(allChannelItems())) {
+        if (item->m_trackId == m_trackId) {
+            item->applyAuxSendsOrder(order);
+        }
+    }
+
+    persistAuxSendsOrder(order);
+}
+
+//! NOTE: the sends in that order (the ones it doesn't have after, as they were), then the empty slots
+void MixerChannelItem::applyAuxSendsOrder(const std::vector<aux_channel_idx_t>& order)
+{
+    m_outParams.auxSendsOrder = order;
+
+    QList<AuxSendItem*> sends;
+    QList<AuxSendItem*> blanks;
+    for (AuxSendItem* item : std::as_const(m_auxSendItems)) {
+        (item->isBlank() ? blanks : sends).push_back(item);
+    }
+
+    auto rank = [&order](const AuxSendItem* item) {
+        const auto it = std::find(order.cbegin(), order.cend(), item->auxIndex());
+        return it != order.cend() ? std::distance(order.cbegin(), it) : static_cast<std::ptrdiff_t>(order.size());
+    };
+    std::stable_sort(sends.begin(), sends.end(), [&rank](const AuxSendItem* a, const AuxSendItem* b) {
+        return rank(a) < rank(b);
+    });
+
+    QMap<int, AuxSendItem*> newItems;
+    int slotOrder = 0;
+    for (AuxSendItem* item : std::as_const(sends)) {
+        newItems.insert(slotOrder++, item);
+    }
+    for (AuxSendItem* item : std::as_const(blanks)) {
+        newItems.insert(slotOrder++, item);
+    }
+
+    if (newItems != m_auxSendItems) {
+        m_auxSendItems = std::move(newItems);
+        m_auxSendItemListModel->sync(m_auxSendItems.values());
+    }
+}
+
+void MixerChannelItem::persistAuxSendsOrder(const std::vector<aux_channel_idx_t>& order)
+{
+    const project::INotationProjectPtr project = context()->currentProject();
+    if (!project) {
+        return;
+    }
+
+    switch (m_type) {
+    case Type::PrimaryInstrument:
+    case Type::SecondaryInstrument:
+    case Type::Metronome: {
+        AudioOutputParams params = project->audioSettings()->trackOutputParams(m_instrumentTrackId);
+        params.auxSendsOrder = order;
+        project->audioSettings()->setTrackOutputParams(m_instrumentTrackId, params);
+        break;
+    }
+    case Type::Aux: {
+        AudioOutputParams params = project->audioSettings()->auxOutputParams(m_auxBusIndex);
+        params.auxSendsOrder = order;
+        project->audioSettings()->setAuxOutputParams(m_auxBusIndex, params);
+        break;
+    }
+    case Type::Video: {
+        AudioOutputParams params = playbackController()->videoOutputParams();
+        params.auxSendsOrder = order;
+        playbackController()->setVideoOutputParams(params);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 bool MixerChannelItem::hasBlankOutputResourceItem() const
 {
     for (const OutputResourceItem* item : std::as_const(m_outputResourceItems)) {
@@ -806,6 +927,11 @@ void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
         emit colorChanged();
     }
 
+    //! NOTE: the engine's params never have it (see AudioOutputParams::auxSendsOrder): only the project's
+    if (!newParams.auxSendsOrder.empty()) {
+        m_outParams.auxSendsOrder = newParams.auxSendsOrder;
+    }
+
     loadOutputResourceItems(newParams.fxChain);
     loadAuxSendItems(newParams.auxSends);
 
@@ -926,7 +1052,20 @@ void MixerChannelItem::loadAuxSendItems(const AuxSendsParams& auxSends)
         }
     }
 
+    //! NOTE: the new sends in the saved order of their slots (see moveAuxSendItem()), then the others by bus
+    std::vector<aux_channel_idx_t> newBuses;
+    for (const aux_channel_idx_t i : m_outParams.auxSendsOrder) {
+        if (i < auxSends.size() && !muse::contains(newBuses, i)) {
+            newBuses.push_back(i);
+        }
+    }
     for (aux_channel_idx_t i = 0; i < auxSends.size(); ++i) {
+        if (!muse::contains(newBuses, i)) {
+            newBuses.push_back(i);
+        }
+    }
+
+    for (const aux_channel_idx_t i : newBuses) {
         if (isBlankAuxSend(auxSends[i]) || muse::contains(handledBuses, i)) {
             continue;
         }
@@ -2282,6 +2421,14 @@ bool MixerChannelItem::clearAuxSendsTargeting(aux_channel_idx_t busIndex)
 
     for (AuxSendItem* item : targetingItems) {
         blankAuxSend(item);
+    }
+
+    //! NOTE: the saved order of the slots forgets it too (see moveAuxSendItem()), or a bus later created with its
+    //! index would take its place
+    std::vector<aux_channel_idx_t>& order = m_outParams.auxSendsOrder;
+    if (muse::contains(order, busIndex)) {
+        order.erase(std::remove(order.begin(), order.end(), busIndex), order.end());
+        persistAuxSendsOrder(order);
     }
 
     return !targetingItems.isEmpty();

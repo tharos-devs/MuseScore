@@ -53,6 +53,10 @@ struct AudioOutputParams {
     //! NOTE UI-only override of the Mixer channel's title background color. Not sent to the audio engine.
     QColor color;
 
+    //! NOTE UI-only: the buses of the aux sends, in the order their slots are shown (moved by the user). Not sent to the
+    //! audio engine: the sends are parallel, their order changes nothing to the sound
+    std::vector<muse::audio::aux_channel_idx_t> auxSendsOrder;
+
     bool operator ==(const AudioOutputParams& other) const
     {
         return fxChain == other.fxChain
@@ -64,7 +68,8 @@ struct AudioOutputParams {
                && solo == other.solo
                && muted == other.muted
                && forceMute == other.forceMute
-               && color == other.color;
+               && color == other.color
+               && auxSendsOrder == other.auxSendsOrder;
     }
 
     muse::audio::ControlParams control() const
