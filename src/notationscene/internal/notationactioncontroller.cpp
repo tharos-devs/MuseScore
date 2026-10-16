@@ -3076,7 +3076,7 @@ void NotationActionController::askToReloadChangedArticulationMaps(
         return;
     }
 
-    std::string details;
+    muse::ValList mapList;
     for (const auto& [path, trackIds] : changed) {
         QStringList partNames;
         for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
@@ -3088,29 +3088,21 @@ void NotationActionController::askToReloadChangedArticulationMaps(
             }
         }
 
-        details += "• " + muse::io::filename(path).toStdString();
-        if (!partNames.isEmpty()) {
-            details += " (" + partNames.join(", ").toStdString() + ")";
-        }
-        details += "\n";
+        mapList.emplace_back(muse::ValMap {
+            { "path", Val(path.toStdString()) },
+            { "fileName", Val(muse::io::filename(path).toStdString()) },
+            { "parts", Val(partNames.join(", ").toStdString()) },
+        });
     }
 
-    static constexpr int reloadButton = int(IInteractive::Button::CustomButton) + 1;
-    static constexpr int keepButton = reloadButton + 1;
-
-    const std::string title = muse::trc("notation", "Articulation map files changed");
-    const std::string text = muse::trc("notation", "These articulation map files changed since this score was saved:")
-                             + "\n" + details + "\n"
-                             + muse::trc("notation", "Reload them? Otherwise the score keeps the versions saved with it.");
+    muse::UriQuery query("musescore://notation/changedarticulationmaps");
+    query.addParam("maps", Val(mapList));
 
     const std::weak_ptr<IMasterNotation> weakMasterNotation = masterNotation;
-    interactive()->question(title, text, {
-        IInteractive::ButtonData(keepButton, muse::trc("notation", "Keep saved versions")),
-        IInteractive::ButtonData(reloadButton, muse::trc("notation", "Reload"), true /*accent*/)
-    }, reloadButton)
-    .onResolve(this, [this, weakMasterNotation, changed](const IInteractive::Result& res) {
+    interactive()->open(query)
+    .onResolve(this, [this, weakMasterNotation, changed](const Val& checked) {
         const IMasterNotationPtr current = currentMasterNotation();
-        if (!res.isButton(reloadButton) || !current || weakMasterNotation.lock() != current) {
+        if (!current || weakMasterNotation.lock() != current) {
             return;
         }
 
@@ -3121,7 +3113,13 @@ void NotationActionController::askToReloadChangedArticulationMaps(
 
         //! NOTE: one undoable action for all of them
         EditArticulationMapChanges changes;
-        for (const auto& [path, trackIds] : changed) {
+        for (const Val& checkedPath : checked.toList()) {
+            const muse::io::path_t path(checkedPath.toString());
+            const auto it = changed.find(path);
+            if (it == changed.end()) {
+                continue;
+            }
+
             const muse::RetVal<muse::ByteArray> file = fileSystem()->readFile(path);
             if (!file.ret) {
                 continue;
@@ -3149,7 +3147,7 @@ void NotationActionController::askToReloadChangedArticulationMaps(
             }
             result.map.sourcePath = path.toString();
 
-            for (const mu::engraving::InstrumentTrackId& trackId : trackIds) {
+            for (const mu::engraving::InstrumentTrackId& trackId : it->second) {
                 changes.maps.emplace(trackId, result.map);
             }
         }
