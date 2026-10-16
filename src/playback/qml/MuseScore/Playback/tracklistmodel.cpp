@@ -701,6 +701,10 @@ void TrackListModel::updateColors()
         }
     }
 
+    if (m_metronomeChannelItem && settings->trackHasExistingOutputParams(m_metronomeChannelItem->instrumentTrackId())) {
+        m_metronomeChannelItem->setColor(settings->trackOutputParams(m_metronomeChannelItem->instrumentTrackId()).color);
+    }
+
     loadVideoColor();
 }
 
@@ -782,6 +786,26 @@ void TrackListModel::setVideoColor(const QColor& color)
 void TrackListModel::resetVideoColor()
 {
     setVideoColor(QColor());
+}
+
+void TrackListModel::setMetronomeColor(const QColor& color)
+{
+    applyMetronomeColor(color, TranslatableString("undoableAction", "Change Mixer channel color"));
+}
+
+void TrackListModel::resetMetronomeColor()
+{
+    applyMetronomeColor(QColor(), TranslatableString("undoableAction", "Reset Mixer channel color"));
+}
+
+void TrackListModel::applyMetronomeColor(const QColor& color, const TranslatableString& actionName)
+{
+    if (!m_metronomeChannelItem) {
+        return;
+    }
+
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), { { m_metronomeChannelItem->instrumentTrackId(), std::nullopt } },
+                              color, actionName);
 }
 
 void TrackListModel::chooseVideoFile()

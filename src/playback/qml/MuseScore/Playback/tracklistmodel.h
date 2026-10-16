@@ -189,6 +189,9 @@ public:
     Q_INVOKABLE void chooseVideoFile();
     Q_INVOKABLE void setVideoColor(const QColor& color);
     Q_INVOKABLE void resetVideoColor();
+    //! NOTE: undoable, like a track's (see setTrackColor())
+    Q_INVOKABLE void setMetronomeColor(const QColor& color);
+    Q_INVOKABLE void resetMetronomeColor();
 
     QVariant data(const QModelIndex& index, int role) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -310,6 +313,7 @@ private:
     void rebuildVideoChannelItem();
     void loadVideoMuteState();
     void loadVideoColor();
+    void applyMetronomeColor(const QColor& color, const muse::TranslatableString& actionName);
     GlobalMuteSoloToggle::Channels channels() const;
     GlobalMuteSoloToggle::Channels globalMuteSoloChannels() const;
 
