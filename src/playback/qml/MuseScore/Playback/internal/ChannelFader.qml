@@ -85,19 +85,12 @@ Row {
         }
     }
 
-    Row {
+    ChannelMeters {
         anchors.verticalCenter: parent.verticalCenter
 
-        spacing: 2
-
-        VolumePressureMeter {
-            currentVolumePressure: root.channelItem.leftChannelPressure
-        }
-
-        VolumePressureMeter {
-            currentVolumePressure: root.channelItem.rightChannelPressure
-            //! NOTE: compact drops the dB ruler to save the 20px it costs (see VolumePressureMeter.qml)
-            showRuler: !root.compact
-        }
+        leftChannelPressure: root.channelItem.leftChannelPressure
+        rightChannelPressure: root.channelItem.rightChannelPressure
+        //! NOTE: compact drops the dB ruler to save the 20px it costs (see VolumePressureMeter.qml)
+        showRuler: !root.compact
     }
 }

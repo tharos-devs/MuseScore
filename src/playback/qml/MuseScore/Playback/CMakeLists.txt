@@ -101,6 +101,7 @@ qt_add_qml_module(playback_qml
         internal/ChannelFader.qml
         internal/ChannelFxSlots.qml
         internal/ChannelKnobControl.qml
+        internal/ChannelMeters.qml
         internal/ChannelMuteSoloButtons.qml
         internal/ChannelVolumeField.qml
         internal/GlobalMuteSoloButtons.qml

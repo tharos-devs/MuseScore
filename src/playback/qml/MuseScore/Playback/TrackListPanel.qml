@@ -302,28 +302,20 @@ Item {
                         color: ui.theme.accentColor
                     }
 
-                    Row {
+                    ChannelMeters {
                         id: metronomeMeter
 
                         anchors.right: parent.right
                         anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
-                        spacing: 1
+                        meterLength: 22
+                        meterThickness: 3
+                        overloadLength: 2
+                        gap: 1
 
-                        VolumePressureMeter {
-                            meterLength: 22
-                            meterThickness: 3
-                            overloadLength: 2
-                            currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.leftChannelPressure : -60
-                        }
-
-                        VolumePressureMeter {
-                            meterLength: 22
-                            meterThickness: 3
-                            overloadLength: 2
-                            currentVolumePressure: metronomeRow.channelItem ? metronomeRow.channelItem.rightChannelPressure : -60
-                        }
+                        leftChannelPressure: metronomeRow.channelItem ? metronomeRow.channelItem.leftChannelPressure : -60
+                        rightChannelPressure: metronomeRow.channelItem ? metronomeRow.channelItem.rightChannelPressure : -60
                     }
 
                     StyledTextLabel {
@@ -461,28 +453,20 @@ Item {
                         }
                     }
 
-                    Row {
+                    ChannelMeters {
                         id: videoMeter
 
                         anchors.right: parent.right
                         anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
-                        spacing: 1
+                        meterLength: 22
+                        meterThickness: 3
+                        overloadLength: 2
+                        gap: 1
 
-                        VolumePressureMeter {
-                            meterLength: 22
-                            meterThickness: 3
-                            overloadLength: 2
-                            currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.leftChannelPressure : -60
-                        }
-
-                        VolumePressureMeter {
-                            meterLength: 22
-                            meterThickness: 3
-                            overloadLength: 2
-                            currentVolumePressure: videoRow.channelItem ? videoRow.channelItem.rightChannelPressure : -60
-                        }
+                        leftChannelPressure: videoRow.channelItem ? videoRow.channelItem.leftChannelPressure : -60
+                        rightChannelPressure: videoRow.channelItem ? videoRow.channelItem.rightChannelPressure : -60
                     }
 
                     StyledTextLabel {
@@ -975,28 +959,20 @@ Item {
                         }
 
                         //! NOTE: the track's level, the Mixer's meters in small
-                        Row {
+                        ChannelMeters {
                             id: meter
 
                             anchors.right: parent.right
                             anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
 
-                            spacing: 1
+                            meterLength: 22
+                            meterThickness: 3
+                            overloadLength: 2
+                            gap: 1
 
-                            VolumePressureMeter {
-                                meterLength: 22
-                                meterThickness: 3
-                                overloadLength: 2
-                                currentVolumePressure: rowItem.channelItem.leftChannelPressure
-                            }
-
-                            VolumePressureMeter {
-                                meterLength: 22
-                                meterThickness: 3
-                                overloadLength: 2
-                                currentVolumePressure: rowItem.channelItem.rightChannelPressure
-                            }
+                            leftChannelPressure: rowItem.channelItem.leftChannelPressure
+                            rightChannelPressure: rowItem.channelItem.rightChannelPressure
                         }
 
                         StyledTextLabel {
