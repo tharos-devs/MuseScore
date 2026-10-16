@@ -469,7 +469,7 @@ QString ArticulationMapEditorModel::sequenceText(const Node* node) const
     }
 
     if (node->channel) {
-        //: %1 is a MIDI channel number (1-16), shown after the activation sequence of an articulation
+        //: %1 is a MIDI channel number (1-16), shown after the trigger of an articulation
         parts << muse::qtrc("notation", "Ch %1").arg(*node->channel + 1);
     }
 
@@ -855,7 +855,7 @@ bool ArticulationMapEditorModel::writeFile(const io::path_t& path, bool reloadTr
     ArticulationMapParser::applyImplicitAliases(file.map.entries);
 
     if (!withoutMessages.empty()) {
-        interactive()->error(muse::trc("notation", "Some articulations have no activation sequence"),
+        interactive()->error(muse::trc("notation", "Some articulations have no trigger"),
                              withoutMessages.join("\n").toStdString());
         return false;
     }
@@ -2185,7 +2185,7 @@ void ArticulationMapEditorModel::setSelectedNotesOffsetMs(int ms)
     }
 }
 
-// ---- activation sequence
+// ---- trigger
 
 void ArticulationMapEditorModel::addMessage()
 {

@@ -248,7 +248,7 @@ StyledDialogView {
             }
 
             StyledTextLabel {
-                text: qsTrc("notation", "Track delay:")
+                text: qsTrc("notation", "Default trigger delay:")
             }
 
             IncrementalPropertyControl {
@@ -331,7 +331,7 @@ StyledDialogView {
                         StyledTextLabel {
                             height: parent.height
                             horizontalAlignment: Text.AlignLeft
-                            text: qsTrc("notation", "Activation sequence")
+                            text: qsTrc("notation", "Trigger")
                             font: ui.theme.bodyBoldFont
                         }
                     }
@@ -962,7 +962,7 @@ StyledDialogView {
                               : editorModel.selectedName
                     }
 
-                    // side by side: room for the activation sequence below
+                    // side by side: room for the trigger below
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -993,7 +993,7 @@ StyledDialogView {
 
                         CheckBox {
                             Layout.fillWidth: true
-                            text: qsTrc("notation", "Articulation delay")
+                            text: qsTrc("notation", "Trigger delay")
                             checked: editorModel.selectedHasKeyswitchOffset && !editorModel.selectedHasKeyswitchOffsetMixed
                             isIndeterminate: editorModel.selectedHasKeyswitchOffsetMixed
                             onClicked: editorModel.setSelectedHasKeyswitchOffset(isIndeterminate || !checked)
@@ -1301,7 +1301,7 @@ StyledDialogView {
                         }
                     }
 
-                    // in place of the activation sequence, shown for one articulation only
+                    // in place of the trigger, shown for one articulation only
                     Item {
                         Layout.fillHeight: true
                         visible: prv.multipleArticulations
@@ -1316,7 +1316,7 @@ StyledDialogView {
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignLeft
                             font: ui.theme.bodyBoldFont
-                            text: qsTrc("notation", "Activation sequence")
+                            text: qsTrc("notation", "Trigger")
                         }
 
                         FlatButton {
