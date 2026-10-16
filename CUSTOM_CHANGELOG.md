@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-16
+- Articulation map editor: "Activation sequence" is now "Trigger" (keyswitches, CCs or program changes); "Track delay", which only sets when the triggers are sent (never the notes), is now "Default trigger delay", and an articulation's "Articulation delay" is now "Trigger delay", next to "Note delay" (which shifts its notes, e.g. a late legato). The map files don't change.
 - Track list: a folder's Mute/Solo button is on as soon as one of its tracks is muted/soloed, and a click then unmutes/unsolos them all (e.g. one click ends the solos of 4 string tracks); off, a click mutes/solos them all. Nothing is remembered; the global Mute/Solo buttons still restore what they turned off.
 - macOS: a VST3 plugin's window (and an extension's) no longer disappears when another app becomes active: it stays shown, behind that app's windows, and comes back above the score when MuseScore is active again. It's hidden while MuseScore's window is minimized and comes back with it (Windows already behaved this way).
 - Articulation lane: a mark's menu has "All following notes" (next to "This note only"): the following notes play the mark's articulation even when they carry a staccato dot, an accent…, until the next mark — e.g. a staccato passage played spiccato from one mark. A playing technique written after it ("pizz."…) takes over; the mark's chip is outlined.
