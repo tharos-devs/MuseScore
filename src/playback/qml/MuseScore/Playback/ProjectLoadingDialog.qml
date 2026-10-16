@@ -41,6 +41,10 @@ StyledDialogView {
 
     closeOnEscape: false
 
+    //! NOTE: no control opened it: the one active when it opened (e.g. the Home tab, the project being opened from the
+    //! Home page) would take the keyboard back from the score once it closes - Space would then press that tab
+    activateParentOnClose: false
+
     ProjectLoadingModel {
         id: loadingModel
 
