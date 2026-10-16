@@ -84,6 +84,12 @@ public:
     std::optional<ArticulationMark> articulationMark(const Chord* chord) const;
     //! NOTE: the latest latched mark of the staff at or before the given tick
     std::optional<ArticulationMark> latchedArticulationMark(const staff_idx_t staffIdx, const int tick) const;
+    //! NOTE: that mark when it applies to all following notes (over their score articulations), unless a playing technique
+    //! of the map ("pizz."...) written after it is in effect. tickOffset: from ticks to the playback positions of the
+    //! techniques (the repeat's offset)
+    std::optional<ArticulationMark> allFollowingNotesArticulationMark(const ExpressionMap& map, const staff_idx_t staffIdx,
+                                                                      const track_idx_t trackIdx, const int tick,
+                                                                      const int tickOffset) const;
     //! NOTE: the playing technique in effect ("pizz.", "sul pont."...) as an articulation an articulation map entry can be
     //! selected by; Undefined when none ("arco", "normal"...)
     muse::mpe::ArticulationType playingTechniqueArticulation(const track_idx_t trackIdx, const int nominalPositionTick) const;

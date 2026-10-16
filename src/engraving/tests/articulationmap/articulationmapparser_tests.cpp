@@ -181,9 +181,11 @@ TEST_F(ArticulationMapParser_Tests, RW_RoundTrip)
 
     const EID chord1 = EID::newUnique();
     const EID chord2 = EID::newUnique();
+    const EID chord3 = EID::newUnique();
     ASSERT_TRUE(chord1.isValid());
     data.setMark(chord1, ArticulationMark { u"Spiccato", ArticulationMark::Scope::SingleChord, -20 });
     data.setMark(chord2, ArticulationMark { u"Legato", ArticulationMark::Scope::Latched, 0 });
+    data.setMark(chord3, ArticulationMark { u"Spiccato", ArticulationMark::Scope::AllFollowingNotes, 0 });
 
     ArticulationMapData read;
     ArticulationMapRW::read(read, ArticulationMapRW::write(data));

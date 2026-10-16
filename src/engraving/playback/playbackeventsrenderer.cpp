@@ -95,7 +95,8 @@ static muse::mpe::NoteEvent buildMetronomeEvent(const TimeSigFrac& timeSig, cons
 }
 
 //! NOTE: resolves which articulation of the instrument's articulation map this chord plays, by priority:
-//! a mark on the chord itself > a score articulation mapped by alias > the staff's latest latched mark > the map's default,
+//! a mark on the chord itself > the staff's latest latched mark if it applies to all following notes > a score articulation
+//! mapped by alias > the staff's latest latched mark > the map's default,
 //! and emits it with the chord's notes. The audio side skips it when it doesn't change from the previous chord
 //! A keyswitch switches the whole plugin, so for an instrument on several staves (piano, harp...),
 //! only its first staff drives the articulations - the others follow it
@@ -120,6 +121,14 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
         entry = map->entry(ownMark->entryId);
         tickOffset = entry ? ownMark->tickOffset : 0;
         source = ResolvedArticulation::Source::OwnMark;
+    }
+
+    if (!entry) {
+        if (const std::optional<ArticulationMark> latched = ctx.playbackCtx->allFollowingNotesArticulationMark(
+                *map, chord->staffIdx(), chord->track(), chord->tick().ticks(), ctx.positionTickOffset)) {
+            entry = map->entry(latched->entryId);
+            source = ResolvedArticulation::Source::Latched;
+        }
     }
 
     if (!entry) {

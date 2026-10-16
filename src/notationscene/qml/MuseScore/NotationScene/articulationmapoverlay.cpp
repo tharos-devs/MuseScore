@@ -42,6 +42,7 @@ constexpr static qreal ARTMAP_CHIP_PADDING_X_PX = 4.0;
 constexpr static qreal ARTMAP_CHIP_MIN_WIDTH_PX = 6.0;
 constexpr static qreal ARTMAP_CHIP_GAP_PX = 2.0;
 constexpr static qreal ARTMAP_CHIP_CORNER_RADIUS_PX = 3.0;
+constexpr static qreal ARTMAP_ALL_FOLLOWING_NOTES_OUTLINE_PX = 1.5;
 constexpr static qreal ARTMAP_MIN_FONT_PX = 9.0;
 constexpr static qreal ARTMAP_MAX_FONT_PX = 13.0;
 constexpr static qreal ARTMAP_LINE_WIDTH_PX = 2.0;
@@ -310,6 +311,16 @@ void ArticulationMapOverlay::paint(QPainter* painter)
         painter->setPen(Qt::NoPen);
         painter->setBrush(fillColor);
         painter->drawRoundedRect(rect, ARTMAP_CHIP_CORNER_RADIUS_PX, ARTMAP_CHIP_CORNER_RADIUS_PX);
+
+        // A mark applying to all following notes, over their score articulations: outlined, to tell why
+        // the staccato dots, accents... after it don't change the articulation
+        if (chip.allFollowingNotes) {
+            painter->setPen(QPen(textColor, ARTMAP_ALL_FOLLOWING_NOTES_OUTLINE_PX));
+            painter->setBrush(Qt::NoBrush);
+            const qreal inset = ARTMAP_ALL_FOLLOWING_NOTES_OUTLINE_PX / 2.0;
+            painter->drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset), ARTMAP_CHIP_CORNER_RADIUS_PX,
+                                     ARTMAP_CHIP_CORNER_RADIUS_PX);
+        }
 
         const QRectF textRect = rect;
 

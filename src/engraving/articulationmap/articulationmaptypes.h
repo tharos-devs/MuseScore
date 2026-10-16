@@ -127,6 +127,7 @@ struct ArticulationMark {
     enum class Scope : unsigned char {
         Latched = 0, // stays active until the next mark
         SingleChord, // applies to its chord only, then the previous articulation resumes
+        AllFollowingNotes, // like Latched, but also over the score articulations of the following chords (e.g. staccato dots)
     };
 
     muse::String entryId;
