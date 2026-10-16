@@ -289,17 +289,24 @@ Item {
 
                     color: ui.theme.backgroundPrimaryColor
 
-                    Rectangle {
+                    ChannelColorStrip {
                         id: metronomeColorStrip
 
                         anchors.left: parent.left
                         anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
-                        width: 8
-                        height: 24
+                        trackColor: metronomeRow.channelItem && metronomeRow.channelItem.hasCustomColor ? metronomeRow.channelItem.color
+                                                                                                         : ui.theme.accentColor
+                        resetEnabled: metronomeRow.channelItem ? metronomeRow.channelItem.hasCustomColor : false
 
-                        color: ui.theme.accentColor
+                        onColorSelected: function(color) {
+                            trackListModel.setMetronomeColor(color)
+                        }
+
+                        onResetRequested: {
+                            trackListModel.resetMetronomeColor()
+                        }
                     }
 
                     ChannelMeters {
@@ -406,50 +413,22 @@ Item {
 
                     color: ui.theme.backgroundPrimaryColor
 
-                    Rectangle {
+                    ChannelColorStrip {
                         id: videoColorStrip
 
                         anchors.left: parent.left
                         anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
 
-                        width: 8
-                        height: 24
+                        trackColor: videoRow.trackColor
+                        resetEnabled: videoRow.channelItem ? videoRow.channelItem.hasCustomColor : false
 
-                        color: videoRow.trackColor
-
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -2
-
-                            onClicked: function(mouse) {
-                                videoColorMenu.show(Qt.point(mouse.x, mouse.y))
-                            }
+                        onColorSelected: function(color) {
+                            trackListModel.setVideoColor(color)
                         }
 
-                        ContextMenuLoader {
-                            id: videoColorMenu
-
-                            items: [
-                                { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                                { id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: videoRow.channelItem ? videoRow.channelItem.hasCustomColor : false }
-                            ]
-
-                            onHandleMenuItem: function(itemId) {
-                                if (itemId === "editColor") {
-                                    videoColorPickerModel.selectColor(videoRow.trackColor, false)
-                                } else if (itemId === "resetColor") {
-                                    trackListModel.resetVideoColor()
-                                }
-                            }
-                        }
-
-                        ColorPickerModel {
-                            id: videoColorPickerModel
-
-                            onColorSelected: function(color) {
-                                trackListModel.setVideoColor(color)
-                            }
+                        onResetRequested: {
+                            trackListModel.resetVideoColor()
                         }
                     }
 
@@ -907,8 +886,7 @@ Item {
                             }
                         }
 
-                        //! NOTE: the track's color, its menu on a left click (like the Timeline's color strips)
-                        Rectangle {
+                        ChannelColorStrip {
                             id: colorStrip
 
                             anchors.left: parent.left
@@ -916,45 +894,16 @@ Item {
                             anchors.leftMargin: rowItem.inFolder ? 18 : 4
                             anchors.verticalCenter: parent.verticalCenter
 
-                            width: 8
-                            height: 24
+                            trackColor: rowItem.trackColor
+                            //! NOTE: on a selected row, for the whole selection, whose other rows may have a color
+                            resetEnabled: rowItem.channelItem.hasCustomColor || rowItem.channelItem.selected
 
-                            color: rowItem.trackColor
-
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -2
-
-                                onClicked: function(mouse) {
-                                    colorMenu.show(Qt.point(mouse.x, mouse.y))
-                                }
+                            onColorSelected: function(color) {
+                                trackListModel.setTrackColor(rowItem.index, color)
                             }
 
-                            ContextMenuLoader {
-                                id: colorMenu
-
-                                items: [
-                                    { id: "editColor", title: qsTrc("playback", "Edit color…") },
-                                    //! NOTE: on a selected row, for the whole selection, whose other rows may have a color
-                                    { id: "resetColor", title: qsTrc("playback", "Reset color"),
-                                        enabled: rowItem.channelItem.hasCustomColor || rowItem.channelItem.selected }
-                                ]
-
-                                onHandleMenuItem: function(itemId) {
-                                    if (itemId === "editColor") {
-                                        colorPickerModel.selectColor(rowItem.trackColor, false)
-                                    } else if (itemId === "resetColor") {
-                                        trackListModel.resetTrackColor(rowItem.index)
-                                    }
-                                }
-                            }
-
-                            ColorPickerModel {
-                                id: colorPickerModel
-
-                                onColorSelected: function(color) {
-                                    trackListModel.setTrackColor(rowItem.index, color)
-                                }
+                            onResetRequested: {
+                                trackListModel.resetTrackColor(rowItem.index)
                             }
                         }
 

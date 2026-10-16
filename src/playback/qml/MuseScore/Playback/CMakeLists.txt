@@ -97,6 +97,7 @@ qt_add_qml_module(playback_qml
         internal/AudioResourceMenuLoader.qml
         internal/AuxSendControl.qml
         internal/ChannelAuxSends.qml
+        internal/ChannelColorStrip.qml
         internal/ChannelEqThumbnail.qml
         internal/ChannelFader.qml
         internal/ChannelFxSlots.qml

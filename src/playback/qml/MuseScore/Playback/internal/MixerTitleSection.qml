@@ -68,7 +68,8 @@ MixerPanelSection {
         readonly property bool isVideo: channelItem.type === MixerChannelItem.Video
 
         function resolveLabelColor() {
-            if ((content.isColorable || content.isVideo) && channelItem.hasCustomColor) {
+            //! NOTE: the metronome's color is chosen in the Track list (see TrackListModel::setMetronomeColor())
+            if ((content.isColorable || content.isVideo || channelItem.type === MixerChannelItem.Metronome) && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 

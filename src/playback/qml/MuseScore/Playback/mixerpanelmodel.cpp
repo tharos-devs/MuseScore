@@ -989,8 +989,8 @@ void MixerPanelModel::setupConnections()
         });
     }
 
-    //! NOTE: the instrument tracks', aux buses' and video's colors are changed through the audio settings, from the
-    //! Mixer itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
+    //! NOTE: the instrument tracks', metronome's, aux buses' and video's colors are changed through the audio
+    //! settings, from the Mixer itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
     if (audioSettings()) {
         audioSettings()->settingsChanged().onNotify(this, [this]() {
             for (MixerChannelItem* item : m_mixerChannelList) {
@@ -999,7 +999,9 @@ void MixerPanelModel::setupConnections()
                 if (item->type() == MixerChannelItem::Type::Aux) {
                     color = audioSettings()->auxOutputParams(item->auxBusIndex()).color;
                 } else if (item->type() == MixerChannelItem::Type::PrimaryInstrument
-                           || item->type() == MixerChannelItem::Type::SecondaryInstrument) {
+                           || item->type() == MixerChannelItem::Type::SecondaryInstrument
+                           || item->type() == MixerChannelItem::Type::Metronome) {
+                    //! NOTE: the metronome's is changed from the Track list's Metronome row
                     const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
                     if (audioSettings()->trackHasExistingOutputParams(trackId)) {
                         color = audioSettings()->trackOutputParams(trackId).color;
