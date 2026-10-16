@@ -217,6 +217,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed the first note not heard when playback starts on it (e.g. a measure's first note selected), at tempos where the start position, rounded to an audio sample, fell a few microseconds after the note; VST3 and SoundFont instruments, also at the start of a loop. A VST3 articulation's keyswitch is no longer sent twice there (2026-10-16).
 - Fixed an automation curve that could stay frozen on screen while the score was scrolled, when two lines started with measures of the same index (e.g. multimeasure rests) (2026-09-29).
 - Fixed MuseScore hanging on quit (the score closed, leaving an empty frozen window that had to be force-quit) after a VST3 plugin's editor had been opened, even once closed — e.g. Kontakt: plugins are now unloaded properly at shutdown (2026-09-29).
 - Fixed removed audio tracks (deleted instruments, changed sounds, closed projects) never releasing their VST instrument, effects and loaded samples until MuseScore quit (2026-09-29).
