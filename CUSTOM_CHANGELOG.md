@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-17
+- Playback toolbar: the Play button has a dropdown arrow to choose what a stop does to the playback position: "Stay at stop position" (MuseScore's usual behavior, the default) or "Return to start position on stop" — when playback stops (Space, Pause, Stop or the end of the score), the playback position goes back to where playback started. Remembered between sessions; the button's tooltip shows the mode (e.g. "Play – Return to start position on stop"); both modes are also actions that can get shortcuts.
 - Score context menu: on a VST instrument staff, a row of icons at the top - note velocities, note offsets, articulations, CC01, CC11, last MIDI CC used, articulation map editor and the VST instrument's window - the same buttons as the circular toolbar, for the clicked instrument (keyboard: Left/Right along the row). They only turn on an editing mode, so the selection made by the right-click (e.g. a measure in an empty part of the staff) goes back to the previous one. The last MIDI CC is shared with the circular toolbar.
 - MIDI CC recording: while Record MIDI CC is on, the recorded staff follows the selection (no need to turn the button off and on again to record another staff); it stays the same during a take, and a selection that isn't a VST instrument staff keeps the previous one.
 - Circular toolbar: the Tempo button shows "♩ =", like a tempo mark, to tell it at a glance.
