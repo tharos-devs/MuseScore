@@ -55,6 +55,9 @@ public:
     MOCK_METHOD(void, selectAndStartEditIfNeeded, (EngravingItem*), (override));
     MOCK_METHOD(INotationSelectionPtr, selection, (), (const, override));
     MOCK_METHOD(void, clearSelection, (), (override));
+    MOCK_METHOD(void, rememberSelectionBeforeContextMenu, (), (override));
+    MOCK_METHOD(void, forgetSelectionBeforeContextMenu, (), (override));
+    MOCK_METHOD(void, restoreSelectionBeforeContextMenu, (), (override));
     MOCK_METHOD(muse::async::Notification, selectionChanged, (), (const, override));
     MOCK_METHOD(void, findAndSelectChordRest, (const Fraction&), (override));
 

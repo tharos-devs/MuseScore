@@ -23,26 +23,13 @@
 
 #include <optional>
 
-#include "modularity/ioc.h"
-
 #include "menuitemsutils.h"
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
-
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
-#include "notation/inotationconfiguration.h"
-#include "playback/iplaybackcontroller.h"
-
-#include "muse_framework_config.h"
-#ifdef MUSE_MODULE_VST
-#include "vst/ivstpluginstateprovider.h"
-#endif
+#include "quickactionsmenumodel.h"
 
 namespace mu::notation {
-//! NOTE: the buttons of the circular toolbar (see CircularToolbar.qml), each running the same command as the
-//! existing button doing the same thing. Rebuilt each time the toolbar shows, which closes again once one is
-//! clicked, so their state is the one at that moment
-class CircularToolbarModel : public muse::uicomponents::AbstractMenuModel
+//! NOTE: the buttons of the circular toolbar (see CircularToolbar.qml). Rebuilt each time the toolbar shows, which
+//! closes again once one is clicked, so their state is the one at that moment
+class CircularToolbarModel : public QuickActionsMenuModel
 {
     Q_OBJECT
     QML_ELEMENT;
@@ -50,14 +37,6 @@ class CircularToolbarModel : public muse::uicomponents::AbstractMenuModel
     //! NOTE: without one, the articulation map editor button still opens an empty editor
     Q_PROPERTY(
         bool focusedStaffHasArticulationMap READ focusedStaffHasArticulationMap NOTIFY focusedStaffHasArticulationMapChanged)
-
-    muse::GlobalInject<INotationConfiguration> notationConfiguration;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
-    muse::ContextInject<playback::IPlaybackController> playbackController = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
-#ifdef MUSE_MODULE_VST
-    muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
-#endif
 
 public:
     //! NOTE: the buttons are found by their id, see CircularToolbar.qml
@@ -71,22 +50,12 @@ signals:
     void focusedStaffHasArticulationMapChanged();
 
 private:
-    muse::uicomponents::MenuItem* makeAutomationItem(const QString& id, const std::string& type, int controller,
-                                                     const muse::TranslatableString& title, bool enabled);
-    muse::uicomponents::MenuItem* makeMoreMidiCcMenu(bool enabled);
-    muse::uicomponents::MenuItem* makeLastMidiCcItem(bool enabled);
-    void updateLastMidiCc();
-    muse::uicomponents::MenuItem* makeArticulationMapEditorItem();
-    muse::uicomponents::MenuItem* makeInstrumentEditorItem();
-
     //! NOTE: the instrument of the selected staff, at the selection
-    std::optional<engraving::InstrumentTrackId> focusedTrackId() const;
-    bool isInstrumentEditorOpened() const;
+    std::optional<engraving::InstrumentTrackId> actionsTrackId() const override;
+
+    muse::uicomponents::MenuItem* makeMoreMidiCcMenu(bool enabled);
 
     ReplacedMenuItems m_replacedItems;
     bool m_focusedStaffHasArticulationMap = false;
-
-    //! NOTE: the last MIDI CC picked in the "…" menu, -1 if none
-    int m_lastMidiCc = -1;
 };
 }

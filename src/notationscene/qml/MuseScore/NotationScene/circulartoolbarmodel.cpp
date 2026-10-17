@@ -29,7 +29,6 @@
 #include "engraving/dom/staff.h"
 
 #include "notation/imasternotation.h"
-#include "notation/inotationarticulationmaps.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationelements.h"
 #include "notation/inotationinteraction.h"
@@ -38,7 +37,6 @@
 #include "notationscene/notationcommands.h"
 #include "appshell/appshellcommands.h"
 
-#include "instrumenteditor.h"
 #include "midiccautomation.h"
 
 using namespace mu::notation;
@@ -46,11 +44,7 @@ using namespace mu::engraving;
 using namespace muse;
 using namespace muse::uicomponents;
 
-static const QString INSTRUMENT_EDITOR_ID("instrument-editor");
 static const QString MORE_MIDI_CC_ID("more-midi-cc");
-
-//! NOTE: the MIDI CCs with their own button, the others are in the "…" menu
-static const std::vector<int> RING_MIDI_CCS { 1, 11 };
 
 void CircularToolbarModel::prepareOpening()
 {
@@ -68,26 +62,32 @@ void CircularToolbarModel::prepareOpening()
         return item;
     };
 
+    bool hasArticulationMap = false;
     MenuItemList newItems {
         withId(makeMenuItem(appshell::DOCK_TOGGLE_MIXER_COMMAND), "mixer"),
         withId(makeMenuItem(appshell::DOCK_TOGGLE_VIDEO_PANEL_COMMAND), "video"),
         withId(makeMenuItem(appshell::DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND), "secondary-window"),
         withId(makeMenuItem(appshell::DOCK_TOGGLE_TIMELINE_COMMAND), "timeline"),
 
-        makeAutomationItem("cc1", "midicc", 1, TranslatableString::untranslatable("CC01"), hasVstInstrument),
-        makeAutomationItem("cc11", "midicc", 11, TranslatableString::untranslatable("CC11"), hasVstInstrument),
+        makeMidiCcItem("cc1", 1, hasVstInstrument),
+        makeMidiCcItem("cc11", 11, hasVstInstrument),
         makeAutomationItem("tempo", "tempo", -1, TranslatableString::untranslatable("Tempo"), true),
         makeLastMidiCcItem(hasVstInstrument),
         makeMoreMidiCcMenu(hasVstInstrument),
 
         withId(makeMenuItem(TOGGLE_NOTE_VELOCITY_EDITOR_COMMAND), "velocities"),
-        makeArticulationMapEditorItem(),
+        makeArticulationMapEditorItem(&hasArticulationMap),
         withId(makeMenuItem(TOGGLE_ARTICULATION_MAP_EDITOR_COMMAND), "articulations"),
         makeInstrumentEditorItem(),
         withId(makeMenuItem(TOGGLE_NOTE_OFFSET_EDITOR_COMMAND), "note-offsets"),
     };
     // a null item would break the toolbar (null entries in its QML model)
     newItems.removeAll(nullptr);
+
+    if (m_focusedStaffHasArticulationMap != hasArticulationMap) {
+        m_focusedStaffHasArticulationMap = hasArticulationMap;
+        emit focusedStaffHasArticulationMapChanged();
+    }
 
     const MenuItemList oldItems = items();
     setItems(newItems);
@@ -103,61 +103,12 @@ void CircularToolbarModel::handleMenuItem(const QString& itemId)
         }
         for (const MenuItem* subitem : item->subitems()) {
             if (subitem->id() == itemId && subitem->commandQuery().contains("cc")) {
-                m_lastMidiCc = subitem->commandQuery().param("cc").toInt();
+                setLastMidiCc(subitem->commandQuery().param("cc").toInt());
             }
         }
     }
 
-    if (itemId != INSTRUMENT_EDITOR_ID) {
-        AbstractMenuModel::handleMenuItem(itemId);
-        return;
-    }
-
-    const std::optional<InstrumentTrackId> trackId = focusedTrackId();
-    if (!trackId) {
-        return;
-    }
-
-    const std::optional<instrumenteditor::Target> target
-        = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
-    if (target) {
-        instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target,
-                                   isInstrumentEditorOpened() ? "close" : "open");
-    }
-}
-
-//! NOTE: shows this curve, or hides it when it's the one shown - see NotationActionController::toggleAutomationType()
-MenuItem* CircularToolbarModel::makeAutomationItem(const QString& id, const std::string& type, int controller,
-                                                   const TranslatableString& title, bool enabled)
-{
-    rcommand::CommandQuery query(TOGGLE_AUTOMATION_TYPE_COMMAND);
-    query.addParam("type", Val(type));
-    if (controller >= 0) {
-        query.addParam("cc", Val(controller));
-    }
-
-    MenuItem* item = makeMenuItem(query, title);
-    if (!item) {
-        return nullptr;
-    }
-
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const bool isAutomationShown = masterNotation && masterNotation->automation()->isAutomationModeEnabled();
-    const AutomationType currentType = notationConfiguration()->currentAutomationType();
-
-    bool checked = false;
-    if (controller >= 0) {
-        checked = currentType == AutomationType::MidiCC && notationConfiguration()->currentAutomationMidiCc() == controller;
-    } else {
-        checked = currentType == AutomationType::Tempo;
-    }
-
-    item->setId(id);
-    item->setCheckable(true);
-    item->setChecked(isAutomationShown && checked);
-    item->setEnabled(enabled);
-
-    return item;
+    QuickActionsMenuModel::handleMenuItem(itemId);
 }
 
 //! NOTE: the score's other MIDI CCs, and "Other MIDI CC…" to pick one
@@ -169,7 +120,7 @@ MenuItem* CircularToolbarModel::makeMoreMidiCcMenu(bool enabled)
     const MenuItemList items = midicc::makeMenuItems(
         [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
-        notationConfiguration().get(), automation, false /*withDeleteItem*/, RING_MIDI_CCS);
+        notationConfiguration().get(), automation, false /*withDeleteItem*/, buttonMidiCcs());
 
     MenuItem* menu = makeMenu(TranslatableString::untranslatable("More MIDI CC"), items, MORE_MIDI_CC_ID, enabled);
     if (menu) {
@@ -177,53 +128,10 @@ MenuItem* CircularToolbarModel::makeMoreMidiCcMenu(bool enabled)
         menu->setCheckable(true);
         menu->setChecked(automation && automation->isAutomationModeEnabled()
                          && notationConfiguration()->currentAutomationType() == AutomationType::MidiCC
-                         && !muse::contains(RING_MIDI_CCS, controller));
+                         && !muse::contains(buttonMidiCcs(), controller));
     }
 
     return menu;
-}
-
-//! NOTE: also a controller picked with "Other MIDI CC…" (only known once shown), or elsewhere; without any yet, the
-//! score's first own controller
-void CircularToolbarModel::updateLastMidiCc()
-{
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
-    const int current = notationConfiguration()->currentAutomationMidiCc();
-
-    if (automation && automation->isAutomationModeEnabled()
-        && notationConfiguration()->currentAutomationType() == AutomationType::MidiCC
-        && !muse::contains(RING_MIDI_CCS, current)) {
-        m_lastMidiCc = current;
-        return;
-    }
-
-    if (m_lastMidiCc >= 0 || !automation) {
-        return;
-    }
-
-    for (const uint8_t controller : automation->customMidiCcs()) {
-        if (!muse::contains(RING_MIDI_CCS, static_cast<int>(controller))) {
-            m_lastMidiCc = controller;
-            return;
-        }
-    }
-}
-
-//! NOTE: toggles the last controller picked in the "…" menu, greyed out before any
-MenuItem* CircularToolbarModel::makeLastMidiCcItem(bool enabled)
-{
-    if (m_lastMidiCc < 0) {
-        MenuItem* item = makeAutomationItem("last-midi-cc", "midicc", 0, TranslatableString::untranslatable("CC"), false);
-        if (item) {
-            item->setChecked(false);
-        }
-        return item;
-    }
-
-    return makeAutomationItem("last-midi-cc", "midicc", m_lastMidiCc,
-                              TranslatableString::untranslatable(muse::String::fromQString(midicc::controllerNumber(m_lastMidiCc))),
-                              enabled);
 }
 
 bool CircularToolbarModel::focusedStaffHasArticulationMap() const
@@ -231,57 +139,7 @@ bool CircularToolbarModel::focusedStaffHasArticulationMap() const
     return m_focusedStaffHasArticulationMap;
 }
 
-//! NOTE: the selected staff's map, as its "Articulation map" context menu would do; an empty editor without any
-MenuItem* CircularToolbarModel::makeArticulationMapEditorItem()
-{
-    const std::optional<InstrumentTrackId> trackId = focusedTrackId();
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
-    const bool isVst = trackId && midicc::isVstTrack(globalContext()->currentProject(), *trackId);
-    const bool hasMap = isVst && maps && maps->data() && maps->data()->map(*trackId);
-
-    if (m_focusedStaffHasArticulationMap != hasMap) {
-        m_focusedStaffHasArticulationMap = hasMap;
-        emit focusedStaffHasArticulationMapChanged();
-    }
-
-    rcommand::CommandQuery query(hasMap ? EDIT_ARTICULATION_MAP_COMMAND : OPEN_ARTICULATION_MAP_EDITOR_COMMAND);
-    if (hasMap) {
-        query.addParam("partId", Val(std::to_string(trackId->partId.toUint64())));
-        query.addParam("instrumentId", Val(trackId->instrumentId.toStdString()));
-    }
-
-    MenuItem* item = makeMenuItem(query, TranslatableString("notation", "Articulation map editor"));
-    if (!item) {
-        return nullptr;
-    }
-
-    item->setId("articulation-map-editor");
-    item->setCheckable(true);
-    item->setChecked(hasMap && maps->isEditorOpened(*trackId));
-    item->setEnabled(true);
-
-    return item;
-}
-
-MenuItem* CircularToolbarModel::makeInstrumentEditorItem()
-{
-    const std::optional<InstrumentTrackId> trackId = focusedTrackId();
-    const bool hasEditor = trackId
-                           && instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
-
-    MenuItem* item = new MenuItem(this);
-    item->setId(INSTRUMENT_EDITOR_ID);
-    item->setTitle(TranslatableString("notation", "VST instrument"));
-    item->setIcon(ui::IconCode::Code::PLUGIN);
-    item->setCheckable(true);
-    item->setChecked(hasEditor && isInstrumentEditorOpened());
-    item->setEnabled(hasEditor);
-
-    return item;
-}
-
-std::optional<InstrumentTrackId> CircularToolbarModel::focusedTrackId() const
+std::optional<InstrumentTrackId> CircularToolbarModel::actionsTrackId() const
 {
     const INotationPtr notation = globalContext()->currentNotation();
     if (!notation) {
@@ -313,20 +171,4 @@ std::optional<InstrumentTrackId> CircularToolbarModel::focusedTrackId() const
     // an instrument change makes it another track
     const Instrument* instrument = part->instrument(tick);
     return InstrumentTrackId { part->id(), instrument ? instrument->id() : part->instrumentId() };
-}
-
-bool CircularToolbarModel::isInstrumentEditorOpened() const
-{
-#ifdef MUSE_MODULE_VST
-    const std::optional<InstrumentTrackId> trackId = focusedTrackId();
-    if (!trackId || !vstPluginStateProvider()) {
-        return false;
-    }
-
-    const std::optional<instrumenteditor::Target> target
-        = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
-    return target && vstPluginStateProvider()->isInstrumentEditorOpened(target->resourceId, target->trackId);
-#else
-    return false;
-#endif
 }

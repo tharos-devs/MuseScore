@@ -22,10 +22,8 @@
 
 #pragma once
 
-#include "modularity/ioc.h"
-#include "context/iglobalcontext.h"
-
-#include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
+#include "menuitemsutils.h"
+#include "quickactionsmenumodel.h"
 
 #include "notation/inotationinteraction.h"
 #include "notation/inotationautomation.h"
@@ -34,16 +32,15 @@
 #include "notation/inotationconfiguration.h"
 
 namespace mu::notation {
-class NotationContextMenuModel : public muse::uicomponents::AbstractMenuModel
+class NotationContextMenuModel : public QuickActionsMenuModel
 {
     Q_OBJECT
     QML_ELEMENT;
 
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
-    muse::GlobalInject<INotationConfiguration> notationConfiguration;
-
 public:
     Q_INVOKABLE void loadItems(int elementType);
+
+    void handleMenuItem(const QString& itemId) override;
 
 private:
     muse::uicomponents::MenuItemList makeItemsByElementType(engraving::ElementType type);
@@ -78,6 +75,8 @@ private:
     bool canSelectSimilarInRange() const;
     bool canSelectSimilar() const;
     bool isVstInstrumentStaff() const;
+    //! NOTE: the instrument of the clicked staff, at the clicked position
+    std::optional<engraving::InstrumentTrackId> actionsTrackId() const override;
     muse::uicomponents::MenuItemList makeMidiCcItems();
     muse::uicomponents::MenuItem* makeMidiCcMenu();
     muse::uicomponents::MenuItem* makeArticulationMapMenu();
@@ -92,5 +91,7 @@ private:
     const engraving::EngravingItem* currentElement() const;
 
     const INotationInteraction::HitElementContext& hitElementContext() const;
+
+    ReplacedMenuItems m_replacedItems;
 };
 }

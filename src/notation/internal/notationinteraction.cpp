@@ -1032,6 +1032,30 @@ void NotationInteraction::clearSelection()
     setHitElementContext(HitElementContext());
 }
 
+void NotationInteraction::rememberSelectionBeforeContextMenu()
+{
+    m_selectionBeforeContextMenu = score()->selection();
+}
+
+void NotationInteraction::forgetSelectionBeforeContextMenu()
+{
+    m_selectionBeforeContextMenu.reset();
+}
+
+void NotationInteraction::restoreSelectionBeforeContextMenu()
+{
+    if (!m_selectionBeforeContextMenu) {
+        return;
+    }
+
+    const mu::engraving::Selection selection = *m_selectionBeforeContextMenu;
+    m_selectionBeforeContextMenu.reset();
+
+    score()->setSelection(selection);
+    score()->setSelectionChanged(true);
+    m_selection->notifyAboutSelectionChangedIfNeed();
+}
+
 muse::async::Notification NotationInteraction::selectionChanged() const
 {
     return m_selection->selectionChanged();
