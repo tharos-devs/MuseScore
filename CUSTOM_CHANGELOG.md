@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-17
+- Score context menu: on a VST instrument staff, a row of icons at the top - note velocities, note offsets, articulations, CC01, CC11, last MIDI CC used, articulation map editor and the VST instrument's window - the same buttons as the circular toolbar, for the clicked instrument (keyboard: Left/Right along the row). They only turn on an editing mode, so the selection made by the right-click (e.g. a measure in an empty part of the staff) goes back to the previous one. The last MIDI CC is shared with the circular toolbar.
 - MIDI CC recording: while Record MIDI CC is on, the recorded staff follows the selection (no need to turn the button off and on again to record another staff); it stays the same during a take, and a selection that isn't a VST instrument staff keeps the previous one.
 - Circular toolbar: the Tempo button shows "♩ =", like a tempo mark, to tell it at a glance.
 - Mixer: a Track delay section for VST3 tracks (under Sound, hidden by default: "…" > View > Track delay): a knob and its field, -500 to +500 ms, shift everything the track plays - notes, articulation triggers, CCs, dynamics, pedals and pitch bends (e.g. a library whose attacks are late); applied when the knob is released or the value typed, undoable, saved with the project and in track presets. An articulation's Note delay now also takes the notes' pedals and pitch bends along.
