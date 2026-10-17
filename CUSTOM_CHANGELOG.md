@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-17
+- Mixer: a Track delay section for VST3 tracks (under Sound, hidden by default: "…" > View > Track delay): a knob and its field, -500 to +500 ms, shift everything the track plays - notes, articulation triggers, CCs, dynamics, pedals and pitch bends (e.g. a library whose attacks are late); applied when the knob is released or the value typed, undoable, saved with the project and in track presets. An articulation's Note delay now also takes the notes' pedals and pitch bends along.
+
 ### 2026-10-16
 - Articulation map editor: "Activation sequence" is now "Trigger" (keyswitches, CCs or program changes); "Track delay", which only sets when the triggers are sent (never the notes), is now "Default trigger delay", and an articulation's "Articulation delay" is now "Trigger delay", next to "Note delay" (which shifts its notes, e.g. a late legato). The map files don't change.
 - Track list: a folder's Mute/Solo button is on as soon as one of its tracks is muted/soloed, and a click then unmutes/unsolos them all (e.g. one click ends the solos of 4 string tracks); off, a click mutes/solos them all. Nothing is remembered; the global Mute/Solo buttons still restore what they turned off.
