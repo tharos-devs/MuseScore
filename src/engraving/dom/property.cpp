@@ -80,8 +80,8 @@ static constexpr PropertyMetaData propertyList[] = {
     { Pid::FIXED_LINE,                          P_TYPE::INT,                       PropertyGroup::NONE      , true,  "fixedLine",                       QT_TRANSLATE_NOOP("engraving/propertyName", "fixed line") },
     { Pid::HEAD_TYPE,                           P_TYPE::NOTEHEAD_TYPE,             PropertyGroup::APPEARANCE, false, "headType",                        QT_TRANSLATE_NOOP("engraving/propertyName", "head type") },
     { Pid::HEAD_GROUP,                          P_TYPE::NOTEHEAD_GROUP,            PropertyGroup::APPEARANCE, true,  "head",                            QT_TRANSLATE_NOOP("engraving/propertyName", "head") },
-    { Pid::VELO_TYPE,                           P_TYPE::VELO_TYPE,                 PropertyGroup::APPEARANCE, false, "veloType",                        QT_TRANSLATE_NOOP("engraving/propertyName", "velocity type") },
-    { Pid::USER_VELOCITY,                       P_TYPE::INT,                       PropertyGroup::APPEARANCE, false, "velocity",                        QT_TRANSLATE_NOOP("engraving/propertyName", "velocity") },
+    { Pid::VELO_TYPE,                           P_TYPE::VELO_TYPE,                 PropertyGroup::APPEARANCE, true,  "veloType",                        QT_TRANSLATE_NOOP("engraving/propertyName", "velocity type") },
+    { Pid::USER_VELOCITY,                       P_TYPE::INT,                       PropertyGroup::APPEARANCE, true,  "velocity",                        QT_TRANSLATE_NOOP("engraving/propertyName", "velocity") },
     { Pid::ARTICULATION_ANCHOR,                 P_TYPE::INT,                       PropertyGroup::POSITION,   false, "anchor",                          QT_TRANSLATE_NOOP("engraving/propertyName", "anchor") },
 
     { Pid::DIRECTION,                           P_TYPE::DIRECTION_V,               PropertyGroup::POSITION,   false, "direction",                       QT_TRANSLATE_NOOP("engraving/propertyName", "direction") },
@@ -96,7 +96,7 @@ static constexpr PropertyMetaData propertyList[] = {
     { Pid::HIDE_GENERATED_PARENTHESES,          P_TYPE::BOOL,                      PropertyGroup::NONE,       false, "hideGeneratedParentheses",        QT_TRANSLATE_NOOP("engraving/propertyName", "hide generated parentheses") },
     { Pid::DOT_POSITION,                        P_TYPE::DIRECTION_V,               PropertyGroup::POSITION,   false, "dotPosition",                     QT_TRANSLATE_NOOP("engraving/propertyName", "dot position") },
     { Pid::COMBINE_VOICE,                       P_TYPE::AUTO_ON_OFF,               PropertyGroup::POSITION,   true,  "combineVoice",                    QT_TRANSLATE_NOOP("engraving/propertyName", "combine voice") },
-    { Pid::TUNING,                              P_TYPE::REAL,                      PropertyGroup::APPEARANCE, false, "tuning",                          QT_TRANSLATE_NOOP("engraving/propertyName", "tuning") },
+    { Pid::TUNING,                              P_TYPE::REAL,                      PropertyGroup::APPEARANCE, true,  "tuning",                          QT_TRANSLATE_NOOP("engraving/propertyName", "tuning") },
     { Pid::PAUSE,                               P_TYPE::REAL,                      PropertyGroup::APPEARANCE, true,  "pause",                           QT_TRANSLATE_NOOP("engraving/propertyName", "pause") },
 
     { Pid::BARLINE_TYPE,                        P_TYPE::BARLINE_TYPE,              PropertyGroup::APPEARANCE, false, "subtype",                         QT_TRANSLATE_NOOP("engraving/propertyName", "barline type") },
@@ -519,8 +519,8 @@ static constexpr PropertyMetaData propertyList[] = {
 
     { Pid::SHARED_PART_ENABLED,                 P_TYPE::BOOL,                      PropertyGroup::NONE,       false, "sharedPartEnabled",               QT_TRANSLATE_NOOP("engraving/propertyName", "shared part enabled") },
 
-    { Pid::PLAYBACK_START_OFFSET,               P_TYPE::INT,                       PropertyGroup::APPEARANCE, false, "playbackStartOffset",             QT_TRANSLATE_NOOP("engraving/propertyName", "playback start offset") },
-    { Pid::PLAYBACK_DURATION_OFFSET,            P_TYPE::INT,                       PropertyGroup::APPEARANCE, false, "playbackDurationOffset",          QT_TRANSLATE_NOOP("engraving/propertyName", "playback duration offset") },
+    { Pid::PLAYBACK_START_OFFSET,               P_TYPE::INT,                       PropertyGroup::APPEARANCE, true,  "playbackStartOffset",             QT_TRANSLATE_NOOP("engraving/propertyName", "playback start offset") },
+    { Pid::PLAYBACK_DURATION_OFFSET,            P_TYPE::INT,                       PropertyGroup::APPEARANCE, true,  "playbackDurationOffset",          QT_TRANSLATE_NOOP("engraving/propertyName", "playback duration offset") },
 
     { Pid::END,                                 P_TYPE::INT,                       PropertyGroup::NONE,       false, "++end++",                         nullptr }
 };

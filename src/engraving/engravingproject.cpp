@@ -27,8 +27,11 @@
 #include "rw/mscloader.h"
 #include "rw/mscsaver.h"
 #include "style/defaultstyle.h"
+#include "dom/chord.h"
 #include "dom/masterscore.h"
+#include "dom/note.h"
 #include "dom/part.h"
+#include "dom/segment.h"
 
 #include "log.h"
 
@@ -108,9 +111,56 @@ void EngravingProject::setMasterScore(MasterScore* score)
     m_masterScore = score;
 }
 
+//! NOTE: these note properties only matter for playback, which is built from the master score: they are always
+//! linked, but files saved before that may have different values in a part (edited there, never heard)
+static void syncPartNotePlaybackPropertiesWithMaster(MasterScore* masterScore)
+{
+    static constexpr Pid PROPERTIES[] = {
+        Pid::VELO_TYPE, Pid::USER_VELOCITY, Pid::TUNING, Pid::PLAYBACK_START_OFFSET, Pid::PLAYBACK_DURATION_OFFSET
+    };
+
+    const auto syncNote = [masterScore](Note* note) {
+        const EngravingItem* masterNote = note->findLinkedInScore(masterScore);
+        if (!masterNote) {
+            return;
+        }
+        for (const Pid pid : PROPERTIES) {
+            const PropertyValue masterValue = masterNote->getProperty(pid);
+            if (note->getProperty(pid) != masterValue) {
+                note->setProperty(pid, masterValue);
+            }
+        }
+    };
+
+    for (Score* score : masterScore->scoreList()) {
+        if (score->isMaster()) {
+            continue;
+        }
+        for (Segment* segment = score->firstSegment(SegmentType::ChordRest); segment;
+             segment = segment->next1(SegmentType::ChordRest)) {
+            for (EngravingItem* item : segment->elist()) {
+                if (!item || !item->isChord()) {
+                    continue;
+                }
+                Chord* chord = toChord(item);
+                for (Chord* grace : chord->graceNotes()) {
+                    for (Note* note : grace->notes()) {
+                        syncNote(note);
+                    }
+                }
+                for (Note* note : chord->notes()) {
+                    syncNote(note);
+                }
+            }
+        }
+    }
+}
+
 Ret EngravingProject::setupMasterScore(bool forceMode)
 {
     TRACEFUNC;
+
+    syncPartNotePlaybackPropertiesWithMaster(m_masterScore);
 
     m_masterScore->updatePaddingTables();
     for (Score* s : m_masterScore->scoreList()) {
