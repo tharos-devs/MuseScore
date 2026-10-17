@@ -72,6 +72,11 @@ void ChannelEditUndo::connectContinuousChanges(MixerChannelItem* item, QObject* 
                                   &MixerChannelItem::setGain, oldValue, newValue);
     });
 
+    QObject::connect(item, &MixerChannelItem::delayChangeCommitted, context, [item, undoStack](int oldValue, int newValue) {
+        pushChannelFieldUndo<int>(undoStack(), item->trackId(), muse::TranslatableString("undoableAction", "Change track delay"),
+                                  &MixerChannelItem::setDelayMs, oldValue, newValue);
+    });
+
     QObject::connect(item, &MixerChannelItem::eqChangeCommitted, context,
                      [item, undoStack](const EqParams& oldValue, const EqParams& newValue) {
         pushChannelFieldUndo<EqParams>(undoStack(), item->trackId(), muse::TranslatableString("undoableAction", "Change Mixer channel EQ"),

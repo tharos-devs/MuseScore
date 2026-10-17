@@ -256,6 +256,17 @@ void InputResourceItem::setMidiRouting(int port, int channel)
     emit inputParamsChanged();
 }
 
+void InputResourceItem::setDelayMs(int delayMs)
+{
+    if (m_currentInputParams.delayMs == delayMs) {
+        return;
+    }
+
+    m_currentInputParams.delayMs = delayMs;
+
+    emit inputParamsChanged();
+}
+
 QString InputResourceItem::title() const
 {
     return audio::audioSourceName(m_currentInputParams).toQString();

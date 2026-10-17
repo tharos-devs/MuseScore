@@ -300,6 +300,29 @@ int MixerChannelItem::gainMax() const
     return audio::GAIN_DB_MAX.raw();
 }
 
+//! NOTE: as VstSynthesiser::setPlaybackDelay() allows
+static constexpr int MAX_DELAY_MS = 500;
+
+int MixerChannelItem::delayMs() const
+{
+    return m_inputParams.delayMs;
+}
+
+bool MixerChannelItem::delayAvailable() const
+{
+    return !m_outputOnly && m_inputParams.type() == AudioSourceType::Vsti;
+}
+
+int MixerChannelItem::delayMsMin() const
+{
+    return -MAX_DELAY_MS;
+}
+
+int MixerChannelItem::delayMsMax() const
+{
+    return MAX_DELAY_MS;
+}
+
 bool MixerChannelItem::hasVolumeAutomation() const
 {
     return m_hasVolumeAutomation;
@@ -909,8 +932,14 @@ void MixerChannelItem::loadInputParams(const AudioInputParams& newParams)
         return;
     }
 
+    const bool delayChanged = m_inputParams.delayMs != newParams.delayMs || m_inputParams.type() != newParams.type();
+
     m_inputParams = newParams;
     m_inputResourceItem->setParams(newParams);
+
+    if (delayChanged) {
+        emit this->delayChanged();
+    }
 }
 
 void MixerChannelItem::loadOutputParams(const AudioOutputParams& newParams)
@@ -1246,6 +1275,27 @@ void MixerChannelItem::setGain(int gain)
     m_outParams.gain = static_cast<float>(gain);
     setDisplayedGain(gain);
     emit controlParamsChanged(m_outParams);
+}
+
+void MixerChannelItem::setDelayMs(int delayMs)
+{
+    delayMs = std::clamp(delayMs, -MAX_DELAY_MS, MAX_DELAY_MS);
+    if (m_outputOnly || !m_inputResourceItem || m_inputParams.delayMs == delayMs) {
+        return;
+    }
+
+    //! NOTE: sent and shown through the input item's change (see buildInputResourceItem())
+    m_inputResourceItem->setDelayMs(delayMs);
+}
+
+void MixerChannelItem::commitDelayMs(int delayMs)
+{
+    const int oldValue = this->delayMs();
+    setDelayMs(delayMs);
+
+    if (oldValue != this->delayMs()) {
+        emit delayChangeCommitted(oldValue, this->delayMs());
+    }
 }
 
 void MixerChannelItem::setEqParams(muse::audio::EqParams eq)
@@ -1770,9 +1820,14 @@ InputResourceItem* MixerChannelItem::buildInputResourceItem()
 
     connect(newItem, &InputResourceItem::inputParamsChanged, this, [this, newItem]() {
         bool audioSourceChanged = m_inputParams.type() != newItem->params().type();
+        const bool delayChanged = audioSourceChanged || m_inputParams.delayMs != newItem->params().delayMs;
 
         m_inputParams = newItem->params();
         emit inputParamsChanged(m_inputParams);
+
+        if (delayChanged) {
+            emit this->delayChanged();
+        }
 
         if (!audioSourceChanged) {
             return;

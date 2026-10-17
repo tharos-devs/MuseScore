@@ -418,6 +418,28 @@ ColumnLayout {
                         }
                     }
 
+                    MixerDelaySection {
+                        id: delaySection
+
+                        visible: contextMenuModel.delaySectionVisible
+                        headerVisible: contextMenuModel.labelsSectionVisible
+                        headerWidth: prv.headerWidth
+                        channelItemWidth: prv.channelItemWidth
+                        masterChannelItemWidth: prv.masterChannelItemWidth
+                        condensedView: contextMenuModel.condensedViewEnabled
+                        headerPinOffsetX: flickable.contentX
+                        masterPinOffsetX: prv.masterPinOffsetX
+
+                        model: mixerPanelModel
+
+                        navigationRowStart: 40
+                        needReadChannelName: prv.isPanelActivated
+
+                        onNavigateControlIndexChanged: function(index) {
+                            prv.setNavigateControlIndex(index)
+                        }
+                    }
+
                     MixerGainSection {
                         id: gainSection
 
