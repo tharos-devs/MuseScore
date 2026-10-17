@@ -169,6 +169,7 @@ private:
     void updatePolylinesColors();
     void onCurrentNotationChanged();
     void rebuildAllPolylines();
+    bool rebuildIfSystemsStale();
     void scheduleRebuild();
 
     void updateStaffPoints(const SysStaffKey& key);
