@@ -194,6 +194,22 @@ const UiActionList PlaybackUiActions::s_settingsActions = {
              IconCode::Code::COUNT_IN,
              Checkable::Yes
              ),
+    UiAction("playback-stop-stays-at-position",
+             mu::context::UiCtxAny,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Stay at stop position"),
+             TranslatableString("action", "When playback stops, keep the playback position where it stopped"),
+             IconCode::Code::NONE,
+             Checkable::Yes
+             ),
+    UiAction("playback-stop-returns-to-start",
+             mu::context::UiCtxAny,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Return to start position on stop"),
+             TranslatableString("action", "When playback stops, move the playback position back to where playback started"),
+             IconCode::Code::NONE,
+             Checkable::Yes
+             ),
 };
 
 const UiActionList PlaybackUiActions::s_loopBoundaryActions = {

@@ -27,6 +27,7 @@
 
 #include "modularity/ioc.h"
 #include "iplaybackcontroller.h"
+#include "iplaybackconfiguration.h"
 #include "notation/inotationconfiguration.h"
 #include "context/iglobalcontext.h"
 
@@ -37,6 +38,7 @@ class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
 
     Q_PROPERTY(bool isToolbarFloating READ isToolbarFloating WRITE setIsToolbarFloating NOTIFY isToolbarFloatingChanged)
     Q_PROPERTY(bool isPlayAllowed READ isPlayAllowed NOTIFY isPlayAllowedChanged)
+    Q_PROPERTY(bool returnToStartOnStop READ returnToStartOnStop NOTIFY returnToStartOnStopChanged)
 
     Q_PROPERTY(QTime maxPlayTime READ maxPlayTime NOTIFY maxPlayTimeChanged)
 
@@ -53,6 +55,7 @@ class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
     QML_ELEMENT
 
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
+    muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
@@ -61,6 +64,7 @@ public:
 
     bool isToolbarFloating() const;
     bool isPlayAllowed() const;
+    bool returnToStartOnStop() const;
 
     QTime maxPlayTime() const;
     QTime playTime() const;
@@ -87,6 +91,7 @@ public slots:
 signals:
     void isToolbarFloatingChanged(bool floating);
     void isPlayAllowedChanged();
+    void returnToStartOnStopChanged();
     void maxPlayTimeChanged();
     void playPositionChanged();
     void tempoChanged();

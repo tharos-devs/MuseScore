@@ -360,6 +360,9 @@ private:
     muse::Progress m_loadingProgress;
     size_t m_loadingTrackCount = 0;
 
+    //! NOTE: where the current playback started, to go back there on stop (see IPlaybackConfiguration::returnToStartOnStop)
+    std::optional<muse::audio::secs_t> m_playStartSecs;
+
     bool m_isExportingAudio = false;
     bool m_isRangeSelection = false;
 

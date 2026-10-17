@@ -48,6 +48,9 @@ inline static const muse::rcommand::Command CHORDSYMBOLS_TOGGLE_COMMAND("command
 inline static const muse::rcommand::Command HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND("command://playback/hear-playback-when-editing-toggle");
 inline static const muse::rcommand::Command PAN_TOGGLE_COMMAND("command://playback/pan-toggle");
 inline static const muse::rcommand::Command COUNTIN_TOGGLE_COMMAND("command://playback/countin-toggle");
+//! NOTE: what a stop does to the playback position: stay where playback stopped, or go back to where it started
+inline static const muse::rcommand::Command STOP_STAYS_AT_POSITION_COMMAND("command://playback/stop-stays-at-position");
+inline static const muse::rcommand::Command STOP_RETURNS_TO_START_COMMAND("command://playback/stop-returns-to-start");
 inline static const muse::rcommand::Command MIDI_CC_RECORD_TOGGLE_COMMAND("command://playback/midi-cc-record-toggle");
 inline static const muse::rcommand::Command CLEAR_ONLINESOUNDS_CACHE_COMMAND("command://playback/clear-onlinesounds-cache");
 inline static const muse::rcommand::Command PROCESS_ONLINESOUNDS_COMMAND("command://playback/process-onlinesounds");

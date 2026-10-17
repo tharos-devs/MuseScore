@@ -44,6 +44,10 @@ public:
     void setPlayNotesWhenEditing(bool value) override;
     muse::async::Notification playNotesWhenEditingChanged() const override;
 
+    bool returnToStartOnStop() const override;
+    void setReturnToStartOnStop(bool value) override;
+    muse::async::Notification returnToStartOnStopChanged() const override;
+
     bool playChordWhenEditing() const override;
     void setPlayChordWhenEditing(bool value) override;
     muse::async::Channel<bool> playChordWhenEditingChanged() const override;
@@ -131,6 +135,7 @@ private:
     const SoundProfileName& fallbackSoundProfileStr() const;
 
     muse::async::Notification m_playNotesWhenEditingChanged;
+    muse::async::Notification m_returnToStartOnStopChanged;
     muse::async::Notification m_shouldShowOnlineSoundsProcessingErrorChanged;
     muse::async::Notification m_onlineSoundsShowProgressBarModeChanged;
     muse::async::Channel<bool> m_playChordWhenEditingChanged;

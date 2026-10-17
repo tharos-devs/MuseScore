@@ -1037,6 +1037,19 @@ void PlaybackController::onPlaybackStatusChanged()
     }
 
     bool playing = isPlaying();
+
+    //! NOTE: the engine handles a seek before the play that follows it, so the position is already the start one here
+    if (playing) {
+        if (!m_playStartSecs) {
+            m_playStartSecs = currentPlayer()->playbackPosition();
+        }
+    } else if (m_playStartSecs) {
+        if (configuration()->returnToStartOnStop()) {
+            seek(*m_playStartSecs);
+        }
+        m_playStartSecs.reset();
+    }
+
     const auto& onlineSounds = m_onlineSoundsController->onlineSounds();
 
     for (const auto& pair : m_instrumentTrackIdMap) {
@@ -1617,6 +1630,7 @@ void PlaybackController::resetPlayback()
     m_seqAsyncReceiver.async_disconnectAll();
 
     m_currentTick = 0;
+    m_playStartSecs.reset();
 
     m_instrumentTrackIdMap.clear();
     m_auxTrackIdMap.clear();

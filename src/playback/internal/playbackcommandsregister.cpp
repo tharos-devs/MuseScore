@@ -179,6 +179,20 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::COUNT_IN, rcommand::Checkable::Yes)
     },
     CommandInfo{
+        STOP_STAYS_AT_POSITION_COMMAND,
+        TranslatableString("playback", "Stay at stop position"),
+        TranslatableString("playback", "When playback stops, keep the playback position where it stopped"),
+        InputSchema(),
+        Decoration(IconCode::Code::NONE, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
+        STOP_RETURNS_TO_START_COMMAND,
+        TranslatableString("playback", "Return to start position on stop"),
+        TranslatableString("playback", "When playback stops, move the playback position back to where playback started"),
+        InputSchema(),
+        Decoration(IconCode::Code::NONE, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
         MIDI_CC_RECORD_TOGGLE_COMMAND,
         TranslatableString("playback", "Record MIDI CC"),
         TranslatableString("playback",

@@ -34,6 +34,10 @@ public:
     MOCK_METHOD(void, setPlayNotesWhenEditing, (bool value), (override));
     MOCK_METHOD(muse::async::Notification, playNotesWhenEditingChanged, (), (const, override));
 
+    MOCK_METHOD(bool, returnToStartOnStop, (), (const, override));
+    MOCK_METHOD(void, setReturnToStartOnStop, (bool value), (override));
+    MOCK_METHOD(muse::async::Notification, returnToStartOnStopChanged, (), (const, override));
+
     MOCK_METHOD(bool, playChordWhenEditing, (), (const, override));
     MOCK_METHOD(void, setPlayChordWhenEditing, (bool value), (override));
     MOCK_METHOD(muse::async::Channel<bool>, playChordWhenEditingChanged, (), (const, override));

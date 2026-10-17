@@ -41,6 +41,11 @@ public:
     virtual void setPlayNotesWhenEditing(bool value) = 0;
     virtual muse::async::Notification playNotesWhenEditingChanged() const = 0;
 
+    //! NOTE: when playback stops, move the playback position back to where it started
+    virtual bool returnToStartOnStop() const = 0;
+    virtual void setReturnToStartOnStop(bool value) = 0;
+    virtual muse::async::Notification returnToStartOnStopChanged() const = 0;
+
     virtual bool playChordWhenEditing() const = 0;
     virtual void setPlayChordWhenEditing(bool value) = 0;
     virtual muse::async::Channel<bool> playChordWhenEditingChanged() const = 0;

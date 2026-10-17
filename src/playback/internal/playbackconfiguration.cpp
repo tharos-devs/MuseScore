@@ -39,6 +39,7 @@ static const std::string moduleName("playback");
 
 static const Settings::Key PLAYBACK_CURSOR_TYPE_KEY(moduleName, "application/playback/cursorType");
 static const Settings::Key PLAY_NOTES_WHEN_EDITING(moduleName, "score/note/playOnClick");
+static const Settings::Key RETURN_TO_START_ON_STOP(moduleName, "application/playback/returnToStartOnStop");
 static const Settings::Key PLAY_NOTES_ON_MIDI_INPUT(moduleName, "score/note/playOnMidiInput");
 static const Settings::Key PLAY_CHORD_WHEN_EDITING(moduleName, "score/chord/playOnAddNote");
 static const Settings::Key PLAY_HARMONY_WHEN_EDITING(moduleName, "score/harmony/play/onedit");
@@ -163,6 +164,11 @@ void PlaybackConfiguration::init()
     settings()->valueChanged(PLAY_NOTES_WHEN_EDITING).onReceive(this, [this](const Val&) {
         m_playNotesWhenEditingChanged.notify();
     });
+
+    settings()->setDefaultValue(RETURN_TO_START_ON_STOP, Val(false));
+    settings()->valueChanged(RETURN_TO_START_ON_STOP).onReceive(this, [this](const Val&) {
+        m_returnToStartOnStopChanged.notify();
+    });
     settings()->setDefaultValue(PLAY_CHORD_WHEN_EDITING, Val(true));
     settings()->valueChanged(PLAY_CHORD_WHEN_EDITING).onReceive(this, [this](const Val& val) {
         m_playChordWhenEditingChanged.send(val.toBool());
@@ -269,6 +275,21 @@ void PlaybackConfiguration::setPlayNotesWhenEditing(bool value)
 muse::async::Notification PlaybackConfiguration::playNotesWhenEditingChanged() const
 {
     return m_playNotesWhenEditingChanged;
+}
+
+bool PlaybackConfiguration::returnToStartOnStop() const
+{
+    return settings()->value(RETURN_TO_START_ON_STOP).toBool();
+}
+
+void PlaybackConfiguration::setReturnToStartOnStop(bool value)
+{
+    settings()->setSharedValue(RETURN_TO_START_ON_STOP, Val(value));
+}
+
+muse::async::Notification PlaybackConfiguration::returnToStartOnStopChanged() const
+{
+    return m_returnToStartOnStopChanged;
 }
 
 bool PlaybackConfiguration::playChordWhenEditing() const

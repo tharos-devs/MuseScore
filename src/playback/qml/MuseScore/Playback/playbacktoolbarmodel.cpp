@@ -80,6 +80,10 @@ void PlaybackToolBarModel::setupConnections()
         emit isPlayAllowedChanged();
     });
 
+    playbackConfiguration()->returnToStartOnStopChanged().onNotify(this, [this]() {
+        emit returnToStartOnStopChanged();
+    });
+
     globalContext()->playbackState()->playbackStatusChanged().onReceive(this, [this](audio::PlaybackStatus) {
         updatePlayItem();
     });
@@ -167,6 +171,11 @@ bool PlaybackToolBarModel::isPlayAllowed() const
     return playbackController()->isPlayAllowed();
 }
 
+bool PlaybackToolBarModel::returnToStartOnStop() const
+{
+    return playbackConfiguration()->returnToStartOnStop();
+}
+
 bool PlaybackToolBarModel::isToolbarFloating() const
 {
     return m_isToolbarFloating;
@@ -228,6 +237,11 @@ muse::uicomponents::MenuItem* PlaybackToolBarModel::makePlayItem()
     rcommand::Command command = globalContext()->playbackState()->isPlaying() ? PAUSE_COMMAND : PLAY_COMMAND;
     MenuItem* item = makeMenuItem(command);
     item->setId(PLAY_TOGGLE_ID);
+    //! NOTE: shown by the Play button's dropdown arrow (see PlaybackToolBarActions.qml)
+    item->setSubitems({
+        makeMenuItem(STOP_STAYS_AT_POSITION_COMMAND),
+        makeMenuItem(STOP_RETURNS_TO_START_COMMAND),
+    });
     return item;
 }
 
