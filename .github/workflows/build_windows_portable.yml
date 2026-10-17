@@ -112,13 +112,23 @@ jobs:
       run: echo "::add-matcher::.github/problem_matchers/msvc.json"
 
     - name: Build
-      # Note: no --crash_log_url, because we don't upload dump symbols for the portable build,
-      # so crash reports from it would not be usable anyway.
+      # Note: no --crash_log_url (nothing is uploaded), but the crash handler is built in: crash dumps are kept
+      # in the portable settings' logs/dumps, which Diagnostics > Save diagnostic files zips with the logs.
+      # They're read with the symbols artifact uploaded below
       shell: cmd
       env:
         DOCKWIDGETS_V2: ${{ inputs.dockwidgets_v2 == 'ON' && 'ON' || 'OFF' }}
       run: |
-        buildscripts\ci\windows\build.bat --portable ON -n %BUILD_NUMBER% --dockwidgets_v2 %DOCKWIDGETS_V2%
+        buildscripts\ci\windows\build.bat --portable ON --crashpad ON -n %BUILD_NUMBER% --dockwidgets_v2 %DOCKWIDGETS_V2%
+    - name: Collect debug symbols
+      shell: bash
+      run: |
+        PDB=$(find build.release -name 'MuseScore*.pdb' -print -quit)
+        if [ -z "$PDB" ]; then echo "error: pdb not found"; exit 1; fi
+        EXE=$(find build.install -name "$(basename "$PDB" .pdb).exe" -print -quit)
+        if [ -z "$EXE" ]; then echo "error: exe not found"; exit 1; fi
+        mkdir -p build.symbols
+        cp "$PDB" "$EXE" build.symbols/
     - name: Package
       shell: cmd
       env:
@@ -142,3 +152,9 @@ jobs:
       with:
         name: ${{ env.UPLOAD_ARTIFACT_NAME }}
         path: build.artifacts\
+    - name: Upload debug symbols on GitHub
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ env.UPLOAD_ARTIFACT_NAME }}_symbols
+        path: build.symbols\
+        retention-days: 90
