@@ -40,6 +40,8 @@ class NotationContextMenuModel : public QuickActionsMenuModel
 public:
     Q_INVOKABLE void loadItems(int elementType);
 
+    void handleMenuItem(const QString& itemId) override;
+
 private:
     muse::uicomponents::MenuItemList makeItemsByElementType(engraving::ElementType type);
 

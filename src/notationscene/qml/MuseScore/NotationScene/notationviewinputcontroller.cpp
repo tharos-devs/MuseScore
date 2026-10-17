@@ -484,6 +484,7 @@ void NotationViewInputController::setViewMode(ViewMode viewMode)
 
 void NotationViewInputController::openContextMenuOfSelection()
 {
+    viewInteraction()->forgetSelectionBeforeContextMenu();
     m_view->showContextMenu(selectionType(), m_view->fromLogical(selectionElementPos()).toQPointF());
 }
 
@@ -651,6 +652,7 @@ void NotationViewInputController::mousePressEvent(QMouseEvent* event)
 
     m_shouldStartEditOnLeftClickRelease = false;
     m_ignoreNextMouseContextMenuEvent = false;
+    viewInteraction()->forgetSelectionBeforeContextMenu();
 
     // When using MiddleButton, just start moving the canvas
     if (button == Qt::MiddleButton) {
@@ -725,7 +727,10 @@ void NotationViewInputController::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // Select
+    // Select (the context menu's row of icons puts back the selection from before a right-click)
+    if (button == Qt::RightButton) {
+        viewInteraction()->rememberSelectionBeforeContextMenu();
+    }
     mousePress_considerSelect(ctx);
 
     // Seek

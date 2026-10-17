@@ -1844,6 +1844,12 @@ bool AbstractNotationPaintView::event(QEvent* event)
             && m_inputController->ignoreNextMouseContextMenuEvent()) {
             return true;
         }
+        // only a right-click selects the clicked element, see NotationViewInputController::mousePressEvent()
+        if (!contextMenuEvent || contextMenuEvent->reason() != QContextMenuEvent::Mouse) {
+            if (INotationInteractionPtr interaction = notationInteraction()) {
+                interaction->forgetSelectionBeforeContextMenu();
+            }
+        }
         QPointF pos = contextMenuEvent && !contextMenuEvent->pos().isNull()
                       ? mapFromGlobal(contextMenuEvent->globalPos())
                       : fromLogical(m_inputController->selectionElementPos()).toQPointF();

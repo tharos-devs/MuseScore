@@ -22,6 +22,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <QTimer>
@@ -109,6 +110,10 @@ public:
     void selectAndStartEditIfNeeded(EngravingItem* element) override;
 
     void clearSelection() override;
+
+    void rememberSelectionBeforeContextMenu() override;
+    void forgetSelectionBeforeContextMenu() override;
+    void restoreSelectionBeforeContextMenu() override;
 
     void findAndSelectChordRest(const Fraction& tick) override;
 
@@ -586,6 +591,9 @@ private:
 
     bool m_notifyAboutDropChanged = false;
     HitElementContext m_hitElementContext;
+
+    //! NOTE: forgotten on any other click, before it may point to deleted elements
+    std::optional<mu::engraving::Selection> m_selectionBeforeContextMenu;
 
     muse::async::Channel<ShowItemRequest> m_showItemRequested;
 

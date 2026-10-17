@@ -92,6 +92,12 @@ public:
     virtual void expandSelection(ExpandSelectionMode mode) = 0;
     virtual void clearSelection() = 0;
 
+    //! NOTE: a right-click selects the clicked element, as the context menu acts on the selection; its items that
+    //! don't (its row of icons, turning on an editing mode) put back the selection from before the right-click
+    virtual void rememberSelectionBeforeContextMenu() = 0;
+    virtual void forgetSelectionBeforeContextMenu() = 0;
+    virtual void restoreSelectionBeforeContextMenu() = 0;
+
     virtual void selectAndStartEditIfNeeded(EngravingItem* element) = 0;
     virtual void findAndSelectChordRest(const Fraction& tick) = 0;
 

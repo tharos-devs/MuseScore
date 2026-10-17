@@ -110,6 +110,28 @@ void NotationContextMenuModel::loadItems(int elementType)
     m_replacedItems.add(oldItems);
 }
 
+//! NOTE: the row of icons turns on an editing mode, without acting on the selection: the selection from before the
+//! right-click (made to act on the clicked element) comes back
+void NotationContextMenuModel::handleMenuItem(const QString& itemId)
+{
+    bool isIconRowItem = false;
+    for (const MenuItem* item : items()) {
+        if (item && item->iconRow()) {
+            for (const MenuItem* subitem : item->subitems()) {
+                isIconRowItem = isIconRowItem || (subitem && subitem->id() == itemId);
+            }
+        }
+    }
+
+    QuickActionsMenuModel::handleMenuItem(itemId);
+
+    if (isIconRowItem) {
+        if (INotationInteractionPtr interaction = this->interaction()) {
+            interaction->restoreSelectionBeforeContextMenu();
+        }
+    }
+}
+
 MenuItemList NotationContextMenuModel::makeItemsByElementType(ElementType elementType)
 {
     switch (elementType) {
