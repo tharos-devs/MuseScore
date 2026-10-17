@@ -47,7 +47,8 @@ Item {
     readonly property var outerSectors: [
         { id: "cc1", label: "CC01", from: 180, to: 216 },
         { id: "cc11", label: "CC11", from: 216, to: 252 },
-        { id: "tempo", label: "", from: 252, to: 288, icon: IconCode.NOTE_QUARTER },
+        // iconSuffix: text after the icon, on its line (a tempo mark: "♩ =")
+        { id: "tempo", label: "", from: 252, to: 288, icon: IconCode.NOTE_QUARTER, iconSuffix: "=" },
         { id: "last-midi-cc", label: "", titleLabel: true, from: 288, to: 324 },
         { id: "more-midi-cc", label: "…", from: 324, to: 360, large: true },
         { id: "note-offsets", label: "", from: 0, to: 48, icon: IconCode.MULTIMEASURE_REST },
@@ -317,12 +318,27 @@ Item {
             spacing: 2
             opacity: root.isDimmed(modelData.id) ? ui.theme.itemOpacityDisabled : 1
 
-            StyledIconLabel {
+            Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: Boolean(sectorLabel.modelData.icon)
-                iconCode: sectorLabel.modelData.icon ?? IconCode.NONE
-                color: root.contentColorOf(sectorLabel.modelData.id)
-                font.pixelSize: sectorLabel.modelData.largeIcon ? root.largeIconSize : root.iconSize
+                spacing: 0
+
+                StyledIconLabel {
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconCode: sectorLabel.modelData.icon ?? IconCode.NONE
+                    color: root.contentColorOf(sectorLabel.modelData.id)
+                    font.pixelSize: sectorLabel.modelData.largeIcon ? root.largeIconSize : root.iconSize
+                }
+
+                StyledTextLabel {
+                    anchors.verticalCenter: parent.verticalCenter
+                    // level with the note's head, at the bottom of the icon
+                    anchors.verticalCenterOffset: 5
+                    visible: Boolean(sectorLabel.modelData.iconSuffix)
+                    text: sectorLabel.modelData.iconSuffix ?? ""
+                    color: root.contentColorOf(sectorLabel.modelData.id)
+                    font: Qt.font({ family: ui.theme.bodyFont.family, pixelSize: ui.theme.bodyFont.pixelSize, bold: true })
+                }
             }
 
             StyledTextLabel {
