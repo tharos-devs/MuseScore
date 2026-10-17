@@ -232,6 +232,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed note velocities, note offsets and tuning differing between a part and the full score: edited in a part, they stayed in that part only (never heard, playback uses the full score) and later edits in the full score no longer reached it. They're now always shared by the score and its parts, and the parts of a score saved before are aligned with the full score when it opens (2026-10-17).
 - Fixed the view jumping to the top of the score during playback in Continuous view, when scrolled down a score with many staves: when the playback cursor reached the right edge of the view, or on Stop (also with smooth panning) (2026-10-17).
 - Fixed a crash when showing the automation curves again after editing the score while they were hidden (e.g. a slur or an undo that moved measures to other lines); the curves are also rebuilt when an edit leaves fewer lines while they're shown (2026-10-17).
 - Fixed the first note not heard when playback starts on it (e.g. a measure's first note selected), at tempos where the start position, rounded to an audio sample, fell a few microseconds after the note; VST3 and SoundFont instruments, also at the start of a loop. A VST3 articulation's keyswitch is no longer sent twice there (2026-10-16).
