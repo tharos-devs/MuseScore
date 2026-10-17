@@ -183,7 +183,10 @@ void MidiCcRecorder::init()
         m_sinceLastReportedPosition.invalidate();
         ++m_segmentGeneration;
 
-        if (!isPlaying) {
+        if (isPlaying) {
+            // The selection may have changed during the previous take, when the target stays fixed
+            retarget();
+        } else {
             commitTake();
         }
     });
@@ -198,6 +201,47 @@ void MidiCcRecorder::init()
         clearTake();
         setArmed(false);
     });
+
+    subscribeToSelection();
+    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+        subscribeToSelection();
+    });
+}
+
+void MidiCcRecorder::subscribeToSelection()
+{
+    const notation::INotationPtr notation = globalContext()->currentNotation();
+    if (!notation || !notation->interaction()) {
+        return;
+    }
+
+    // Guarded: the subscriptions to the previous notations stay alive
+    const notation::INotation* thisNotation = notation.get();
+    notation->interaction()->selectionChanged().onNotify(this, [this, thisNotation]() {
+        if (thisNotation == globalContext()->currentNotation().get()) {
+            followSelection();
+        }
+    }, Asyncable::Mode::SetReplace);
+}
+
+//! NOTE: while armed, the target is the selected staff, except during a take (it's fixed from the playback start
+//! to its end). A selection that isn't a VST instrument staff (e.g. a click in an empty area) keeps the target
+void MidiCcRecorder::followSelection()
+{
+    if (!playbackController()->isPlaying()) {
+        retarget();
+    }
+}
+
+void MidiCcRecorder::retarget()
+{
+    if (!isArmed()) {
+        return;
+    }
+
+    if (std::optional<Target> target = resolveTarget()) {
+        m_target = target;
+    }
 }
 
 bool MidiCcRecorder::isArmed() const
