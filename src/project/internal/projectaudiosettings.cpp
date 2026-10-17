@@ -209,7 +209,8 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
     const bool onlyMidiPortNamesChanged = it != m_trackInputParamsMap.end()
                                           && it->second.hasSameSource(params)
                                           && it->second.midiPort == params.midiPort
-                                          && it->second.midiChannel == params.midiChannel;
+                                          && it->second.midiChannel == params.midiChannel
+                                          && it->second.delayMs == params.delayMs;
 
     //! NOTE Only the plugin's state (e.g. read before saving): nothing the listeners show
     const bool onlyStateChanged = it != m_trackInputParamsMap.end()
@@ -217,7 +218,8 @@ void ProjectAudioSettings::setTrackInputParams(const InstrumentTrackId& partId, 
                                   && it->second.resourceMeta == params.resourceMeta
                                   && it->second.midiPort == params.midiPort
                                   && it->second.midiChannel == params.midiChannel
-                                  && it->second.midiPortNames == params.midiPortNames;
+                                  && it->second.midiPortNames == params.midiPortNames
+                                  && it->second.delayMs == params.delayMs;
 
     m_trackInputParamsMap.insert_or_assign(partId, params);
     if (!onlyStateChanged) {
@@ -666,6 +668,7 @@ AudioInputParams ProjectAudioSettings::inputParamsFromJson(const QJsonObject& ob
     result.configuration = unitConfigFromJson(object.value("unitConfiguration").toObject());
     result.midiPort = object.value("midiPort").toInt(0);
     result.midiChannel = object.value("midiChannel").toInt(0);
+    result.delayMs = object.value("delayMs").toInt(0);
 
     return result;
 }
@@ -869,6 +872,9 @@ QJsonObject ProjectAudioSettings::inputParamsToJson(const AudioInputParams& para
     }
     if (params.midiChannel != 0) {
         result.insert("midiChannel", params.midiChannel);
+    }
+    if (params.delayMs != 0) {
+        result.insert("delayMs", params.delayMs);
     }
 
     return result;

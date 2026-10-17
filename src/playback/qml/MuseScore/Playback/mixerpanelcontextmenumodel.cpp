@@ -48,6 +48,7 @@ static TranslatableString mixerSectionTitle(MixerSectionType type)
     switch (type) {
     case MixerSectionType::Labels: return TranslatableString("playback", "Labels");
     case MixerSectionType::Sound: return TranslatableString("playback", "Sound");
+    case MixerSectionType::Delay: return TranslatableString("playback", "Track delay");
     case MixerSectionType::Gain: return TranslatableString("playback", "Gain");
     case MixerSectionType::Eq: return TranslatableString("playback", "EQ");
     case MixerSectionType::AudioFX: return TranslatableString("playback", "Audio FX");
@@ -77,6 +78,11 @@ bool MixerPanelContextMenuModel::labelsSectionVisible() const
 bool MixerPanelContextMenuModel::soundSectionVisible() const
 {
     return isSectionVisible(MixerSectionType::Sound);
+}
+
+bool MixerPanelContextMenuModel::delaySectionVisible() const
+{
+    return isSectionVisible(MixerSectionType::Delay);
 }
 
 bool MixerPanelContextMenuModel::gainSectionVisible() const
@@ -306,6 +312,9 @@ void MixerPanelContextMenuModel::emitMixerSectionVisibilityChanged(MixerSectionT
     case MixerSectionType::Sound:
         emit soundSectionVisibleChanged();
         break;
+    case MixerSectionType::Delay:
+        emit delaySectionVisibleChanged();
+        break;
     case MixerSectionType::Gain:
         emit gainSectionVisibleChanged();
         break;
@@ -345,6 +354,7 @@ void MixerPanelContextMenuModel::updateItems()
         makeSeparator(),
         buildSectionVisibleItem(MixerSectionType::Labels),
         buildSectionVisibleItem(MixerSectionType::Sound),
+        buildSectionVisibleItem(MixerSectionType::Delay),
         buildSectionVisibleItem(MixerSectionType::Gain),
         buildSectionVisibleItem(MixerSectionType::Eq),
         buildSectionVisibleItem(MixerSectionType::AudioFX),

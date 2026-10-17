@@ -97,6 +97,11 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(int gain READ gain WRITE setGain NOTIFY gainChanged)
     Q_PROPERTY(int gainMin READ gainMin CONSTANT)
     Q_PROPERTY(int gainMax READ gainMax CONSTANT)
+    //! NOTE The track delay (see AudioSourceParams::delayMs), in ms: a VST3 instrument's only
+    Q_PROPERTY(int delayMs READ delayMs NOTIFY delayChanged)
+    Q_PROPERTY(bool delayAvailable READ delayAvailable NOTIFY delayChanged)
+    Q_PROPERTY(int delayMsMin READ delayMsMin CONSTANT)
+    Q_PROPERTY(int delayMsMax READ delayMsMax CONSTANT)
     //! NOTE The channel EQ: { enabled, flat, bands: [{ type, typeTitle, frequency, gain, q, enabled, hasGain, hasQ }] }
     Q_PROPERTY(QVariantMap eq READ eq NOTIFY eqChanged)
     Q_PROPERTY(bool hasVolumeAutomation READ hasVolumeAutomation NOTIFY hasVolumeAutomationChanged)
@@ -176,6 +181,10 @@ public:
     int gain() const;
     int gainMin() const;
     int gainMax() const;
+    int delayMs() const;
+    bool delayAvailable() const;
+    int delayMsMin() const;
+    int delayMsMax() const;
 
     QVariantMap eq() const;
     const muse::audio::EqParams& eqParams() const;
@@ -339,6 +348,8 @@ public:
     Q_INVOKABLE void endBalanceChange();
     Q_INVOKABLE void beginGainChange();
     Q_INVOKABLE void endGainChange();
+    //! NOTE: a delay typed in a field: set, and undoable (see delayChangeCommitted)
+    Q_INVOKABLE void commitDelayMs(int delayMs);
 
     //! NOTE The EQ: each call is one undoable change, except within beginEqChange()/endEqChange() (e.g. dragging
     //! a band on the curve), which makes the whole gesture one
@@ -362,6 +373,7 @@ public slots:
     void setVolumeLevel(float volumeLevel);
     void setBalance(int balance);
     void setGain(int gain);
+    void setDelayMs(int delayMs);
     void setEqParams(muse::audio::EqParams eq);
     //! NOTE: see moveAuxSendItem()
     void setAuxSendsOrder(std::vector<muse::audio::aux_channel_idx_t> order);
@@ -379,6 +391,7 @@ signals:
     void volumeLevelChanged(float volumeLevel);
     void balanceChanged(int balance);
     void gainChanged(int gain);
+    void delayChanged();
     void eqChanged();
     void hasVolumeAutomationChanged();
     void hasBalanceAutomationChanged();
@@ -420,6 +433,7 @@ signals:
     void volumeChangeCommitted(float oldVolumeLevel, float newVolumeLevel);
     void balanceChangeCommitted(int oldBalance, int newBalance);
     void gainChangeCommitted(int oldGain, int newGain);
+    void delayChangeCommitted(int oldDelayMs, int newDelayMs);
     void eqChangeCommitted(const muse::audio::EqParams& oldEq, const muse::audio::EqParams& newEq);
     //! NOTE: forwarded from the relevant AuxSendItem's own levelChangeCommitted (see
     //! its NOTE) - fired here too (with the slot's stable auxIndex added) so

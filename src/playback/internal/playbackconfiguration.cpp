@@ -76,6 +76,7 @@ static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
 
 static const Settings::Key MIXER_LABELS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/labelsSectionVisible");
 static const Settings::Key MIXER_SOUND_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/soundSectionVisible");
+static const Settings::Key MIXER_DELAY_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/delaySectionVisible");
 static const Settings::Key MIXER_GAIN_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/gainSectionVisible");
 static const Settings::Key MIXER_EQ_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/eqSectionVisible");
 static const Settings::Key MIXER_AUDIO_FX_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/audioFxSectionVisible");
@@ -140,6 +141,7 @@ static Settings::Key mixerSectionVisibleKey(MixerSectionType sectionType)
     switch (sectionType) {
     case MixerSectionType::Labels: return MIXER_LABELS_SECTION_VISIBLE_KEY;
     case MixerSectionType::Sound: return MIXER_SOUND_SECTION_VISIBLE_KEY;
+    case MixerSectionType::Delay: return MIXER_DELAY_SECTION_VISIBLE_KEY;
     case MixerSectionType::Gain: return MIXER_GAIN_SECTION_VISIBLE_KEY;
     case MixerSectionType::Eq: return MIXER_EQ_SECTION_VISIBLE_KEY;
     case MixerSectionType::AudioFX: return MIXER_AUDIO_FX_SECTION_VISIBLE_KEY;
@@ -186,7 +188,8 @@ void PlaybackConfiguration::init()
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_PLAYBACK_PROFILE_WARNING, Val(true));
 
     for (MixerSectionType sectionType : allMixerSectionTypes()) {
-        bool sectionEnabledByDefault = sectionType != MixerSectionType::Volume;
+        //! NOTE: the track delay is seldom needed: shown from the View menu
+        bool sectionEnabledByDefault = sectionType != MixerSectionType::Volume && sectionType != MixerSectionType::Delay;
         settings()->setDefaultValue(mixerSectionVisibleKey(sectionType), Val(sectionEnabledByDefault));
         settings()->valueChanged(mixerSectionVisibleKey(sectionType)).onReceive(this, [this, sectionType](const Val& val) {
             m_isMixerSectionVisibleChanged.send(sectionType, val.toBool());

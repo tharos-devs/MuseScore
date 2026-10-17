@@ -27,13 +27,16 @@ import Muse.Ui
 import Muse.UiComponents
 import MuseScore.Playback
 
-//! NOTE: a channel's Pan or Gain (Mixer, Track list): a knob and its field. Compact: no field, the value shows while
-//! the knob is dragged
+//! NOTE: a channel's Pan, Gain or track delay (Mixer, Track list): a knob and its field. Compact: no field, the value
+//! shows while the knob is dragged
 Row {
     id: root
 
     required property MixerChannelItem channelItem
     property bool isGain: false
+    //! NOTE: the track delay is applied once set (a release of the knob, a value typed), not along a drag: each change
+    //! rebuilds what the instrument plays
+    property bool isDelay: false
     property bool compact: false
 
     property NavigationPanel navigationPanel: channelItem.panel
@@ -42,14 +45,33 @@ Row {
 
     signal navigateControlIndexChanged(var index)
 
-    readonly property int value: root.isGain ? root.channelItem.gain : root.channelItem.balance
-    readonly property int minValue: root.isGain ? root.channelItem.gainMin : root.channelItem.balanceMin
-    readonly property int maxValue: root.isGain ? root.channelItem.gainMax : root.channelItem.balanceMax
+    readonly property int value: root.isDelay ? (prv.delayDragging ? prv.draggedDelay : root.channelItem.delayMs)
+                                              : root.isGain ? root.channelItem.gain : root.channelItem.balance
+    readonly property int minValue: root.isDelay ? root.channelItem.delayMsMin
+                                                 : root.isGain ? root.channelItem.gainMin : root.channelItem.balanceMin
+    readonly property int maxValue: root.isDelay ? root.channelItem.delayMsMax
+                                                 : root.isGain ? root.channelItem.gainMax : root.channelItem.balanceMax
     //! NOTE: the pan curve drawn on the score sets it then
-    readonly property bool editable: root.isGain || !root.channelItem.hasBalanceAutomation
+    readonly property bool editable: root.isDelay ? root.channelItem.delayAvailable
+                                                  : root.isGain || !root.channelItem.hasBalanceAutomation
+    readonly property string unit: root.isDelay ? qsTrc("global", "ms") : root.isGain ? "dB" : ""
+
+    QtObject {
+        id: prv
+
+        property bool delayDragging: false
+        property int draggedDelay: 0
+    }
 
     function setValue(newValue) {
-        if (root.isGain) {
+        if (root.isDelay) {
+            if (prv.delayDragging) {
+                prv.draggedDelay = newValue
+            } else {
+                // not a drag (keyboard, wheel): applied at once
+                root.channelItem.commitDelayMs(newValue)
+            }
+        } else if (root.isGain) {
             root.channelItem.gain = newValue
         } else {
             root.channelItem.balance = newValue
@@ -57,7 +79,10 @@ Row {
     }
 
     function beginChange() {
-        if (root.isGain) {
+        if (root.isDelay) {
+            prv.draggedDelay = root.channelItem.delayMs
+            prv.delayDragging = true
+        } else if (root.isGain) {
             root.channelItem.beginGainChange()
         } else {
             root.channelItem.beginBalanceChange()
@@ -65,7 +90,10 @@ Row {
     }
 
     function endChange() {
-        if (root.isGain) {
+        if (root.isDelay) {
+            prv.delayDragging = false
+            root.channelItem.commitDelayMs(prv.draggedDelay)
+        } else if (root.isGain) {
             root.channelItem.endGainChange()
         } else {
             root.channelItem.endBalanceChange()
@@ -90,7 +118,7 @@ Row {
         //! while actively dragging, same "reveal on interaction" precedent as AuxSendControl's isDragging title swap
         KnobDragValueTooltip {
             visible: root.compact && knob.mouseArea.pressed
-            text: Math.round(root.value) + (root.isGain ? "dB" : "")
+            text: Math.round(root.value) + root.unit
         }
 
         navigation.panel: root.navigationPanel
@@ -149,10 +177,21 @@ Row {
         currentText: root.value
 
         onTextEdited: function(newTextValue) {
+            if (root.isDelay) {
+                return
+            }
+
             if (root.value !== Number(newTextValue)) {
                 root.beginChange()
                 root.setValue(Number(newTextValue))
                 root.endChange()
+            }
+        }
+
+        onTextEditingFinished: function(newTextValue) {
+            const newValue = parseInt(newTextValue)
+            if (root.isDelay && !isNaN(newValue)) {
+                root.channelItem.commitDelayMs(newValue)
             }
         }
     }

@@ -40,6 +40,7 @@ class MixerPanelContextMenuModel : public muse::uicomponents::ZoomableMenuModel,
 
     Q_PROPERTY(bool labelsSectionVisible READ labelsSectionVisible NOTIFY labelsSectionVisibleChanged)
     Q_PROPERTY(bool soundSectionVisible READ soundSectionVisible NOTIFY soundSectionVisibleChanged)
+    Q_PROPERTY(bool delaySectionVisible READ delaySectionVisible NOTIFY delaySectionVisibleChanged)
     Q_PROPERTY(bool gainSectionVisible READ gainSectionVisible NOTIFY gainSectionVisibleChanged)
     Q_PROPERTY(bool eqSectionVisible READ eqSectionVisible NOTIFY eqSectionVisibleChanged)
     Q_PROPERTY(bool audioFxSectionVisible READ audioFxSectionVisible NOTIFY audioFxSectionVisibleChanged)
@@ -76,6 +77,7 @@ public:
 
     bool labelsSectionVisible() const;
     bool soundSectionVisible() const;
+    bool delaySectionVisible() const;
     bool gainSectionVisible() const;
     bool eqSectionVisible() const;
     bool audioFxSectionVisible() const;
@@ -111,6 +113,7 @@ public:
 signals:
     void labelsSectionVisibleChanged();
     void soundSectionVisibleChanged();
+    void delaySectionVisibleChanged();
     void gainSectionVisibleChanged();
     void eqSectionVisibleChanged();
     void audioFxSectionVisibleChanged();
