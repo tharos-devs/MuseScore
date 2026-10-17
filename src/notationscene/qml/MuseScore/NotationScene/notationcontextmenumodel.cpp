@@ -61,6 +61,16 @@ void NotationContextMenuModel::loadItems(int elementType)
 
     MenuItemList items = makeItemsByElementType(static_cast<ElementType>(elementType));
 
+    // The note editors, curves and editors of the clicked VST instrument, as on the circular toolbar
+    const bool isVstStaff = isVstInstrumentStaff();
+    if (isVstStaff) {
+        MenuItemList iconRowItems { makeIconRow("quick-actions") };
+        if (!items.empty()) {
+            iconRowItems << makeSeparator();
+        }
+        items = iconRowItems << items;
+    }
+
     const INotationAutomationPtr automation = this->automation();
     if (automation && automation->isAutomationModeEnabled()) {
         items << makeSeparator()
@@ -69,7 +79,6 @@ void NotationContextMenuModel::loadItems(int elementType)
     }
 
     // In automation mode, MIDI CC is already right below "Automation type" above
-    const bool isVstStaff = isVstInstrumentStaff();
     if (isVstStaff && !(automation && automation->isAutomationModeEnabled())) {
         items << makeSeparator()
               << makeMenu(TranslatableString::untranslatable("MIDI CC"), makeMidiCcItems(), "midi-cc");
@@ -537,10 +546,7 @@ MenuItem* NotationContextMenuModel::makeArticulationMapMenu()
         return nullptr;
     }
 
-    const Fraction tick = ctx.element ? ctx.element->tick() : Fraction(0, 1);
-    const mu::engraving::Part* part = ctx.staff->part();
-    const mu::engraving::Instrument* instrument = part->instrument(tick);
-    const mu::engraving::InstrumentTrackId trackId { part->id(), instrument ? instrument->id() : part->instrumentId() };
+    const mu::engraving::InstrumentTrackId trackId = *actionsTrackId();
     if (!midicc::isVstTrack(globalContext()->currentProject(), trackId)) {
         return nullptr;
     }
@@ -584,6 +590,20 @@ MenuItem* NotationContextMenuModel::makeArticulationMapMenu()
     items.removeAll(nullptr);
 
     return makeMenu(TranslatableString("playback", "Articulation map"), items, "articulation-map");
+}
+
+std::optional<mu::engraving::InstrumentTrackId> NotationContextMenuModel::actionsTrackId() const
+{
+    const INotationInteraction::HitElementContext& ctx = hitElementContext();
+    if (!ctx.staff || !ctx.staff->part()) {
+        return std::nullopt;
+    }
+
+    // an instrument change makes it another track
+    const Fraction tick = ctx.element ? ctx.element->tick() : Fraction(0, 1);
+    const mu::engraving::Part* part = ctx.staff->part();
+    const mu::engraving::Instrument* instrument = part->instrument(tick);
+    return mu::engraving::InstrumentTrackId { part->id(), instrument ? instrument->id() : part->instrumentId() };
 }
 
 bool NotationContextMenuModel::isDrumsetStaff() const

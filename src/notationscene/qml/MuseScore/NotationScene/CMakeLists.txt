@@ -120,6 +120,8 @@ qt_add_qml_module(notationscene_qml
         articulationpickermodel.h
         notationarticulationmapcontroller.cpp
         notationarticulationmapcontroller.h
+        quickactionsmenumodel.cpp
+        quickactionsmenumodel.h
         valueeditorpopup.cpp
         valueeditorpopup.h
         paintedengravingitem.cpp
