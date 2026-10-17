@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-17
+- Circular toolbar: the Tempo button shows "♩ =", like a tempo mark, to tell it at a glance.
 - Mixer: a Track delay section for VST3 tracks (under Sound, hidden by default: "…" > View > Track delay): a knob and its field, -500 to +500 ms, shift everything the track plays - notes, articulation triggers, CCs, dynamics, pedals and pitch bends (e.g. a library whose attacks are late); applied when the knob is released or the value typed, undoable, saved with the project and in track presets. An articulation's Note delay now also takes the notes' pedals and pitch bends along.
 
 ### 2026-10-16
