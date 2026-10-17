@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-17
+- MIDI CC recording: while Record MIDI CC is on, the recorded staff follows the selection (no need to turn the button off and on again to record another staff); it stays the same during a take, and a selection that isn't a VST instrument staff keeps the previous one.
 - Circular toolbar: the Tempo button shows "♩ =", like a tempo mark, to tell it at a glance.
 - Mixer: a Track delay section for VST3 tracks (under Sound, hidden by default: "…" > View > Track delay): a knob and its field, -500 to +500 ms, shift everything the track plays - notes, articulation triggers, CCs, dynamics, pedals and pitch bends (e.g. a library whose attacks are late); applied when the knob is released or the value typed, undoable, saved with the project and in track presets. An articulation's Note delay now also takes the notes' pedals and pitch bends along.
 
@@ -230,6 +231,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed the view jumping to the top of the score during playback in Continuous view, when scrolled down a score with many staves: when the playback cursor reached the right edge of the view, or on Stop (also with smooth panning) (2026-10-17).
 - Fixed a crash when showing the automation curves again after editing the score while they were hidden (e.g. a slur or an undo that moved measures to other lines); the curves are also rebuilt when an edit leaves fewer lines while they're shown (2026-10-17).
 - Fixed the first note not heard when playback starts on it (e.g. a measure's first note selected), at tempos where the start position, rounded to an audio sample, fell a few microseconds after the note; VST3 and SoundFont instruments, also at the start of a loop. A VST3 articulation's keyswitch is no longer sent twice there (2026-10-16).
 - Fixed an automation curve that could stay frozen on screen while the score was scrolled, when two lines started with measures of the same index (e.g. multimeasure rests) (2026-09-29).
