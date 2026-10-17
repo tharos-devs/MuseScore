@@ -1435,12 +1435,19 @@ bool AbstractNotationPaintView::adjustCanvasPosition(const RectF& logicRect, boo
     return moveCanvasToPosition(pos);
 }
 
+//! NOTE: not just "doesn't intersect the view": a playback cursor leaving it sideways (reaching the right edge, or
+//! sent back by Stop) would move the view to the top of the system, losing the staves the user was following
+static bool isOutOfViewVertically(const RectF& cursorRect, const RectF& viewRect)
+{
+    return cursorRect.bottom() < viewRect.top() || cursorRect.top() > viewRect.bottom();
+}
+
 bool AbstractNotationPaintView::adjustCanvasPositionSmoothPan(const RectF& cursorRect)
 {
     RectF viewRect = viewport();
     PointF pos(cursorRect.x() - (viewRect.width() / 2), viewRect.y());
 
-    if (!viewport().intersects(cursorRect)) {
+    if (isOutOfViewVertically(cursorRect, viewRect)) {
         pos.setY(cursorRect.y() - (viewRect.height() / 2));
     }
 
@@ -2071,7 +2078,7 @@ void AbstractNotationPaintView::movePlaybackCursor(muse::midi::tick_t tick)
 
 bool AbstractNotationPaintView::shouldAdjustCanvasVerticallyDuringPlayback(const RectF& cursorRect)
 {
-    if (!viewport().intersects(cursorRect)) {
+    if (isOutOfViewVertically(cursorRect, viewport())) {
         return true;
     }
 
