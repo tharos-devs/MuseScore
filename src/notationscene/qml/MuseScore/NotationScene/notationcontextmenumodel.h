@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include "menuitemsutils.h"
 #include "quickactionsmenumodel.h"
 
 #include "notation/inotationinteraction.h"
@@ -88,5 +89,7 @@ private:
     const engraving::EngravingItem* currentElement() const;
 
     const INotationInteraction::HitElementContext& hitElementContext() const;
+
+    ReplacedMenuItems m_replacedItems;
 };
 }

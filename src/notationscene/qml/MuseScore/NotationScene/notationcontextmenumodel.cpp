@@ -59,6 +59,9 @@ void NotationContextMenuModel::loadItems(int elementType)
 {
     AbstractMenuModel::load();
 
+    // the items of the menu shown before the last one: the last one may still be closing
+    m_replacedItems.deleteAll();
+
     MenuItemList items = makeItemsByElementType(static_cast<ElementType>(elementType));
 
     // The note editors, curves and editors of the clicked VST instrument, as on the circular toolbar
@@ -102,7 +105,9 @@ void NotationContextMenuModel::loadItems(int elementType)
               << makeMenuItem(RESET_NOTE_VELOCITIES_COMMAND);
     }
 
+    const MenuItemList oldItems = this->items();
     setItems(items);
+    m_replacedItems.add(oldItems);
 }
 
 MenuItemList NotationContextMenuModel::makeItemsByElementType(ElementType elementType)
