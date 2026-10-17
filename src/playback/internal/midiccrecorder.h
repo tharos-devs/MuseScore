@@ -68,6 +68,9 @@ private:
     using TakeSegment = std::map<int, double>;
 
     std::optional<Target> resolveTarget() const;
+    void followSelection();
+    void retarget();
+    void subscribeToSelection();
     void setArmed(bool armed);
 
     void onMidiEventReceived(const muse::midi::Event& event);
