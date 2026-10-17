@@ -430,7 +430,9 @@ void NotationAutomationController::init()
 
     automation()->automationModeEnabledChanged().onNotify(this, [this]() {
         closePointValueEditor();
-        if (automation()->isAutomationModeEnabled() && !m_pendingChanges.isEmpty()) {
+        if (automation()->isAutomationModeEnabled() && rebuildIfSystemsStale()) {
+            m_pendingChanges.clear();
+        } else if (automation()->isAutomationModeEnabled() && !m_pendingChanges.isEmpty()) {
             applyAutomationChanges(m_pendingChanges);
             m_pendingChanges.clear();
         } else {
@@ -1038,7 +1040,7 @@ void NotationAutomationController::setViewMatrix(const muse::draw::Transform& vi
     }
     m_viewMatrix = viewMatrix;
 
-    if (automation() && automation()->isAutomationModeEnabled()) {
+    if (automation() && automation()->isAutomationModeEnabled() && !rebuildIfSystemsStale()) {
         updatePolylinesGeometry();
     }
 }
@@ -1154,19 +1156,21 @@ void NotationAutomationController::processPendingChanges()
 
     const bool automationVisible = automation() && automation()->isAutomationModeEnabled();
 
-    if (scoreState.structural) {
-        if (!automationVisible) {
-            // Nothing visible right now; defer the rebuild until automation mode is enabled again
+    if (!automationVisible) {
+        // Nothing visible right now; m_pendingChanges keeps accumulating for next time. Any score change may have
+        // re-flowed (or deleted) the systems the polylines are keyed on, and its layout drift is dropped here:
+        // defer a full rebuild until automation mode is enabled again
+        if (scoreState.hasChanges) {
             m_pendingChanges.isFullReset = true;
-            return;
         }
-        rebuildAllPolylines();
-        m_pendingChanges.clear();
         return;
     }
 
-    if (!automationVisible) {
-        // Nothing visible right now; m_pendingChanges keeps accumulating for next time
+    if (scoreState.structural || rebuildIfSystemsStale()) {
+        if (scoreState.structural) {
+            rebuildAllPolylines();
+        }
+        m_pendingChanges.clear();
         return;
     }
 
@@ -1239,6 +1243,30 @@ void NotationAutomationController::rebuildAllPolylines()
     }
 
     updatePolylinesGeometry();
+}
+
+//! NOTE: a non-structural edit can still re-flow measures across systems, and the layout then deletes the systems
+//! left over (see LayoutContext's systemList): the keys' System pointers would dangle. They're only compared here,
+//! never dereferenced, before rebuilding
+bool NotationAutomationController::rebuildIfSystemsStale()
+{
+    if (m_stavesToLinesMap.empty()) {
+        return false;
+    }
+
+    std::unordered_set<const System*> currentSystems;
+    if (score()) {
+        currentSystems.insert(score()->systems().begin(), score()->systems().end());
+    }
+
+    for (const auto& [key, _] : m_stavesToLinesMap) {
+        if (!muse::contains(currentSystems, key.system)) {
+            rebuildAllPolylines();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 //! NOTE: the whole system is recomputed - a system only holds a handful of points, and its edge points
