@@ -32,6 +32,10 @@ public:
     void setPlayNotesWhenEditing(bool value) override;
     muse::async::Notification playNotesWhenEditingChanged() const override;
 
+    bool returnToStartOnStop() const override;
+    void setReturnToStartOnStop(bool value) override;
+    muse::async::Notification returnToStartOnStopChanged() const override;
+
     bool playChordWhenEditing() const override;
     void setPlayChordWhenEditing(bool value) override;
     muse::async::Channel<bool> playChordWhenEditingChanged() const override;

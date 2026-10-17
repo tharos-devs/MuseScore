@@ -38,6 +38,20 @@ muse::async::Notification PlaybackConfigurationStub::playNotesWhenEditingChanged
     return muse::async::Notification();
 }
 
+bool PlaybackConfigurationStub::returnToStartOnStop() const
+{
+    return false;
+}
+
+void PlaybackConfigurationStub::setReturnToStartOnStop(bool)
+{
+}
+
+muse::async::Notification PlaybackConfigurationStub::returnToStartOnStopChanged() const
+{
+    return muse::async::Notification();
+}
+
 bool PlaybackConfigurationStub::playChordWhenEditing() const
 {
     return false;

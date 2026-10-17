@@ -125,6 +125,10 @@ void PlaybackCommandsState::init()
         updateCommandStates({ HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND });
     });
 
+    playbackConfiguration()->returnToStartOnStopChanged().onNotify(this, [this]() {
+        updateCommandStates({ STOP_STAYS_AT_POSITION_COMMAND, STOP_RETURNS_TO_START_COMMAND });
+    });
+
     m_moduleRegister = commandsRegister()->moduleRegister(moduleName());
     IF_ASSERT_FAILED(m_moduleRegister) {
         return;
@@ -145,6 +149,7 @@ void PlaybackCommandsState::deinit()
     playbackController()->loopEnabledChanged().disconnect(this);
     playbackController()->onlineSoundsChanged().disconnect(this);
     playbackConfiguration()->playNotesWhenEditingChanged().disconnect(this);
+    playbackConfiguration()->returnToStartOnStopChanged().disconnect(this);
     notationConfiguration()->isMetronomeEnabledChanged().disconnect(this);
     notationConfiguration()->isMidiInputEnabledChanged().disconnect(this);
     notationConfiguration()->midiUseWrittenPitch().ch.disconnect(this);
@@ -213,6 +218,10 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
         return CommandState(true, notationConfiguration()->isAutomaticallyPanEnabled());
     } else if (command == COUNTIN_TOGGLE_COMMAND) {
         return CommandState(true, notationConfiguration()->isCountInEnabled());
+    } else if (command == STOP_STAYS_AT_POSITION_COMMAND) {
+        return CommandState(true, !playbackConfiguration()->returnToStartOnStop());
+    } else if (command == STOP_RETURNS_TO_START_COMMAND) {
+        return CommandState(true, playbackConfiguration()->returnToStartOnStop());
     } else if (command == CLEAR_ONLINESOUNDS_CACHE_COMMAND) {
         return CommandState(true, !playbackController()->onlineSounds().empty());
     }

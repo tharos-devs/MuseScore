@@ -74,6 +74,14 @@ void PlaybackCommandsController::init()
     registerCommand(HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND, &IPlaybackController::toggleHearPlaybackWhenEditing);
     registerCommand(PAN_TOGGLE_COMMAND, &IPlaybackController::toggleAutomaticallyPan);
     registerCommand(COUNTIN_TOGGLE_COMMAND, &IPlaybackController::toggleCountIn);
+    registerCommand(STOP_STAYS_AT_POSITION_COMMAND, [this]() {
+        configuration()->setReturnToStartOnStop(false);
+        return muse::make_ok();
+    });
+    registerCommand(STOP_RETURNS_TO_START_COMMAND, [this]() {
+        configuration()->setReturnToStartOnStop(true);
+        return muse::make_ok();
+    });
     registerCommand(OPEN_PLAYBACK_SETUP_COMMAND, [this]() { return showPlaybackSetup(); });
     registerCommand(RELOAD_PLAYBACK_CACHE_COMMAND, &IPlaybackController::reloadPlaybackCache);
 
@@ -108,6 +116,8 @@ void PlaybackCommandsController::init()
             { "toggle-hear-playback-when-editing", HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND, {} },
             { "pan", PAN_TOGGLE_COMMAND, {} },
             { "countin", COUNTIN_TOGGLE_COMMAND, {} },
+            { "playback-stop-stays-at-position", STOP_STAYS_AT_POSITION_COMMAND, {} },
+            { "playback-stop-returns-to-start", STOP_RETURNS_TO_START_COMMAND, {} },
             { "toggle-record-midicc", MIDI_CC_RECORD_TOGGLE_COMMAND, {} },
             { "reload-playback-cache", RELOAD_PLAYBACK_CACHE_COMMAND, {} },
             { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },

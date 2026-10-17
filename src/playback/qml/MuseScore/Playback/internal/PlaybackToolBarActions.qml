@@ -65,51 +65,112 @@ Item {
 
         readonly property int navigationOrderEnd: count
 
-        delegate: FlatButton {
-            id: btn
+        delegate: Item {
+            id: delegateItem
 
             required property MenuItem item
             required property int index
 
-            width: 30
-            height: width
+            //! NOTE: Play has a dropdown arrow, to choose what a stop does to the playback position
+            readonly property bool isPlayItem: Boolean(item) && item.id === "play-toggle"
 
-            icon: Boolean(item) ? item.icon : IconCode.NONE
+            width: delegateLoader.width
+            height: root.height
 
-            toolTipTitle: Boolean(item) ? item.title : ""
-            toolTipDescription: Boolean(item) ? item.description : ""
-            toolTipShortcut: Boolean(item) ? item.shortcuts : ""
+            Loader {
+                id: delegateLoader
 
-            iconFont: ui.theme.toolbarIconsFont
+                anchors.verticalCenter: parent.verticalCenter
 
-            //! NOTE: armed MIDI CC recording shows a red record icon, like a DAW's, instead of the accent background
-            readonly property bool isArmedRecordItem: Boolean(item) && item.checked && item.id === "command://playback/midi-cc-record-toggle"
-
-            iconColor: isArmedRecordItem ? "#E5403A" : ui.theme.fontPrimaryColor
-
-            accentButton: (Boolean(item) && item.checked && !isArmedRecordItem) || menuLoader.isMenuOpened
-            transparent: !accentButton
-
-            navigation.panel: root.navPanel
-            navigation.name: toolTipTitle
-            navigation.order: index
-            accessible.name: (item.checkable ? (item.checked ? item.title + "  " + qsTrc("global", "On") :
-                                                               item.title + "  " + qsTrc("global", "Off")) : item.title)
-
-            onClicked: {
-                if (menuLoader.isMenuOpened || item.subitems.length) {
-                    menuLoader.toggleOpened(item.subitems)
-                    return
-                }
-
-                Qt.callLater(root.playbackModel.handleMenuItem, item.id)
+                sourceComponent: delegateItem.isPlayItem ? playButtonComponent : buttonComponent
             }
 
-            StyledMenuLoader {
-                id: menuLoader
+            Component {
+                id: playButtonComponent
 
-                onHandleMenuItem: function(itemId) {
-                    root.playbackModel.handleMenuItem(itemId)
+                SplitButton {
+                    height: 30
+
+                    mainContentMargins: 7
+                    arrowAreaWidth: 16
+                    transparent: true
+
+                    icon: Boolean(delegateItem.item) ? delegateItem.item.icon : IconCode.NONE
+                    iconFont: ui.theme.toolbarIconsFont
+
+                    // With the mode chosen in the dropdown
+                    toolTipTitle: !Boolean(delegateItem.item) ? ""
+                                  : delegateItem.item.title + " \u2013 "
+                                    + (root.playbackModel.returnToStartOnStop ? qsTrc("playback", "Return to start position on stop")
+                                                                              : qsTrc("playback", "Stay at stop position"))
+                    toolTipDescription: Boolean(delegateItem.item) ? delegateItem.item.description : ""
+                    toolTipShortcut: Boolean(delegateItem.item) ? delegateItem.item.shortcuts : ""
+
+                    menuItems: Boolean(delegateItem.item) ? delegateItem.item.subitems : []
+
+                    navigation.panel: root.navPanel
+                    navigation.name: toolTipTitle
+                    navigation.order: delegateItem.index
+
+                    onClicked: {
+                        Qt.callLater(root.playbackModel.handleMenuItem, delegateItem.item.id)
+                    }
+
+                    onHandleMenuItem: function(itemId) {
+                        root.playbackModel.handleMenuItem(itemId)
+                    }
+                }
+            }
+
+            Component {
+                id: buttonComponent
+
+                FlatButton {
+                    id: btn
+
+                    readonly property MenuItem item: delegateItem.item
+
+                    width: 30
+                    height: width
+
+                    icon: Boolean(item) ? item.icon : IconCode.NONE
+
+                    toolTipTitle: Boolean(item) ? item.title : ""
+                    toolTipDescription: Boolean(item) ? item.description : ""
+                    toolTipShortcut: Boolean(item) ? item.shortcuts : ""
+
+                    iconFont: ui.theme.toolbarIconsFont
+
+                    //! NOTE: armed MIDI CC recording shows a red record icon, like a DAW's, instead of the accent background
+                    readonly property bool isArmedRecordItem: Boolean(item) && item.checked && item.id === "command://playback/midi-cc-record-toggle"
+
+                    iconColor: isArmedRecordItem ? "#E5403A" : ui.theme.fontPrimaryColor
+
+                    accentButton: (Boolean(item) && item.checked && !isArmedRecordItem) || menuLoader.isMenuOpened
+                    transparent: !accentButton
+
+                    navigation.panel: root.navPanel
+                    navigation.name: toolTipTitle
+                    navigation.order: delegateItem.index
+                    accessible.name: (item.checkable ? (item.checked ? item.title + "  " + qsTrc("global", "On") :
+                                                                       item.title + "  " + qsTrc("global", "Off")) : item.title)
+
+                    onClicked: {
+                        if (menuLoader.isMenuOpened || item.subitems.length) {
+                            menuLoader.toggleOpened(item.subitems)
+                            return
+                        }
+
+                        Qt.callLater(root.playbackModel.handleMenuItem, item.id)
+                    }
+
+                    StyledMenuLoader {
+                        id: menuLoader
+
+                        onHandleMenuItem: function(itemId) {
+                            root.playbackModel.handleMenuItem(itemId)
+                        }
+                    }
                 }
             }
         }
