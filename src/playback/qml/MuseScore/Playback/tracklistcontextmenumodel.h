@@ -36,7 +36,7 @@ class TrackListContextMenuModel : public muse::uicomponents::ZoomableMenuModel
     Q_OBJECT
     QML_ELEMENT
 
-    Q_PROPERTY(bool channelStripVisible READ channelStripVisible NOTIFY channelStripVisibleChanged)
+    Q_PROPERTY(bool channelStripVisible READ channelStripVisible WRITE setChannelStripVisible NOTIFY channelStripVisibleChanged)
 
 public:
     explicit TrackListContextMenuModel(QObject* parent = nullptr);
@@ -45,6 +45,7 @@ public:
     Q_INVOKABLE void handleMenuItem(const QString& itemId) override;
 
     bool channelStripVisible() const;
+    void setChannelStripVisible(bool visible);
 
 signals:
     void channelStripVisibleChanged();

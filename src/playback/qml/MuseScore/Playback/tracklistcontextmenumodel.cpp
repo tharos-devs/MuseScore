@@ -68,7 +68,7 @@ void TrackListContextMenuModel::load()
 void TrackListContextMenuModel::handleMenuItem(const QString& itemId)
 {
     if (itemId == TOGGLE_CHANNEL_STRIP_ID) {
-        settings()->setSharedValue(CHANNEL_STRIP_VISIBLE_KEY, Val(!channelStripVisible()));
+        setChannelStripVisible(!channelStripVisible());
         return;
     }
 
@@ -78,6 +78,16 @@ void TrackListContextMenuModel::handleMenuItem(const QString& itemId)
 bool TrackListContextMenuModel::channelStripVisible() const
 {
     return settings()->value(CHANNEL_STRIP_VISIBLE_KEY).toBool();
+}
+
+void TrackListContextMenuModel::setChannelStripVisible(bool visible)
+{
+    if (visible == channelStripVisible()) {
+        return;
+    }
+
+    //! NOTE: the menu item's check mark and the header's button follow the setting (see the constructor)
+    settings()->setSharedValue(CHANNEL_STRIP_VISIBLE_KEY, Val(visible));
 }
 
 void TrackListContextMenuModel::onCommandStateChanged(const rcommand::Command& command, const rcommand::CommandState& state)

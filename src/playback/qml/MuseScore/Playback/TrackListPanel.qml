@@ -86,6 +86,10 @@ Item {
             anchors.right: parent.right
             anchors.bottom: stripArea.top
 
+            //! NOTE: room for the scroll bar on the right: it no longer covers the rows' meters and the header's buttons
+            //! (a click there went to the scroll bar). Always kept, so the content doesn't move when the bar appears
+            readonly property real scrollBarRoom: visualScrollBarInset
+
             model: trackListModel
 
             //! NOTE: a track selected in the score: its row comes into view, only when it's out of view and as little as
@@ -186,7 +190,7 @@ Item {
             //! NOTE: stays at the top; its global Mute/Solo buttons are in the same columns as the rows' ones
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
-                width: ListView.view.width
+                width: ListView.view.width - ListView.view.scrollBarRoom
                 height: 32 + metronomeRow.height + videoRow.height
                 z: 2
 
@@ -219,6 +223,35 @@ Item {
                         anchors.bottom: parent.bottom
                         iconCode: IconCode.PLUS
                         font.pixelSize: 9
+                    }
+                }
+
+                //! NOTE: shows/hides the channel strip, like the "…" menu's Channel strip item
+                FlatButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: globalButtonsRow.verticalCenter
+
+                    width: 20
+                    height: 20
+
+                    transparent: !contextMenuModel.channelStripVisible
+                    accentButton: contextMenuModel.channelStripVisible
+
+                    navigation.panel: navPanel
+                    navigation.name: "ChannelStripButton"
+                    navigation.row: 0
+                    navigation.column: 10
+                    navigation.accessible.name: qsTrc("playback", "Channel strip")
+
+                    onClicked: {
+                        contextMenuModel.channelStripVisible = !contextMenuModel.channelStripVisible
+                    }
+
+                    StyledIconLabel {
+                        anchors.centerIn: parent
+                        iconCode: IconCode.SECTION_BREAK2
+                        rotation: 90
                     }
                 }
 
@@ -559,7 +592,7 @@ Item {
                 readonly property bool isAuxBus: channelItem ? channelItem.type === MixerChannelItem.Aux : false
                 readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
 
-                width: ListView.view.width
+                width: ListView.view.width - ListView.view.scrollBarRoom
                 height: 28
 
                 //! NOTE: a dragged track's target folder, or where a dragged folder goes (a line above the row, or below
