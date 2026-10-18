@@ -157,7 +157,7 @@ jobs:
         host: 'mac'
         target: 'desktop'
         arch: 'clang_64'
-        modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets'
+        modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
         cache: true
 
     - parallel:
