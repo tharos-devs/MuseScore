@@ -1,4 +1,4 @@
-name: 'Build: macOS'
+name: 'Build: macOS universal (arm64 + x86_64)'
 
 on:
   workflow_dispatch:
@@ -120,7 +120,7 @@ jobs:
           fi
         fi
 
-        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU5_${BUILD_NUMBER}_Mac_${GITHUB_REF#refs/heads/}")"
+        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU5_${BUILD_NUMBER}_Mac_universal_${GITHUB_REF#refs/heads/}")"
 
         echo "github.repository: ${{ github.repository }}"
         echo "BUILD_MODE=$BUILD_MODE" | tee -a $GITHUB_ENV
