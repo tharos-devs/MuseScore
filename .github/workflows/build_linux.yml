@@ -1,56 +1,36 @@
-name: 'Build: Linux'
+name: 'Build: Linux (shared steps)'
 
+# Called by build_linux_x64.yml and build_linux_arm64.yml, which are the ones to run.
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      platforms:
-        description: 'Platforms to build: linux_x64, linux_arm64 (space-separated)'
-        default: 'linux_x64'
+      arch:
+        description: 'Architecture: x86_64, aarch64'
+        type: string
         required: true
       build_mode:
         description: 'Build mode: devel, nightly, testing, stable'
-        default: 'devel'
+        type: string
         required: true
       publish:
         description: 'Publish to FTP: on - publish'
-        default: 'off'
+        type: string
         required: false
+        default: 'off'
       sentry_project:
         description: 'Upload symbols and dumps to Sentry (choose a project): mu4(default for stable build), mu4-sandbox'
-        default: ''
+        type: string
         required: false
+        default: ''
       dockwidgets_v2:
         description: 'Use KDDockWidgets v2: ON/OFF'
-        default: 'ON'
+        type: string
         required: false
-
-concurrency:
-  group: ${{ github.workflow }} ${{ github.ref }}
-  cancel-in-progress: true
+        default: 'ON'
 
 jobs:
   build:
-    runs-on: ${{ matrix.runs-on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ${{
-          (contains(inputs.platforms, 'linux_x64') && contains(inputs.platforms, 'linux_arm64'))
-          && fromJson('["linux_x64","linux_arm64"]')
-          || (contains(inputs.platforms, 'linux_arm64') && fromJson('["linux_arm64"]')
-          || fromJson('["linux_x64"]'))
-          }}
-        include:
-          - platform: linux_x64
-            arch: x86_64
-            runs-on: ubuntu-24.04
-            qt-host: linux
-            qt-arch: linux_gcc_64
-          - platform: linux_arm64
-            arch: aarch64
-            runs-on: ubuntu-24.04-arm
-            qt-host: linux_arm64
-            qt-arch: linux_gcc_arm64
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     steps:
     - name: Clone repository
       uses: actions/checkout@v7
@@ -118,7 +98,7 @@ jobs:
           fi
         fi
 
-        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU4_${BUILD_NUMBER}_Lin_${{ matrix.arch }}_${GITHUB_REF#refs/heads/}")"
+        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU4_${BUILD_NUMBER}_Lin_${{ inputs.arch }}_${GITHUB_REF#refs/heads/}")"
 
         echo "github.repository: ${{ github.repository }}"
         echo "BUILD_MODE=$BUILD_MODE" | tee -a $GITHUB_ENV
@@ -150,15 +130,15 @@ jobs:
       uses: jurplel/install-qt-action@v4.3.1
       with:
         version: 6.11.2
-        host: ${{ matrix.qt-host }}
+        host: ${{ inputs.arch == 'aarch64' && 'linux_arm64' || 'linux' }}
         target: 'desktop'
-        arch: ${{ matrix.qt-arch }}
+        arch: ${{ inputs.arch == 'aarch64' && 'linux_gcc_arm64' || 'linux_gcc_64' }}
         # qtmultimedia: Video panel playback, bundled by make_appimage.sh
         modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
         cache: true
     - name: Setup environment
       run: |
-        bash ./buildscripts/ci/linux/setup.sh --arch ${{ matrix.arch }} --build-pipewire
+        bash ./buildscripts/ci/linux/setup.sh --arch ${{ inputs.arch }} --build-pipewire
 
     - parallel:
       - name: Generate _en.ts files
@@ -181,7 +161,7 @@ jobs:
       env:
         DOCKWIDGETS_V2: ${{ inputs.dockwidgets_v2 == 'ON' && 'ON' || 'OFF' }}
       run: |
-        bash ./buildscripts/ci/linux/build.sh -n "${BUILD_NUMBER}" --crash_log_url "${SENTRY_URL}" --arch ${{ matrix.arch }} --build-pipewire --dockwidgets_v2 "${DOCKWIDGETS_V2}"
+        bash ./buildscripts/ci/linux/build.sh -n "${BUILD_NUMBER}" --crash_log_url "${SENTRY_URL}" --arch ${{ inputs.arch }} --build-pipewire --dockwidgets_v2 "${DOCKWIDGETS_V2}"
     - name: Show ccache stats
       run: |
         ccache -sv
@@ -199,7 +179,7 @@ jobs:
 
     - name: Package
       run: |
-        bash ./buildscripts/ci/linux/package.sh --arch ${{ matrix.arch }} --build-pipewire
+        bash ./buildscripts/ci/linux/package.sh --arch ${{ inputs.arch }} --build-pipewire
     - name: Checksum
       run: |
         bash ./buildscripts/ci/tools/checksum.sh
@@ -209,7 +189,7 @@ jobs:
       env:
         OSUOSL_SSH_ENCRYPT_SECRET: ${{ secrets.OSUOSL_SSH_ENCRYPT_SECRET }}
       run: |
-        bash ./buildscripts/ci/tools/osuosl/publish.sh -s "${OSUOSL_SSH_ENCRYPT_SECRET}" --os linux --arch ${{ matrix.arch }} -v 4
+        bash ./buildscripts/ci/tools/osuosl/publish.sh -s "${OSUOSL_SSH_ENCRYPT_SECRET}" --os linux --arch ${{ inputs.arch }} -v 4
     - name: Upload artifacts on GitHub
       uses: actions/upload-artifact@v7
       with:

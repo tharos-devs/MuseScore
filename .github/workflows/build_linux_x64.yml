@@ -1,0 +1,36 @@
+name: 'Build: Linux x64'
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: 'Build mode: devel, nightly, testing, stable'
+        default: 'devel'
+        required: true
+      publish:
+        description: 'Publish to FTP: on - publish'
+        default: 'off'
+        required: false
+      sentry_project:
+        description: 'Upload symbols and dumps to Sentry (choose a project): mu4(default for stable build), mu4-sandbox'
+        default: ''
+        required: false
+      dockwidgets_v2:
+        description: 'Use KDDockWidgets v2: ON/OFF'
+        default: 'ON'
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }} ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux_x64:
+    uses: ./.github/workflows/build_linux.yml
+    with:
+      arch: x86_64
+      build_mode: ${{ inputs.build_mode }}
+      publish: ${{ inputs.publish }}
+      sentry_project: ${{ inputs.sentry_project }}
+      dockwidgets_v2: ${{ inputs.dockwidgets_v2 }}
+    secrets: inherit
