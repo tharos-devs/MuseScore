@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-18
+- Export > MP4 video (score): "Add score title at the beginning" and "Add MuseScore logo at the end" checkboxes (both on by default, remembered) to keep or leave out the black title screen and the "Made with MuseScore Studio" screen; the audio follows. Without the title, the video starts on the score's first page, held silent for 1 s before the music, so the first notes don't start the instant the video plays. Sample rate, bit rate and video resolution are now on one row (the last checkbox went under the Cancel button).
+
 ### 2026-10-17
 - Playback toolbar: the Play button has a dropdown arrow to choose what a stop does to the playback position: "Stay at stop position" (MuseScore's usual behavior, the default) or "Return to start position on stop" — when playback stops (Space, Pause, Stop or the end of the score), the playback position goes back to where playback started. Remembered between sessions; the button's tooltip shows the mode (e.g. "Play – Return to start position on stop"); both modes are also actions that can get shortcuts.
 - Score context menu: on a VST instrument staff, a row of icons at the top - note velocities, note offsets, articulations, CC01, CC11, last MIDI CC used, articulation map editor and the VST instrument's window - the same buttons as the circular toolbar, for the clicked instrument (keyboard: Left/Right along the row). They only turn on an editing mode, so the selection made by the right-click (e.g. a measure in an empty part of the staff) goes back to the previous one. The last MIDI CC is shared with the circular toolbar.
@@ -260,6 +263,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Fixed the start of an exported audio or video cut (a jerky start, the first notes' attacks missing) with a VST3 effect such as IK Multimedia's TR5 White 2A: reactivated with the export's block size, it output silence on its first block, losing the first 85 ms of music. VST3 effects now get a few silent blocks after each (re)activation, as in a DAW. Also fixed the score MP4's leading/trailing silences rounded down to whole seconds (2026-10-18).
 - Fixed muting a Mixer Group bus not silencing its member tracks' sends to an unrelated, shared Aux FX bus (e.g. a reverb), which kept leaking their audio through that bus instead of going fully silent (2026-09-21).
 - Fixed the Mixer's Video channel meter lighting up during playback of a video that has no audio track (2026-09-27).
 - Fixed the Video panel showing up empty (no player) when it was restored open along with a score, until it was hidden and shown again (2026-09-29).
