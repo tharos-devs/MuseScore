@@ -139,6 +139,17 @@ void NotationNoteVelocityController::onCurrentNotationChanged()
             scheduleRebuild();
         }, Asyncable::Mode::SetReplace);
 
+        // A relayout outside of any transaction (e.g. the thumbnail on save, in Continuous view) recreates the
+        // systems without ScoreChanges
+        notation->notationChanged().onReceive(this, [this, thisNotation](const muse::RectF&) {
+            if (thisNotation != currentNotation().get()) {
+                return;
+            }
+            if (m_layoutSignature.refresh(score())) {
+                scheduleRebuild();
+            }
+        }, Asyncable::Mode::SetReplace);
+
         if (notation->style()) {
             // Style edits (e.g. live-dragging "Staff space (sp)" in Page Settings) relayout the
             // score without necessarily going through changesChannel() - without this, the
@@ -202,6 +213,7 @@ void NotationNoteVelocityController::rebuildAllOverlays()
     }
 
     m_noteLocations.clear();
+    m_layoutSignature.refresh(score());
 
     if (!score()) {
         // Happens on close...

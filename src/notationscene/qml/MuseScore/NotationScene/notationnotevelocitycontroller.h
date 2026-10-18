@@ -33,6 +33,8 @@
 #include "modularity/ioc.h"
 #include "notation/inotationconfiguration.h"
 #include "notation/notationtypes.h"
+
+#include "layoutsignature.h"
 #include "playback/iplaybackcontroller.h"
 #include "notevelocitygeometry.h"
 
@@ -166,6 +168,7 @@ private:
 
     QQuickItem* m_overlaysParent = nullptr;
     OverlaysMap m_overlaysByStaff;
+    LayoutSignature m_layoutSignature;
     NoteLocationMap m_noteLocations;
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;

@@ -34,6 +34,8 @@
 #include "modularity/ioc.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/notationtypes.h"
+
+#include "layoutsignature.h"
 #include "playback/iplaybackcontroller.h"
 #include "rcommand/icommanddispatcher.h"
 
@@ -124,6 +126,7 @@ private:
 
     QQuickItem* m_overlaysParent = nullptr;
     OverlaysMap m_overlaysByStaff;
+    LayoutSignature m_layoutSignature;
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;
     bool m_rebuildAfterDrag = false;

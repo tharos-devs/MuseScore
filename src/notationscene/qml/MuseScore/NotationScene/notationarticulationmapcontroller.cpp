@@ -166,6 +166,17 @@ void NotationArticulationMapController::onCurrentNotationChanged()
         scheduleRebuild();
     }, Asyncable::Mode::SetReplace);
 
+    // A relayout outside of any transaction (e.g. the thumbnail on save, in Continuous view) recreates the
+    // systems without ScoreChanges
+    notation->notationChanged().onReceive(this, [this, thisNotation](const muse::RectF&) {
+        if (thisNotation != currentNotation().get()) {
+            return;
+        }
+        if (m_layoutSignature.refresh(score())) {
+            scheduleRebuild();
+        }
+    }, Asyncable::Mode::SetReplace);
+
     if (notation->style()) {
         notation->style()->styleChanged().onNotify(this, [this, thisNotation]() {
             if (thisNotation != currentNotation().get()) {
@@ -204,6 +215,7 @@ void NotationArticulationMapController::rebuildAllOverlays()
     }
 
     m_rebuildAfterDrag = false;
+    m_layoutSignature.refresh(score());
 
     // Its choices apply to the chords of the lane being replaced (the score changed, e.g. undo)
     if (m_picker) {

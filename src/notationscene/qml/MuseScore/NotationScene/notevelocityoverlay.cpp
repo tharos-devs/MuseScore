@@ -36,8 +36,10 @@ constexpr static qreal EDGE_HIT_MARGIN_PX = 4.0;
 constexpr static qreal BAR_HALF_WIDTH_MARGIN_PX = 1.0; // keeps adjacent chord bars from visually touching
 
 // Below this, a press+release is a plain click (jump straight to that position) rather than a
-// drag (nudge relative to wherever the bar already was) - see mouseReleaseEvent().
-constexpr static qreal CLICK_MOVE_THRESHOLD_PX = 3.0;
+// drag (nudge relative to wherever the bar already was) - see mouseReleaseEvent(). Kept tiny: the
+// bar already follows the mouse relatively from the first move, so a short drag on a small zoom
+// (a few pixels = several velocity steps) must not turn into a jump to the click position on release.
+constexpr static qreal CLICK_MOVE_THRESHOLD_PX = 0.5;
 
 constexpr static qreal VALUE_LABEL_FONT_PX = 11.0;
 constexpr static qreal VALUE_LABEL_GAP_PX = 4.0; // horizontal gap between the bar and the label chip
