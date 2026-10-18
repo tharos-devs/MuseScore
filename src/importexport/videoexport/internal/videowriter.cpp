@@ -129,7 +129,10 @@ muse::Ret VideoWriter::write(INotationPtr notation, muse::io::IODevice& device, 
     encoderOptions.width = cfg.width;
     encoderOptions.height = cfg.height;
     encoderOptions.bitrate = cfg.bitrate;
-    encoderOptions.gop = cfg.fps / 2;
+    //! NOTE A full picture every 5 s (was every 0.5 s): a score's pictures hardly change between two of them,
+    //! the full ones made ~3/4 of the file for nothing
+    static constexpr int KEYFRAME_INTERVAL_SEC = 5;
+    encoderOptions.gop = cfg.fps * KEYFRAME_INTERVAL_SEC;
     encoderOptions.fps = cfg.fps;
 
     if (!encoder->open(finalPath, encoderOptions)) {
