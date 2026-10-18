@@ -38,6 +38,11 @@ Column {
     property bool showSampleRateControl: true
     property bool showIncludeVideoAudioControl: true
 
+    property int dropdownWidth: 126
+
+    //! NOTE A control of the caller's, at the end of the dropdowns' row
+    property Component extraRowComponent: null
+
     width: parent ? parent.width : implicitWidth
 
     spacing: 12
@@ -53,7 +58,7 @@ Column {
             text: qsTrc("project/export", "Sample rate:")
 
             StyledDropdown {
-                Layout.preferredWidth: 126
+                Layout.preferredWidth: root.dropdownWidth
 
                 navigation.name: "SampleRatesDropdown"
                 navigation.panel: root.navigationPanel
@@ -78,7 +83,7 @@ Column {
             text: qsTrc("project/export", "Bit rate:")
 
             StyledDropdown {
-                Layout.preferredWidth: 126
+                Layout.preferredWidth: root.dropdownWidth
 
                 navigation.name: "BitratesDropdown"
                 navigation.panel: root.navigationPanel
@@ -105,7 +110,7 @@ Column {
             StyledDropdown {
                 id: sampleFormatsDropdown
 
-                Layout.preferredWidth: 126
+                Layout.preferredWidth: root.dropdownWidth
 
                 navigation.name: "SampleFormatsDropdown"
                 navigation.panel: root.navigationPanel
@@ -120,6 +125,12 @@ Column {
                     root.model.selectedSampleFormat = value
                 }
             }
+        }
+
+        Loader {
+            active: Boolean(root.extraRowComponent)
+            visible: active
+            sourceComponent: root.extraRowComponent
         }
     }
 

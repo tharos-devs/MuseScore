@@ -148,7 +148,7 @@ muse::Ret VideoWriter::write(INotationPtr notation, muse::io::IODevice& device, 
     if (withAudio) {
         Options audioOpts;
         audioOpts[OptionKey::WAIT_FOR_COMPLETION] = muse::Val(false);
-        audioOpts[OptionKey::LEADING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.leadingSec));
+        audioOpts[OptionKey::LEADING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.leadingSec + cfg.firstFrameHoldSec));
         audioOpts[OptionKey::TRAILING_SILENCE_SEC] = muse::Val(static_cast<double>(cfg.trailingSec));
         startAudioExport(notation, tempAudioPath, audioOpts);
     } else {
@@ -245,8 +245,11 @@ VideoWriter::Config VideoWriter::makeConfig() const
     }
     cfg.bitrate = int(br * 1000000);
 
-    cfg.leadingSec = configuration()->leadingSec();
-    cfg.trailingSec = configuration()->trailingSec();
+    static constexpr float FIRST_FRAME_HOLD_SEC = 1.f;
+    const bool titleScreen = configuration()->showTitleScreen();
+    cfg.leadingSec = titleScreen ? configuration()->leadingSec() : 0.f;
+    cfg.firstFrameHoldSec = titleScreen ? 0.f : FIRST_FRAME_HOLD_SEC;
+    cfg.trailingSec = configuration()->showMadeWithScreen() ? configuration()->trailingSec() : 0.f;
 
     cfg.viewMode = configuration()->viewMode();
 
@@ -674,9 +677,10 @@ void VideoWriter::doGenerate(muse::media::IVideoEncoderPtr encoder, INotationPtr
     float totalPlayTimeSec = playback->totalPlayTime();
 
     int leadingFrameCount = static_cast<int>(actualConfig.leadingSec * actualConfig.fps);
+    int holdFrameCount = static_cast<int>(actualConfig.firstFrameHoldSec * actualConfig.fps);
     int scoreFrameCount = static_cast<int>(totalPlayTimeSec * actualConfig.fps);
     int trailingFrameCount = static_cast<int>(actualConfig.trailingSec * actualConfig.fps);
-    int totalFrameCount = leadingFrameCount + scoreFrameCount + trailingFrameCount;
+    int totalFrameCount = leadingFrameCount + holdFrameCount + scoreFrameCount + trailingFrameCount;
     LOGI() << "totalPlayTime: " << totalPlayTimeSec << " sec" << " frame count " << totalFrameCount;
 
     m_progress.start();
@@ -870,7 +874,11 @@ bool VideoWriter::generateScoreFrames(muse::media::IVideoEncoderPtr encoder, INo
 
         painter.restore();
 
-        encoder->encodeImage(frame);
+        //! NOTE The first frame may be held, silent, before the music starts
+        const int repeatCount = f == 0 ? static_cast<int>(config.firstFrameHoldSec * config.fps) + 1 : 1;
+        for (int r = 0; r < repeatCount; ++r) {
+            encoder->encodeImage(frame);
+        }
     }
 
     return true;

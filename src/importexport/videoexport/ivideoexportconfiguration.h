@@ -59,6 +59,12 @@ public:
     virtual double trailingSec() const = 0;
     virtual void setTrailingSec(std::optional<double> trailingSec) = 0;
 
+    //! NOTE The score's video: the title screen at the start, the "Made with MuseScore" screen at the end
+    virtual bool showTitleScreen() const = 0;
+    virtual void setShowTitleScreen(bool show) = 0;
+    virtual bool showMadeWithScreen() const = 0;
+    virtual void setShowMadeWithScreen(bool show) = 0;
+
     virtual VideoSource source() const = 0;
     virtual void setSource(std::optional<VideoSource> source) = 0;
 

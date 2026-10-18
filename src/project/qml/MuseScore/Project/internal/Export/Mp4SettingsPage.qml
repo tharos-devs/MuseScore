@@ -105,33 +105,38 @@ ExportSettingsPage {
             AudioSettings {
                 id: audioSection
 
+                readonly property int videoResolutionNavigationRow: navigationOrderEnd + 1
+
                 model: root.model
                 navigationPanel: root.navigationPanel
                 navigationOrderStart: root.navigationOrder
                 showBitRateControl: true
-            }
 
-            ExportOptionItem {
-                id: videoResolutionLabel
-                text: qsTrc("project/export", "Video resolution")
+                //! NOTE Narrower, to fit the video resolution on the same row
+                dropdownWidth: 106
 
-                StyledDropdown {
-                    id: videoResolutionDropdown
-                    Layout.preferredWidth: 126
+                extraRowComponent: ExportOptionItem {
+                    id: videoResolutionLabel
+                    width: implicitWidth // in a Loader, sized by its item
+                    text: qsTrc("project/export", "Video resolution")
 
-                    navigation.name: "VideoResolutionDropdown"
-                    navigation.panel: root.navigationPanel
-                    navigation.row: audioSection.navigationOrderEnd + 1
-                    navigation.accessible.name: videoResolutionLabel.text + " " + currentText
+                    StyledDropdown {
+                        Layout.preferredWidth: audioSection.dropdownWidth
 
-                    model: root.model ? root.model.availableVideoResolutions().map(function(res) {
-                        return { text: res, value: res }
-                    }) : []
+                        navigation.name: "VideoResolutionDropdown"
+                        navigation.panel: root.navigationPanel
+                        navigation.row: audioSection.videoResolutionNavigationRow
+                        navigation.accessible.name: videoResolutionLabel.text + " " + currentText
 
-                    currentIndex: root.model ? indexOfValue(root.model.videoResolution) : -1
+                        model: root.model ? root.model.availableVideoResolutions().map(function(res) {
+                            return { text: res, value: res }
+                        }) : []
 
-                    onActivated: function(index, value) {
-                        root.model.videoResolution = value
+                        currentIndex: root.model ? indexOfValue(root.model.videoResolution) : -1
+
+                        onActivated: function(index, value) {
+                            root.model.videoResolution = value
+                        }
                     }
                 }
             }
@@ -155,8 +160,40 @@ ExportSettingsPage {
 
                     navigation.name: modelData.text
                     navigation.panel: root.navigationPanel
-                    navigation.row: videoResolutionDropdown.navigation.row + 1 + index
+                    navigation.row: audioSection.videoResolutionNavigationRow + 1 + index
                     navigation.accessible.name: modelData.text
+                }
+            }
+
+            CheckBox {
+                id: showTitleScreenCheckBox
+
+                width: parent.width
+                text: qsTrc("project/export", "Add score title at the beginning")
+
+                navigation.name: "VideoShowTitleScreenCheckbox"
+                navigation.panel: root.navigationPanel
+                navigation.row: audioSection.videoResolutionNavigationRow + 3
+
+                checked: root.model ? root.model.videoShowTitleScreen : true
+
+                onClicked: {
+                    root.model.videoShowTitleScreen = !checked
+                }
+            }
+
+            CheckBox {
+                width: parent.width
+                text: qsTrc("project/export", "Add MuseScore logo at the end")
+
+                navigation.name: "VideoShowMadeWithScreenCheckbox"
+                navigation.panel: root.navigationPanel
+                navigation.row: showTitleScreenCheckBox.navigation.row + 1
+
+                checked: root.model ? root.model.videoShowMadeWithScreen : true
+
+                onClicked: {
+                    root.model.videoShowMadeWithScreen = !checked
                 }
             }
 

@@ -828,6 +828,36 @@ bool ExportDialogModel::isAttachedVideoAudioLossless() const
     return format == Format::Alac || format == Format::Flac;
 }
 
+bool ExportDialogModel::videoShowTitleScreen() const
+{
+    return videoExportConfiguration() ? videoExportConfiguration()->showTitleScreen() : true;
+}
+
+void ExportDialogModel::setVideoShowTitleScreen(bool show)
+{
+    if (!videoExportConfiguration() || show == videoShowTitleScreen()) {
+        return;
+    }
+
+    videoExportConfiguration()->setShowTitleScreen(show);
+    emit videoShowTitleScreenChanged();
+}
+
+bool ExportDialogModel::videoShowMadeWithScreen() const
+{
+    return videoExportConfiguration() ? videoExportConfiguration()->showMadeWithScreen() : true;
+}
+
+void ExportDialogModel::setVideoShowMadeWithScreen(bool show)
+{
+    if (!videoExportConfiguration() || show == videoShowMadeWithScreen()) {
+        return;
+    }
+
+    videoExportConfiguration()->setShowMadeWithScreen(show);
+    emit videoShowMadeWithScreenChanged();
+}
+
 QList<int> ExportDialogModel::availableSampleRates() const
 {
     const std::vector<int>& rates = audioExportConfiguration()->availableSampleRates();
