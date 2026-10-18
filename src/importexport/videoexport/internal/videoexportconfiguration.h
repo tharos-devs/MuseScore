@@ -55,6 +55,11 @@ public:
     double trailingSec() const override;
     void setTrailingSec(std::optional<double> trailingSec) override;
 
+    bool showTitleScreen() const override;
+    void setShowTitleScreen(bool show) override;
+    bool showMadeWithScreen() const override;
+    void setShowMadeWithScreen(bool show) override;
+
     VideoSource source() const override;
     void setSource(std::optional<VideoSource> source) override;
 

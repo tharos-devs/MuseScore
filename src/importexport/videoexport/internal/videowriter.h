@@ -85,6 +85,9 @@ private:
         int bitrate = 800000;
         float leadingSec = 3.;
         float trailingSec = 3.;
+        //! NOTE Without the title screen, a silence on the score's first frame: a video starting right on the first
+        //! notes sounds cut
+        float firstFrameHoldSec = 0.;
         double canvasDpi = 300.0;
         ViewMode viewMode = ViewMode::PageFull;
         muse::PointF moveToCenter;

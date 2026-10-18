@@ -121,6 +121,10 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     Q_PROPERTY(bool isAttachedVideoAudioLossless READ isAttachedVideoAudioLossless NOTIFY attachedVideoAudioFormatChanged)
     Q_PROPERTY(QString ffmpegDir READ ffmpegDir WRITE setFFmpegDir NOTIFY ffmpegDirChanged)
 
+    Q_PROPERTY(bool videoShowTitleScreen READ videoShowTitleScreen WRITE setVideoShowTitleScreen NOTIFY videoShowTitleScreenChanged)
+    Q_PROPERTY(
+        bool videoShowMadeWithScreen READ videoShowMadeWithScreen WRITE setVideoShowMadeWithScreen NOTIFY videoShowMadeWithScreenChanged)
+
     QML_ELEMENT
 
     muse::GlobalInject<iex::musicxml::IMusicXmlConfiguration> musicXmlConfiguration;
@@ -261,6 +265,11 @@ public:
     void setAttachedVideoAudioFormat(int format);
     bool isAttachedVideoAudioLossless() const;
 
+    bool videoShowTitleScreen() const;
+    void setVideoShowTitleScreen(bool show);
+    bool videoShowMadeWithScreen() const;
+    void setVideoShowMadeWithScreen(bool show);
+
     Q_INVOKABLE void updateExportInfo();
 
 signals:
@@ -311,6 +320,9 @@ signals:
 
     void includeVideoAudioChanged();
     void attachedVideoAudioFormatChanged();
+
+    void videoShowTitleScreenChanged();
+    void videoShowMadeWithScreenChanged();
 
 private:
     void classBegin() override;

@@ -28,6 +28,8 @@ using namespace mu::iex::videoexport;
 
 static const Settings::Key ATTACHED_VIDEO_AUDIO_FORMAT_KEY("iex_videoexport", "export/video/attachedVideoAudioFormat");
 static const Settings::Key ATTACHED_VIDEO_AUDIO_BITS_KEY("iex_videoexport", "export/video/attachedVideoAudioBitsPerSample");
+static const Settings::Key SHOW_TITLE_SCREEN_KEY("iex_videoexport", "export/video/showTitleScreen");
+static const Settings::Key SHOW_MADE_WITH_SCREEN_KEY("iex_videoexport", "export/video/showMadeWithScreen");
 
 static const ViewMode DEFAULT_VIEW_MODE = ViewMode::PageFull;
 static const bool DEFAULT_SHOW_PIANO = false;
@@ -43,6 +45,8 @@ void VideoExportConfiguration::init()
 {
     settings()->setDefaultValue(ATTACHED_VIDEO_AUDIO_FORMAT_KEY, Val(static_cast<int>(AttachedVideoAudioFormat::Aac)));
     settings()->setDefaultValue(ATTACHED_VIDEO_AUDIO_BITS_KEY, Val(24));
+    settings()->setDefaultValue(SHOW_TITLE_SCREEN_KEY, Val(true));
+    settings()->setDefaultValue(SHOW_MADE_WITH_SCREEN_KEY, Val(true));
 }
 
 ViewMode VideoExportConfiguration::viewMode() const
@@ -118,6 +122,26 @@ double VideoExportConfiguration::trailingSec() const
 void VideoExportConfiguration::setTrailingSec(std::optional<double> trailingSec)
 {
     m_trailingSec = trailingSec;
+}
+
+bool VideoExportConfiguration::showTitleScreen() const
+{
+    return settings()->value(SHOW_TITLE_SCREEN_KEY).toBool();
+}
+
+void VideoExportConfiguration::setShowTitleScreen(bool show)
+{
+    settings()->setSharedValue(SHOW_TITLE_SCREEN_KEY, Val(show));
+}
+
+bool VideoExportConfiguration::showMadeWithScreen() const
+{
+    return settings()->value(SHOW_MADE_WITH_SCREEN_KEY).toBool();
+}
+
+void VideoExportConfiguration::setShowMadeWithScreen(bool show)
+{
+    settings()->setSharedValue(SHOW_MADE_WITH_SCREEN_KEY, Val(show));
 }
 
 VideoSource VideoExportConfiguration::source() const
