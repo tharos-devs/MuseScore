@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-18
+- Export > MP4 video (score): about half the size at the same picture quality (e.g. 34 → 16 MB for a 2 min 15 s 1080p video) — a full picture every 5 s instead of every 0.5 s, a score's pictures hardly changing in between.
 - Track list: a button at the right of the header shows/hides the channel strip, in sync with the "…" menu's Channel strip item. The button stays left of where the scroll bar appears, so its clicks don't go to the scroll bar.
 - Export > MP4 video (score): "Add score title at the beginning" and "Add MuseScore logo at the end" checkboxes (both on by default, remembered) to keep or leave out the black title screen and the "Made with MuseScore Studio" screen; the audio follows. Without the title, the video starts on the score's first page, held silent for 1 s before the music, so the first notes don't start the instant the video plays. Sample rate, bit rate and video resolution are now on one row (the last checkbox went under the Cancel button).
 
