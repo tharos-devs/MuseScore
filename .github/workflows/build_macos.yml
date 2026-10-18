@@ -120,7 +120,7 @@ jobs:
           fi
         fi
 
-        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU4_${BUILD_NUMBER}_Mac_${GITHUB_REF#refs/heads/}")"
+        UPLOAD_ARTIFACT_NAME="$(tr '":<>|*?/\\’' '_' <<<"MU5_${BUILD_NUMBER}_Mac_${GITHUB_REF#refs/heads/}")"
 
         echo "github.repository: ${{ github.repository }}"
         echo "BUILD_MODE=$BUILD_MODE" | tee -a $GITHUB_ENV
