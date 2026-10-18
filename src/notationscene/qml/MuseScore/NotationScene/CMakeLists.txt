@@ -105,6 +105,8 @@ qt_add_qml_module(notationscene_qml
         noteinputbarmodel.h
         noteinputcursor.cpp
         noteinputcursor.h
+        layoutsignature.cpp
+        layoutsignature.h
         noteoffsetoverlay.cpp
         noteoffsetoverlay.h
         notevelocitygeometry.cpp

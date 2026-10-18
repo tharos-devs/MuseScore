@@ -1077,6 +1077,14 @@ void NotationAutomationController::onCurrentNotationChanged()
         currentNotation()->viewModeChanged().onNotify(this, [this]() {
             rebuildAllPolylines();
         }, Asyncable::Mode::SetReplace /* FIXME */);
+
+        // A relayout outside of any transaction (e.g. the thumbnail on save, in Continuous view) recreates the
+        // systems without ScoreChanges
+        currentNotation()->notationChanged().onReceive(this, [this](const muse::RectF&) {
+            if (m_layoutSignature.refresh(score())) {
+                scheduleRebuild();
+            }
+        }, Asyncable::Mode::SetReplace /* FIXME */);
     }
 
     // Points inside MuseScore's range selection are shown selected (and move together)
@@ -1222,6 +1230,7 @@ void NotationAutomationController::rebuildAllPolylines()
     }
     m_stavesToLinesMap.clear();
     m_pointsDataByStaff.clear();
+    m_layoutSignature.refresh(score());
     m_groupDrag = GroupDrag(); // its polylines are gone
 
     if (!score()) {

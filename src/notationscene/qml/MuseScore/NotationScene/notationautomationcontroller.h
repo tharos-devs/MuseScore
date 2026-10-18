@@ -35,6 +35,8 @@
 #include "ui/iuiconfiguration.h"
 #include "ui/iuicontextconfiguration.h"
 #include "notation/notationtypes.h"
+
+#include "layoutsignature.h"
 #include "notation/inotationconfiguration.h"
 #include "notation/inotationcontextconfiguration.h"
 #include "engraving/automation/automationdata.h"
@@ -199,6 +201,7 @@ private:
 
     QQuickItem* m_linesParent = nullptr;
     SysStaffToPolylinesMap m_stavesToLinesMap;
+    LayoutSignature m_layoutSignature;
     PointsDataMap m_pointsDataByStaff;
     muse::draw::Transform m_viewMatrix;
     mu::engraving::AutomationChanges m_pendingChanges;

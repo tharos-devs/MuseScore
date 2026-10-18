@@ -30,6 +30,8 @@
 #include "async/asyncable.h"
 #include "notation/notationtypes.h"
 
+#include "layoutsignature.h"
+
 namespace mu::engraving {
 struct ScoreChanges;
 }
@@ -130,6 +132,7 @@ private:
 
     QQuickItem* m_overlaysParent = nullptr;
     OverlaysMap m_overlaysByStaff;
+    LayoutSignature m_layoutSignature;
     NoteLocationMap m_noteLocations;
     muse::draw::Transform m_viewMatrix;
     bool m_rebuildScheduled = false;
