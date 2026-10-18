@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-18
+- Track list: a button at the right of the header shows/hides the channel strip, in sync with the "…" menu's Channel strip item. The rows and the header always leave room for the scroll bar on the right: it no longer covers the meters or the button.
 - Export > MP4 video (score): "Add score title at the beginning" and "Add MuseScore logo at the end" checkboxes (both on by default, remembered) to keep or leave out the black title screen and the "Made with MuseScore Studio" screen; the audio follows. Without the title, the video starts on the score's first page, held silent for 1 s before the music, so the first notes don't start the instant the video plays. Sample rate, bit rate and video resolution are now on one row (the last checkbox went under the Cancel button).
 
 ### 2026-10-17
