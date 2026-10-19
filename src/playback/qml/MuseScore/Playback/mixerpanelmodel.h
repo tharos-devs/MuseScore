@@ -196,8 +196,6 @@ private:
     static void deleteItemsLater(const QList<MixerChannelItem*>& items);
     void setupConnections();
 
-    void subscribeOnAutomationChanges();
-
     void onVideoAttachmentChanged();
     //! NOTE: shared by setColorForSelectedChannels()/resetColorForSelectedChannels() -
     //! applies color to every currently-selected channel as a single undo command (see
