@@ -265,6 +265,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Fixed the note-offset rectangles of notes in tuplets (triplets, sextuplets, duplets…) or on a staff with a local time signature: drawn with the notated duration instead of the played one, they went past the next note (or stopped short for a duplet). The drag limits used the same wrong duration; playback was already right (2026-10-19).
 - Fixed the start of an exported audio or video cut (a jerky start, the first notes' attacks missing) with a VST3 effect such as IK Multimedia's TR5 White 2A: reactivated with the export's block size, it output silence on its first block, losing the first 85 ms of music. VST3 effects now get a few silent blocks after each (re)activation, as in a DAW. Also fixed the score MP4's leading/trailing silences rounded down to whole seconds (2026-10-18).
 - Fixed muting a Mixer Group bus not silencing its member tracks' sends to an unrelated, shared Aux FX bus (e.g. a reverb), which kept leaking their audio through that bus instead of going fully silent (2026-09-21).
 - Fixed the Mixer's Video channel meter lighting up during playback of a video that has no audio track (2026-09-27).
