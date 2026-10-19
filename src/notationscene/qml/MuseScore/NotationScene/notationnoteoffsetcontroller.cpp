@@ -298,7 +298,7 @@ void NotationNoteOffsetController::createOverlayForStaff(const System* system, s
                     entry.hasRightHandle = tailInSameSystem;
 
                     if (tailInSameSystem) {
-                        const int tailEndTick = tailChord->tick().ticks() + tailChord->ticks().ticks();
+                        const int tailEndTick = tailChord->endTick().ticks();
                         const std::optional<double> rx = mu::notation::canvasXFromTick(system, tailEndTick);
                         entry.nominalRightX = rx ? *rx : (staffCanvasRect.x() + staffCanvasRect.width());
                     } else {
@@ -341,7 +341,7 @@ void NotationNoteOffsetController::createOverlayForStaff(const System* system, s
                 entry.hasRightHandle = tailInSameSystem;
 
                 if (tailInSameSystem) {
-                    const int tailEndTick = tailChord->tick().ticks() + tailChord->ticks().ticks();
+                    const int tailEndTick = tailChord->endTick().ticks();
                     const std::optional<double> rx = mu::notation::canvasXFromTick(system, tailEndTick);
                     entry.nominalRightX = rx ? *rx : (staffCanvasRect.x() + staffCanvasRect.width());
                 } else {
@@ -406,7 +406,7 @@ void NotationNoteOffsetController::createOverlayForStaff(const System* system, s
         }
 
         const int headStartTick = headChord->tick().ticks();
-        const int tailEndTick = tailChord->tick().ticks() + tailChord->ticks().ticks();
+        const int tailEndTick = tailChord->endTick().ticks();
 
         // Fallback local px-per-tick rate, only used if an offset pushes an edge right at a
         // system boundary where segment interpolation has nothing to anchor to.
@@ -580,7 +580,7 @@ void NotationNoteOffsetController::previewNoteRect(const NoteLocation& location,
     }
 
     const int headStartTick = headChord->tick().ticks();
-    const int tailEndTick = tailChord->tick().ticks() + tailChord->ticks().ticks();
+    const int tailEndTick = tailChord->endTick().ticks();
     const int totalTicks = tailEndTick - headStartTick;
     const double fallbackPxPerTick = totalTicks > 0 ? (entry.nominalRightX - entry.nominalLeftX) / totalTicks : 0.0;
 
@@ -633,9 +633,9 @@ void NotationNoteOffsetController::onEdgeDragged(const SysStaffKey& key, int rec
     // skip in createOverlayForStaff), so it's always the target here regardless of which
     // fragment/handle - possibly on the chain's last note, in a different system - was dragged.
     const int headChordStartTick = headChord->tick().ticks();
-    const int headChordEndTick = headChordStartTick + headChord->ticks().ticks();
+    const int headChordEndTick = headChord->endTick().ticks();
     const int tailChordStartTick = tailChord->tick().ticks();
-    const int tailChordEndTick = tailChordStartTick + tailChord->ticks().ticks();
+    const int tailChordEndTick = tailChord->endTick().ticks();
 
     int newStartOffset = headNote->playbackStartOffset();
     int newDurationOffset = headNote->playbackDurationOffset();
@@ -700,7 +700,7 @@ void NotationNoteOffsetController::onEdgeDragged(const SysStaffKey& key, int rec
 
         if (isLeftEdge) {
             otherStartOffset = std::clamp(otherStartOffset + delta, -MAX_OFFSET_TICKS, MAX_OFFSET_TICKS);
-            const int chordEndTick = chord->tick().ticks() + chord->ticks().ticks();
+            const int chordEndTick = chord->endTick().ticks();
             const int effEnd = chordEndTick + otherDurationOffset;
             if (effEnd - (chord->tick().ticks() + otherStartOffset) < MIN_EFFECTIVE_TICKS) {
                 otherStartOffset = std::clamp(effEnd - MIN_EFFECTIVE_TICKS - chord->tick().ticks(),
@@ -709,7 +709,7 @@ void NotationNoteOffsetController::onEdgeDragged(const SysStaffKey& key, int rec
         } else {
             otherDurationOffset = std::clamp(otherDurationOffset + delta, -MAX_OFFSET_TICKS, MAX_OFFSET_TICKS);
             const int chordStartTick = chord->tick().ticks();
-            const int chordEndTick = chordStartTick + chord->ticks().ticks();
+            const int chordEndTick = chord->endTick().ticks();
             const int effStart = chordStartTick + otherStartOffset;
             if ((chordEndTick + otherDurationOffset) - effStart < MIN_EFFECTIVE_TICKS) {
                 otherDurationOffset = std::clamp(effStart + MIN_EFFECTIVE_TICKS - chordEndTick,
