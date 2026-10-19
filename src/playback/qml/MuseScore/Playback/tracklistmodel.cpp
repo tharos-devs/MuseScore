@@ -556,17 +556,6 @@ void TrackListModel::connectMixerControls(MixerChannelItem* item, const PartTrac
     connect(item, &MixerChannelItem::auxSendsParamsChanged, this, showAllSlotsInStrip);
 
     connect(item, &MixerChannelItem::selectedChanged, this, &TrackListModel::updateStripChannelItem);
-
-    //! NOTE: the volume and pan curves drawn on the score: shown by the fader and knob, which can't be moved then
-    if (!tracks.auxIndex) {
-        QPointer<MixerChannelItem> guard(item);
-        playback()->automatedControlParamsChanges(tracks.trackId)
-        .onResolve(this, [guard](muse::audio::AutomatedControlParamsChanges changes) {
-            if (guard) {
-                guard->subscribeOnAutomatedControlParamsChanges(changes);
-            }
-        });
-    }
 }
 
 bool TrackListModel::isInstrumentEditorOpened(const Row& row) const

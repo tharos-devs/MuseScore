@@ -280,7 +280,6 @@ public:
     void subscribeOnAudioSignalChanges(muse::audio::AudioSignalChanges& audioSignalChanges);
     //! NOTE: the same, for this channel's own track (not the master's, see IPlayback::masterSignalChanges())
     void subscribeOnTrackAudioSignalChanges();
-    void subscribeOnAutomatedControlParamsChanges(muse::audio::AutomatedControlParamsChanges& changes);
 
     bool outputOnly() const;
 
@@ -504,6 +503,9 @@ protected:
 
     bool askAboutChangingSound();
 
+    void subscribeOnAutomationChanges();
+    void updateAutomatedControlParams();
+
     void setDisplayedVolumeLevel(float volumeLevel);
     void setDisplayedBalance(int balance);
     void setDisplayedGain(int gain);
@@ -526,6 +528,7 @@ protected:
 
     bool m_hasVolumeAutomation = false;
     bool m_hasBalanceAutomation = false;
+    bool m_subscribedOnAutomationChanges = false;
 
     InputResourceItem* m_inputResourceItem = nullptr;
     QMap<muse::audio::AudioFxChainOrder, OutputResourceItem*> m_outputResourceItems;
@@ -533,7 +536,6 @@ protected:
     AuxSendItemListModel* m_auxSendItemListModel = nullptr;
 
     muse::audio::AudioSignalChanges m_audioSignalChanges;
-    muse::audio::AutomatedControlParamsChanges m_automatedControlParamsChanges;
 
     QString m_title;
     bool m_outputOnly = false;

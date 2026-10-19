@@ -237,6 +237,7 @@ void MixerChannelItem::setInstrumentTrackId(const mu::engraving::InstrumentTrack
 {
     m_instrumentTrackId = instrumentTrackId;
 
+    subscribeOnAutomationChanges();
     updateHasAutomationFlags();
 }
 
@@ -1199,21 +1200,6 @@ void MixerChannelItem::subscribeOnAudioSignalChanges(AudioSignalChanges& audioSi
     });
 }
 
-void MixerChannelItem::subscribeOnAutomatedControlParamsChanges(AutomatedControlParamsChanges& changes)
-{
-    m_automatedControlParamsChanges = changes;
-
-    m_automatedControlParamsChanges.onReceive(this, [this](const AutomatedControlParams& params) {
-        if (m_hasVolumeAutomation) {
-            setDisplayedVolumeLevel(params.volume.raw());
-        }
-
-        if (m_hasBalanceAutomation) {
-            setDisplayedBalance(params.balance.raw() * BALANCE_SCALING_FACTOR);
-        }
-    });
-}
-
 void MixerChannelItem::setTitle(QString title)
 {
     if (m_title == title) {
@@ -1760,6 +1746,64 @@ void MixerChannelItem::updateHasAutomationFlags()
         if (!m_hasBalanceAutomation) {
             setDisplayedBalance(m_outParams.balance.raw() * BALANCE_SCALING_FACTOR);
         }
+    }
+
+    updateAutomatedControlParams();
+}
+
+void MixerChannelItem::subscribeOnAutomationChanges()
+{
+    if (m_subscribedOnAutomationChanges || !m_instrumentTrackId.isValid()) {
+        return;
+    }
+
+    INotationProjectPtr project = context()->currentProject();
+    const notation::AutomationDataConstPtr automationData = project ? project->masterNotation()->automation()->automationData() : nullptr;
+    if (!automationData) {
+        return;
+    }
+
+    m_subscribedOnAutomationChanges = true;
+
+    automationData->changed().onReceive(this, [this](const notation::AutomationChanges& changes) {
+        if (changes.isFullReset) {
+            updateHasAutomationFlags();
+            return;
+        }
+
+        for (const notation::AutomationCurveKey& key : changes.affectedKeys) {
+            if (key.type != notation::AutomationType::Volume && key.type != notation::AutomationType::Pan) {
+                continue;
+            }
+
+            if (key.trackId() == m_instrumentTrackId) {
+                updateHasAutomationFlags();
+                return;
+            }
+        }
+    });
+
+    //! NOTE: the curves move the fader and the knob as the playback position goes (playing, seeking, stopping)
+    context()->playbackState()->playbackPositionChanged().onReceive(this, [this](secs_t) {
+        updateAutomatedControlParams();
+    });
+}
+
+void MixerChannelItem::updateAutomatedControlParams()
+{
+    if (!m_hasVolumeAutomation && !m_hasBalanceAutomation) {
+        return;
+    }
+
+    const AutomatedControlParams params
+        = playbackController()->automatedControlParamsAt(m_instrumentTrackId, context()->playbackState()->playbackPosition());
+
+    if (m_hasVolumeAutomation) {
+        setDisplayedVolumeLevel(params.volume.raw());
+    }
+
+    if (m_hasBalanceAutomation) {
+        setDisplayedBalance(params.balance.raw() * BALANCE_SCALING_FACTOR);
     }
 }
 

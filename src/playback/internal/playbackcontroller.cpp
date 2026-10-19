@@ -2101,30 +2101,56 @@ ControlParams PlaybackController::trackControlParams(const InstrumentTrackId& in
         return outParams.control();
     }
 
-    auto buildAutomationEnvelope = [this](const AutomationCurve& curve) {
-        muse::audio::AutomationEnvelope envelope;
-        for (const auto& [tick, point] : curve) {
-            envelope.insert({ playedTickToSecs(tick), point.value });
-        }
-        return envelope;
-    };
-
     if (rebuildVolume) {
         const AutomationCurve& volumeCurve = automationData->curve(AutomationCurveKey::instrument(AutomationType::Volume,
                                                                                                   instrumentTrackId));
-        control.volume = !volumeCurve.empty() ? AutomatableValue<volume_db_t>(buildAutomationEnvelope(volumeCurve))
+        control.volume = !volumeCurve.empty() ? AutomatableValue<volume_db_t>(automationEnvelope(volumeCurve))
                          : AutomatableValue<volume_db_t>(outParams.volume);
     }
 
     if (rebuildPan) {
         const AutomationCurve& panCurve = automationData->curve(AutomationCurveKey::instrument(AutomationType::Pan, instrumentTrackId));
-        control.balance = !panCurve.empty() ? AutomatableValue<balance_t>(buildAutomationEnvelope(panCurve))
+        control.balance = !panCurve.empty() ? AutomatableValue<balance_t>(automationEnvelope(panCurve))
                           : AutomatableValue<balance_t>(outParams.balance);
     }
 
     m_automatedControlParamsCache[instrumentTrackId] = control;
 
     return control;
+}
+
+muse::audio::AutomationEnvelope PlaybackController::automationEnvelope(const AutomationCurve& curve) const
+{
+    muse::audio::AutomationEnvelope envelope;
+    for (const auto& [tick, point] : curve) {
+        envelope.insert({ playedTickToSecs(tick), point.value });
+    }
+    return envelope;
+}
+
+AutomatedControlParams PlaybackController::automatedControlParamsAt(const InstrumentTrackId& instrumentTrackId, secs_t position) const
+{
+    const AudioOutputParams outParams = trackOutputParams(instrumentTrackId);
+    AutomatedControlParams result { outParams.volume, outParams.balance };
+
+    const INotationAutomationPtr automation = m_masterNotation ? m_masterNotation->automation() : nullptr;
+    const AutomationDataConstPtr automationData = automation ? automation->automationData() : nullptr;
+    if (!automationData || !instrumentTrackId.isValid()) {
+        return result;
+    }
+
+    //! NOTE Evaluated the same way as the audio engine does (AutomationControlNode), so that it shows what is heard
+    const AutomationCurve& volumeCurve = automationData->curve(AutomationCurveKey::instrument(AutomationType::Volume, instrumentTrackId));
+    if (!volumeCurve.empty()) {
+        result.volume = AutomatableValue<volume_db_t>(automationEnvelope(volumeCurve)).evaluateAt(position, VOLUME_DB_MIN, VOLUME_DB_MAX);
+    }
+
+    const AutomationCurve& panCurve = automationData->curve(AutomationCurveKey::instrument(AutomationType::Pan, instrumentTrackId));
+    if (!panCurve.empty()) {
+        result.balance = AutomatableValue<balance_t>(automationEnvelope(panCurve)).evaluateAt(position, BALANCE_MIN, BALANCE_MAX);
+    }
+
+    return result;
 }
 
 void PlaybackController::onAutomationDataChanged(const AutomationChanges& changes)

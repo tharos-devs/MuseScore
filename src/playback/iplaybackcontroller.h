@@ -190,6 +190,11 @@ public:
     virtual engraving::MeasureBeat currentBeat() const = 0;
     virtual muse::audio::secs_t beatToSecs(int measureIndex, int beatIndex) const = 0;
 
+    //! NOTE The volume and pan the curves drawn on the score give the track at `position`, as the audio engine applies
+    //! them (its manual volume/pan where it has no curve)
+    virtual muse::audio::AutomatedControlParams automatedControlParamsAt(const engraving::InstrumentTrackId& instrumentTrackId,
+                                                                         muse::audio::secs_t position) const = 0;
+
     virtual double tempoMultiplier() const = 0;
     virtual void setTempoMultiplier(double multiplier) = 0;
 

@@ -124,6 +124,8 @@ public:
 
     MOCK_METHOD(engraving::MeasureBeat, currentBeat, (), (const, override));
     MOCK_METHOD(muse::audio::secs_t, beatToSecs, (int, int), (const, override));
+    MOCK_METHOD(muse::audio::AutomatedControlParams, automatedControlParamsAt, (const engraving::InstrumentTrackId&, muse::audio::secs_t),
+                (const, override));
 
     MOCK_METHOD(double, tempoMultiplier, (), (const, override));
     MOCK_METHOD(void, setTempoMultiplier, (double), (override));

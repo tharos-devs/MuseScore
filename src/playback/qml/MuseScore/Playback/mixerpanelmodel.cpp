@@ -1023,50 +1023,6 @@ void MixerPanelModel::setupConnections()
             item->loadMuteForceMuteState(muted, forceMute);
         }
     });
-
-    subscribeOnAutomationChanges();
-}
-
-void MixerPanelModel::subscribeOnAutomationChanges()
-{
-    if (!currentProject()) {
-        return;
-    }
-
-    AutomationDataConstPtr automation = currentProject()->masterNotation()->automation()->automationData();
-    if (!automation) {
-        return;
-    }
-
-    automation->changed().onReceive(this, [this](const AutomationChanges& changes) {
-        if (changes.isFullReset) {
-            for (MixerChannelItem* item : m_mixerChannelList) {
-                item->updateHasAutomationFlags();
-            }
-            return;
-        }
-
-        InstrumentTrackIdSet affectedTrackIds;
-        for (const AutomationCurveKey& key : changes.affectedKeys) {
-            if (key.type != AutomationType::Volume && key.type != AutomationType::Pan) {
-                continue;
-            }
-
-            if (const std::optional<InstrumentTrackId> trackId = key.trackId()) {
-                affectedTrackIds.insert(*trackId);
-            }
-        }
-
-        if (affectedTrackIds.empty()) {
-            return;
-        }
-
-        for (MixerChannelItem* item : m_mixerChannelList) {
-            if (muse::contains(affectedTrackIds, item->instrumentTrackId())) {
-                item->updateHasAutomationFlags();
-            }
-        }
-    });
 }
 
 void MixerPanelModel::onVideoAttachmentChanged()
@@ -1271,17 +1227,6 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         } else {
             LOGE() << "unable to get track name, error: " << trackName.ret.toString();
         }
-    });
-
-    playback()->automatedControlParamsChanges(trackId)
-    .onResolve(this, [this, trackId](AutomatedControlParamsChanges changes) {
-        if (MixerChannelItem* item = findChannelItem(trackId)) {
-            item->subscribeOnAutomatedControlParamsChanges(changes);
-        }
-    })
-    .onReject(this, [](int errCode, std::string text) {
-        LOGE() << "unable to subscribe on automated control params changes from mixer channel, error code: " << errCode
-               << ", " << text;
     });
 
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this]() {

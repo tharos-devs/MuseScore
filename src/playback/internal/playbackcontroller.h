@@ -172,6 +172,9 @@ public:
     engraving::MeasureBeat currentBeat() const override;
     muse::audio::secs_t beatToSecs(int measureIndex, int beatIndex) const override;
 
+    muse::audio::AutomatedControlParams automatedControlParamsAt(const engraving::InstrumentTrackId& instrumentTrackId,
+                                                                 muse::audio::secs_t position) const override;
+
     double tempoMultiplier() const override;
     void setTempoMultiplier(double multiplier) override;
 
@@ -298,6 +301,7 @@ private:
     void onTrackNewlyAdded(const engraving::InstrumentTrackId& instrumentTrackId);
 
     muse::audio::secs_t playedTickToSecs(int tick) const;
+    muse::audio::AutomationEnvelope automationEnvelope(const notation::AutomationCurve& curve) const;
 
     notation::INotationPtr m_notation;
     notation::IMasterNotationPtr m_masterNotation;
