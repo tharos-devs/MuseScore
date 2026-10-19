@@ -238,6 +238,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed playback that could hang for good (Play, Pause and Rewind no longer doing anything, no sound, the score still editable and savable): two audio threads could each wait for the other, when macOS moved the audio processing to another thread just as the end of playback or of a count-in was being handled. A thread sending a message to another one no longer waits for that thread's callbacks to finish (2026-10-19).
 - Fixed note velocities, note offsets and tuning differing between a part and the full score: edited in a part, they stayed in that part only (never heard, playback uses the full score) and later edits in the full score no longer reached it. They're now always shared by the score and its parts, and the parts of a score saved before are aligned with the full score when it opens (2026-10-17).
 - Fixed the view jumping to the top of the score during playback in Continuous view, when scrolled down a score with many staves: when the playback cursor reached the right edge of the view, or on Stop (also with smooth panning) (2026-10-17).
 - Fixed a crash when showing the automation curves again after editing the score while they were hidden (e.g. a slur or an undo that moved measures to other lines); the curves are also rebuilt when an edit leaves fewer lines while they're shown (2026-10-17).
