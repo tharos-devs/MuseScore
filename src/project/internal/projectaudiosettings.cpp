@@ -113,6 +113,30 @@ void ProjectAudioSettings::setVideoOutputParams(const AudioOutputParams& params,
     }
 }
 
+bool ProjectAudioSettings::containsReferenceAudioOutputParams() const
+{
+    return m_referenceAudioOutputParams.has_value();
+}
+
+const AudioOutputParams& ProjectAudioSettings::referenceAudioOutputParams() const
+{
+    static const AudioOutputParams DEFAULT;
+    return m_referenceAudioOutputParams ? *m_referenceAudioOutputParams : DEFAULT;
+}
+
+void ProjectAudioSettings::setReferenceAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged)
+{
+    if (m_referenceAudioOutputParams == params) {
+        return;
+    }
+
+    m_referenceAudioOutputParams = params;
+
+    if (notifySettingsChanged) {
+        m_settingsChanged.notify();
+    }
+}
+
 bool ProjectAudioSettings::containsAuxOutputParams(aux_channel_idx_t index) const
 {
     return muse::contains(m_auxOutputParams, index);
@@ -503,6 +527,10 @@ Ret ProjectAudioSettings::read(const engraving::MscReader& reader)
         m_videoOutputParams = outputParamsFromJson(rootObj.value("video").toObject().value("out").toObject());
     }
 
+    if (rootObj.contains("referenceAudio")) {
+        m_referenceAudioOutputParams = outputParamsFromJson(rootObj.value("referenceAudio").toObject().value("out").toObject());
+    }
+
     QJsonArray auxArray = rootObj.value("aux").toArray();
     for (aux_channel_idx_t i = 0; i < static_cast<aux_channel_idx_t>(auxArray.size()); ++i) {
         QJsonObject auxObject = auxArray[i].toObject();
@@ -609,6 +637,12 @@ Ret ProjectAudioSettings::write(engraving::MscWriter& writer, notation::INotatio
         QJsonObject videoObj;
         videoObj["out"] = outputParamsToJson(*m_videoOutputParams);
         rootObj["video"] = videoObj;
+    }
+
+    if (m_referenceAudioOutputParams) {
+        QJsonObject referenceAudioObj;
+        referenceAudioObj["out"] = outputParamsToJson(*m_referenceAudioOutputParams);
+        rootObj["referenceAudio"] = referenceAudioObj;
     }
 
     QJsonArray auxArray;

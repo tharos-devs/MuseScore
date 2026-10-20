@@ -100,6 +100,7 @@ private:
     muse::uicomponents::MenuItem* makeAddMenu();
     muse::uicomponents::MenuItem* makeFormatMenu();
     muse::uicomponents::MenuItem* makeToolsMenu();
+    muse::uicomponents::MenuItem* makeAudioMenu();
     muse::uicomponents::MenuItemList makeExtensionsSubitems();
     muse::uicomponents::MenuItem* makeExtensionsMenu();
     muse::uicomponents::MenuItem* makeHelpMenu(bool addDiagnosticsSubMenu);

@@ -24,6 +24,8 @@
 
 #include "notation/inotation.h"
 #include "notation/inotationinteraction.h"
+#include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
 
 #include "../playbackcommands.h"
 
@@ -43,6 +45,13 @@ void PlaybackCommandsState::init()
 {
     globalContext()->currentProjectChanged().onNotify(this, [this]() {
         updateCommandStates();
+
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        if (project && project->audioSyncSettings()) {
+            project->audioSyncSettings()->settingsChanged().onNotify(this, [this]() {
+                updateCommandStates({ REMOVE_REFERENCE_AUDIO_COMMAND });
+            }, Asyncable::Mode::SetReplace);
+        }
     });
 
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
@@ -180,6 +189,13 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
 {
     if (!isProjectOpened()) {
         return CommandState(false, false);
+    }
+
+    if (command == LOAD_REFERENCE_AUDIO_COMMAND) {
+        return CommandState(true, false);
+    } else if (command == REMOVE_REFERENCE_AUDIO_COMMAND) {
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        return CommandState(project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid(), false);
     }
 
     if (!playbackController()->isPlayAllowed()) {

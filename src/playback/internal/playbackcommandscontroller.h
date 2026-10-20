@@ -40,6 +40,7 @@
 #include "../imidiccrecorder.h"
 #include "../iplaybackconfiguration.h"
 #include "notation/inotationconfiguration.h"
+#include "context/iglobalcontext.h"
 
 namespace mu::playback {
 class PlaybackCommandsController : public IPlaybackCommandsController, public muse::Contextable, public muse::actions::Actionable,
@@ -53,6 +54,7 @@ class PlaybackCommandsController : public IPlaybackCommandsController, public mu
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<IMidiCcRecorder> midiCcRecorder = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
+    muse::ContextInject<context::IGlobalContext> globalContext = { this };
 public:
     PlaybackCommandsController(const muse::modularity::ContextPtr& ctx)
         : muse::Contextable(ctx) {}
@@ -63,6 +65,8 @@ private:
 
     muse::Ret rewind(const muse::rcommand::Params& params);
     muse::Ret showPlaybackSetup();
+    muse::Ret loadReferenceAudio();
+    muse::Ret removeReferenceAudio();
 
     muse::Ret toggleMixerSection(const muse::rcommand::Params& params);
     muse::Ret toggleChannelCategory(const muse::rcommand::Params& params);

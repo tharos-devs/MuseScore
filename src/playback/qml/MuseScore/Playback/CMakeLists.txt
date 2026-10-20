@@ -33,6 +33,10 @@ qt_add_qml_module(playback_qml
     SOURCES
         abstractaudioresourceitem.cpp
         abstractaudioresourceitem.h
+        audiosync/audiosyncview.cpp
+        audiosync/audiosyncview.h
+        audiosync/referenceaudiopeaks.cpp
+        audiosync/referenceaudiopeaks.h
         auxbuseditor.cpp
         auxbuseditor.h
         auxsenditem.cpp
@@ -135,6 +139,7 @@ qt_add_qml_module(playback_qml
         internal/VideoHitPointsPanel.qml
         internal/VolumePressureMeter.qml
         internal/VolumeSlider.qml
+        AudioSyncPanel.qml
         MixerPanel.qml
         NotationRegionsBeingProcessedView.qml
         OnlineSoundsStatusView.qml

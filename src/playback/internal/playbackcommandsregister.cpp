@@ -109,6 +109,20 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::METRONOME, rcommand::Checkable::Yes)
     },
     CommandInfo{
+        LOAD_REFERENCE_AUDIO_COMMAND,
+        TranslatableString("playback", "&Load reference audio…"),
+        TranslatableString("playback", "Load an audio file to sync the score's tempo to"),
+        InputSchema(),
+        Decoration(IconCode::Code::OPEN_FILE)
+    },
+    CommandInfo{
+        REMOVE_REFERENCE_AUDIO_COMMAND,
+        TranslatableString("playback", "&Remove reference audio"),
+        TranslatableString("playback", "Remove the reference audio from the score"),
+        InputSchema(),
+        Decoration(IconCode::Code::DELETE_TANK)
+    },
+    CommandInfo{
         OPEN_PLAYBACK_SETUP_COMMAND,
         TranslatableString("playback", "Playback setup"),
         TranslatableString("playback", "Show playback setup"),

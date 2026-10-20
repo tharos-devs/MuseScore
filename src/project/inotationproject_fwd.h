@@ -34,6 +34,9 @@ using IProjectAudioSettingsPtr = std::shared_ptr<IProjectAudioSettings>;
 class IProjectVideoSettings;
 using IProjectVideoSettingsPtr = std::shared_ptr<IProjectVideoSettings>;
 
+class IProjectAudioSyncSettings;
+using IProjectAudioSyncSettingsPtr = std::shared_ptr<IProjectAudioSyncSettings>;
+
 class IProjectUndoStack;
 using IProjectUndoStackPtr = std::shared_ptr<IProjectUndoStack>;
 

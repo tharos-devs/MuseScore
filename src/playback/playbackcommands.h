@@ -56,6 +56,10 @@ inline static const muse::rcommand::Command CLEAR_ONLINESOUNDS_CACHE_COMMAND("co
 inline static const muse::rcommand::Command PROCESS_ONLINESOUNDS_COMMAND("command://playback/process-onlinesounds");
 inline static const muse::rcommand::Command RELOAD_PLAYBACK_CACHE_COMMAND("command://playback/reload-playback-cache");
 
+//! NOTE The Audio sync window's reference audio
+inline static const muse::rcommand::Command LOAD_REFERENCE_AUDIO_COMMAND("command://playback/load-reference-audio");
+inline static const muse::rcommand::Command REMOVE_REFERENCE_AUDIO_COMMAND("command://playback/remove-reference-audio");
+
 inline static const muse::rcommand::Command TOGGLE_MIXER_SECTION_COMMAND("command://playback/toggle-mixer-section"); // with params
 inline static const muse::rcommand::Command TOGGLE_CHANNEL_CATEGORY_COMMAND("command://playback/toggle-channel-category"); // with params
 inline static const muse::rcommand::Command TOGGLE_MIXER_CONDENSED_VIEW_COMMAND("command://playback/toggle-mixer-condensed-view");

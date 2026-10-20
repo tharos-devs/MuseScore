@@ -29,6 +29,11 @@
 #include "rcommand/commandtypes.h"
 #include "audio/common/audiotypes.h"
 
+#include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
+
+#include "referenceaudiofile.h"
+
 #include "../playbackcommands.h"
 
 using namespace muse;
@@ -83,6 +88,8 @@ void PlaybackCommandsController::init()
         return muse::make_ok();
     });
     registerCommand(OPEN_PLAYBACK_SETUP_COMMAND, [this]() { return showPlaybackSetup(); });
+    registerCommand(LOAD_REFERENCE_AUDIO_COMMAND, [this]() { return loadReferenceAudio(); });
+    registerCommand(REMOVE_REFERENCE_AUDIO_COMMAND, [this]() { return removeReferenceAudio(); });
     registerCommand(RELOAD_PLAYBACK_CACHE_COMMAND, &IPlaybackController::reloadPlaybackCache);
 
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
@@ -133,6 +140,28 @@ muse::Ret PlaybackCommandsController::rewind(const muse::rcommand::Params& param
 {
     double secs = params.at("position").toDouble();
     return playbackController()->rewind(secs_t(secs));
+}
+
+muse::Ret PlaybackCommandsController::loadReferenceAudio()
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    if (!project) {
+        return muse::make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    audiosync::chooseReferenceAudio(interactive().get(), project->audioSyncSettings());
+    return muse::make_ok();
+}
+
+muse::Ret PlaybackCommandsController::removeReferenceAudio()
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    if (!project || !project->audioSyncSettings()) {
+        return muse::make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    project->audioSyncSettings()->clearReferenceAudio();
+    return muse::make_ok();
 }
 
 muse::Ret PlaybackCommandsController::showPlaybackSetup()

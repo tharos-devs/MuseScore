@@ -34,8 +34,8 @@ class QAudioDecoder;
 class QAudioBuffer;
 
 namespace mu::playback {
-//! NOTE Decodes the audio track of a video file into a 16-bit stereo PCM WAV file in the app's cache
-//! directory, to be played by the audio engine as a sound track (see IPlayback::addSoundTrack()).
+//! NOTE Decodes the audio track of a video file (or a plain audio file: WAV, MP3, FLAC, OGG, M4A...) into a
+//! 16-bit stereo PCM WAV file in the app's cache directory, to be played by the audio engine as a sound track (see IPlayback::addSoundTrack()).
 //! Uses Qt Multimedia's QAudioDecoder (backed by the FFmpeg bundled with Qt), so it doesn't depend
 //! on the user-configured FFmpeg used by video export. Results are cached by file path, size,
 //! modification time and sample rate, so reopening a project doesn't decode again.
@@ -46,12 +46,15 @@ class VideoAudioDecoder : public QObject
 public:
     //! NOTE Empty path: the video has no audio track (or it couldn't be decoded)
     using Callback = std::function<void (const muse::io::path_t& wavPath)>;
+    //! NOTE Decoded fraction, in [0; 1]
+    using ProgressCallback = std::function<void (double progress)>;
 
     explicit VideoAudioDecoder(QObject* parent = nullptr);
     ~VideoAudioDecoder() override;
 
     //! NOTE Cancels any decoding in progress; the callback is always called asynchronously
-    void decode(const muse::io::path_t& videoPath, unsigned int sampleRate, const Callback& onFinished);
+    void decode(const muse::io::path_t& videoPath, unsigned int sampleRate, const Callback& onFinished,
+                const ProgressCallback& onProgress = nullptr);
     void cancel();
 
     bool isDecoding() const;
@@ -71,6 +74,7 @@ private:
     QFile m_file;
     QString m_targetPath;
     Callback m_callback;
+    ProgressCallback m_progressCallback;
     quint32 m_fileSampleRate = 0;
     quint64 m_dataBytes = 0;
     quint64 m_generation = 0;

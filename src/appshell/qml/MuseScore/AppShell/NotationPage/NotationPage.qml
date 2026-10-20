@@ -697,6 +697,37 @@ DockPage {
         },
 
         DockPanel {
+            id: audioSyncPanel
+
+            objectName: root.pageModel.audioSyncPanelName()
+            title: qsTrc("appshell", "Audio sync")
+
+            height: 240
+            minimumHeight: root.horizontalPanelMinHeight
+            maximumHeight: root.horizontalPanelMaxHeight
+
+            minimumWidth: root.panelMinDimension
+            maximumWidth: root.panelMaxDimension
+
+            groupName: root.horizontalPanelsGroup
+            secondaryWindowAllowed: true
+
+            //! NOTE: hidden by default
+            visible: false
+
+            location: Location.Bottom
+
+            dropDestinations: root.horizontalPanelDropDestinations
+
+            navigationSection: root.navigationPanelSec(audioSyncPanel.location)
+
+            AudioSyncPanel {
+                navigationSection: audioSyncPanel.navigationSection
+                contentNavigationPanelOrderStart: audioSyncPanel.contentNavigationPanelOrderStart
+            }
+        },
+
+        DockPanel {
             id: timelinePanel
 
             objectName: root.pageModel.timelinePanelName()

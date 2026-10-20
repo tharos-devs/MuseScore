@@ -105,6 +105,7 @@ NotationProject::~NotationProject()
 {
     m_projectAudioSettings = nullptr;
     m_projectVideoSettings = nullptr;
+    m_projectAudioSyncSettings = nullptr;
     m_projectUndoStack = nullptr;
     m_masterNotation = nullptr;
     m_engravingProject = nullptr;
@@ -119,6 +120,7 @@ void NotationProject::setupProject()
     m_masterNotation = std::shared_ptr<MasterNotation>(new MasterNotation(this, iocContext()));
     m_projectAudioSettings = std::shared_ptr<ProjectAudioSettings>(new ProjectAudioSettings(iocContext()));
     m_projectVideoSettings = std::make_shared<ProjectVideoSettings>();
+    m_projectAudioSyncSettings = std::make_shared<ProjectAudioSyncSettings>();
     m_projectUndoStack = std::make_shared<ProjectUndoStack>();
 }
 
@@ -252,6 +254,12 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
         m_projectVideoSettings->makeDefault();
     }
 
+    // Load audio sync settings (the reference audio file)
+    ret = m_projectAudioSyncSettings->read(reader, path);
+    if (!ret) {
+        m_projectAudioSyncSettings->makeDefault();
+    }
+
     // Load cloud info
     {
         m_cloudInfo.sourceUrl = masterScore->metaTags()[SOURCE_TAG].toQString();
@@ -352,6 +360,7 @@ Ret NotationProject::doImport(const muse::io::path_t& path, const OpenParams& op
     // Setup audio settings
     m_projectAudioSettings->makeDefault();
     m_projectVideoSettings->makeDefault();
+    m_projectAudioSyncSettings->makeDefault();
 
     // Setup view state
     m_masterNotation->notation()->viewState()->makeDefault();
@@ -399,6 +408,7 @@ Ret NotationProject::createNew(const ProjectCreateOptions& projectOptions)
     // Setup audio settings
     m_projectAudioSettings->makeDefault();
     m_projectVideoSettings->makeDefault();
+    m_projectAudioSyncSettings->makeDefault();
 
     // Setup view state
     m_masterNotation->notation()->viewState()->makeDefault();
@@ -964,6 +974,14 @@ Ret NotationProject::writeProject(MscWriter& msczWriter, bool createThumbnail, c
         return ret;
     }
 
+    // Write audio sync settings
+    const muse::io::path_t writtenPath = msczWriter.params().filePath.empty() ? m_path : msczWriter.params().filePath;
+    ret = m_projectAudioSyncSettings->write(msczWriter, writtenPath);
+    if (!ret) {
+        LOGE() << "failed write project audio sync settings, err: " << ret.toString();
+        return ret;
+    }
+
     // Write master view settings
     m_masterNotation->notation()->viewState()->write(msczWriter);
 
@@ -1167,6 +1185,11 @@ void NotationProject::listenIfNeedSaveChanges()
         markAsUnsaved();
         m_hasNonUndoStackChanges = true;
     });
+
+    m_projectAudioSyncSettings->settingsChanged().onNotify(this, [this]() {
+        markAsUnsaved();
+        m_hasNonUndoStackChanges = true;
+    });
 }
 
 void NotationProject::markAsSaved(const muse::io::path_t& path)
@@ -1337,6 +1360,11 @@ IProjectAudioSettingsPtr NotationProject::audioSettings() const
 IProjectVideoSettingsPtr NotationProject::videoSettings() const
 {
     return m_projectVideoSettings;
+}
+
+IProjectAudioSyncSettingsPtr NotationProject::audioSyncSettings() const
+{
+    return m_projectAudioSyncSettings;
 }
 
 IProjectUndoStackPtr NotationProject::undoStack() const

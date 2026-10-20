@@ -105,7 +105,8 @@ bool VideoAudioDecoder::isDecoding() const
     return m_decoder != nullptr;
 }
 
-void VideoAudioDecoder::decode(const muse::io::path_t& videoPath, unsigned int sampleRate, const Callback& onFinished)
+void VideoAudioDecoder::decode(const muse::io::path_t& videoPath, unsigned int sampleRate, const Callback& onFinished,
+                               const ProgressCallback& onProgress)
 {
     cancel();
 
@@ -158,6 +159,7 @@ void VideoAudioDecoder::decode(const muse::io::path_t& videoPath, unsigned int s
     m_fileSampleRate = 0;
     m_dataBytes = 0;
     m_callback = onFinished;
+    m_progressCallback = onProgress;
 
     QAudioFormat format;
     format.setSampleRate(static_cast<int>(sampleRate));
@@ -171,6 +173,12 @@ void VideoAudioDecoder::decode(const muse::io::path_t& videoPath, unsigned int s
     connect(m_decoder, &QAudioDecoder::bufferReady, this, &VideoAudioDecoder::onBufferReady);
     connect(m_decoder, &QAudioDecoder::finished, this, &VideoAudioDecoder::onFinished);
     connect(m_decoder, qOverload<QAudioDecoder::Error>(&QAudioDecoder::error), this, &VideoAudioDecoder::onError);
+    connect(m_decoder, &QAudioDecoder::positionChanged, this, [this](qint64 positionMs) {
+        const qint64 durationMs = m_decoder ? m_decoder->duration() : -1;
+        if (m_progressCallback && durationMs > 0) {
+            m_progressCallback(std::clamp(static_cast<double>(positionMs) / static_cast<double>(durationMs), 0.0, 1.0));
+        }
+    });
 
     LOGI() << "decoding video audio: " << videoPath << " -> " << m_targetPath;
     m_decoder->start();
@@ -199,6 +207,7 @@ void VideoAudioDecoder::cancel()
     }
 
     m_callback = nullptr;
+    m_progressCallback = nullptr;
 }
 
 void VideoAudioDecoder::onBufferReady()
@@ -323,6 +332,7 @@ void VideoAudioDecoder::finish(bool ok)
 {
     Callback callback = m_callback;
     m_callback = nullptr;
+    m_progressCallback = nullptr;
 
 #ifdef MUE_PLAYBACK_HAS_QT_MULTIMEDIA
     if (m_decoder) {

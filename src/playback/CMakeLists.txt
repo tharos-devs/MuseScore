@@ -55,6 +55,10 @@ target_sources(playback PRIVATE
     internal/knownaudiopluginsconfigurator.h
     internal/videoaudiodecoder.cpp
     internal/videoaudiodecoder.h
+    internal/soundtrackslot.cpp
+    internal/soundtrackslot.h
+    internal/referenceaudiofile.cpp
+    internal/referenceaudiofile.h
     internal/trackpresets.cpp
     internal/trackpresets.h
 )

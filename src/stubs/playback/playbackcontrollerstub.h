@@ -101,6 +101,14 @@ public:
     bool isVideoForceMuted() const override;
     muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
 
+    muse::audio::TrackId referenceAudioTrackId() const override;
+    project::AudioOutputParams referenceAudioOutputParams() const override;
+    void setReferenceAudioOutputParams(const project::AudioOutputParams& params) override;
+    bool isReferenceAudioForceMuted() const override;
+    muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const override;
+    ReferenceAudioDecodeState referenceAudioDecodeState() const override;
+    muse::async::Notification referenceAudioDecodeStateChanged() const override;
+
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;
     void playNotes(const engraving::NoteValList& notes, engraving::staff_idx_t staffIdx, const engraving::Segment* segment,

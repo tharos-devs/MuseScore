@@ -198,6 +198,11 @@ void MscWriter::writeVideoSettingsJsonFile(const ByteArray& data)
     addFileData(u"videosettings.json", data);
 }
 
+void MscWriter::writeAudioSyncJsonFile(const ByteArray& data)
+{
+    addFileData(u"audiosync.json", data);
+}
+
 void MscWriter::writeViewSettingsJsonFile(const ByteArray& data, const muse::io::path_t& pathPrefix)
 {
     addFileData(pathPrefix.toString() + u"viewsettings.json", data);

@@ -49,6 +49,10 @@ public:
     const AudioOutputParams& videoOutputParams() const override;
     void setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) override;
 
+    bool containsReferenceAudioOutputParams() const override;
+    const AudioOutputParams& referenceAudioOutputParams() const override;
+    void setReferenceAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) override;
+
     bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const override;
     void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params,
@@ -144,6 +148,7 @@ private:
 
     AudioOutputParams m_masterOutputParams;
     std::optional<AudioOutputParams> m_videoOutputParams;
+    std::optional<AudioOutputParams> m_referenceAudioOutputParams;
 
     std::map<muse::audio::aux_channel_idx_t, AudioOutputParams> m_auxOutputParams;
     std::unordered_map<muse::audio::aux_channel_idx_t, SoloMuteState> m_auxSoloMuteStatesMap;

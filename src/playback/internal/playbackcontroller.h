@@ -44,7 +44,7 @@
 #include "interactive/iinteractive.h"
 
 #include "drumsetloader.h"
-#include "videoaudiodecoder.h"
+#include "soundtrackslot.h"
 
 #include "muse_framework_config.h"
 #ifdef MUSE_MODULE_VST
@@ -55,6 +55,7 @@
 #include "../iplaybackconfiguration.h"
 #include "../isoundprofilesrepository.h"
 #include "project/iprojectvideosettings.h"
+#include "project/iprojectaudiosyncsettings.h"
 
 namespace mu::playback {
 class OnlineSoundsController;
@@ -151,6 +152,14 @@ public:
     bool isVideoAudioIncludedInExport() const override;
     bool isVideoForceMuted() const override;
     muse::async::Channel<bool, bool> videoMuteStateChanged() const override;
+
+    muse::audio::TrackId referenceAudioTrackId() const override;
+    project::AudioOutputParams referenceAudioOutputParams() const override;
+    void setReferenceAudioOutputParams(const project::AudioOutputParams& params) override;
+    bool isReferenceAudioForceMuted() const override;
+    muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const override;
+    ReferenceAudioDecodeState referenceAudioDecodeState() const override;
+    muse::async::Notification referenceAudioDecodeStateChanged() const override;
 
     void playElements(const std::vector<const engraving::EngravingItem*>& elements,
                       const PlayParams& params = PlayParams(), bool isMidi = false) override;
@@ -250,13 +259,19 @@ private:
     project::IProjectVideoSettingsPtr videoSettings() const;
     void updateMasterControlParams();
 
+    project::IProjectAudioSyncSettingsPtr audioSyncSettings() const;
+
+    std::unique_ptr<SoundTrackSlot> makeSoundTrackSlot(std::function<std::string()> title,
+                                                       std::function<project::AudioOutputParams()> outputParams);
+    //! NOTE Sound tracks (the video's, the reference audio): output params changed in the engine
+    //! (Mixer...) persisted; false if trackId isn't one of them
+    bool persistSoundTrackOutputParams(muse::audio::TrackId trackId, const std::function<void(project::AudioOutputParams&)>& mutate);
+
     void onVideoAttachmentChanged();
-    void addVideoTrack();
-    void removeVideoTrack();
-    void startVideoAudioDecoding(const muse::io::path_t& videoPath);
-    muse::audio::AudioSourceParams videoSourceParams() const;
-    void applyVideoSourceParams();
     void updateVideoMuteState(bool hasSolo);
+
+    void onReferenceAudioChanged();
+    void updateReferenceAudioMuteState(bool hasSolo);
 
     void resetPlayback();
     void setupPlaybackIfNeed();
@@ -315,17 +330,10 @@ private:
     muse::async::Channel<bool> m_loopEnabledChanged;
     muse::async::Notification m_totalPlayTimeChanged;
     muse::async::Notification m_currentTempoChanged;
-    muse::audio::TrackId m_videoTrackId = muse::audio::INVALID_TRACK_ID;
-    bool m_isVideoTrackBeingAdded = false;
-    bool m_isVideoAudioDecodePending = false;
-    bool m_videoTrackFailed = false; // the engine refused it: nothing to wait for
-    std::unique_ptr<VideoAudioDecoder> m_videoAudioDecoder;
-    muse::io::path_t m_videoAudioSourcePath; //! the video whose audio m_videoAudioWavPath is (being) decoded from
-    muse::io::path_t m_videoAudioWavPath;
-    muse::audio::AudioSourceParams m_lastAppliedVideoSourceParams;
-    std::optional<std::pair<bool, bool> > m_lastAppliedVideoMuteState; //! (muted, forceMute)
-    bool m_isVideoForceMuted = false;
+    std::unique_ptr<SoundTrackSlot> m_videoSlot;
     muse::async::Channel<bool, bool> m_videoMuteStateChanged;
+    std::unique_ptr<SoundTrackSlot> m_referenceAudioSlot;
+    muse::async::Channel<bool, bool> m_referenceAudioMuteStateChanged;
 
     muse::midi::tick_t m_currentTick = 0;
     notation::Tempo m_currentTempo;

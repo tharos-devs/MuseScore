@@ -238,6 +238,14 @@ const UiActionList ApplicationUiActions::m_actions = {
              TranslatableString("action", "Show/hide track list"),
              ui::Checkable::Yes
              ),
+    UiAction("toggle-audio-sync-panel",
+             mu::context::UiCtxProjectOpened,
+             mu::context::CTX_ANY,
+             TranslatableString("action", "Audio &sync"),
+             TranslatableString("action", "Show/hide the audio sync window"),
+             IconCode::Code::WAVEFORM,
+             ui::Checkable::Yes
+             ),
     //! NOTE: not checkable here: the View menu shows the command's checked state
     UiAction("toggle-secondary-window",
              mu::context::UiCtxProjectOpened,
@@ -461,6 +469,7 @@ const QMap<ActionCode, DockName>& ApplicationUiActions::toggleDockActions()
         { "toggle-piano-keyboard", PIANO_KEYBOARD_PANEL_NAME },
         { "toggle-video-panel", VIDEO_PANEL_NAME },
         { "toggle-track-list", TRACK_LIST_PANEL_NAME },
+        { "toggle-audio-sync-panel", AUDIO_SYNC_PANEL_NAME },
         { TOGGLE_PERCUSSION_PANEL_ACTION_CODE, PERCUSSION_PANEL_NAME },
 
         { "toggle-statusbar", NOTATION_STATUSBAR_NAME },

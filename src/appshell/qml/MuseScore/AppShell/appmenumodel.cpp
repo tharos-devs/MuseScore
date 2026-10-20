@@ -102,6 +102,7 @@ void AppMenuModel::load()
         makeAddMenu(),
         makeFormatMenu(),
         makeToolsMenu(),
+        makeAudioMenu(),
         makeExtensionsMenu()
     };
 
@@ -311,6 +312,7 @@ MenuItem* AppMenuModel::makeViewMenu()
         makeMenuItem(DOCK_TOGGLE_MIXER_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PIANO_KEYBOARD_COMMAND),
         makeMenuItem(DOCK_TOGGLE_VIDEO_PANEL_COMMAND),
+        makeMenuItem(DOCK_TOGGLE_AUDIO_SYNC_PANEL_COMMAND),
         makeMenuItem(DOCK_TOGGLE_TRACK_LIST_COMMAND),
         makeMenuItem(DOCK_TOGGLE_PERCUSSION_COMMAND),
         makeMenuItem(OPEN_PLAYBACK_SETUP_COMMAND),
@@ -386,6 +388,19 @@ MenuItem* AppMenuModel::makeFormatMenu()
     };
 
     return makeMenu(TranslatableString("appshell/menu/format", "F&ormat"), formatItems, "menu-format");
+}
+
+//! NOTE The Audio sync window: a reference recording the score's tempo is synced to
+MenuItem* AppMenuModel::makeAudioMenu()
+{
+    MenuItemList audioItems {
+        makeMenuItem(DOCK_TOGGLE_AUDIO_SYNC_PANEL_COMMAND),
+        makeSeparator(),
+        makeMenuItem(LOAD_REFERENCE_AUDIO_COMMAND),
+        makeMenuItem(REMOVE_REFERENCE_AUDIO_COMMAND),
+    };
+
+    return makeMenu(TranslatableString("appshell/menu/audio", "A&udio"), audioItems, "menu-audio");
 }
 
 MenuItem* AppMenuModel::makeToolsMenu()
