@@ -243,6 +243,50 @@ std::vector<DetectedBeat> trackBeats(const std::vector<Onset>& onsets, const Bea
     return beats;
 }
 
+std::optional<double> findMusicStart(const MappedWav& wav, const CancelFlag& canceled)
+{
+    constexpr double WINDOW_SECS = 0.01;
+    constexpr double SILENCE_DB = -40.0; // below the loudest window
+    constexpr int SUSTAINED_WINDOWS = 5; // 50 ms: not a click or a breath
+
+    const int64_t window = std::max<int64_t>(1, std::llround(wav.sampleRate * WINDOW_SECS));
+    const int64_t windows = wav.frames / window;
+    if (windows <= 0) {
+        return std::nullopt;
+    }
+
+    std::vector<float> rms(static_cast<size_t>(windows));
+    float peak = 0.f;
+    for (int64_t w = 0; w < windows; ++w) {
+        if ((w & 0xfff) == 0 && canceled) {
+            return std::nullopt;
+        }
+
+        double sum = 0.0;
+        for (int64_t f = w * window; f < (w + 1) * window; ++f) {
+            const float s = wav.monoSample(f);
+            sum += s * s;
+        }
+        rms[static_cast<size_t>(w)] = static_cast<float>(std::sqrt(sum / static_cast<double>(window)));
+        peak = std::max(peak, rms[static_cast<size_t>(w)]);
+    }
+
+    if (peak <= 0.f) {
+        return std::nullopt;
+    }
+
+    const float threshold = peak * static_cast<float>(std::pow(10.0, SILENCE_DB / 20.0));
+    int run = 0;
+    for (int64_t w = 0; w < windows; ++w) {
+        run = rms[static_cast<size_t>(w)] >= threshold ? run + 1 : 0;
+        if (run >= SUSTAINED_WINDOWS) {
+            return static_cast<double>((w - SUSTAINED_WINDOWS + 1) * window) / wav.sampleRate;
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::vector<DetectedBeat> detectBeats(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,
                                       const ProgressFn& progress)
 {

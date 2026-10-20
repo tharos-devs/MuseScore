@@ -1591,7 +1591,8 @@ void PlaybackController::onReferenceAudioChanged()
         if (m_masterNotation && m_masterNotation->automation()) {
             source.offsetMs = static_cast<int>(std::lround(m_masterNotation->automation()->audioSyncOffsetSecs() * 1000.0));
         }
-        source.offsetMs += referenceAudio.latencyMs;
+        //! NOTE A track delay plays it later: an earlier file position at the same playback time
+        source.offsetMs -= referenceAudio.delayMs;
     }
 
     const bool hadTrack = m_referenceAudioSlot->trackId() != INVALID_TRACK_ID;

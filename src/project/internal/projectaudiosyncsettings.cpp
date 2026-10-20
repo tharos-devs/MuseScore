@@ -73,6 +73,16 @@ muse::async::Notification ProjectAudioSyncSettings::settingsChanged() const
     return m_settingsChanged;
 }
 
+const AudioSyncViewState& ProjectAudioSyncSettings::viewState() const
+{
+    return m_viewState;
+}
+
+void ProjectAudioSyncSettings::setViewState(const AudioSyncViewState& state)
+{
+    m_viewState = state;
+}
+
 muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, const muse::io::path_t& projectPath)
 {
     makeDefault();
@@ -122,10 +132,15 @@ muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, con
     m_referenceAudio.solo = audioObj.value("solo").toBool(false);
     m_referenceAudio.includeInExport = audioObj.value("includeInExport").toBool(false);
     m_referenceAudio.showStereo = audioObj.value("showStereo").toBool(true);
-    m_referenceAudio.latencyMs = std::clamp(audioObj.value("latencyMs").toInt(0), -1000, 1000);
+    m_referenceAudio.delayMs = std::clamp(audioObj.value("delayMs").toInt(0), -500, 500);
     m_referenceAudio.loopFromSecs = audioObj.value("loopFromSecs").toDouble(-1.0);
     m_referenceAudio.loopToSecs = audioObj.value("loopToSecs").toDouble(-1.0);
     m_referenceAudio.loopEnabled = audioObj.value("loopEnabled").toBool(false);
+
+    const QJsonObject viewObj = rootObj.value("view").toObject();
+    m_viewState.pixelsPerSecond = viewObj.value("pixelsPerSecond").toDouble(0.0);
+    m_viewState.scrollSecs = viewObj.value("scrollSecs").toDouble(0.0);
+    m_viewState.amplitudeZoom = viewObj.value("amplitudeZoom").toDouble(1.0);
 
     return make_ret(Ret::Code::Ok);
 }
@@ -146,7 +161,7 @@ muse::Ret ProjectAudioSyncSettings::write(engraving::MscWriter& writer, const mu
     audioObj["solo"] = m_referenceAudio.solo;
     audioObj["includeInExport"] = m_referenceAudio.includeInExport;
     audioObj["showStereo"] = m_referenceAudio.showStereo;
-    audioObj["latencyMs"] = m_referenceAudio.latencyMs;
+    audioObj["delayMs"] = m_referenceAudio.delayMs;
     audioObj["loopFromSecs"] = m_referenceAudio.loopFromSecs;
     audioObj["loopToSecs"] = m_referenceAudio.loopToSecs;
     audioObj["loopEnabled"] = m_referenceAudio.loopEnabled;
@@ -154,6 +169,14 @@ muse::Ret ProjectAudioSyncSettings::write(engraving::MscWriter& writer, const mu
     QJsonObject rootObj;
     rootObj["version"] = AUDIO_SYNC_SETTINGS_VERSION;
     rootObj["referenceAudio"] = audioObj;
+
+    if (m_viewState.isValid()) {
+        QJsonObject viewObj;
+        viewObj["pixelsPerSecond"] = m_viewState.pixelsPerSecond;
+        viewObj["scrollSecs"] = m_viewState.scrollSecs;
+        viewObj["amplitudeZoom"] = m_viewState.amplitudeZoom;
+        rootObj["view"] = viewObj;
+    }
 
     const QByteArray json = QJsonDocument(rootObj).toJson();
     writer.writeAudioSyncJsonFile(ByteArray::fromQByteArrayNoCopy(json));
@@ -164,4 +187,5 @@ muse::Ret ProjectAudioSyncSettings::write(engraving::MscWriter& writer, const mu
 void ProjectAudioSyncSettings::makeDefault()
 {
     m_referenceAudio = ReferenceAudioSettings();
+    m_viewState = AudioSyncViewState();
 }

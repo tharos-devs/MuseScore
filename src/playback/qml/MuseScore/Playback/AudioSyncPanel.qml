@@ -65,6 +65,19 @@ Item {
                 anchors.verticalCenterOffset: 4
                 spacing: 4
 
+                FlatButton {
+                    icon: IconCode.NEW_FILE
+                    buttonType: FlatButton.IconOnly
+                    transparent: true
+                    enabled: syncView.hasAudio
+                    toolTipTitle: qsTrc("playback", "New")
+                    toolTipDescription: qsTrc("playback", "Removes the reference audio")
+                    navigation.panel: navigationPanel
+                    navigation.order: 0
+
+                    onClicked: syncView.removeAudio()
+                }
+
                 RecentFilesLoadButton {
                     path: syncView.audioPath
                     dialogTitle: qsTrc("playback", "Choose reference audio")
@@ -83,18 +96,6 @@ Item {
                     }
                 }
 
-                FlatButton {
-                    visible: syncView.hasAudio
-                    icon: IconCode.DELETE_TANK
-                    buttonType: FlatButton.IconOnly
-                    transparent: true
-                    toolTipTitle: qsTrc("playback", "Remove reference audio")
-                    navigation.panel: navigationPanel
-                    navigation.order: 5
-
-                    onClicked: syncView.removeAudio()
-                }
-
                 SeparatorLine { orientation: Qt.Vertical; Layout.preferredHeight: 20; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
                 FlatButton {
@@ -102,7 +103,7 @@ Item {
                     text: qsTrc("playback", "Sync", "Use audio sync: the score's tempo follows the audio sync points")
                     accentButton: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Use audio sync")
-                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click: add a point on the nearest beat (Shift: anywhere). Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
+                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click: add a point on the nearest beat (Shift: anywhere), or delete a point. Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
                     navigation.panel: navigationPanel
                     navigation.order: 6
 
@@ -114,7 +115,7 @@ Item {
                     enabled: syncView.audioSyncEnabled && syncView.waveformReady && !syncView.detecting
                     text: qsTrc("playback", "Detect…", "Detect audio sync points automatically")
                     toolTipTitle: qsTrc("playback", "Detect sync points")
-                    toolTipDescription: qsTrc("playback", "Detect the beats of the audio and propose sync points")
+                    toolTipDescription: qsTrc("playback", "Detects the beats from the score's start (the first sync point). Without ignoring the silence at the beginning, move that point to the first downbeat first.")
                     navigation.panel: navigationPanel
                     navigation.order: 7
 
@@ -123,6 +124,19 @@ Item {
                             syncView.detectPoints(params)
                         }
                     }
+                }
+
+                FlatButton {
+                    icon: IconCode.ERASER
+                    buttonType: FlatButton.IconOnly
+                    transparent: true
+                    enabled: syncView.audioSyncEnabled && syncView.hasSyncPoints && !syncView.detecting
+                    toolTipTitle: qsTrc("playback", "Clear sync points")
+                    toolTipDescription: qsTrc("playback", "Deletes all the sync points but the score's start (and the locked ones)")
+                    navigation.panel: navigationPanel
+                    navigation.order: 8
+
+                    onClicked: syncView.clearSyncPoints()
                 }
 
                 ProgressBar {
@@ -171,6 +185,20 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.verticalCenterOffset: 4
                     spacing: 4
+
+                    FlatButton {
+                        width: 26
+                        height: 26
+                        icon: syncView.showStereo && syncView.isStereoAudio ? IconCode.TWO_CIRCLES : IconCode.CIRCLE
+                        enabled: syncView.isStereoAudio
+                        toolTipTitle: syncView.showStereo && syncView.isStereoAudio ? qsTrc("playback", "Stereo waveform")
+                                                                                     : qsTrc("playback", "Mono waveform")
+                        toolTipDescription: qsTrc("playback", "Show the left and right channels separately, or mixed")
+                        navigation.panel: navigationPanel
+                        navigation.order: 19
+
+                        onClicked: syncView.showStereo = !syncView.showStereo
+                    }
 
                     FlatButton {
                         width: 26
@@ -299,6 +327,19 @@ Item {
 
                         onClicked: syncView.loopEnabled = !syncView.loopEnabled
                     }
+
+                    FlatButton {
+                        width: 26
+                        height: 26
+                        icon: IconCode.PAN_SCORE
+                        accentButton: syncView.followPlayback
+                        toolTipTitle: qsTrc("playback", "Follow playback")
+                        toolTipDescription: qsTrc("playback", "Scroll the waveform along with the playback cursor")
+                        navigation.panel: navigationPanel
+                        navigation.order: 29
+
+                        onClicked: syncView.followPlayback = !syncView.followPlayback
+                    }
                 }
             }
 
@@ -311,26 +352,6 @@ Item {
                 //! NOTE Same line as the transport buttons (the clock is above them)
                 anchors.verticalCenterOffset: 4
                 spacing: 4
-
-                IncrementalPropertyControl {
-                    Layout.preferredWidth: 90
-                    enabled: syncView.hasAudio
-                    currentValue: syncView.latencyMs
-                    minValue: -1000
-                    maxValue: 1000
-                    step: 5
-                    decimals: 0
-                    measureUnitsSymbol: qsTrc("global", "ms")
-                    navigation.panel: navigationPanel
-                    navigation.order: 40
-                    navigation.accessible.name: qsTrc("playback", "Reference audio latency compensation")
-
-                    onValueEdited: function(newValue) {
-                        syncView.latencyMs = newValue
-                    }
-                }
-
-                SeparatorLine { orientation: Qt.Vertical; Layout.preferredHeight: 20; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
                 FlatButton {
                     icon: IconCode.ZOOM_OUT
@@ -363,43 +384,6 @@ Item {
                     navigation.order: 43
 
                     onClicked: syncView.zoomToFit()
-                }
-
-                SeparatorLine { orientation: Qt.Vertical; Layout.preferredHeight: 20; Layout.leftMargin: 4; Layout.rightMargin: 4 }
-
-                FlatButton {
-                    minWidth: 28
-                    text: qsTrc("playback", "Stereo", "Show the left and right channels separately")
-                    accentButton: syncView.showStereo && syncView.isStereoAudio
-                    enabled: syncView.isStereoAudio
-                    toolTipTitle: qsTrc("playback", "Show left and right channels separately")
-                    navigation.panel: navigationPanel
-                    navigation.order: 44
-
-                    onClicked: syncView.showStereo = !syncView.showStereo
-                }
-
-                FlatButton {
-                    minWidth: 28
-                    text: qsTrc("playback", "dB", "Logarithmic amplitude scale")
-                    accentButton: syncView.logarithmic
-                    toolTipTitle: qsTrc("playback", "Logarithmic amplitude scale")
-                    toolTipDescription: qsTrc("playback", "Alt + mouse wheel: amplitude zoom")
-                    navigation.panel: navigationPanel
-                    navigation.order: 45
-
-                    onClicked: syncView.logarithmic = !syncView.logarithmic
-                }
-
-                FlatButton {
-                    minWidth: 28
-                    text: qsTrc("playback", "Follow", "Scroll the waveform along with the playback cursor")
-                    accentButton: syncView.followPlayback
-                    toolTipTitle: qsTrc("playback", "Follow playback")
-                    navigation.panel: navigationPanel
-                    navigation.order: 46
-
-                    onClicked: syncView.followPlayback = !syncView.followPlayback
                 }
             }
         }
@@ -457,6 +441,31 @@ Item {
                     propagateComposedEvents: true
                     onPressed: function(mouse) { mouse.accepted = false }
                     onDoubleClicked: syncView.amplitudeZoom = 1
+                }
+            }
+
+            //! NOTE What the last detection found, shown for a while
+            StyledTextLabel {
+                id: detectionSummaryLabel
+
+                anchors.left: syncView.left
+                anchors.leftMargin: 8
+                anchors.top: syncView.top
+                anchors.topMargin: syncView.waveformTop + 14
+                visible: false
+                text: syncView.detectionSummary
+
+                onTextChanged: {
+                    visible = text !== ""
+                    if (visible) {
+                        detectionSummaryTimer.restart()
+                    }
+                }
+
+                Timer {
+                    id: detectionSummaryTimer
+                    interval: 10000
+                    onTriggered: detectionSummaryLabel.visible = false
                 }
             }
 

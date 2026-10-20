@@ -28,7 +28,9 @@
 #include <map>
 
 #include "engraving/automation/tempovalues.h"
+#include "engraving/dom/chord.h"
 #include "engraving/dom/measure.h"
+#include "engraving/dom/segment.h"
 #include "engraving/dom/repeatlist.h"
 #include "engraving/dom/score.h"
 #include "engraving/dom/sig.h"
@@ -253,6 +255,30 @@ bool removePoint(INotationAutomation& automation, int utick)
                      muse::TranslatableString("undoableAction", "Delete audio sync point"));
 }
 
+bool removeAllPoints(INotationAutomation& automation)
+{
+    const AutomationDataConstPtr data = automation.automationData();
+    if (!data || !data->isAudioSyncEnabled()) {
+        return false;
+    }
+
+    const std::vector<SyncPoint> points = syncPoints(automation);
+    AutomationPointEdits edits;
+    for (size_t i = 1; i < points.size(); ++i) {
+        if (!points[i].locked) {
+            edits.push_back({ points[i].utick, AutomationPointEdit::ErasePoint {} });
+        }
+    }
+
+    if (edits.empty()) {
+        return false;
+    }
+
+    std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve { { TEMPO_KEY, edits } };
+    automation.editPoints(editsByCurve, muse::TranslatableString("undoableAction", "Clear audio sync points"));
+    return true;
+}
+
 // ---- detection ----
 
 //! NOTE The measure starts and beats of the unrolled score from fromUtick on (the metronome's beats)
@@ -301,14 +327,19 @@ static std::vector<std::pair<int, bool> > scoreBeats(const Score* score, int fro
     return result;
 }
 
-std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<DetectedBeatTime>& beats, const DetectionOptions& options)
+std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<DetectedBeatTime>& beats, const DetectionOptions& options,
+                                        MatchInfo* info)
 {
     std::vector<MatchedPoint> result;
     if (!score || beats.size() < 2) {
         return result;
     }
 
-    const std::vector<std::pair<int, bool> > positions = scoreBeats(score, options.anchorUtick, options.toUtick);
+    std::vector<std::pair<int, bool> > positions = scoreBeats(score, options.anchorUtick, options.toUtick);
+    //! NOTE The anchor (e.g. the first note, a pickup's) isn't necessarily on a beat: it's the first position anyway
+    if (positions.empty() || positions.front().first != options.anchorUtick) {
+        positions.insert(positions.begin(), { options.anchorUtick, false });
+    }
     if (positions.size() < 2) {
         return result;
     }
@@ -322,22 +353,38 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
     std::sort(intervals.begin(), intervals.end());
     const double medianInterval = intervals[intervals.size() / 2];
 
-    audioBeats.push_back({ options.anchorSecs, 1.f });
+    // The anchor on the nearest detected beat, if one is close enough
+    double anchorSecs = options.anchorSecs;
+    const auto nearest = std::min_element(beats.begin(), beats.end(), [&options](const DetectedBeatTime& a, const DetectedBeatTime& b) {
+        return std::abs(a.secs - options.anchorSecs) < std::abs(b.secs - options.anchorSecs);
+    });
+    if (nearest != beats.end() && std::abs(nearest->secs - options.anchorSecs) < medianInterval * 0.5) {
+        anchorSecs = nearest->secs;
+    }
+
+    audioBeats.push_back({ anchorSecs, 1.f });
     for (const DetectedBeatTime& beat : beats) {
-        if (beat.secs > options.anchorSecs + medianInterval * 0.5) {
+        if (beat.secs > anchorSecs + medianInterval * 0.5) {
             audioBeats.push_back(beat);
         }
     }
 
-    // Octave errors: detected beats twice too fast or too slow compared with the score's beats
+    // Octave errors: detected beats twice too fast or too slow. Judged by the expected tempo the user gave,
+    // not by the score's tempo markings: they're only approximate here
+    const double detectedBpm = 60.0 / medianInterval;
     DetectionOptions::Octave octave = options.octave;
     if (octave == DetectionOptions::Octave::Auto) {
-        const TempoTimeline& timeline = score->tempoTimeline(true);
-        const double scoreBeatSecs = (timeline.utick2utime(positions[1].first) - timeline.utick2utime(positions[0].first))
-                                     * timeline.tempoMultiplier().val;
-        const double ratio = scoreBeatSecs / medianInterval;
-        octave = ratio > 1.5 ? DetectionOptions::Octave::Half : ratio < 0.67 ? DetectionOptions::Octave::Double
+        octave = detectedBpm > options.maxBpm ? DetectionOptions::Octave::Half
+                 : detectedBpm < options.minBpm ? DetectionOptions::Octave::Double
                  : DetectionOptions::Octave::None;
+    }
+
+    if (info) {
+        info->anchorSecs = anchorSecs;
+        info->detectedBpm = detectedBpm;
+        info->octave = octave;
+        info->appliedBpm = octave == DetectionOptions::Octave::Half ? detectedBpm / 2.0
+                           : octave == DetectionOptions::Octave::Double ? detectedBpm * 2.0 : detectedBpm;
     }
 
     if (octave == DetectionOptions::Octave::Half) {
@@ -417,23 +464,57 @@ std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points
     return result;
 }
 
-bool hasManualPoints(const INotationAutomation& automation, int fromUtick, int toUtick)
+int firstNoteUtick(const Score* score)
 {
-    const std::vector<SyncPoint> points = syncPoints(automation);
-    for (size_t i = 1; i < points.size(); ++i) {
-        const SyncPoint& point = points[i];
-        if (point.origin == AudioSyncInfo::Origin::Manual && point.utick >= fromUtick && (toUtick < 0 || point.utick < toUtick)) {
-            return true;
+    if (!score) {
+        return 0;
+    }
+
+    for (const Measure* measure = score->firstMeasure(); measure; measure = measure->nextMeasure()) {
+        for (const Segment* segment = measure->first(SegmentType::ChordRest); segment; segment = segment->next(SegmentType::ChordRest)) {
+            for (track_idx_t track = 0; track < score->ntracks(); ++track) {
+                const EngravingItem* element = segment->element(track);
+                if (element && element->isChord()) {
+                    return score->expandedRepeatList().tick2utick(segment->tick().ticks());
+                }
+            }
         }
     }
-    return false;
+
+    return 0;
 }
 
-int applyDetectedPoints(INotationAutomation& automation, const Score* score, const std::vector<MatchedPoint>& points, bool replaceManual)
+double scoreStartSecsForFirstNote(const Score* score, const std::vector<MatchedPoint>& points, int firstNoteUtick, double firstNoteSecs)
 {
+    if (firstNoteUtick <= 0) {
+        return firstNoteSecs;
+    }
+
+    // The tempo of the first matched segment (the music's own), else the score's current one
+    double secsPerTick = 0.0;
+    for (size_t i = 0; i + 1 < points.size(); ++i) {
+        if (points[i + 1].utick > points[i].utick && points[i + 1].secs > points[i].secs) {
+            secsPerTick = (points[i + 1].secs - points[i].secs) / static_cast<double>(points[i + 1].utick - points[i].utick);
+            break;
+        }
+    }
+
+    if (secsPerTick <= 0.0 && score) {
+        const TempoTimeline& timeline = score->tempoTimeline(true);
+        return firstNoteSecs - timeline.utick2utime(firstNoteUtick) * timeline.tempoMultiplier().val;
+    }
+
+    return firstNoteSecs - secsPerTick * static_cast<double>(firstNoteUtick);
+}
+
+AppliedDetection applyDetectedPoints(INotationAutomation& automation, const Score* score, const std::vector<MatchedPoint>& points,
+                                     std::optional<double> scoreStartSecs)
+{
+    AppliedDetection result;
+
     const AutomationDataConstPtr data = automation.automationData();
     if (!data || !data->isAudioSyncEnabled() || !score || points.empty()) {
-        return 0;
+        return result;
     }
 
     const int fromUtick = points.front().utick;
@@ -444,13 +525,31 @@ int applyDetectedPoints(INotationAutomation& automation, const Score* score, con
     std::map<int, SyncPoint> kept;
     AutomationPointEdits edits;
     for (size_t i = 0; i < existing.size(); ++i) {
-        const SyncPoint& point = existing[i];
+        SyncPoint point = existing[i];
         const bool inRange = point.utick > fromUtick && point.utick <= toUtick;
-        const bool fixed = point.locked || i == 0 || (point.origin == AudioSyncInfo::Origin::Manual && !replaceManual);
-        if (!inRange || fixed) {
+        if (i == 0 && scoreStartSecs && !point.locked) {
+            point.audioSecs = *scoreStartSecs;
+        }
+        if (!inRange || point.locked || i == 0) {
             kept[point.utick] = point;
         } else {
+            if (point.origin == AudioSyncInfo::Origin::Manual) {
+                ++result.replacedManual;
+            }
             edits.push_back({ point.utick, AutomationPointEdit::ErasePoint {} });
+        }
+    }
+
+    // The score's start
+    if (scoreStartSecs && !existing.empty() && !existing.front().locked) {
+        const auto it = data->curve(TEMPO_KEY).find(existing.front().utick);
+        if (it != data->curve(TEMPO_KEY).end() && it->second.audioSync) {
+            AutomationPoint startPoint = it->second;
+            startPoint.audioSync->audioSecs = *scoreStartSecs;
+            startPoint.audioSync->origin = AudioSyncInfo::Origin::Detected;
+            if (!(startPoint == it->second)) {
+                edits.push_back({ existing.front().utick, AutomationPointEdit::SetPoint { startPoint } });
+            }
         }
     }
 
@@ -491,15 +590,15 @@ int applyDetectedPoints(INotationAutomation& automation, const Score* score, con
             return edit.tick == point.utick;
         }), edits.end());
         edits.push_back({ point.utick, AutomationPointEdit::SetPoint { automationPoint } });
-        ++added;
+        ++result.added;
     }
 
     if (edits.empty()) {
-        return 0;
+        return result;
     }
 
     std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve { { TEMPO_KEY, edits } };
     automation.editPoints(editsByCurve, muse::TranslatableString("undoableAction", "Detect audio sync points"));
-    return added;
+    return result;
 }
 }

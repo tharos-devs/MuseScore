@@ -24,6 +24,7 @@
 
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace mu::playback {
@@ -61,6 +62,10 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
                                 const ProgressFn& progress);
 
 std::vector<DetectedBeat> trackBeats(const std::vector<Onset>& onsets, const BeatDetectionParams& params);
+
+//! NOTE Where the music starts, after the silence the audio may start with: the first sustained sound above
+//! the silence threshold (relative to the loudest part); nullopt if the audio is silent
+std::optional<double> findMusicStart(const MappedWav& wav, const CancelFlag& canceled);
 
 //! NOTE Both steps; progress in [0; 1]
 std::vector<DetectedBeat> detectBeats(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,

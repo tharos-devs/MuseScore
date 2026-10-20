@@ -357,6 +357,10 @@ public:
     //! NOTE: a delay typed in a field: set, and undoable (see delayChangeCommitted)
     Q_INVOKABLE void commitDelayMs(int delayMs);
 
+    //! NOTE: a channel whose track delay isn't in its input params (a sound track's): read and written through these;
+    //! called again when it may have changed
+    void bindExternalDelay(std::function<int()> getter, std::function<void(int)> setter);
+
     //! NOTE The EQ: each call is one undoable change, except within beginEqChange()/endEqChange() (e.g. dragging
     //! a band on the curve), which makes the whole gesture one
     Q_INVOKABLE QVariantList eqBandTypes(int bandIndex) const;
@@ -571,5 +575,8 @@ protected:
     std::optional<int> m_balanceChangeStart;
     std::optional<int> m_gainChangeStart;
     std::optional<muse::audio::EqParams> m_eqChangeStart;
+
+    std::function<int()> m_externalDelayGetter;
+    std::function<void(int)> m_externalDelaySetter;
 };
 }

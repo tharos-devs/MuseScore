@@ -67,7 +67,7 @@ struct DetectedBeatTime {
 
 struct DetectionOptions {
     enum class Octave {
-        Auto,   // the audio's beats taken twice as fast/slow as detected if closer to the score's current tempo
+        Auto,   // the audio's beats taken twice as fast/slow as detected if out of [minBpm; maxBpm]
         None,
         Double, // two score beats per detected beat
         Half,   // one score beat every two detected beats
@@ -79,6 +79,9 @@ struct DetectionOptions {
     //! NOTE Where it ends (< 0: the score's end)
     int toUtick = -1;
     Octave octave = Octave::Auto;
+    //! NOTE The expected tempo of the score's beats (Octave::Auto)
+    double minBpm = 50.0;
+    double maxBpm = 200.0;
     //! NOTE A point on every measure; otherwise only where the tempo changes (see simplifyPoints())
     bool everyMeasure = false;
     double toleranceSecs = 0.02;
@@ -91,24 +94,47 @@ struct MatchedPoint {
     float confidence = 1.f;
 };
 
+//! NOTE What the matching found, to tell the user
+struct MatchInfo {
+    double detectedBpm = 0.0; // the beats as detected
+    DetectionOptions::Octave octave = DetectionOptions::Octave::None; // as applied (never Auto)
+    double appliedBpm = 0.0; // the beats the score's beats were matched to
+    //! NOTE The anchor's audio time, moved onto the nearest detected beat (within half a beat): placed by hand or
+    //! found from the music's start, it's rarely exactly on it, and the beats after it would be off by one beat
+    double anchorSecs = 0.0;
+};
+
 //! NOTE The measure starts matched to detected beats, from the anchor on
 std::vector<MatchedPoint> matchMeasures(const engraving::Score* score, const std::vector<DetectedBeatTime>& beats,
-                                        const DetectionOptions& options);
+                                        const DetectionOptions& options, MatchInfo* info = nullptr);
 
 //! NOTE Only the points the others can't be told apart from, within a tolerance, with a constant tempo between them
 //! (the first and last ones kept)
 std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points, double toleranceSecs);
 
-//! NOTE Manual sync points (other than the first one) in [fromUtick; toUtick): detection asks before replacing them
-bool hasManualPoints(const notation::INotationAutomation& automation, int fromUtick, int toUtick);
+//! NOTE The first note of the unrolled score (its first chord, rests before it skipped); 0 if none
+int firstNoteUtick(const engraving::Score* score);
 
-//! NOTE Writes detected points (undoable): the converted/detected ones in their range are replaced, the manual ones
-//! too if replaceManual, locked ones never; points that would break the order or the tempo range are dropped
-int applyDetectedPoints(notation::INotationAutomation& automation, const engraving::Score* score, const std::vector<MatchedPoint>& points,
-                        bool replaceManual);
+//! NOTE Where the score's start falls when its first note is at firstNoteSecs, its first beats being as long as the
+//! matched points say (or as long as at the current tempo, without any)
+double scoreStartSecsForFirstNote(const engraving::Score* score, const std::vector<MatchedPoint>& points, int firstNoteUtick,
+                                  double firstNoteSecs);
+
+struct AppliedDetection {
+    int added = 0;
+    int replacedManual = 0;
+};
+
+//! NOTE Writes detected points (undoable, one step): the existing points in their range are replaced, the locked ones
+//! never; points that would break the order or the tempo range are dropped. scoreStartSecs: the first sync point
+//! (the score's start) moved there too
+AppliedDetection applyDetectedPoints(notation::INotationAutomation& automation, const engraving::Score* score,
+                                     const std::vector<MatchedPoint>& points, std::optional<double> scoreStartSecs);
 
 //! NOTE Undoable edits; false if refused (out of the allowed range, initial point...)
 bool addPoint(notation::INotationAutomation& automation, const engraving::Score* score, int utick, double audioSecs);
 bool movePoint(notation::INotationAutomation& automation, int utick, double audioSecs);
 bool removePoint(notation::INotationAutomation& automation, int utick);
+//! NOTE All of them but the first one (the score's start) and the locked ones, in one undoable step; false if none
+bool removeAllPoints(notation::INotationAutomation& automation);
 }

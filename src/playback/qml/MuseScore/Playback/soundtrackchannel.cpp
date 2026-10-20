@@ -149,6 +149,18 @@ SoundTrackChannel makeReferenceAudioChannel(const ServicesPtr& services)
         });
     };
 
+    //! NOTE: stored with the reference audio too (undoable through the Mixer's channel edits)
+    channel.delayMs = [services]() {
+        const IProjectAudioSyncSettingsPtr settings = services->audioSyncSettings();
+        return settings ? settings->referenceAudio().delayMs : 0;
+    };
+
+    channel.setDelayMs = [services](int delayMs) {
+        updateReferenceAudio(services->audioSyncSettings(), [delayMs](ReferenceAudioSettings& referenceAudio) {
+            referenceAudio.delayMs = delayMs;
+        });
+    };
+
     channel.settingsChanged = [services]() -> std::optional<async::Notification> {
         const IProjectAudioSyncSettingsPtr settings = services->audioSyncSettings();
         if (!settings) {
@@ -180,6 +192,10 @@ void SoundTrackChannel::loadMuteState(MixerChannelItem* item) const
 
     const bool forceMute = isForceMuted();
     item->loadMuteForceMuteState((state.mute && !state.solo) || forceMute, forceMute);
+
+    if (delayMs) {
+        item->bindExternalDelay(delayMs, setDelayMs);
+    }
 }
 
 void SoundTrackChannel::setColor(const QColor& color) const

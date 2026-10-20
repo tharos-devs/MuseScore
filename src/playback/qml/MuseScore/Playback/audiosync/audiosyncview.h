@@ -75,7 +75,8 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
     Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
-    Q_PROPERTY(int latencyMs READ latencyMs WRITE setLatencyMs NOTIFY audioChanged)
+    //! NOTE Points other than the first one (the score's start)
+    Q_PROPERTY(bool hasSyncPoints READ hasSyncPoints NOTIFY syncChanged)
     Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY playingChanged)
     Q_PROPERTY(bool metronomeEnabled READ metronomeEnabled NOTIFY metronomeChanged)
     //! NOTE "position / duration", of the reference audio
@@ -88,6 +89,8 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool speedWarning READ speedWarning NOTIFY speedWarningChanged)
     Q_PROPERTY(bool detecting READ detecting NOTIFY detectionChanged)
     Q_PROPERTY(double detectionProgress READ detectionProgress NOTIFY detectionChanged)
+    //! NOTE What the last detection found (e.g. its tempo), empty before
+    Q_PROPERTY(QString detectionSummary READ detectionSummary NOTIFY detectionChanged)
 
     Q_PROPERTY(double pixelsPerSecond READ pixelsPerSecond WRITE setPixelsPerSecond NOTIFY viewChanged)
     Q_PROPERTY(double scrollSecs READ scrollSecs WRITE setScrollSecs NOTIFY viewChanged)
@@ -95,7 +98,6 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(double contentEndSecs READ contentEndSecs NOTIFY viewChanged)
     Q_PROPERTY(double visibleSecs READ visibleSecs NOTIFY viewChanged)
     Q_PROPERTY(double amplitudeZoom READ amplitudeZoom WRITE setAmplitudeZoom NOTIFY viewChanged)
-    Q_PROPERTY(bool logarithmic READ logarithmic WRITE setLogarithmic NOTIFY viewChanged)
     //! NOTE Where the main waveform is, for controls placed along it
     Q_PROPERTY(double waveformTop READ waveformTop NOTIFY viewChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight NOTIFY viewChanged)
@@ -140,9 +142,8 @@ public:
     void setShowStereo(bool showStereo);
     bool isStereoAudio() const;
     bool audioSyncEnabled() const;
+    bool hasSyncPoints() const;
     void setAudioSyncEnabled(bool enabled);
-    int latencyMs() const;
-    void setLatencyMs(int ms);
     bool isPlaying() const;
     bool metronomeEnabled() const;
     QString timeText() const;
@@ -153,6 +154,7 @@ public:
     bool speedWarning() const;
     bool detecting() const;
     double detectionProgress() const;
+    QString detectionSummary() const;
 
     double pixelsPerSecond() const;
     void setPixelsPerSecond(double pps);
@@ -163,10 +165,8 @@ public:
     double visibleSecs() const;
     double amplitudeZoom() const;
     void setAmplitudeZoom(double zoom);
-    bool logarithmic() const;
     double waveformTop() const;
     double waveformHeight() const;
-    void setLogarithmic(bool logarithmic);
     bool followPlayback() const;
     void setFollowPlayback(bool follow);
 
@@ -207,10 +207,13 @@ public:
     Q_INVOKABLE void clearRecentAudioFiles();
     Q_INVOKABLE void setAudioFile(const QString& path);
 
-    //! NOTE Automatic sync points, from the selected sync point (or the first one) on, which must be on a downbeat.
-    //! params: sensitivity [0; 1], minBpm, maxBpm, octave (0 auto, 1 none, 2 double, 3 half), everyMeasure, toleranceMs
+    //! NOTE Automatic sync points, from the score's start (the first sync point, or the music's start).
+    //! params: sensitivity [0; 1], minBpm, maxBpm, octave (0 auto, 1 none, 2 double, 3 half), everyMeasure, toleranceMs,
+    //! ignoreLeadingSilence
     Q_INVOKABLE void detectPoints(const QVariantMap& params);
     Q_INVOKABLE void cancelDetection();
+    //! NOTE All the sync points but the score's start (and the locked ones)
+    Q_INVOKABLE void clearSyncPoints();
 
     Q_INVOKABLE void zoomIn();
     Q_INVOKABLE void zoomOut();
@@ -265,6 +268,8 @@ private:
         double originalSecs = 0.0;
         double audioSecs = 0.0;
         bool moved = false;
+        //! NOTE Stopped by a neighboring segment's tempo limit (MIN/MAX_SYNC_BPM): shown, so the user knows why
+        bool atLimit = false;
     };
 
     project::IProjectAudioSyncSettingsPtr audioSyncSettings() const;
@@ -289,6 +294,7 @@ private:
 
     // Audio sync points
     std::vector<double> displayedPointSecs() const;
+    static bool isUncertainPoint(const audiosync::SyncPoint& point);
     std::optional<size_t> pointAt(const QPointF& pos) const;
     std::optional<size_t> selectedPointIndex() const;
     void addPointAt(double audioSecs, bool snapToBeat);
@@ -306,6 +312,8 @@ private:
     double cursorAudioSecs() const;
 
     void zoomAround(double pps, double anchorX);
+    void restoreViewState();
+    void storeViewState();
     void clampScroll();
     void updatePlaybackCursor();
     void updatePositionText();
@@ -334,7 +342,6 @@ private:
     double m_pixelsPerSecond = 50.0;
     double m_scrollSecs = -1.0;
     double m_amplitudeZoom = 1.0;
-    bool m_logarithmic = false;
     bool m_followPlayback = true;
 
     mutable bool m_gridDirty = true;
@@ -350,7 +357,9 @@ private:
     struct DetectionJob;
     std::shared_ptr<DetectionJob> m_detectionJob;
     double m_detectionProgress = 0.0;
-    void onDetectionFinished(const std::shared_ptr<DetectionJob>& job, const std::vector<audiosync::DetectedBeatTime>& beats);
+    QString m_detectionSummary;
+    void onDetectionFinished(const std::shared_ptr<DetectionJob>& job, const std::vector<audiosync::DetectedBeatTime>& beats,
+                             std::optional<double> musicStartSecs);
     bool m_speedWarning = false;
     std::optional<PointDrag> m_pointDrag;
 

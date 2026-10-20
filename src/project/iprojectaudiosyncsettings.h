@@ -43,9 +43,9 @@ struct ReferenceAudioSettings
     //! NOTE Display: left/right channels drawn separately instead of one mixed waveform (a mono file is
     //! always drawn as one)
     bool showStereo = true;
-    //! NOTE Playback only: the reference audio played this much earlier (negative: later), to compensate a
-    //! latency heard between it and the score (the sync points and the display aren't affected)
-    int latencyMs = 0;
+    //! NOTE Its track delay (the Mixer's): played this much later (negative: earlier), to compensate a latency
+    //! heard between it and the score; the sync points and the display aren't affected
+    int delayMs = 0;
     //! NOTE The Audio sync window's A-B loop, in the audio's time (< 0: not set); while enabled, it's played
     //! instead of the score's loop
     double loopFromSecs = -1.0;
@@ -69,7 +69,7 @@ struct ReferenceAudioSettings
                && solo == other.solo
                && includeInExport == other.includeInExport
                && showStereo == other.showStereo
-               && latencyMs == other.latencyMs
+               && delayMs == other.delayMs
                && loopFromSecs == other.loopFromSecs
                && loopToSecs == other.loopToSecs
                && loopEnabled == other.loopEnabled;
@@ -78,6 +78,19 @@ struct ReferenceAudioSettings
     bool operator!=(const ReferenceAudioSettings& other) const
     {
         return !(*this == other);
+    }
+};
+
+//! NOTE How the Audio sync window was showing it (zoom, position): saved with the project, but not a change of it
+struct AudioSyncViewState
+{
+    double pixelsPerSecond = 0.0; // 0: not set (fits the whole audio)
+    double scrollSecs = 0.0;
+    double amplitudeZoom = 1.0;
+
+    bool isValid() const
+    {
+        return pixelsPerSecond > 0.0;
     }
 };
 
@@ -91,6 +104,10 @@ public:
     virtual void clearReferenceAudio() = 0;
 
     virtual muse::async::Notification settingsChanged() const = 0;
+
+    //! NOTE Doesn't notify settingsChanged (nor mark the project as modified)
+    virtual const AudioSyncViewState& viewState() const = 0;
+    virtual void setViewState(const AudioSyncViewState& state) = 0;
 };
 
 using IProjectAudioSyncSettingsPtr = std::shared_ptr<IProjectAudioSyncSettings>;

@@ -21,6 +21,7 @@
  */
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 import Muse.Ui
@@ -37,9 +38,14 @@ StyledPopupView {
     property int maxBpm: 200
     property int octave: 0
     property bool everyMeasure: false
+    property bool ignoreLeadingSilence: true
     property int toleranceMs: 20
 
-    contentWidth: contentColumn.implicitWidth
+    //! NOTE Fixed: the rows wrap or shrink to it (their implicit widths side by side would make it very wide)
+    //! NOTE Takes the keyboard focus: Escape closes it (opened with the mouse, the score kept it)
+    onOpened: contentColumn.forceActiveFocus()
+
+    contentWidth: 320
     contentHeight: contentColumn.implicitHeight
 
     NavigationPanel {
@@ -48,18 +54,30 @@ StyledPopupView {
         section: root.navigationSection
         direction: NavigationPanel.Vertical
         accessible.name: qsTrc("playback", "Beat detection")
+
+        onNavigationEvent: function(event) {
+            if (event.type === NavigationEvent.Escape) {
+                root.close()
+            }
+        }
     }
 
     ColumnLayout {
         id: contentColumn
-        width: 320
+        width: root.contentWidth
         spacing: 10
 
-        StyledTextLabel {
-            Layout.fillWidth: true
-            text: qsTrc("playback", "Detects the beats from the selected sync point on (the first one if none is selected), which must be on a downbeat.")
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignLeft
+        //! NOTE Escape closes it, also when opened with the mouse (no keyboard navigation then)
+        focus: true
+        Keys.onEscapePressed: root.close()
+
+        CheckBox {
+            checked: root.ignoreLeadingSilence
+            text: qsTrc("playback", "Ignore silence at the beginning")
+            navigation.panel: navPanel
+            navigation.order: 0
+
+            onClicked: root.ignoreLeadingSilence = !root.ignoreLeadingSilence
         }
 
         StyledTextLabel {
@@ -80,15 +98,18 @@ StyledPopupView {
         }
 
         RowLayout {
+            Layout.fillWidth: true
             spacing: 8
 
             StyledTextLabel {
+                Layout.fillWidth: true
                 text: qsTrc("playback", "Expected tempo")
                 horizontalAlignment: Text.AlignLeft
+                wrapMode: Text.WordWrap
             }
 
             IncrementalPropertyControl {
-                Layout.preferredWidth: 90
+                Layout.preferredWidth: 84
                 currentValue: root.minBpm
                 minValue: 20
                 maxValue: root.maxBpm - 10
@@ -106,7 +127,7 @@ StyledPopupView {
             }
 
             IncrementalPropertyControl {
-                Layout.preferredWidth: 90
+                Layout.preferredWidth: 84
                 currentValue: root.maxBpm
                 minValue: root.minBpm + 10
                 maxValue: 400
@@ -121,6 +142,7 @@ StyledPopupView {
         }
 
         RowLayout {
+            Layout.fillWidth: true
             spacing: 8
 
             StyledTextLabel {
@@ -129,7 +151,7 @@ StyledPopupView {
             }
 
             StyledDropdown {
-                Layout.preferredWidth: 220
+                Layout.fillWidth: true
                 model: [
                     { text: qsTrc("playback", "Automatic"), value: 0 },
                     { text: qsTrc("playback", "As detected"), value: 1 },
@@ -146,7 +168,7 @@ StyledPopupView {
 
         CheckBox {
             checked: root.everyMeasure
-            text: qsTrc("playback", "A point on every measure")
+            text: qsTrc("playback", "Add a point on every measure")
             navigation.panel: navPanel
             navigation.order: 4
 
@@ -154,14 +176,23 @@ StyledPopupView {
         }
 
         RowLayout {
+            Layout.fillWidth: true
             spacing: 8
             enabled: !root.everyMeasure
 
+            //! NOTE Without a point on every measure: the largest gap a measure can have from the audio before it gets one
             StyledTextLabel {
-                text: qsTrc("playback", "Otherwise, where the tempo changes by more than")
+                text: qsTrc("playback", "Precision")
                 horizontalAlignment: Text.AlignLeft
-                wrapMode: Text.WordWrap
                 Layout.fillWidth: true
+
+                ToolTip.visible: precisionHover.hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTrc("playback", "Maximum gap between the score and the audio: smaller adds more points")
+
+                HoverHandler {
+                    id: precisionHover
+                }
             }
 
             IncrementalPropertyControl {
@@ -179,23 +210,36 @@ StyledPopupView {
             }
         }
 
-        FlatButton {
+        RowLayout {
             Layout.alignment: Qt.AlignRight
-            text: qsTrc("playback", "Detect")
-            accentButton: true
-            navigation.panel: navPanel
-            navigation.order: 6
+            spacing: 8
 
-            onClicked: {
-                root.detectRequested({
-                    sensitivity: root.sensitivity,
-                    minBpm: root.minBpm,
-                    maxBpm: root.maxBpm,
-                    octave: root.octave,
-                    everyMeasure: root.everyMeasure,
-                    toleranceMs: root.toleranceMs
-                })
-                root.close()
+            FlatButton {
+                text: qsTrc("global", "Cancel")
+                navigation.panel: navPanel
+                navigation.order: 6
+
+                onClicked: root.close()
+            }
+
+            FlatButton {
+                text: qsTrc("playback", "Detect")
+                accentButton: true
+                navigation.panel: navPanel
+                navigation.order: 7
+
+                onClicked: {
+                    root.detectRequested({
+                        sensitivity: root.sensitivity,
+                        minBpm: root.minBpm,
+                        maxBpm: root.maxBpm,
+                        octave: root.octave,
+                        everyMeasure: root.everyMeasure,
+                        ignoreLeadingSilence: root.ignoreLeadingSilence,
+                        toleranceMs: root.toleranceMs
+                    })
+                    root.close()
+                }
             }
         }
     }

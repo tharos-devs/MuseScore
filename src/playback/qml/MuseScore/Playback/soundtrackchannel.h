@@ -71,6 +71,10 @@ struct SoundTrackChannel
     //! NOTE: the engine's live mute changed (muted, forceMute)
     std::function<muse::async::Channel<bool, bool>()> muteStateChanged;
 
+    //! NOTE: its track delay (see MixerChannelItem::delayMs), if it has one (not set otherwise)
+    std::function<int()> delayMs;
+    std::function<void(int)> setDelayMs;
+
     //! NOTE: its source or its user solo/mute changed (the current project's settings, nullopt without a project)
     std::function<std::optional<muse::async::Notification>()> settingsChanged;
 
@@ -80,7 +84,7 @@ struct SoundTrackChannel
     //! NOTE: the effective mute: the user's, or forced by another track's solo
     bool isEffectivelyMuted() const;
 
-    //! NOTE: the user's solo/mute and the live effective mute/force-mute
+    //! NOTE: the user's solo/mute and the live effective mute/force-mute (and its track delay, stored with them)
     void loadMuteState(MixerChannelItem* item) const;
 
     //! NOTE: not undoable, like its other output params
