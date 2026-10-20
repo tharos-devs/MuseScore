@@ -67,6 +67,8 @@ private:
     muse::Ret showPlaybackSetup();
     muse::Ret loadReferenceAudio();
     muse::Ret removeReferenceAudio();
+    muse::Ret toggleAudioSync();
+    muse::Ret addAudioSyncPointAtPlayback();
 
     muse::Ret toggleMixerSection(const muse::rcommand::Params& params);
     muse::Ret toggleChannelCategory(const muse::rcommand::Params& params);

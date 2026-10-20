@@ -94,6 +94,39 @@ void NotationAutomation::editPoints(std::vector<std::pair<AutomationCurveKey, Au
     });
 }
 
+bool NotationAutomation::isAudioSyncEnabled() const
+{
+    return m_masterScore && m_masterScore->isAudioSyncEnabled();
+}
+
+void NotationAutomation::setAudioSyncEnabled(bool enabled)
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    if (m_masterScore->isAudioSyncEnabled() == enabled) {
+        return;
+    }
+
+    const muse::TranslatableString actionName = enabled
+                                                ? muse::TranslatableString("undoableAction", "Turn on audio sync")
+                                                : muse::TranslatableString("undoableAction", "Turn off audio sync");
+    m_undoStack->transaction(actionName, [&](engraving::Transaction&) {
+        m_masterScore->setAudioSyncEnabled(enabled);
+    });
+}
+
+double NotationAutomation::audioSyncOffsetSecs() const
+{
+    return m_masterScore ? m_masterScore->audioSyncOffsetSecs() : 0.0;
+}
+
+double NotationAutomation::audioSecsAtUtick(int utick) const
+{
+    return m_masterScore ? m_masterScore->audioSecsAtUtick(utick) : 0.0;
+}
+
 std::vector<uint8_t> NotationAutomation::customMidiCcs() const
 {
     const AutomationDataConstPtr data = automationData();

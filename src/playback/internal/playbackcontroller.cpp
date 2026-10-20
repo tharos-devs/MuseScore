@@ -1558,6 +1558,11 @@ void PlaybackController::onReferenceAudioChanged()
         const ReferenceAudioSettings& referenceAudio = audioSyncSettingsPtr->referenceAudio();
         source.mediaPath = referenceAudio.path;
         source.includeInExport = referenceAudio.includeInExport;
+
+        //! NOTE Audio time = score playback time + the audio time of the score's start (the audio sync points')
+        if (m_masterNotation && m_masterNotation->automation()) {
+            source.offsetMs = static_cast<int>(std::lround(m_masterNotation->automation()->audioSyncOffsetSecs() * 1000.0));
+        }
     }
 
     const bool hadTrack = m_referenceAudioSlot->trackId() != INVALID_TRACK_ID;
@@ -2129,6 +2134,11 @@ AutomatedControlParams PlaybackController::automatedControlParamsAt(const Instru
 
 void PlaybackController::onAutomationDataChanged(const AutomationChanges& changes)
 {
+    //! NOTE The audio sync points give the reference audio's offset
+    if (changes.isFullReset || muse::contains(changes.affectedKeys, mu::engraving::TEMPO_KEY)) {
+        onReferenceAudioChanged();
+    }
+
     if (changes.isFullReset) {
         resendAutomatedControlParams();
         return;

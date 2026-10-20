@@ -29,9 +29,14 @@
 #include "rcommand/commandtypes.h"
 #include "audio/common/audiotypes.h"
 
+#include "notation/imasternotation.h"
+#include "notation/inotationautomation.h"
+#include "engraving/dom/masterscore.h"
+#include "engraving/dom/tempotimeline.h"
 #include "project/inotationproject.h"
 #include "project/iprojectaudiosyncsettings.h"
 
+#include "audiosyncedits.h"
 #include "referenceaudiofile.h"
 
 #include "../playbackcommands.h"
@@ -90,6 +95,8 @@ void PlaybackCommandsController::init()
     registerCommand(OPEN_PLAYBACK_SETUP_COMMAND, [this]() { return showPlaybackSetup(); });
     registerCommand(LOAD_REFERENCE_AUDIO_COMMAND, [this]() { return loadReferenceAudio(); });
     registerCommand(REMOVE_REFERENCE_AUDIO_COMMAND, [this]() { return removeReferenceAudio(); });
+    registerCommand(AUDIO_SYNC_TOGGLE_COMMAND, [this]() { return toggleAudioSync(); });
+    registerCommand(AUDIO_SYNC_ADD_POINT_COMMAND, [this]() { return addAudioSyncPointAtPlayback(); });
     registerCommand(RELOAD_PLAYBACK_CACHE_COMMAND, &IPlaybackController::reloadPlaybackCache);
 
     registerCommand(TOGGLE_MIXER_SECTION_COMMAND, [this](const rcommand::Params& params) { return toggleMixerSection(params); });
@@ -161,6 +168,40 @@ muse::Ret PlaybackCommandsController::removeReferenceAudio()
     }
 
     project->audioSyncSettings()->clearReferenceAudio();
+    return muse::make_ok();
+}
+
+muse::Ret PlaybackCommandsController::toggleAudioSync()
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    notation::INotationAutomationPtr automation = project && project->masterNotation() ? project->masterNotation()->automation() : nullptr;
+    if (!automation) {
+        return muse::make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    automation->setAudioSyncEnabled(!automation->isAudioSyncEnabled());
+    return muse::make_ok();
+}
+
+muse::Ret PlaybackCommandsController::addAudioSyncPointAtPlayback()
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    notation::IMasterNotationPtr masterNotation = project ? project->masterNotation() : nullptr;
+    notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
+    context::IPlaybackStatePtr playbackState = globalContext()->playbackState();
+    const engraving::Score* score = masterNotation ? masterNotation->masterScore() : nullptr;
+    if (!automation || !automation->isAudioSyncEnabled() || !playbackState || !score) {
+        return muse::make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    //! NOTE Audio time = playback time + offset; the beat is the score's one playing now
+    const double playbackSecs = playbackState->playbackPosition();
+    const std::optional<int> beat = audiosync::nearestBeatUtick(score, score->tempoTimeline(true).utime2utick(playbackSecs));
+    if (!beat) {
+        return muse::make_ret(muse::Ret::Code::NotSupported);
+    }
+
+    audiosync::addPoint(*automation, score, *beat, automation->audioSyncOffsetSecs() + playbackSecs);
     return muse::make_ok();
 }
 

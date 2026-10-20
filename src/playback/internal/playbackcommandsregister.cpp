@@ -123,6 +123,20 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(IconCode::Code::DELETE_TANK)
     },
     CommandInfo{
+        AUDIO_SYNC_TOGGLE_COMMAND,
+        TranslatableString("playback", "&Use audio sync"),
+        TranslatableString("playback", "Play the score at the tempo given by the audio sync points instead of its tempo markings"),
+        InputSchema(),
+        Decoration(IconCode::Code::NONE, rcommand::Checkable::Yes)
+    },
+    CommandInfo{
+        AUDIO_SYNC_ADD_POINT_COMMAND,
+        TranslatableString("playback", "Add audio sync point at playback position"),
+        TranslatableString("playback", "Sync the beat nearest to the playback position to the audio playing now"),
+        InputSchema(),
+        Decoration(IconCode::Code::NONE)
+    },
+    CommandInfo{
         OPEN_PLAYBACK_SETUP_COMMAND,
         TranslatableString("playback", "Playback setup"),
         TranslatableString("playback", "Show playback setup"),

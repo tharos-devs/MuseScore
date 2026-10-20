@@ -174,3 +174,30 @@ void EditCustomMidiCcs::flip()
     m_controller->setCustomMidiCcs(m_controllers);
     m_controllers = std::move(previous);
 }
+
+EditAudioSyncEnabled::EditAudioSyncEnabled(Score* score, ScoreAutomationController* controller, bool enabled)
+    : m_score(score), m_controller(controller), m_enabled(enabled)
+{
+    assert(score && controller);
+}
+
+std::optional<ChangedRange> EditAudioSyncEnabled::changedRange() const
+{
+    const Measure* lastMeasure = m_score ? m_score->lastMeasure() : nullptr;
+    if (!lastMeasure) {
+        return std::nullopt;
+    }
+
+    return ChangedRange { Fraction(0, 1), lastMeasure->endTick(), muse::nidx, muse::nidx };
+}
+
+void EditAudioSyncEnabled::flip()
+{
+    IF_ASSERT_FAILED(m_controller) {
+        return;
+    }
+
+    const bool previous = m_controller->isAudioSyncEnabled();
+    m_controller->setAudioSyncEnabled(m_enabled);
+    m_enabled = previous;
+}

@@ -59,6 +59,10 @@ inline static const muse::rcommand::Command RELOAD_PLAYBACK_CACHE_COMMAND("comma
 //! NOTE The Audio sync window's reference audio
 inline static const muse::rcommand::Command LOAD_REFERENCE_AUDIO_COMMAND("command://playback/load-reference-audio");
 inline static const muse::rcommand::Command REMOVE_REFERENCE_AUDIO_COMMAND("command://playback/remove-reference-audio");
+//! NOTE The tempo follows the audio sync points (see INotationAutomation::isAudioSyncEnabled())
+inline static const muse::rcommand::Command AUDIO_SYNC_TOGGLE_COMMAND("command://playback/audio-sync-toggle");
+//! NOTE At the beat nearest to the playback position, placed where the audio is: e.g. tapped to the music
+inline static const muse::rcommand::Command AUDIO_SYNC_ADD_POINT_COMMAND("command://playback/audio-sync-add-point");
 
 inline static const muse::rcommand::Command TOGGLE_MIXER_SECTION_COMMAND("command://playback/toggle-mixer-section"); // with params
 inline static const muse::rcommand::Command TOGGLE_CHANNEL_CATEGORY_COMMAND("command://playback/toggle-channel-category"); // with params

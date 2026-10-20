@@ -327,6 +327,26 @@ void AutomationData::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
     m_customMidiCcs = controllers;
 }
 
+bool AutomationData::isAudioSyncEnabled() const
+{
+    return m_audioSyncEnabled;
+}
+
+void AutomationData::setAudioSyncEnabled(bool enabled)
+{
+    m_audioSyncEnabled = enabled;
+}
+
+const AutomationCurve& AutomationData::inactiveTempoCurve() const
+{
+    return m_inactiveTempoCurve;
+}
+
+void AutomationData::setInactiveTempoCurve(const AutomationCurve& curve)
+{
+    m_inactiveTempoCurve = curve;
+}
+
 std::string AutomationData::dump() const
 {
     auto typeName = [](AutomationType type) -> const char* {

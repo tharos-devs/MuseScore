@@ -94,6 +94,20 @@ Item {
             SeparatorLine { orientation: Qt.Vertical; Layout.preferredHeight: 20; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
             FlatButton {
+                minWidth: 28
+                text: qsTrc("playback", "Sync", "Use audio sync: the score's tempo follows the audio sync points")
+                accentButton: syncView.audioSyncEnabled
+                toolTipTitle: qsTrc("playback", "Use audio sync")
+                toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click: add a point on the nearest beat (Shift: anywhere). Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
+                navigation.panel: navigationPanel
+                navigation.order: 2
+
+                onClicked: syncView.audioSyncEnabled = !syncView.audioSyncEnabled
+            }
+
+            SeparatorLine { orientation: Qt.Vertical; Layout.preferredHeight: 20; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+
+            FlatButton {
                 enabled: syncView.hasAudio
                 minWidth: 28
                 text: qsTrc("playback", "M", "Mute the reference audio")

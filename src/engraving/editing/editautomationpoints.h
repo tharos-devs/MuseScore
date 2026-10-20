@@ -58,6 +58,28 @@ private:
     std::optional<ChangedRange> m_changedRange;
 };
 
+//! NOTE: turns audio sync on/off (see AutomationData::isAudioSyncEnabled): the whole tempo changes
+class EditAudioSyncEnabled : public UndoableCommand
+{
+    OBJECT_ALLOCATOR(engraving, EditAudioSyncEnabled)
+
+public:
+    EditAudioSyncEnabled(Score* score, ScoreAutomationController* controller, bool enabled);
+
+    UNDO_TYPE(CommandType::EditAudioSyncEnabled)
+    UNDO_NAME("EditAudioSyncEnabled")
+    UNDO_CHANGED_OBJECTS({ m_score })
+
+    std::optional<ChangedRange> changedRange() const override;
+
+private:
+    void flip() override;
+
+    Score* m_score = nullptr;
+    ScoreAutomationController* m_controller = nullptr;
+    bool m_enabled = false;
+};
+
 //! NOTE: replaces the score's custom MIDI CC list (see AutomationData::customMidiCcs)
 class EditCustomMidiCcs : public UndoableCommand
 {

@@ -46,6 +46,11 @@ public:
     void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
                     const muse::TranslatableString& actionName) override;
 
+    bool isAudioSyncEnabled() const override;
+    void setAudioSyncEnabled(bool enabled) override;
+    double audioSyncOffsetSecs() const override;
+    double audioSecsAtUtick(int utick) const override;
+
     std::vector<uint8_t> customMidiCcs() const override;
     void addCustomMidiCc(uint8_t controller) override;
 

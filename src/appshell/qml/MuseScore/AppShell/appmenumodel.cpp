@@ -398,6 +398,9 @@ MenuItem* AppMenuModel::makeAudioMenu()
         makeSeparator(),
         makeMenuItem(LOAD_REFERENCE_AUDIO_COMMAND),
         makeMenuItem(REMOVE_REFERENCE_AUDIO_COMMAND),
+        makeSeparator(),
+        makeMenuItem(AUDIO_SYNC_TOGGLE_COMMAND),
+        makeMenuItem(AUDIO_SYNC_ADD_POINT_COMMAND),
     };
 
     return makeMenu(TranslatableString("appshell/menu/audio", "A&udio"), audioItems, "menu-audio");

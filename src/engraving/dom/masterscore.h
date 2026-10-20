@@ -110,6 +110,13 @@ public:
     void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true) override;
     void setCustomMidiCcs(const std::vector<uint8_t>& controllers) override;
 
+    // Audio sync (see AudioSyncInfo)
+    bool isAudioSyncEnabled() const;
+    //! NOTE Undoable; turning it on also converts the current tempo into sync points
+    void setAudioSyncEnabled(bool enabled);
+    double audioSyncOffsetSecs() const;
+    double audioSecsAtUtick(int utick) const;
+
     ArticulationMapDataConstPtr articulationMapData() const override;
     void setArticulationMapData(ArticulationMapDataPtr data);
     void editArticulationMap(const EditArticulationMapChanges& changes) override;

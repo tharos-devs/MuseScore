@@ -23,6 +23,7 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
 #include <vector>
 
 #include <QColor>
@@ -37,6 +38,9 @@
 #include "modularity/ioc.h"
 #include "notation/inotationconfiguration.h"
 #include "project/iprojectaudiosyncsettings.h"
+
+#include "notation/inotationautomation.h"
+#include "playback/internal/audiosyncedits.h"
 
 #include "iplaybackcontroller.h"
 
@@ -67,6 +71,7 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool solo READ solo WRITE setSolo NOTIFY audioChanged)
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
+    Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
 
     Q_PROPERTY(double pixelsPerSecond READ pixelsPerSecond WRITE setPixelsPerSecond NOTIFY viewChanged)
     Q_PROPERTY(double scrollSecs READ scrollSecs WRITE setScrollSecs NOTIFY viewChanged)
@@ -114,6 +119,8 @@ public:
     bool showStereo() const;
     void setShowStereo(bool showStereo);
     bool isStereoAudio() const;
+    bool audioSyncEnabled() const;
+    void setAudioSyncEnabled(bool enabled);
 
     double pixelsPerSecond() const;
     void setPixelsPerSecond(double pps);
@@ -163,6 +170,7 @@ signals:
     void decodeStateChanged();
     void viewChanged();
     void positionTextChanged();
+    void syncChanged();
     void colorsChanged();
 
 protected:
@@ -171,20 +179,39 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    bool event(QEvent* event) override;
 
 private:
+    //! NOTE A position of the unrolled score, with its playback time
+    struct GridTime {
+        int utick = 0;
+        double secs = 0.0; // score playback seconds
+    };
+
     struct GridMeasure {
-        double startSecs = 0.0;
-        double endSecs = 0.0;
+        GridTime start;
+        GridTime end;
         int tickFrom = 0; // raw score ticks
         int tickTo = 0;
         QString number;
         QString timeSig; // only where it changes
-        std::vector<double> beatSecs; // excluding the measure start
+        std::vector<GridTime> beats; // excluding the measure start
+    };
+
+    //! NOTE An audio sync point being dragged: the grid follows it before the edit is made
+    struct PointDrag {
+        size_t index = 0;
+        double grabOffsetSecs = 0.0;
+        double originalSecs = 0.0;
+        double audioSecs = 0.0;
+        bool moved = false;
     };
 
     project::IProjectAudioSyncSettingsPtr audioSyncSettings() const;
+    notation::INotationAutomationPtr automation() const;
     const engraving::Score* score() const;
     bool isPlayRepeatsEnabled() const;
 
@@ -199,6 +226,18 @@ private:
 
     //! NOTE Audio seconds = engine (score playback) seconds + offset
     double audioOffsetSecs() const;
+    //! NOTE Where a score position is in the audio (following a point being dragged)
+    double audioSecsOf(const GridTime& time) const;
+    double previewAudioSecs(int utick) const;
+
+    // Audio sync points
+    std::vector<double> displayedPointSecs() const;
+    std::optional<size_t> pointAt(const QPointF& pos) const;
+    std::optional<size_t> selectedPointIndex() const;
+    void addPointAt(double audioSecs, bool snapToBeat);
+    void nudgeSelectedPoint(double deltaSecs);
+    void deleteSelectedPoint();
+    void paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const;
     double audioSecsAtX(double x) const;
     double xForAudioSecs(double secs) const;
     double cursorAudioSecs() const;
@@ -210,6 +249,7 @@ private:
     void seekToAudioSecs(double secs);
 
     QRectF rulerRect() const;
+    QRectF railRect() const;
     QRectF waveformRect() const;
     //! NOTE The whole audio in small, below the waveform, with the visible part highlighted
     QRectF overviewRect() const;
@@ -234,6 +274,13 @@ private:
     mutable bool m_gridDirty = true;
     mutable std::vector<GridMeasure> m_grid;
     mutable double m_scoreEndSecs = 0.0;
+    mutable GridTime m_scoreEnd;
+    mutable std::vector<audiosync::SyncPoint> m_syncPoints;
+    mutable bool m_audioSyncEnabled = false;
+    mutable double m_audioOffsetSecs = 0.0;
+
+    int m_selectedPointUtick = -1;
+    std::optional<PointDrag> m_pointDrag;
 
     int m_selectionTickFrom = -1;
     int m_selectionTickTo = -1;
@@ -247,6 +294,7 @@ private:
         None,
         Seek,
         Overview, // moving the visible window in the overview
+        Point,
     };
 
     DragMode m_dragMode = DragMode::None;

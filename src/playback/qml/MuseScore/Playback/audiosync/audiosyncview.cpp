@@ -55,7 +55,11 @@ using namespace muse;
 
 namespace {
 constexpr double RULER_ROW_HEIGHT = 18.0;
-constexpr double RULER_HEIGHT = 3 * RULER_ROW_HEIGHT; // measures, time, time signatures
+constexpr double RAIL_HEIGHT = 20.0; // audio sync points
+constexpr double RULER_HEIGHT = 3 * RULER_ROW_HEIGHT + RAIL_HEIGHT; // measures, time, time signatures, points
+constexpr double POINT_HIT_DISTANCE = 6.0;
+constexpr double NUDGE_SECS = 0.001;
+constexpr double LARGE_NUDGE_SECS = 0.010;
 constexpr double OVERVIEW_HEIGHT = 34.0;
 constexpr double OVERVIEW_GAP = 4.0;
 constexpr double MIN_PIXELS_PER_SECOND = 0.5;
@@ -87,6 +91,8 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
 {
     setAcceptedMouseButtons(Qt::LeftButton);
     setAntialiasing(true);
+    setFlag(QQuickItem::ItemIsFocusScope);
+    setActiveFocusOnTab(true);
 
     m_peaks = new ReferenceAudioPeaks(this);
     connect(m_peaks, &ReferenceAudioPeaks::readyChanged, this, [this]() {
@@ -138,6 +144,12 @@ mu::project::IProjectAudioSyncSettingsPtr AudioSyncView::audioSyncSettings() con
     return project ? project->audioSyncSettings() : nullptr;
 }
 
+mu::notation::INotationAutomationPtr AudioSyncView::automation() const
+{
+    project::INotationProjectPtr project = globalContext()->currentProject();
+    return project && project->masterNotation() ? project->masterNotation()->automation() : nullptr;
+}
+
 const Score* AudioSyncView::score() const
 {
     project::INotationProjectPtr project = globalContext()->currentProject();
@@ -187,10 +199,13 @@ void AudioSyncView::onNotationChanged()
             if (engraving::AutomationDataConstPtr data = automation->automationData()) {
                 data->changed().onReceive(this, [this](const engraving::AutomationChanges&) {
                     invalidateGrid();
+                    emit syncChanged();
                 }, Asyncable::Mode::SetReplace);
             }
         }
     }
+
+    emit syncChanged();
 
     notation->interaction()->selectionChanged().onNotify(this, [this]() {
         const Score* sc = score();
@@ -339,6 +354,19 @@ void AudioSyncView::setShowStereo(bool showStereo)
 bool AudioSyncView::isStereoAudio() const
 {
     return m_peaks->isStereo();
+}
+
+bool AudioSyncView::audioSyncEnabled() const
+{
+    notation::INotationAutomationPtr automationPtr = automation();
+    return automationPtr && automationPtr->isAudioSyncEnabled();
+}
+
+void AudioSyncView::setAudioSyncEnabled(bool enabled)
+{
+    if (notation::INotationAutomationPtr automationPtr = automation()) {
+        automationPtr->setAudioSyncEnabled(enabled);
+    }
 }
 
 void AudioSyncView::chooseAudioFile()
@@ -529,8 +557,47 @@ void AudioSyncView::geometryChange(const QRectF& newGeometry, const QRectF& oldG
 
 double AudioSyncView::audioOffsetSecs() const
 {
-    //! TODO Audio sync points: the audio time of the score's start
-    return 0.0;
+    ensureGrid();
+    return m_audioOffsetSecs;
+}
+
+double AudioSyncView::audioSecsOf(const GridTime& time) const
+{
+    if (m_pointDrag) {
+        return previewAudioSecs(time.utick);
+    }
+
+    return time.secs + audioOffsetSecs();
+}
+
+double AudioSyncView::previewAudioSecs(int utick) const
+{
+    //! NOTE While audio sync is on, the tempo is constant between two sync points: audio time is linear in
+    //! ticks there, so the grid can follow a dragged point without any engraving edit
+    std::vector<std::pair<int, double> > points;
+    points.reserve(m_syncPoints.size());
+    for (size_t i = 0; i < m_syncPoints.size(); ++i) {
+        const double secs = m_pointDrag && m_pointDrag->index == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs;
+        points.emplace_back(m_syncPoints[i].utick, secs);
+    }
+
+    if (points.size() < 2) {
+        const double shift = points.empty() ? 0.0 : points.front().second - m_syncPoints.front().audioSecs;
+        return audioOffsetSecs() + shift + (score() ? score()->tempoTimeline(true).utick2utime(utick) : 0.0);
+    }
+
+    // The segment containing utick (the first/last one beyond the points)
+    size_t i = 0;
+    while (i + 2 < points.size() && utick >= points[i + 1].first) {
+        ++i;
+    }
+
+    const auto& [u1, s1] = points[i];
+    const auto& [u2, s2] = points[i + 1];
+    if (u2 == u1) {
+        return s1;
+    }
+    return s1 + (s2 - s1) * static_cast<double>(utick - u1) / static_cast<double>(u2 - u1);
 }
 
 double AudioSyncView::audioSecsAtX(double x) const
@@ -587,12 +654,14 @@ void AudioSyncView::updatePositionText()
     if (sc) {
         const double engineSecs = secs - audioOffsetSecs();
         auto it = std::upper_bound(m_grid.begin(), m_grid.end(), engineSecs, [](double s, const GridMeasure& m) {
-            return s < m.startSecs;
+            return s < m.start.secs;
         });
         if (it != m_grid.begin()) {
             const GridMeasure& measure = *std::prev(it);
-            const int beat = 1 + static_cast<int>(std::upper_bound(measure.beatSecs.begin(), measure.beatSecs.end(), engineSecs)
-                                                  - measure.beatSecs.begin());
+            const int beat = 1
+                             + static_cast<int>(std::count_if(measure.beats.begin(), measure.beats.end(), [engineSecs](const GridTime& t) {
+                return t.secs <= engineSecs;
+            }));
             //: Position in the score: measure number and beat, e.g. "Measure 12, beat 3"
             positionText = muse::qtrc("playback", "Measure %1, beat %2").arg(measure.number).arg(beat) + "  ·  " + positionText;
         }
@@ -640,6 +709,16 @@ void AudioSyncView::rebuildGrid() const
     m_gridDirty = false;
     m_grid.clear();
     m_scoreEndSecs = 0.0;
+    m_scoreEnd = GridTime();
+    m_syncPoints.clear();
+    m_audioSyncEnabled = false;
+    m_audioOffsetSecs = 0.0;
+
+    if (notation::INotationAutomationPtr automationPtr = automation()) {
+        m_syncPoints = audiosync::syncPoints(*automationPtr);
+        m_audioSyncEnabled = automationPtr->isAudioSyncEnabled();
+        m_audioOffsetSecs = automationPtr->audioSyncOffsetSecs();
+    }
 
     const Score* sc = score();
     if (!sc || !sc->firstMeasure()) {
@@ -658,8 +737,8 @@ void AudioSyncView::rebuildGrid() const
         GridMeasure gridMeasure;
         gridMeasure.tickFrom = tickFrom;
         gridMeasure.tickTo = tickTo;
-        gridMeasure.startSecs = timeline.utick2utime(tickFrom + tickOffset);
-        gridMeasure.endSecs = timeline.utick2utime(tickTo + tickOffset);
+        gridMeasure.start = { tickFrom + tickOffset, timeline.utick2utime(tickFrom + tickOffset) };
+        gridMeasure.end = { tickTo + tickOffset, timeline.utick2utime(tickTo + tickOffset) };
         gridMeasure.number = measure->excludeFromNumbering() ? QStringLiteral("( )") : QString::number(measure->measureNumber() + 1);
 
         const TimeSigFrac timeSig = sc->sigmap()->timesig(tickFrom).nominal();
@@ -677,11 +756,14 @@ void AudioSyncView::rebuildGrid() const
         }
         for (; beatTick < tickTo; beatTick += step) {
             if (beatTick > tickFrom) {
-                gridMeasure.beatSecs.push_back(timeline.utick2utime(beatTick + tickOffset));
+                gridMeasure.beats.push_back({ beatTick + tickOffset, timeline.utick2utime(beatTick + tickOffset) });
             }
         }
 
-        m_scoreEndSecs = std::max(m_scoreEndSecs, gridMeasure.endSecs);
+        if (gridMeasure.end.secs >= m_scoreEndSecs) {
+            m_scoreEndSecs = gridMeasure.end.secs;
+            m_scoreEnd = gridMeasure.end;
+        }
         m_grid.push_back(std::move(gridMeasure));
     };
 
@@ -699,7 +781,7 @@ void AudioSyncView::rebuildGrid() const
     }
 
     std::stable_sort(m_grid.begin(), m_grid.end(), [](const GridMeasure& a, const GridMeasure& b) {
-        return a.startSecs < b.startSecs;
+        return a.start.secs < b.start.secs;
     });
 }
 
@@ -728,6 +810,30 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    if (const std::optional<size_t> index = pointAt(pos)) {
+        const audiosync::SyncPoint& point = m_syncPoints[*index];
+        m_selectedPointUtick = point.utick;
+        if (m_audioSyncEnabled && !point.locked) {
+            PointDrag drag;
+            drag.index = *index;
+            drag.originalSecs = point.audioSecs;
+            drag.audioSecs = point.audioSecs;
+            drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
+            m_pointDrag = drag;
+            m_dragMode = DragMode::Point;
+        }
+        update();
+        event->accept();
+        return;
+    }
+
+    if (railRect().contains(pos)) {
+        m_selectedPointUtick = -1;
+        update();
+        event->accept();
+        return;
+    }
+
     m_dragMode = DragMode::Seek;
     seekToAudioSecs(audioSecsAtX(pos.x()));
     event->accept();
@@ -737,7 +843,24 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 {
     //! NOTE A release can be lost (e.g. outside the window): the buttons tell
     if (m_dragMode == DragMode::None || !(event->buttons() & Qt::LeftButton)) {
+        if (m_dragMode == DragMode::Point) {
+            m_pointDrag.reset();
+            update();
+        }
         m_dragMode = DragMode::None;
+        return;
+    }
+
+    if (m_dragMode == DragMode::Point && m_pointDrag) {
+        // Kept where both neighboring segments stay within the allowed tempos
+        const audiosync::SyncPoint& point = m_syncPoints[m_pointDrag->index];
+        double secs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
+        if (const auto range = audiosync::allowedAudioRange(m_syncPoints, point.utick)) {
+            secs = std::clamp(secs, range->first, range->second);
+        }
+        m_pointDrag->audioSecs = secs;
+        m_pointDrag->moved = m_pointDrag->moved || std::abs(secs - m_pointDrag->originalSecs) > 1e-6;
+        update();
         return;
     }
 
@@ -751,7 +874,301 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 
 void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
 {
+    if (m_dragMode == DragMode::Point && m_pointDrag) {
+        const PointDrag drag = *m_pointDrag;
+        const int utick = m_syncPoints[drag.index].utick;
+        m_pointDrag.reset();
+        m_dragMode = DragMode::None;
+
+        notation::INotationAutomationPtr automationPtr = automation();
+        if (drag.moved && automationPtr) {
+            audiosync::movePoint(*automationPtr, utick, drag.audioSecs);
+        }
+        update();
+        return;
+    }
+
     m_dragMode = DragMode::None;
+}
+
+void AudioSyncView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    const QPointF pos = event->position();
+    if (event->button() != Qt::LeftButton || overviewRect().contains(pos) || pointAt(pos)) {
+        event->ignore();
+        return;
+    }
+
+    //! NOTE On the nearest beat, unless Shift is held (anywhere)
+    addPointAt(audioSecsAtX(pos.x()), !(event->modifiers() & Qt::ShiftModifier));
+    event->accept();
+}
+
+bool AudioSyncView::event(QEvent* event)
+{
+    //! NOTE The keys editing the selected sync point win over the app's shortcuts while this view has the focus
+    if (event->type() == QEvent::ShortcutOverride && selectedPointIndex()) {
+        const QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+        switch (keyEvent->key()) {
+        case Qt::Key_Delete:
+        case Qt::Key_Backspace:
+        case Qt::Key_Left:
+        case Qt::Key_Right:
+        case Qt::Key_Escape:
+            event->accept();
+            return true;
+        default:
+            break;
+        }
+    }
+
+    return QQuickPaintedItem::event(event);
+}
+
+void AudioSyncView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Delete:
+    case Qt::Key_Backspace:
+        deleteSelectedPoint();
+        break;
+    case Qt::Key_Left:
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? -LARGE_NUDGE_SECS : -NUDGE_SECS);
+        break;
+    case Qt::Key_Right:
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS);
+        break;
+    case Qt::Key_Escape:
+        if (m_pointDrag) {
+            // Back where it was
+            m_pointDrag.reset();
+            m_dragMode = DragMode::None;
+        } else {
+            m_selectedPointUtick = -1;
+        }
+        update();
+        break;
+    default:
+        QQuickPaintedItem::keyPressEvent(event);
+        return;
+    }
+
+    event->accept();
+}
+
+// ---- audio sync points ----
+
+std::vector<double> AudioSyncView::displayedPointSecs() const
+{
+    std::vector<double> result;
+    result.reserve(m_syncPoints.size());
+    for (size_t i = 0; i < m_syncPoints.size(); ++i) {
+        result.push_back(m_pointDrag && m_pointDrag->index == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
+    }
+    return result;
+}
+
+std::optional<size_t> AudioSyncView::pointAt(const QPointF& pos) const
+{
+    ensureGrid();
+
+    const bool inRail = railRect().contains(pos);
+    const bool inWaveform = waveformRect().contains(pos);
+    if (!inRail && !inWaveform) {
+        return std::nullopt;
+    }
+
+    const std::vector<double> secs = displayedPointSecs();
+    std::optional<size_t> nearest;
+    double nearestDistance = inRail ? POINT_HIT_DISTANCE : POINT_HIT_DISTANCE / 2.0;
+    for (size_t i = 0; i < secs.size(); ++i) {
+        const double distance = std::abs(xForAudioSecs(secs[i]) - pos.x());
+        if (distance <= nearestDistance) {
+            nearestDistance = distance;
+            nearest = i;
+        }
+    }
+
+    return nearest;
+}
+
+std::optional<size_t> AudioSyncView::selectedPointIndex() const
+{
+    ensureGrid();
+    for (size_t i = 0; i < m_syncPoints.size(); ++i) {
+        if (m_syncPoints[i].utick == m_selectedPointUtick) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+void AudioSyncView::addPointAt(double audioSecs, bool snapToBeat)
+{
+    notation::INotationAutomationPtr automationPtr = automation();
+    const Score* sc = score();
+    ensureGrid();
+    if (!automationPtr || !sc || !m_audioSyncEnabled) {
+        return;
+    }
+
+    // The score position there by the current tempo; the new point stays where that position already is
+    const TempoTimeline& timeline = sc->tempoTimeline(true);
+    int utick = timeline.utime2utick(std::max(0.0, audioSecs - audioOffsetSecs()));
+    if (snapToBeat) {
+        if (const std::optional<int> beat = audiosync::nearestBeatUtick(sc, utick)) {
+            utick = *beat;
+        }
+    }
+
+    if (audiosync::addPoint(*automationPtr, sc, utick, automationPtr->audioSecsAtUtick(utick))) {
+        m_selectedPointUtick = utick;
+    }
+}
+
+void AudioSyncView::nudgeSelectedPoint(double deltaSecs)
+{
+    const std::optional<size_t> index = selectedPointIndex();
+    notation::INotationAutomationPtr automationPtr = automation();
+    if (!index || !automationPtr) {
+        return;
+    }
+
+    audiosync::movePoint(*automationPtr, m_syncPoints[*index].utick, m_syncPoints[*index].audioSecs + deltaSecs);
+}
+
+void AudioSyncView::deleteSelectedPoint()
+{
+    const std::optional<size_t> index = selectedPointIndex();
+    notation::INotationAutomationPtr automationPtr = automation();
+    if (!index || !automationPtr) {
+        return;
+    }
+
+    if (audiosync::removePoint(*automationPtr, m_syncPoints[*index].utick)) {
+        m_selectedPointUtick = -1;
+    }
+}
+
+void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const
+{
+    if (m_syncPoints.empty()) {
+        return;
+    }
+
+    QFont font = painter->font();
+    font.setPixelSize(10);
+    painter->setFont(font);
+    const QFontMetricsF metrics(font);
+
+    const std::vector<double> secs = displayedPointSecs();
+    std::vector<audiosync::SyncPoint> displayed = m_syncPoints;
+    for (size_t i = 0; i < displayed.size(); ++i) {
+        displayed[i].audioSecs = secs[i];
+    }
+
+    // Off: shown (they're kept), but they don't drive the tempo
+    const double opacity = m_audioSyncEnabled ? 1.0 : 0.35;
+
+    // The tempo of each segment, where it fits
+    for (size_t i = 0; i + 1 < displayed.size(); ++i) {
+        const std::optional<double> bpm = audiosync::segmentBpm(displayed, i);
+        if (!bpm) {
+            continue;
+        }
+
+        const double x1 = xForAudioSecs(displayed[i].audioSecs);
+        const double x2 = xForAudioSecs(displayed[i + 1].audioSecs);
+        if (x2 < 0 || x1 > railRect.width()) {
+            continue;
+        }
+
+        const QString text = QString::number(*bpm, 'f', 1);
+        if (metrics.horizontalAdvance(text) + 16 <= x2 - x1) {
+            QColor textColor = m_textColor;
+            textColor.setAlphaF(0.75 * opacity);
+            painter->setPen(textColor);
+            painter->drawText(QRectF(x1, railRect.top(), x2 - x1, railRect.height()), Qt::AlignCenter, text);
+        }
+    }
+
+    const std::optional<size_t> selected = selectedPointIndex();
+
+    for (size_t i = 0; i < displayed.size(); ++i) {
+        const audiosync::SyncPoint& point = displayed[i];
+        const double x = xForAudioSecs(point.audioSecs);
+        if (x < -POINT_HIT_DISTANCE || x > railRect.width() + POINT_HIT_DISTANCE) {
+            continue;
+        }
+
+        QColor color;
+        switch (point.origin) {
+        case engraving::AudioSyncInfo::Origin::Manual: color = m_accentColor;
+            break;
+        case engraving::AudioSyncInfo::Origin::Detected: {
+            static const QColor RELIABLE(0x3F, 0xCB, 0x5A);
+            static const QColor UNRELIABLE(0xE8, 0xA3, 0x3D);
+            color = point.confidence < 0.5f ? UNRELIABLE : RELIABLE;
+            break;
+        }
+        case engraving::AudioSyncInfo::Origin::FromTempo: color = m_textColor;
+            color.setAlphaF(0.7);
+            break;
+        }
+        color.setAlphaF(color.alphaF() * opacity);
+
+        const bool isSelected = selected && *selected == i;
+
+        // Through the waveform
+        QColor lineColor = color;
+        lineColor.setAlphaF(lineColor.alphaF() * (isSelected ? 1.0 : 0.7));
+        painter->setPen(QPen(lineColor, isSelected ? 2.0 : 1.2));
+        painter->drawLine(QPointF(x, railRect.top()), QPointF(x, waveRect.bottom()));
+
+        // The handle, in the rail: a downward triangle (a square when locked)
+        const double size = isSelected ? 7.0 : 6.0;
+        QPainterPath handle;
+        if (point.locked) {
+            handle.addRect(QRectF(x - size * 0.7, railRect.bottom() - size * 1.4, size * 1.4, size * 1.4));
+        } else {
+            handle.moveTo(x - size, railRect.bottom() - size * 1.6);
+            handle.lineTo(x + size, railRect.bottom() - size * 1.6);
+            handle.lineTo(x, railRect.bottom());
+            handle.closeSubpath();
+        }
+
+        painter->setPen(isSelected ? QPen(m_textColor, 1.2) : Qt::NoPen);
+        painter->setBrush(color);
+        painter->drawPath(handle);
+        painter->setBrush(Qt::NoBrush);
+    }
+
+    // While dragging: the tempos of both segments and the position
+    if (m_pointDrag) {
+        const size_t i = m_pointDrag->index;
+        const std::optional<double> before = i > 0 ? audiosync::segmentBpm(displayed, i - 1) : std::nullopt;
+        const std::optional<double> after = audiosync::segmentBpm(displayed, i);
+
+        QStringList parts;
+        if (before) {
+            parts << QString::fromUtf8("← %1").arg(*before, 0, 'f', 1);
+        }
+        if (after) {
+            parts << QString::fromUtf8("%1 →").arg(*after, 0, 'f', 1);
+        }
+        //: Tempo in beats (quarter notes) per minute
+        const QString text = parts.join("   ") + "  " + muse::qtrc("playback", "BPM") + "   " + formatTime(m_pointDrag->audioSecs, true);
+
+        const double x = xForAudioSecs(m_pointDrag->audioSecs);
+        const double textWidth = metrics.horizontalAdvance(text) + 12;
+        const QRectF box(std::clamp(x + 8, 0.0, std::max(0.0, width() - textWidth)), waveRect.top() + 4, textWidth, 18);
+        painter->setPen(QPen(m_gridColor, 1));
+        painter->setBrush(m_rulerColor);
+        painter->drawRoundedRect(box, 3, 3);
+        painter->setBrush(Qt::NoBrush);
+        painter->setPen(m_textColor);
+        painter->drawText(box, Qt::AlignCenter, text);
+    }
 }
 
 void AudioSyncView::wheelEvent(QWheelEvent* event)
@@ -793,6 +1210,11 @@ void AudioSyncView::wheelEvent(QWheelEvent* event)
 QRectF AudioSyncView::rulerRect() const
 {
     return QRectF(0, 0, width(), RULER_HEIGHT);
+}
+
+QRectF AudioSyncView::railRect() const
+{
+    return QRectF(0, 3 * RULER_ROW_HEIGHT, width(), RAIL_HEIGHT);
 }
 
 QRectF AudioSyncView::waveformRect() const
@@ -881,8 +1303,8 @@ void AudioSyncView::paint(QPainter* painter)
     const QRectF waveRect = waveformRect();
 
     // Outside the score: dimmed
-    const double scoreStartX = xForAudioSecs(audioOffsetSecs());
-    const double scoreEndX = xForAudioSecs(audioOffsetSecs() + m_scoreEndSecs);
+    const double scoreStartX = xForAudioSecs(audioSecsOf(GridTime()));
+    const double scoreEndX = xForAudioSecs(audioSecsOf(m_scoreEnd));
     QColor outsideColor = m_textColor;
     outsideColor.setAlphaF(0.06);
     if (scoreStartX > 0) {
@@ -900,8 +1322,8 @@ void AudioSyncView::paint(QPainter* painter)
             if (measure.tickTo <= m_selectionTickFrom || measure.tickFrom >= m_selectionTickTo) {
                 continue;
             }
-            const double x1 = xForAudioSecs(measure.startSecs + audioOffsetSecs());
-            const double x2 = xForAudioSecs(measure.endSecs + audioOffsetSecs());
+            const double x1 = xForAudioSecs(audioSecsOf(measure.start));
+            const double x2 = xForAudioSecs(audioSecsOf(measure.end));
             if (x2 >= 0 && x1 <= width()) {
                 painter->fillRect(QRectF(x1, waveRect.top(), x2 - x1, waveRect.height()), selectionColor);
             }
@@ -911,6 +1333,7 @@ void AudioSyncView::paint(QPainter* painter)
     paintWaveform(painter, waveRect);
     paintGrid(painter, waveRect);
     paintRuler(painter, rulerRect());
+    paintSyncPoints(painter, railRect(), waveRect);
     paintOverview(painter, overviewRect());
 
     // Playback cursor
@@ -930,7 +1353,6 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
     painter->setFont(font);
     const QFontMetricsF metrics(font);
 
-    const double offset = audioOffsetSecs();
     const QRectF measuresRow(rect.left(), rect.top(), rect.width(), RULER_ROW_HEIGHT);
     const QRectF timeRow(rect.left(), measuresRow.bottom(), rect.width(), RULER_ROW_HEIGHT);
     const QRectF timeSigRow(rect.left(), timeRow.bottom(), rect.width(), RULER_ROW_HEIGHT);
@@ -939,8 +1361,8 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
     // Measure numbers (every Nth one when they're too close)
     double lastLabelEnd = -1e9;
     for (const GridMeasure& measure : m_grid) {
-        const double x = xForAudioSecs(measure.startSecs + offset);
-        const double endX = xForAudioSecs(measure.endSecs + offset);
+        const double x = xForAudioSecs(audioSecsOf(measure.start));
+        const double endX = xForAudioSecs(audioSecsOf(measure.end));
         if (endX < 0) {
             continue;
         }
@@ -987,7 +1409,7 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
             continue;
         }
 
-        const double x = xForAudioSecs(measure.startSecs + offset);
+        const double x = xForAudioSecs(audioSecsOf(measure.start));
         if (x > rect.width()) {
             break;
         }
@@ -995,7 +1417,7 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
         double nextX = rect.width();
         for (size_t j = i + 1; j < m_grid.size(); ++j) {
             if (!m_grid[j].timeSig.isEmpty()) {
-                nextX = xForAudioSecs(m_grid[j].startSecs + offset);
+                nextX = xForAudioSecs(audioSecsOf(m_grid[j].start));
                 break;
             }
         }
@@ -1016,21 +1438,20 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
     painter->setPen(QPen(m_gridColor, 1));
     painter->drawLine(QPointF(0, measuresRow.bottom()), QPointF(rect.width(), measuresRow.bottom()));
     painter->drawLine(QPointF(0, timeRow.bottom()), QPointF(rect.width(), timeRow.bottom()));
+    painter->drawLine(QPointF(0, timeSigRow.bottom()), QPointF(rect.width(), timeSigRow.bottom()));
     painter->drawLine(QPointF(0, rect.bottom()), QPointF(rect.width(), rect.bottom()));
 }
 
 void AudioSyncView::paintGrid(QPainter* painter, const QRectF& rect) const
 {
-    const double offset = audioOffsetSecs();
-
     QPen measurePen(m_gridColor, 1);
     QColor beatColor = m_gridColor;
     beatColor.setAlphaF(0.6);
     QPen beatPen(beatColor, 1, Qt::DotLine);
 
     for (const GridMeasure& measure : m_grid) {
-        const double x = xForAudioSecs(measure.startSecs + offset);
-        const double endX = xForAudioSecs(measure.endSecs + offset);
+        const double x = xForAudioSecs(audioSecsOf(measure.start));
+        const double endX = xForAudioSecs(audioSecsOf(measure.end));
         if (endX < 0) {
             continue;
         }
@@ -1042,18 +1463,18 @@ void AudioSyncView::paintGrid(QPainter* painter, const QRectF& rect) const
         painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
 
         // Beats only when they aren't crowded
-        const double beatSpacing = (endX - x) / static_cast<double>(measure.beatSecs.size() + 1);
+        const double beatSpacing = (endX - x) / static_cast<double>(measure.beats.size() + 1);
         if (beatSpacing >= 6.0) {
             painter->setPen(beatPen);
-            for (double beatSecs : measure.beatSecs) {
-                const double bx = xForAudioSecs(beatSecs + offset);
+            for (const GridTime& beat : measure.beats) {
+                const double bx = xForAudioSecs(audioSecsOf(beat));
                 painter->drawLine(QPointF(bx, rect.top()), QPointF(bx, rect.bottom()));
             }
         }
     }
 
     // The score's end
-    const double endX = xForAudioSecs(m_scoreEndSecs + offset);
+    const double endX = xForAudioSecs(audioSecsOf(m_scoreEnd));
     if (!m_grid.empty() && endX >= 0 && endX <= rect.width()) {
         painter->setPen(QPen(m_gridColor, 2));
         painter->drawLine(QPointF(endX, rect.top()), QPointF(endX, rect.bottom()));

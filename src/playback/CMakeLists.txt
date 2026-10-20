@@ -59,6 +59,8 @@ target_sources(playback PRIVATE
     internal/soundtrackslot.h
     internal/referenceaudiofile.cpp
     internal/referenceaudiofile.h
+    internal/audiosyncedits.cpp
+    internal/audiosyncedits.h
     internal/trackpresets.cpp
     internal/trackpresets.h
 )
