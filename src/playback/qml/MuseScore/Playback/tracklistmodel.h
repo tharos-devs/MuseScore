@@ -44,7 +44,6 @@
 #include "context/iglobalcontext.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
-#include "project/iprojectvideosettings.h"
 #include "interactive/iinteractive.h"
 
 #include "iplaybackcontroller.h"
@@ -54,6 +53,7 @@
 #include "channelselection.h"
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
+#include "soundtrackchannel.h"
 
 namespace mu::engraving {
 class Part;
@@ -65,8 +65,8 @@ namespace mu::playback {
 //! (color, mute, solo), in the Mixer's order. Each row's channel item is a Mixer channel item of its own (not the
 //! Mixer's), bound to the part's first instrument's track or to the bus like the Mixer's (see
 //! MixerChannelItem::bindInstrumentTrack()/bindAuxBus()): everything goes through the same services as the Mixer
-//! and the Timeline, which pick the changes up from there (and the other way around). The Metronome and Video rows
-//! are above them; each kind of rows can be hidden (View menu, see ChannelCategoriesMenu)
+//! and the Timeline, which pick the changes up from there (and the other way around). The Metronome, Video and
+//! Reference audio rows are above them; each kind of rows can be hidden (View menu, see ChannelCategoriesMenu)
 class TrackListModel : public QAbstractListModel, public QQmlParserStatus, public muse::async::Asyncable, public muse::Contextable
 {
     Q_OBJECT
@@ -82,12 +82,16 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     Q_PROPERTY(bool hasArticulationMapColumn READ hasArticulationMapColumn NOTIFY columnsChanged)
     Q_PROPERTY(bool hasEditorColumn READ hasEditorColumn NOTIFY columnsChanged)
 
-    //! NOTE: the Video row, above the parts' rows: the Mixer's Video channel (its mute/solo are the video
-    //! attachment's, shared with the Video panel and the Timeline), there even without a video, to load one
-    Q_PROPERTY(MixerChannelItem * videoChannelItem READ videoChannelItem NOTIFY videoChannelItemChanged)
-    Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY hasVideoChanged)
+    //! NOTE: the sound tracks' rows (see SoundTrackChannel), above the parts' rows: the Video row, the Mixer's Video
+    //! channel (its mute/solo are the video attachment's, shared with the Video panel and the Timeline), then the
+    //! Reference audio row (its mute/solo shared with the Audio sync window), each there even without its source,
+    //! to load one
+    Q_PROPERTY(MixerChannelItem * videoChannelItem READ videoChannelItem NOTIFY soundTrackChannelItemsChanged)
+    Q_PROPERTY(bool hasVideo READ hasVideo NOTIFY soundTrackSourcesChanged)
+    Q_PROPERTY(MixerChannelItem * referenceAudioChannelItem READ referenceAudioChannelItem NOTIFY soundTrackChannelItemsChanged)
+    Q_PROPERTY(bool hasReferenceAudio READ hasReferenceAudio NOTIFY soundTrackSourcesChanged)
 
-    //! NOTE: the Metronome row, above the Video row: its mute only
+    //! NOTE: the Metronome row, above the sound tracks' rows: its mute only
     Q_PROPERTY(MixerChannelItem * metronomeChannelItem READ metronomeChannelItem NOTIFY metronomeChannelItemChanged)
 
     //! NOTE: the channel shown below the list, with the Mixer's controls: the first selected row's (a track or a bus);
@@ -102,6 +106,7 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
     Q_PROPERTY(int stripContentHeight READ stripContentHeight WRITE setStripContentHeight NOTIFY stripContentHeightChanged)
 
     Q_PROPERTY(bool videoVisible READ videoVisible NOTIFY categoriesVisibleChanged)
+    Q_PROPERTY(bool referenceAudioVisible READ referenceAudioVisible NOTIFY categoriesVisibleChanged)
     Q_PROPERTY(bool metronomeVisible READ metronomeVisible NOTIFY categoriesVisibleChanged)
 
     QML_ELEMENT
@@ -171,6 +176,8 @@ public:
 
     MixerChannelItem* videoChannelItem() const;
     bool hasVideo() const;
+    MixerChannelItem* referenceAudioChannelItem() const;
+    bool hasReferenceAudio() const;
 
     MixerChannelItem* metronomeChannelItem() const;
 
@@ -183,12 +190,16 @@ public:
     void setStripHeight(int height);
 
     bool videoVisible() const;
+    bool referenceAudioVisible() const;
     bool metronomeVisible() const;
 
     //! NOTE: same as the Timeline's Video row "Load video" (see Timeline::chooseVideoFile())
     Q_INVOKABLE void chooseVideoFile();
-    Q_INVOKABLE void setVideoColor(const QColor& color);
-    Q_INVOKABLE void resetVideoColor();
+    //! NOTE: same as the Audio sync window's (see audiosync::chooseReferenceAudio())
+    Q_INVOKABLE void chooseReferenceAudioFile();
+    //! NOTE: a sound track's row (its channel item): not undoable, like its other output params changed from the Mixer
+    Q_INVOKABLE void setSoundTrackColor(mu::playback::MixerChannelItem* item, const QColor& color);
+    Q_INVOKABLE void resetSoundTrackColor(mu::playback::MixerChannelItem* item);
     //! NOTE: undoable, like a track's (see setTrackColor())
     Q_INVOKABLE void setMetronomeColor(const QColor& color);
     Q_INVOKABLE void resetMetronomeColor();
@@ -202,8 +213,8 @@ signals:
     void globalMuteEngagedChanged();
     void globalSoloEngagedChanged();
     void columnsChanged();
-    void videoChannelItemChanged();
-    void hasVideoChanged();
+    void soundTrackChannelItemsChanged();
+    void soundTrackSourcesChanged();
     void metronomeChannelItemChanged();
     void categoriesVisibleChanged();
     void stripChannelItemChanged();
@@ -310,9 +321,12 @@ private:
     void updateColors();
     void updateAuxBusTitles();
     void updateColumns();
-    void rebuildVideoChannelItem();
-    void loadVideoMuteState();
-    void loadVideoColor();
+    struct SoundTrackRow;
+    const SoundTrackRow* soundTrackRow(MixerChannelItem::Type type) const;
+    void connectSoundTrackSettings();
+    void updateSoundTrackSources();
+    void rebuildSoundTrackChannelItem(SoundTrackRow& row);
+    void loadSoundTrackColors();
     void applyMetronomeColor(const QColor& color, const muse::TranslatableString& actionName);
     GlobalMuteSoloToggle::Channels channels() const;
     GlobalMuteSoloToggle::Channels globalMuteSoloChannels() const;
@@ -325,7 +339,6 @@ private:
     notation::INotationPtr currentNotation() const;
     project::IProjectAudioSettingsPtr audioSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;
-    project::IProjectVideoSettingsPtr videoSettings() const;
 
     QList<Row> m_rows;
     bool m_reloadScheduled = false;
@@ -352,10 +365,16 @@ private:
     notation::INotationPtr m_masterNotation;
     project::IProjectAudioSettingsPtr m_audioSettings;
     notation::INotationArticulationMapsPtr m_articulationMaps;
-    project::IProjectVideoSettingsPtr m_videoSettings;
 
-    MixerChannelItem* m_videoChannelItem = nullptr;
-    bool m_hasVideo = false;
+    //! NOTE: a sound track's row (see SoundTrackChannel), in display order
+    struct SoundTrackRow {
+        SoundTrackChannel channel;
+        MixerChannelItem* item = nullptr;
+        bool hasSource = false;
+        //! NOTE: the current project's (to disconnect from when it changes)
+        std::optional<muse::async::Notification> settingsChanged;
+    };
+    std::vector<SoundTrackRow> m_soundTrackRows;
 
     MixerChannelItem* m_metronomeChannelItem = nullptr;
 };

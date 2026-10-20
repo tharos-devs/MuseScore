@@ -22,13 +22,14 @@
 
 #include "referenceaudiopeaks.h"
 
+#include "playback/internal/mappedwav.h"
+
 #include <algorithm>
 #include <cstring>
 #include <limits>
 #include <thread>
 
 #include <QCoreApplication>
-#include <QFile>
 #include <QMetaObject>
 #include <QPointer>
 
@@ -45,21 +46,10 @@ struct Bin {
     int16_t min = 0;
     int16_t max = 0;
 };
-
-uint16_t readLE16(const uchar* p)
-{
-    return static_cast<uint16_t>(p[0] | (p[1] << 8));
-}
-
-uint32_t readLE32(const uchar* p)
-{
-    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16)
-           | (static_cast<uint32_t>(p[3]) << 24);
-}
 }
 
 struct ReferenceAudioPeaks::Data {
-    std::unique_ptr<QFile> file;
+    std::shared_ptr<MappedWav> wav;
     const int16_t* samples = nullptr; // interleaved, inside the mapping
     int64_t frames = 0;
     int channels = 0;
@@ -192,49 +182,18 @@ void ReferenceAudioPeaks::load(const QString& wavPath)
 
 std::shared_ptr<ReferenceAudioPeaks::Data> ReferenceAudioPeaks::open(const QString& wavPath)
 {
+    std::shared_ptr<MappedWav> wav = MappedWav::open(wavPath);
+    if (!wav) {
+        return nullptr;
+    }
+
     auto data = std::make_shared<Data>();
-    data->file = std::make_unique<QFile>(wavPath);
-    if (!data->file->open(QIODevice::ReadOnly)) {
-        LOGE() << "unable to open " << wavPath;
-        return nullptr;
-    }
-
-    const qint64 size = data->file->size();
-    const uchar* map = data->file->map(0, size);
-    if (!map || size < 12 || std::memcmp(map, "RIFF", 4) != 0 || std::memcmp(map + 8, "WAVE", 4) != 0) {
-        LOGE() << "not a WAV file: " << wavPath;
-        return nullptr;
-    }
-
-    int format = 0;
-    int bitsPerSample = 0;
-    qint64 pos = 12;
-    while (pos + 8 <= size) {
-        const uchar* chunk = map + pos;
-        const qint64 chunkSize = readLE32(chunk + 4);
-        if (std::memcmp(chunk, "fmt ", 4) == 0 && chunkSize >= 16 && pos + 8 + 16 <= size) {
-            format = readLE16(chunk + 8);
-            data->channels = readLE16(chunk + 10);
-            data->sampleRate = static_cast<int>(readLE32(chunk + 12));
-            bitsPerSample = readLE16(chunk + 22);
-        } else if (std::memcmp(chunk, "data", 4) == 0) {
-            if (format != 1 || bitsPerSample != 16 || data->channels <= 0 || data->sampleRate <= 0) {
-                LOGE() << "unsupported WAV format: " << wavPath;
-                return nullptr;
-            }
-
-            //! NOTE A truncated file: what's there
-            const qint64 dataBytes = std::min(chunkSize, size - (pos + 8));
-            data->samples = reinterpret_cast<const int16_t*>(chunk + 8);
-            data->frames = dataBytes / (2 * data->channels);
-            return data;
-        }
-
-        pos += 8 + chunkSize + (chunkSize & 1);
-    }
-
-    LOGE() << "no audio data in " << wavPath;
-    return nullptr;
+    data->samples = wav->samples;
+    data->frames = wav->frames;
+    data->channels = wav->channels;
+    data->sampleRate = wav->sampleRate;
+    data->wav = std::move(wav);
+    return data;
 }
 
 void ReferenceAudioPeaks::computePeaks(Data& data, const std::atomic<bool>& canceled)

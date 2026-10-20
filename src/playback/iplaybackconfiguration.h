@@ -83,6 +83,11 @@ public:
     virtual void addRecentVideoFile(const QString& path) = 0;
     virtual void clearRecentVideoFiles() = 0;
 
+    //! NOTE Same for the Audio sync window's reference audio files
+    virtual QStringList recentReferenceAudioFiles() const = 0;
+    virtual void addRecentReferenceAudioFile(const QString& path) = 0;
+    virtual void clearRecentReferenceAudioFiles() = 0;
+
     virtual bool isMixerSectionVisible(MixerSectionType sectionType) const = 0;
     virtual void setMixerSectionVisible(MixerSectionType sectionType, bool visible) = 0;
     virtual muse::async::Channel<MixerSectionType, bool> isMixerSectionVisibleChanged() const = 0;

@@ -100,6 +100,8 @@ void MixerPanelModel::init()
     //! NOTE Must be set from Qml
     DO_ASSERT(m_navigationSection);
 
+    m_soundTrackChannels = makeSoundTrackChannels(iocContext());
+
     controller()->playbackInitedChanged().onReceive(this, [this](bool) {
         reload();
     });
@@ -190,17 +192,17 @@ void MixerPanelModel::resetColorForSelectedChannels()
     applyColorToSelectedChannels(QColor(), muse::TranslatableString("undoableAction", "Reset Mixer channel color"));
 }
 
-//! NOTE: the Video channel picks it up from the audio settings, like the other channels' colors
-void MixerPanelModel::setVideoColor(const QColor& color)
+//! NOTE: the channel picks it up from the audio settings, like the other channels' colors
+void MixerPanelModel::setSoundTrackColor(MixerChannelItem* item, const QColor& color)
 {
-    AudioOutputParams params = controller()->videoOutputParams();
-    params.color = color;
-    controller()->setVideoOutputParams(params);
+    if (const SoundTrackChannel* channel = item ? findSoundTrackChannel(m_soundTrackChannels, item->type()) : nullptr) {
+        channel->setColor(color);
+    }
 }
 
-void MixerPanelModel::resetVideoColor()
+void MixerPanelModel::resetSoundTrackColor(MixerChannelItem* item)
 {
-    setVideoColor(QColor());
+    setSoundTrackColor(item, QColor());
 }
 
 void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName)
@@ -439,7 +441,7 @@ void MixerPanelModel::reorderAuxChannels(const QVariantList& draggedAuxBusIndice
     }
 
     //! NOTE: the row right after the last bus of this type - i.e. right before whatever
-    //! immediately follows it (another aux type, video/metronome, or master). Deliberately
+    //! immediately follows it (another aux type, a sound track/metronome, or master). Deliberately
     //! NOT resolveAuxInsertIndex(): that resolves where a bus's OWN persisted sort order
     //! currently ranks it among siblings, which is right for an incrementally-added bus
     //! (whose order is either freshly assigned or already correctly reloaded), but wrong
@@ -450,7 +452,7 @@ void MixerPanelModel::reorderAuxChannels(const QVariantList& draggedAuxBusIndice
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
             const MixerChannelItem* item = m_mixerChannelList[i];
             if (item->type() == MixerChannelItem::Type::Master
-                || item->type() == MixerChannelItem::Type::Video
+                || item->isSoundTrack()
                 || item->type() == MixerChannelItem::Type::Metronome) {
                 return i;
             }
@@ -723,9 +725,9 @@ void MixerPanelModel::reloadItems()
         }
     }
 
-    //! NOTE: aux buses come before video/metronome (both placed immediately left of
+    //! NOTE: aux buses come before the sound tracks/metronome (all placed immediately left of
     //! master instead) so the aux section stays adjacent to the instrument tracks
-    //! it routes from, rather than sitting between two channels (video, metronome)
+    //! it routes from, rather than sitting between channels (video, reference audio, metronome)
     //! that have nothing to do with aux routing.
     const auto& auxTrackIdMap = controller()->auxTrackIdMap();
     for (aux_channel_idx_t index : sortedAuxIndices()) {
@@ -734,8 +736,11 @@ void MixerPanelModel::reloadItems()
         }
     }
 
-    if (controller()->videoTrackId() != INVALID_TRACK_ID && isCategoryVisible(ChannelCategory::Video)) {
-        m_mixerChannelList.push_back(buildVideoChannelItem(controller()->videoTrackId()));
+    for (const SoundTrackChannel& channel : m_soundTrackChannels) {
+        const TrackId trackId = channel.trackId();
+        if (trackId != INVALID_TRACK_ID && isCategoryVisible(channel.category)) {
+            m_mixerChannelList.push_back(buildSoundTrackChannelItem(channel, trackId));
+        }
     }
 
     addInstrumentTrack(notationPlayback()->metronomeTrackId());
@@ -751,11 +756,13 @@ void MixerPanelModel::onTrackAdded(const TrackId& trackId)
 {
     TRACEFUNC;
 
-    if (trackId == controller()->videoTrackId()) {
-        if (indexOf(trackId) == INVALID_INDEX && isCategoryVisible(ChannelCategory::Video)) {
-            addItem(buildVideoChannelItem(trackId), resolveVideoInsertIndex());
+    for (const SoundTrackChannel& channel : m_soundTrackChannels) {
+        if (trackId == channel.trackId()) {
+            if (indexOf(trackId) == INVALID_INDEX && isCategoryVisible(channel.category)) {
+                addItem(buildSoundTrackChannelItem(channel, trackId), resolveSoundTrackInsertIndex(channel.type));
+            }
+            return;
         }
-        return;
     }
 
     const IPlaybackController::InstrumentTrackIdMap& instrumentTracks = controller()->instrumentTrackIdMap();
@@ -946,16 +953,12 @@ void MixerPanelModel::setupConnections()
             //! NOTE Each channel type keeps its output params in its own place: reloading the others'
             //! (default ones, for an invalid instrument track id) would reset its fader/pan/gain/color/sends
             AudioOutputParams outParams;
-            switch (item->type()) {
-                case MixerChannelItem::Type::Video:
-                    outParams = controller()->videoOutputParams();
-                    break;
-                case MixerChannelItem::Type::Aux:
-                    outParams = audioSettings()->auxOutputParams(item->auxBusIndex());
-                    break;
-                default:
-                    outParams = audioSettings()->trackOutputParams(item->instrumentTrackId());
-                    break;
+            if (const SoundTrackChannel* channel = findSoundTrackChannel(m_soundTrackChannels, item->type())) {
+                outParams = channel->outputParams();
+            } else if (item->type() == MixerChannelItem::Type::Aux) {
+                outParams = audioSettings()->auxOutputParams(item->auxBusIndex());
+            } else {
+                outParams = audioSettings()->trackOutputParams(item->instrumentTrackId());
             }
 
             outParams.fxChain = params;
@@ -983,13 +986,15 @@ void MixerPanelModel::setupConnections()
         }
     });
 
-    if (videoSettings()) {
-        videoSettings()->settingsChanged().onNotify(this, [this]() {
-            onVideoAttachmentChanged();
-        });
+    for (const SoundTrackChannel& channel : m_soundTrackChannels) {
+        if (std::optional<async::Notification> settingsChanged = channel.settingsChanged()) {
+            settingsChanged->onNotify(this, [this, channel]() {
+                onSoundTrackSettingsChanged(channel);
+            });
+        }
     }
 
-    //! NOTE: the instrument tracks', metronome's, aux buses' and video's colors are changed through the audio
+    //! NOTE: the instrument tracks', metronome's, aux buses' and sound tracks' colors are changed through the audio
     //! settings, from the Mixer itself, the Timeline or the Track list (see ChannelColorChange) - pick them up from there
     if (audioSettings()) {
         audioSettings()->settingsChanged().onNotify(this, [this]() {
@@ -1006,9 +1011,9 @@ void MixerPanelModel::setupConnections()
                     if (audioSettings()->trackHasExistingOutputParams(trackId)) {
                         color = audioSettings()->trackOutputParams(trackId).color;
                     }
-                } else if (item->type() == MixerChannelItem::Type::Video) {
-                    //! NOTE: e.g. changed from the Track list's Video row
-                    color = controller()->videoOutputParams().color;
+                } else if (const SoundTrackChannel* channel = findSoundTrackChannel(m_soundTrackChannels, item->type())) {
+                    //! NOTE: e.g. changed from the Track list's Video/Reference audio row
+                    color = channel->outputParams().color;
                 }
 
                 if (color && item->color() != *color) {
@@ -1018,43 +1023,48 @@ void MixerPanelModel::setupConnections()
         }, Asyncable::Mode::SetReplace);
     }
 
-    controller()->videoMuteStateChanged().onReceive(this, [this](bool muted, bool forceMute) {
-        if (MixerChannelItem* item = findChannelItem(controller()->videoTrackId())) {
-            item->loadMuteForceMuteState(muted, forceMute);
-        }
-    });
+    for (const SoundTrackChannel& channel : m_soundTrackChannels) {
+        channel.muteStateChanged().onReceive(this, [this, trackId = channel.trackId](bool muted, bool forceMute) {
+            if (MixerChannelItem* item = findChannelItem(trackId())) {
+                item->loadMuteForceMuteState(muted, forceMute);
+            }
+        });
+    }
 }
 
-void MixerPanelModel::onVideoAttachmentChanged()
+void MixerPanelModel::onSoundTrackSettingsChanged(const SoundTrackChannel& channel)
 {
     TRACEFUNC;
 
-    //! NOTE The channel itself follows the video's sound track (see onTrackAdded()/trackRemoved()),
-    //! only its solo/mute state is shared with the Video panel (its "M" button) and must be refreshed
-    if (!videoSettings() || !videoSettings()->attachment().isValid()) {
+    //! NOTE The channel itself follows the sound track (see onTrackAdded()/trackRemoved()), only its
+    //! solo/mute state is shared with its source's own UI (e.g. the Video panel's "M" button) and must be refreshed
+    if (!channel.hasSource()) {
         return;
     }
 
-    if (MixerChannelItem* item = findChannelItem(controller()->videoTrackId())) {
-        loadVideoMuteState(item);
+    if (MixerChannelItem* item = findChannelItem(channel.trackId())) {
+        channel.loadMuteState(item);
     }
 }
 
-void MixerPanelModel::loadVideoMuteState(MixerChannelItem* item)
+int MixerPanelModel::resolveSoundTrackInsertIndex(MixerChannelItem::Type type) const
 {
-    //! NOTE The user's own mute/solo come from the attachment, but the effective mute also includes the
-    //! live force-mute (another track soloed), exactly like PlaybackController::updateVideoMuteState()
-    const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
-    item->loadSoloMuteState({ attachment.muted, attachment.solo });
+    //! NOTE: the sound tracks' channels are immediately left of the metronome (or master), in m_soundTrackChannels' order
+    auto displayOrder = [this](MixerChannelItem::Type soundTrackType) {
+        for (size_t i = 0; i < m_soundTrackChannels.size(); ++i) {
+            if (m_soundTrackChannels[i].type == soundTrackType) {
+                return i;
+            }
+        }
+        return m_soundTrackChannels.size();
+    };
 
-    const bool forceMute = controller()->isVideoForceMuted();
-    item->loadMuteForceMuteState((attachment.muted && !attachment.solo) || forceMute, forceMute);
-}
+    const size_t ownOrder = displayOrder(type);
 
-int MixerPanelModel::resolveVideoInsertIndex() const
-{
     for (int i = 0; i < m_mixerChannelList.size(); ++i) {
-        if (m_mixerChannelList[i]->type() == MixerChannelItem::Type::Metronome) {
+        const MixerChannelItem* item = m_mixerChannelList[i];
+        if (item->type() == MixerChannelItem::Type::Metronome || item->type() == MixerChannelItem::Type::Master
+            || (item->isSoundTrack() && displayOrder(item->type()) > ownOrder)) {
             return i;
         }
     }
@@ -1071,9 +1081,9 @@ int MixerPanelModel::resolveInsertIndex(const engraving::InstrumentTrackId& newI
 
     // Assumptions:
     // - the last channel is always the master channel
-    // - metronome channel is placed to the immediate left of the master (video, if
-    //   present, goes immediately left of metronome in turn - see
-    //   resolveVideoInsertIndex()); aux buses, if visible, sit further left still,
+    // - metronome channel is placed to the immediate left of the master (the sound
+    //   tracks, if present, go immediately left of metronome in turn - see
+    //   resolveSoundTrackInsertIndex()); aux buses, if visible, sit further left still,
     //   adjacent to the instrument tracks they route from (see resolveAuxInsertIndex())
     // - the InstrumentTrackIds from the mixer channel items are always a correctly
     //   sorted subset of the InstrumentTrackIds from NotationParts
@@ -1139,7 +1149,7 @@ std::vector<aux_channel_idx_t> MixerPanelModel::sortedAuxIndices() const
 int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroupBus) const
 {
     //! NOTE: FX-type aux buses are grouped together (by sort order), followed by all
-    //! Group-type buses (also by sort order), then video/metronome (if present), then
+    //! Group-type buses (also by sort order), then the sound tracks/metronome (if present), then
     //! the master channel. Mirrors sortedAuxIndices()'s ordering, resolving the
     //! equivalent insert position for a single newly-added bus rather than the whole
     //! list at once - without the sort-order comparison below, a bus recreated at a
@@ -1149,7 +1159,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
     //! instead of in its correct sorted position, making the on-screen order depend on
     //! WHETHER a bus arrived via this incremental path or a full reload, rather than
     //! being a stable function of the current bus set and its persisted order. Stopping
-    //! at video/metronome too (not just master) keeps aux buses added after those
+    //! at the sound tracks/metronome too (not just master) keeps aux buses added after those
     //! already exist from landing on the wrong side of them.
     int ownOrder = controller()->auxBusSortOrder(index);
 
@@ -1157,7 +1167,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
         for (int i = 0; i < m_mixerChannelList.size(); ++i) {
             const MixerChannelItem* item = m_mixerChannelList[i];
             if (item->type() == MixerChannelItem::Type::Master
-                || item->type() == MixerChannelItem::Type::Video
+                || item->isSoundTrack()
                 || item->type() == MixerChannelItem::Type::Metronome) {
                 return i;
             }
@@ -1173,7 +1183,7 @@ int MixerPanelModel::resolveAuxInsertIndex(aux_channel_idx_t index, bool isGroup
     for (int i = 0; i < m_mixerChannelList.size(); ++i) {
         const MixerChannelItem* item = m_mixerChannelList[i];
         if (item->type() == MixerChannelItem::Type::Master
-            || item->type() == MixerChannelItem::Type::Video
+            || item->isSoundTrack()
             || item->type() == MixerChannelItem::Type::Metronome
             || (item->type() == MixerChannelItem::Type::Aux && item->isGroupBus())) {
             return i;
@@ -1296,31 +1306,30 @@ MixerChannelItem* MixerPanelModel::buildAuxChannelItem(aux_channel_idx_t index, 
     return item;
 }
 
-MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
+MixerChannelItem* MixerPanelModel::buildSoundTrackChannelItem(const SoundTrackChannel& channel, const TrackId trackId)
 {
-    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, trackId);
+    MixerChannelItem* item = new MixerChannelItem(this, channel.type, true /*outputOnly*/, trackId);
     item->setPanelSection(m_navigationSection);
-    item->setTitle(muse::qtrc("playback", "Video"));
+    item->setTitle(channel.title());
 
     //! NOTE Solo/mute aren't part of the persisted output params (loadOutputParams() ignores them)
-    loadVideoMuteState(item);
-    loadOutputParams(item, controller()->videoOutputParams());
+    channel.loadMuteState(item);
+    loadOutputParams(item, channel.outputParams());
 
     item->subscribeOnTrackAudioSignalChanges();
 
-    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
+    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, channel, trackId](const AudioOutputParams& params) {
         //! NOTE The engine's mute is always the live effective one (force-mute included), whatever the item shows
-        const project::VideoAttachmentSettings& attachment = videoSettings()->attachment();
         ControlParams control = params.control();
-        control.muted = (attachment.muted && !attachment.solo) || controller()->isVideoForceMuted();
+        control.muted = channel.isEffectivelyMuted();
         playback()->setControlParams(trackId, control);
 
-        AudioOutputParams outParams = controller()->videoOutputParams();
+        AudioOutputParams outParams = channel.outputParams();
         outParams.volume = params.volume;
         outParams.balance = params.balance;
         outParams.gain = params.gain;
         outParams.eq = params.eq;
-        controller()->setVideoOutputParams(outParams);
+        channel.setOutputParams(outParams);
     });
 
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
@@ -1333,19 +1342,14 @@ MixerChannelItem* MixerPanelModel::buildVideoChannelItem(const TrackId trackId)
         updateAuxSendItemCount();
     });
 
-    connect(item, &MixerChannelItem::soloMuteStateChanged, this, [this](const notation::INotationSoloMuteState::SoloMuteState& state) {
-        //! NOTE Stored in the attachment, shared with the Video panel's "M" button;
+    connect(item, &MixerChannelItem::soloMuteStateChanged, this, [channel](const notation::INotationSoloMuteState::SoloMuteState& state) {
+        //! NOTE Stored with its source's settings, shared with its own UI (e.g. the Video panel's "M" button);
         //! PlaybackController applies it to the engine (see updateSoloMuteStates())
-        project::updateVideoAttachment(videoSettings(), [&state](VideoAttachmentSettings& attachment) {
-            attachment.muted = state.solo ? false : state.mute;
-            attachment.solo = state.solo;
-        });
+        channel.setUserSoloMuteState(state);
     });
 
-    connect(item, &MixerChannelItem::colorChanged, this, [this, item]() {
-        AudioOutputParams outParams = controller()->videoOutputParams();
-        outParams.color = item->color();
-        controller()->setVideoOutputParams(outParams);
+    connect(item, &MixerChannelItem::colorChanged, this, [channel, item]() {
+        channel.setColor(item->color());
     });
 
     connectGlobalMuteSoloAggregate(item);
@@ -1505,11 +1509,6 @@ INotationProjectPtr MixerPanelModel::currentProject() const
 IProjectAudioSettingsPtr MixerPanelModel::audioSettings() const
 {
     return currentProject() ? currentProject()->audioSettings() : nullptr;
-}
-
-IProjectVideoSettingsPtr MixerPanelModel::videoSettings() const
-{
-    return currentProject() ? currentProject()->videoSettings() : nullptr;
 }
 
 IProjectUndoStackPtr MixerPanelModel::projectUndoStack() const

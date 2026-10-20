@@ -156,7 +156,7 @@ muse::Ret PlaybackCommandsController::loadReferenceAudio()
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
 
-    audiosync::chooseReferenceAudio(interactive().get(), project->audioSyncSettings());
+    audiosync::chooseReferenceAudio(interactive().get(), configuration().get(), project->audioSyncSettings());
     return muse::make_ok();
 }
 

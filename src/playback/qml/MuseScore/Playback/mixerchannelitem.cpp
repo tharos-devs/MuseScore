@@ -38,6 +38,7 @@
 #include "project/inotationproject.h"
 
 #include "auxbuseditor.h"
+#include "soundtrackchannel.h"
 
 using namespace mu::playback;
 using namespace muse;
@@ -211,6 +212,16 @@ bool MixerChannelItem::isGroupBus() const
 bool MixerChannelItem::isReverbBus() const
 {
     return m_type == Type::Aux && m_auxBusIndex == REVERB_CHANNEL_IDX;
+}
+
+bool MixerChannelItem::isSoundTrackType(Type type)
+{
+    return type == Type::Video || type == Type::ReferenceAudio;
+}
+
+bool MixerChannelItem::isSoundTrack() const
+{
+    return isSoundTrackType(m_type);
 }
 
 aux_channel_idx_t MixerChannelItem::auxBusIndex() const
@@ -543,10 +554,14 @@ void MixerChannelItem::persistAuxSendsOrder(const std::vector<aux_channel_idx_t>
         project->audioSettings()->setAuxOutputParams(m_auxBusIndex, params);
         break;
     }
-    case Type::Video: {
-        AudioOutputParams params = playbackController()->videoOutputParams();
-        params.auxSendsOrder = order;
-        playbackController()->setVideoOutputParams(params);
+    case Type::Video:
+    case Type::ReferenceAudio: {
+        const SoundTrackChannels channels = makeSoundTrackChannels(iocContext());
+        if (const SoundTrackChannel* channel = findSoundTrackChannel(channels, m_type)) {
+            AudioOutputParams params = channel->outputParams();
+            params.auxSendsOrder = order;
+            channel->setOutputParams(params);
+        }
         break;
     }
     default:

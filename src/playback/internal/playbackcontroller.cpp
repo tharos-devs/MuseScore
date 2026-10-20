@@ -117,7 +117,7 @@ void PlaybackController::init()
 
     m_videoSlot = makeSoundTrackSlot([]() { return muse::trc("playback", "Video"); },
                                      [this]() { return videoOutputParams(); });
-    m_referenceAudioSlot = makeSoundTrackSlot([]() { return muse::trc("playback", "Reference audio"); },
+    m_referenceAudioSlot = makeSoundTrackSlot([]() { return muse::trc("playback", "Audio"); },
                                               [this]() { return referenceAudioOutputParams(); });
 
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
@@ -526,6 +526,17 @@ void PlaybackController::setGroupBusSourcesSolo(aux_channel_idx_t index, bool so
         const VideoAttachmentSettings& attachment = videoSettingsPtr->attachment();
         if (attachment.solo != solo && !(solo && attachment.muted)) {
             updateVideoAttachment(videoSettingsPtr, [solo](VideoAttachmentSettings& updated) {
+                updated.solo = solo;
+            });
+        }
+    }
+
+    IProjectAudioSyncSettingsPtr audioSyncSettingsPtr = audioSyncSettings();
+    if (referenceAudioTrackId() != INVALID_TRACK_ID && audioSyncSettingsPtr
+        && routesTo(referenceAudioOutputParams().auxSends, groupBuses)) {
+        const ReferenceAudioSettings& referenceAudio = audioSyncSettingsPtr->referenceAudio();
+        if (referenceAudio.solo != solo && !(solo && referenceAudio.muted)) {
+            updateReferenceAudio(audioSyncSettingsPtr, [solo](ReferenceAudioSettings& updated) {
                 updated.solo = solo;
             });
         }
@@ -1188,6 +1199,13 @@ muse::Ret PlaybackController::toggleLoopPlayback()
         return make_ok();
     }
 
+    //! NOTE The score's loop turned on: the Audio sync window's A-B loop goes off (the latest one wins)
+    if (isReferenceAudioLoopActive()) {
+        updateReferenceAudio(audioSyncSettings(), [](ReferenceAudioSettings& referenceAudio) {
+            referenceAudio.loopEnabled = false;
+        });
+    }
+
     if (loopBoundariesSet() && !selection()->isRange()) {
         enableLoop();
         return make_ok();
@@ -1257,6 +1275,12 @@ void PlaybackController::updateLoop()
         return;
     }
 
+    //! NOTE The Audio sync window's A-B loop wins while it's on
+    if (isReferenceAudioLoopActive()) {
+        applyReferenceAudioLoop();
+        return;
+    }
+
     const LoopBoundaries& boundaries = notationPlayback()->loopBoundaries();
 
     if (!boundaries.enabled) {
@@ -1291,7 +1315,11 @@ void PlaybackController::disableLoop()
         return;
     }
 
-    currentPlayer()->resetLoop();
+    if (isReferenceAudioLoopActive()) {
+        applyReferenceAudioLoop();
+    } else {
+        currentPlayer()->resetLoop();
+    }
     notationPlayback()->setLoopBoundariesEnabled(false);
 }
 
@@ -1563,6 +1591,7 @@ void PlaybackController::onReferenceAudioChanged()
         if (m_masterNotation && m_masterNotation->automation()) {
             source.offsetMs = static_cast<int>(std::lround(m_masterNotation->automation()->audioSyncOffsetSecs() * 1000.0));
         }
+        source.offsetMs += referenceAudio.latencyMs;
     }
 
     const bool hadTrack = m_referenceAudioSlot->trackId() != INVALID_TRACK_ID;
@@ -1570,6 +1599,49 @@ void PlaybackController::onReferenceAudioChanged()
 
     if (hadTrack && m_referenceAudioSlot->trackId() != INVALID_TRACK_ID) {
         updateSoloMuteStates();
+    }
+
+    applyReferenceAudioLoop();
+}
+
+bool PlaybackController::isReferenceAudioLoopActive() const
+{
+    IProjectAudioSyncSettingsPtr audioSyncSettingsPtr = audioSyncSettings();
+    if (!audioSyncSettingsPtr) {
+        return false;
+    }
+
+    const ReferenceAudioSettings& referenceAudio = audioSyncSettingsPtr->referenceAudio();
+    return referenceAudio.isValid() && referenceAudio.loopEnabled && referenceAudio.hasLoop();
+}
+
+void PlaybackController::applyReferenceAudioLoop()
+{
+    if (!currentPlayer()) {
+        return;
+    }
+
+    if (!isReferenceAudioLoopActive()) {
+        if (m_isReferenceAudioLoopApplied) {
+            // Back to the score's own loop, if any
+            m_isReferenceAudioLoopApplied = false;
+            updateLoop();
+        }
+        return;
+    }
+
+    //! NOTE In the audio's time as heard: playback time = audio time - the sound track's offset
+    const ReferenceAudioSettings& referenceAudio = audioSyncSettings()->referenceAudio();
+    const double offsetSecs = m_referenceAudioSlot->source().offsetMs / 1000.0;
+    const secs_t fromSecs = std::max(0.0, referenceAudio.loopFromSecs - offsetSecs);
+    const secs_t toSecs = std::max(fromSecs.raw() + 0.01, referenceAudio.loopToSecs - offsetSecs);
+
+    currentPlayer()->setLoop(fromSecs, toSecs);
+    m_isReferenceAudioLoopApplied = true;
+
+    //! NOTE Turned on while the score's loop was: that one goes off (the latest one wins)
+    if (notationPlayback() && notationPlayback()->isLoopEnabled()) {
+        notationPlayback()->setLoopBoundariesEnabled(false);
     }
 }
 

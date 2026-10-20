@@ -34,6 +34,7 @@ static TranslatableString channelCategoryTitle(ChannelCategory category)
 {
     switch (category) {
     case ChannelCategory::Video: return TranslatableString("playback", "Video");
+    case ChannelCategory::ReferenceAudio: return TranslatableString("playback", "Audio");
     case ChannelCategory::Metronome: return TranslatableString("playback", "Metronome");
     case ChannelCategory::Instruments: return TranslatableString("playback", "Instruments");
     case ChannelCategory::AuxFx: return TranslatableString("playback", "Aux FX");
@@ -64,7 +65,7 @@ MenuItemList ChannelCategoriesMenu::makeItems(QObject* parent)
     MenuItemList items;
     m_items.clear();
 
-    //! NOTE: in the panel's own order: the Track list's Metronome row is above its Video row
+    //! NOTE: in the panel's own order: the Track list's Metronome row is above its Video and Reference audio rows
     QList<ChannelCategory> categories = allChannelCategories();
     if (m_panel == ChannelListPanel::TrackList) {
         categories.removeOne(ChannelCategory::Metronome);

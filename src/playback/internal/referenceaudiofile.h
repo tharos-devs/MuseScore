@@ -27,13 +27,17 @@
 
 #include "project/iprojectaudiosyncsettings.h"
 
+#include "../iplaybackconfiguration.h"
+
 namespace mu::playback::audiosync {
 //! NOTE Whether a file can be loaded as the reference audio, judged by its extension (drag and drop)
 bool isSupportedAudioFile(const muse::io::path_t& path);
 
 //! NOTE Asks for an audio file and makes it the reference audio; false if nothing was chosen
-bool chooseReferenceAudio(muse::IInteractive* interactive, const project::IProjectAudioSyncSettingsPtr& settings);
+bool chooseReferenceAudio(muse::IInteractive* interactive, IPlaybackConfiguration* configuration,
+                          const project::IProjectAudioSyncSettingsPtr& settings);
 
-//! NOTE Makes path the reference audio (keeping the other settings when replacing one)
-void setReferenceAudioPath(const project::IProjectAudioSyncSettingsPtr& settings, const muse::io::path_t& path);
+//! NOTE Makes path the reference audio (keeping the other settings when replacing one), added to the recent files
+void setReferenceAudioPath(IPlaybackConfiguration* configuration, const project::IProjectAudioSyncSettingsPtr& settings,
+                           const muse::io::path_t& path);
 }

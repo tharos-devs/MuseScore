@@ -72,8 +72,9 @@ static constexpr int VIDEO_HIT_POINTS_PANEL_MIN_HEIGHT = 160;
 static constexpr int VIDEO_HIT_POINTS_PANEL_MAX_HEIGHT = 400;
 
 static const Settings::Key RECENT_VIDEO_FILES_KEY(moduleName, "playback/video/recentFiles");
-static constexpr int RECENT_VIDEO_FILES_MAX = 5;
-static const QChar RECENT_VIDEO_FILES_SEPARATOR(u'\n');
+static const Settings::Key RECENT_REFERENCE_AUDIO_FILES_KEY(moduleName, "playback/audioSync/recentFiles");
+static constexpr int RECENT_FILES_MAX = 5;
+static const QChar RECENT_FILES_SEPARATOR(u'\n');
 
 static const Settings::Key MIXER_LABELS_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/labelsSectionVisible");
 static const Settings::Key MIXER_SOUND_SECTION_VISIBLE_KEY(moduleName, "playback/mixer/soundSectionVisible");
@@ -123,6 +124,8 @@ static Settings::Key channelCategoryVisibleKey(ChannelListPanel panel, ChannelCa
     std::string categoryName;
     switch (category) {
     case ChannelCategory::Video: categoryName = "video";
+        break;
+    case ChannelCategory::ReferenceAudio: categoryName = "referenceAudio";
         break;
     case ChannelCategory::Metronome: categoryName = "metronome";
         break;
@@ -189,6 +192,7 @@ void PlaybackConfiguration::init()
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_BELOW_TIMELINE_KEY, Val(false));
     settings()->setDefaultValue(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY, Val(VIDEO_HIT_POINTS_PANEL_DEFAULT_HEIGHT));
     settings()->setDefaultValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
+    settings()->setDefaultValue(RECENT_REFERENCE_AUDIO_FILES_KEY, Val(std::string()));
     settings()->setDefaultValue(SOUND_PRESETS_MULTI_SELECTION_KEY, Val(false));
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_SOUND_WARNING, Val(true));
     settings()->setDefaultValue(MIXER_RESET_SOUND_FLAGS_WHEN_CHANGE_PLAYBACK_PROFILE_WARNING, Val(true));
@@ -406,35 +410,61 @@ void PlaybackConfiguration::setVideoHitPointsPanelHeight(int height)
     settings()->setSharedValue(VIDEO_HIT_POINTS_PANEL_HEIGHT_KEY, Val(height));
 }
 
-QStringList PlaybackConfiguration::recentVideoFiles() const
+//! NOTE Recent files lists: most-recently-used first, capped
+static QStringList recentFiles(const Settings::Key& key)
 {
-    QString joined = QString::fromStdString(settings()->value(RECENT_VIDEO_FILES_KEY).toString());
+    QString joined = QString::fromStdString(settings()->value(key).toString());
     if (joined.isEmpty()) {
         return {};
     }
 
-    return joined.split(RECENT_VIDEO_FILES_SEPARATOR, Qt::SkipEmptyParts);
+    return joined.split(RECENT_FILES_SEPARATOR, Qt::SkipEmptyParts);
 }
 
-void PlaybackConfiguration::addRecentVideoFile(const QString& path)
+static void addRecentFile(const Settings::Key& key, const QString& path)
 {
     if (path.isEmpty()) {
         return;
     }
 
-    QStringList files = recentVideoFiles();
+    QStringList files = recentFiles(key);
     files.removeAll(path);
     files.prepend(path);
-    while (files.size() > RECENT_VIDEO_FILES_MAX) {
+    while (files.size() > RECENT_FILES_MAX) {
         files.removeLast();
     }
 
-    settings()->setSharedValue(RECENT_VIDEO_FILES_KEY, Val(files.join(RECENT_VIDEO_FILES_SEPARATOR).toStdString()));
+    settings()->setSharedValue(key, Val(files.join(RECENT_FILES_SEPARATOR).toStdString()));
+}
+
+QStringList PlaybackConfiguration::recentVideoFiles() const
+{
+    return recentFiles(RECENT_VIDEO_FILES_KEY);
+}
+
+void PlaybackConfiguration::addRecentVideoFile(const QString& path)
+{
+    addRecentFile(RECENT_VIDEO_FILES_KEY, path);
 }
 
 void PlaybackConfiguration::clearRecentVideoFiles()
 {
     settings()->setSharedValue(RECENT_VIDEO_FILES_KEY, Val(std::string()));
+}
+
+QStringList PlaybackConfiguration::recentReferenceAudioFiles() const
+{
+    return recentFiles(RECENT_REFERENCE_AUDIO_FILES_KEY);
+}
+
+void PlaybackConfiguration::addRecentReferenceAudioFile(const QString& path)
+{
+    addRecentFile(RECENT_REFERENCE_AUDIO_FILES_KEY, path);
+}
+
+void PlaybackConfiguration::clearRecentReferenceAudioFiles()
+{
+    settings()->setSharedValue(RECENT_REFERENCE_AUDIO_FILES_KEY, Val(std::string()));
 }
 
 bool PlaybackConfiguration::isMixerSectionVisible(MixerSectionType sectionType) const

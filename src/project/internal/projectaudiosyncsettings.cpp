@@ -22,6 +22,8 @@
 
 #include "projectaudiosyncsettings.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -120,6 +122,10 @@ muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, con
     m_referenceAudio.solo = audioObj.value("solo").toBool(false);
     m_referenceAudio.includeInExport = audioObj.value("includeInExport").toBool(false);
     m_referenceAudio.showStereo = audioObj.value("showStereo").toBool(true);
+    m_referenceAudio.latencyMs = std::clamp(audioObj.value("latencyMs").toInt(0), -1000, 1000);
+    m_referenceAudio.loopFromSecs = audioObj.value("loopFromSecs").toDouble(-1.0);
+    m_referenceAudio.loopToSecs = audioObj.value("loopToSecs").toDouble(-1.0);
+    m_referenceAudio.loopEnabled = audioObj.value("loopEnabled").toBool(false);
 
     return make_ret(Ret::Code::Ok);
 }
@@ -140,6 +146,10 @@ muse::Ret ProjectAudioSyncSettings::write(engraving::MscWriter& writer, const mu
     audioObj["solo"] = m_referenceAudio.solo;
     audioObj["includeInExport"] = m_referenceAudio.includeInExport;
     audioObj["showStereo"] = m_referenceAudio.showStereo;
+    audioObj["latencyMs"] = m_referenceAudio.latencyMs;
+    audioObj["loopFromSecs"] = m_referenceAudio.loopFromSecs;
+    audioObj["loopToSecs"] = m_referenceAudio.loopToSecs;
+    audioObj["loopEnabled"] = m_referenceAudio.loopEnabled;
 
     QJsonObject rootObj;
     rootObj["version"] = AUDIO_SYNC_SETTINGS_VERSION;

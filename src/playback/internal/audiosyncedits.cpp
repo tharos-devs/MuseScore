@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 
 #include "engraving/automation/tempovalues.h"
 #include "engraving/dom/measure.h"
@@ -250,5 +251,255 @@ bool removePoint(INotationAutomation& automation, int utick)
 
     return editPoint(automation, utick, AutomationPointEdit::ErasePoint {},
                      muse::TranslatableString("undoableAction", "Delete audio sync point"));
+}
+
+// ---- detection ----
+
+//! NOTE The measure starts and beats of the unrolled score from fromUtick on (the metronome's beats)
+static std::vector<std::pair<int, bool> > scoreBeats(const Score* score, int fromUtick, int toUtick)
+{
+    std::vector<std::pair<int, bool> > result; // utick, measure start
+
+    const TempoTimeline& timeline = score->tempoTimeline(true);
+    for (const RepeatSegment* seg : score->expandedRepeatList()) {
+        const int tickOffset = seg->utick - seg->tick;
+        for (const Measure* measure : seg->measureList()) {
+            const int tickFrom = measure->tick().ticks();
+            const int tickTo = measure->endTick().ticks();
+            if (tickTo + tickOffset <= fromUtick) {
+                continue;
+            }
+            if (toUtick >= 0 && tickFrom + tickOffset >= toUtick) {
+                return result;
+            }
+
+            const TimeSigFrac timeSig = score->sigmap()->timesig(tickFrom).nominal();
+            const double bps = timeline.tempo(tickFrom + tickOffset).val;
+            const int step = std::max(1, timeSig.isBeatedCompound(bps) ? timeSig.beatTicks() : timeSig.dUnitTicks());
+
+            if (tickFrom + tickOffset >= fromUtick) {
+                result.emplace_back(tickFrom + tickOffset, true);
+            }
+            int beatTick = tickFrom + (measure->isAnacrusis() ? measure->ticks().ticks() % step : 0);
+            for (; beatTick < tickTo; beatTick += step) {
+                if (beatTick > tickFrom && beatTick + tickOffset >= fromUtick) {
+                    result.emplace_back(beatTick + tickOffset, false);
+                }
+            }
+        }
+    }
+
+    // The score's end, so the last measure gets matched too
+    if (const Measure* last = score->lastMeasure()) {
+        const int endUtick = score->expandedRepeatList().empty() ? last->endTick().ticks()
+                             : score->expandedRepeatList().back()->utick + score->expandedRepeatList().back()->len();
+        if ((toUtick < 0 || endUtick <= toUtick) && (result.empty() || result.back().first < endUtick)) {
+            result.emplace_back(endUtick, true);
+        }
+    }
+
+    return result;
+}
+
+std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<DetectedBeatTime>& beats, const DetectionOptions& options)
+{
+    std::vector<MatchedPoint> result;
+    if (!score || beats.size() < 2) {
+        return result;
+    }
+
+    const std::vector<std::pair<int, bool> > positions = scoreBeats(score, options.anchorUtick, options.toUtick);
+    if (positions.size() < 2) {
+        return result;
+    }
+
+    // The audio's beats after the anchor, which is the first one
+    std::vector<DetectedBeatTime> audioBeats;
+    std::vector<double> intervals;
+    for (size_t i = 1; i < beats.size(); ++i) {
+        intervals.push_back(beats[i].secs - beats[i - 1].secs);
+    }
+    std::sort(intervals.begin(), intervals.end());
+    const double medianInterval = intervals[intervals.size() / 2];
+
+    audioBeats.push_back({ options.anchorSecs, 1.f });
+    for (const DetectedBeatTime& beat : beats) {
+        if (beat.secs > options.anchorSecs + medianInterval * 0.5) {
+            audioBeats.push_back(beat);
+        }
+    }
+
+    // Octave errors: detected beats twice too fast or too slow compared with the score's beats
+    DetectionOptions::Octave octave = options.octave;
+    if (octave == DetectionOptions::Octave::Auto) {
+        const TempoTimeline& timeline = score->tempoTimeline(true);
+        const double scoreBeatSecs = (timeline.utick2utime(positions[1].first) - timeline.utick2utime(positions[0].first))
+                                     * timeline.tempoMultiplier().val;
+        const double ratio = scoreBeatSecs / medianInterval;
+        octave = ratio > 1.5 ? DetectionOptions::Octave::Half : ratio < 0.67 ? DetectionOptions::Octave::Double
+                 : DetectionOptions::Octave::None;
+    }
+
+    if (octave == DetectionOptions::Octave::Half) {
+        std::vector<DetectedBeatTime> halved;
+        for (size_t i = 0; i < audioBeats.size(); i += 2) {
+            halved.push_back(audioBeats[i]);
+        }
+        audioBeats = std::move(halved);
+    } else if (octave == DetectionOptions::Octave::Double) {
+        std::vector<DetectedBeatTime> doubled;
+        for (size_t i = 0; i < audioBeats.size(); ++i) {
+            doubled.push_back(audioBeats[i]);
+            if (i + 1 < audioBeats.size()) {
+                doubled.push_back({ (audioBeats[i].secs + audioBeats[i + 1].secs) / 2.0, 0.3f });
+            }
+        }
+        audioBeats = std::move(doubled);
+    }
+
+    // Beat after beat: the measure starts
+    const size_t count = std::min(positions.size(), audioBeats.size());
+    for (size_t i = 0; i < count; ++i) {
+        if (!positions[i].second) {
+            continue;
+        }
+        result.push_back({ positions[i].first, audioBeats[i].secs, audioBeats[i].confidence });
+    }
+
+    return options.everyMeasure ? result : simplifyPoints(result, options.toleranceSecs);
+}
+
+std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points, double toleranceSecs)
+{
+    if (points.size() <= 2) {
+        return points;
+    }
+
+    // Douglas-Peucker on (ticks, seconds): a straight line between two kept points is a constant tempo
+    std::vector<bool> keep(points.size(), false);
+    keep.front() = keep.back() = true;
+
+    std::vector<std::pair<size_t, size_t> > stack { { 0, points.size() - 1 } };
+    while (!stack.empty()) {
+        const auto [from, to] = stack.back();
+        stack.pop_back();
+        if (to <= from + 1) {
+            continue;
+        }
+
+        const MatchedPoint& a = points[from];
+        const MatchedPoint& b = points[to];
+        double maxError = 0.0;
+        size_t maxIndex = from;
+        for (size_t i = from + 1; i < to; ++i) {
+            const double predicted = a.secs + (b.secs - a.secs) * static_cast<double>(points[i].utick - a.utick)
+                                     / static_cast<double>(b.utick - a.utick);
+            const double error = std::abs(points[i].secs - predicted);
+            if (error > maxError) {
+                maxError = error;
+                maxIndex = i;
+            }
+        }
+
+        if (maxError > toleranceSecs) {
+            keep[maxIndex] = true;
+            stack.push_back({ from, maxIndex });
+            stack.push_back({ maxIndex, to });
+        }
+    }
+
+    std::vector<MatchedPoint> result;
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (keep[i]) {
+            result.push_back(points[i]);
+        }
+    }
+    return result;
+}
+
+bool hasManualPoints(const INotationAutomation& automation, int fromUtick, int toUtick)
+{
+    const std::vector<SyncPoint> points = syncPoints(automation);
+    for (size_t i = 1; i < points.size(); ++i) {
+        const SyncPoint& point = points[i];
+        if (point.origin == AudioSyncInfo::Origin::Manual && point.utick >= fromUtick && (toUtick < 0 || point.utick < toUtick)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int applyDetectedPoints(INotationAutomation& automation, const Score* score, const std::vector<MatchedPoint>& points, bool replaceManual)
+{
+    const AutomationDataConstPtr data = automation.automationData();
+    if (!data || !data->isAudioSyncEnabled() || !score || points.empty()) {
+        return 0;
+    }
+
+    const int fromUtick = points.front().utick;
+    const int toUtick = points.back().utick;
+
+    // What stays: the points outside the range, and the fixed ones inside
+    const std::vector<SyncPoint> existing = syncPoints(automation);
+    std::map<int, SyncPoint> kept;
+    AutomationPointEdits edits;
+    for (size_t i = 0; i < existing.size(); ++i) {
+        const SyncPoint& point = existing[i];
+        const bool inRange = point.utick > fromUtick && point.utick <= toUtick;
+        const bool fixed = point.locked || i == 0 || (point.origin == AudioSyncInfo::Origin::Manual && !replaceManual);
+        if (!inRange || fixed) {
+            kept[point.utick] = point;
+        } else {
+            edits.push_back({ point.utick, AutomationPointEdit::ErasePoint {} });
+        }
+    }
+
+    // The detected ones, where they fit between what stays (order and tempo range)
+    int added = 0;
+    for (const MatchedPoint& point : points) {
+        if (kept.count(point.utick)) {
+            continue;
+        }
+
+        std::vector<SyncPoint> neighbors;
+        for (const auto& [utick, syncPoint] : kept) {
+            neighbors.push_back(syncPoint);
+        }
+        const std::optional<std::pair<double, double> > range = allowedAudioRange(neighbors, point.utick);
+        if (!range || point.secs < range->first || point.secs > range->second) {
+            continue;
+        }
+
+        SyncPoint syncPoint;
+        syncPoint.utick = point.utick;
+        syncPoint.audioSecs = point.secs;
+        syncPoint.origin = AudioSyncInfo::Origin::Detected;
+        syncPoint.confidence = point.confidence;
+        kept[point.utick] = syncPoint;
+
+        AutomationPoint automationPoint;
+        automationPoint.value.inValue = AutomationPoint::ArrivalFromPrevious {};
+        automationPoint.value.outValue = normalizeTempo(score->tempoTimeline(true).tempo(point.utick));
+        AudioSyncInfo sync;
+        sync.audioSecs = point.secs;
+        sync.origin = AudioSyncInfo::Origin::Detected;
+        sync.confidence = point.confidence;
+        automationPoint.audioSync = sync;
+
+        // Replaces an erase at the same tick, if any
+        edits.erase(std::remove_if(edits.begin(), edits.end(), [&point](const AutomationPointEdit& edit) {
+            return edit.tick == point.utick;
+        }), edits.end());
+        edits.push_back({ point.utick, AutomationPointEdit::SetPoint { automationPoint } });
+        ++added;
+    }
+
+    if (edits.empty()) {
+        return 0;
+    }
+
+    std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve { { TEMPO_KEY, edits } };
+    automation.editPoints(editsByCurve, muse::TranslatableString("undoableAction", "Detect audio sync points"));
+    return added;
 }
 }

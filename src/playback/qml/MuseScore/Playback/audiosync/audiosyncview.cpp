@@ -25,7 +25,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include <thread>
+
+#include <QCoreApplication>
 #include <QFileInfo>
+#include <QPointer>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -41,8 +45,11 @@
 #include "notation/inotation.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationinteraction.h"
+#include "notation/inotationplayback.h"
 #include "project/inotationproject.h"
 
+#include "playback/internal/beatdetection.h"
+#include "playback/internal/mappedwav.h"
 #include "playback/internal/referenceaudiofile.h"
 
 #include "referenceaudiopeaks.h"
@@ -56,19 +63,30 @@ using namespace muse;
 namespace {
 constexpr double RULER_ROW_HEIGHT = 18.0;
 constexpr double RAIL_HEIGHT = 20.0; // audio sync points
-constexpr double RULER_HEIGHT = 3 * RULER_ROW_HEIGHT + RAIL_HEIGHT; // measures, time, time signatures, points
+constexpr double RULER_HEIGHT = 2 * RULER_ROW_HEIGHT + RAIL_HEIGHT; // above the waveform: measures, time signatures, points
 constexpr double POINT_HIT_DISTANCE = 6.0;
+constexpr double LOOP_BAND_HEIGHT = 10.0; // the A-B loop, at the top of the waveform
+constexpr double LOOP_HANDLE_SIZE = 8.0;
 constexpr double NUDGE_SECS = 0.001;
 constexpr double LARGE_NUDGE_SECS = 0.010;
 constexpr double OVERVIEW_HEIGHT = 34.0;
-constexpr double OVERVIEW_GAP = 4.0;
+constexpr double OVERVIEW_GAP = 8.0;
 constexpr double MIN_PIXELS_PER_SECOND = 0.5;
 constexpr double MAX_PIXELS_PER_SECOND = 48000.0; // ~1 px per sample
 constexpr double ZOOM_STEP = 1.41421356237;
-constexpr double MIN_AMPLITUDE_ZOOM = 0.25;
-constexpr double MAX_AMPLITUDE_ZOOM = 64.0;
+constexpr double MIN_AMPLITUDE_ZOOM = 0.5;
+constexpr double MAX_AMPLITUDE_ZOOM = 8.0;
 constexpr double LOG_RANGE_DB = 60.0;
 constexpr int CURSOR_INTERVAL_MS = 16;
+
+//! NOTE The transport's clock: mm:ss.cc
+QString formatClock(double secs)
+{
+    const qint64 totalCs = static_cast<qint64>(std::llround(std::max(0.0, secs) * 100.0));
+    return QString("%1:%2.%3").arg(totalCs / 6000, 2, 10, QLatin1Char('0'))
+           .arg((totalCs / 100) % 60, 2, 10, QLatin1Char('0'))
+           .arg(totalCs % 100, 2, 10, QLatin1Char('0'));
+}
 
 QString formatTime(double secs, bool withMs)
 {
@@ -101,6 +119,7 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
         }
         emit decodeStateChanged();
         emit viewChanged();
+        updatePositionText();
         update();
     });
 
@@ -128,6 +147,10 @@ void AudioSyncView::componentComplete()
 
     notationConfiguration()->isPlayRepeatsChanged().onNotify(this, [this]() {
         invalidateGrid();
+    });
+
+    notationConfiguration()->isMetronomeEnabledChanged().onNotify(this, [this]() {
+        emit metronomeChanged();
     });
 
     listenPlaybackState();
@@ -170,6 +193,7 @@ void AudioSyncView::onProjectChanged()
     if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
         settings->settingsChanged().onNotify(this, [this]() {
             emit audioChanged();
+            updateSpeedWarning();
             update();
         }, Asyncable::Mode::SetReplace);
     }
@@ -206,6 +230,12 @@ void AudioSyncView::onNotationChanged()
     }
 
     emit syncChanged();
+
+    if (notation::INotationPlaybackPtr notationPlayback = project->masterNotation() ? project->masterNotation()->playback() : nullptr) {
+        notationPlayback->loopBoundariesChanged().onNotify(this, [this]() {
+            update();
+        }, Asyncable::Mode::SetReplace);
+    }
 
     notation->interaction()->selectionChanged().onNotify(this, [this]() {
         const Score* sc = score();
@@ -255,6 +285,7 @@ void AudioSyncView::listenPlaybackState()
     playbackState->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
         context::IPlaybackStatePtr state = globalContext()->playbackState();
         m_isPlaying = state && state->isPlaying();
+        emit playingChanged();
         if (m_isPlaying) {
             m_cursorTimer.start();
         } else {
@@ -369,9 +400,289 @@ void AudioSyncView::setAudioSyncEnabled(bool enabled)
     }
 }
 
+int AudioSyncView::latencyMs() const
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    return settings ? settings->referenceAudio().latencyMs : 0;
+}
+
+void AudioSyncView::setLatencyMs(int ms)
+{
+    project::updateReferenceAudio(audioSyncSettings(), [ms](project::ReferenceAudioSettings& updated) {
+        updated.latencyMs = std::clamp(ms, -1000, 1000);
+    });
+}
+
+bool AudioSyncView::isPlaying() const
+{
+    return m_isPlaying;
+}
+
+bool AudioSyncView::metronomeEnabled() const
+{
+    return notationConfiguration()->isMetronomeEnabled();
+}
+
+QString AudioSyncView::timeText() const
+{
+    return m_timeText;
+}
+
+void AudioSyncView::togglePlay()
+{
+    playbackController()->togglePlay();
+}
+
+void AudioSyncView::stopPlayback()
+{
+    playbackController()->stop();
+}
+
+void AudioSyncView::rewindToStart()
+{
+    playbackController()->rewind(0);
+}
+
+void AudioSyncView::toggleMetronome()
+{
+    playbackController()->toggleMetronome();
+}
+
+QStringList AudioSyncView::recentAudioFiles() const
+{
+    return playbackConfiguration()->recentReferenceAudioFiles();
+}
+
+void AudioSyncView::clearRecentAudioFiles()
+{
+    playbackConfiguration()->clearRecentReferenceAudioFiles();
+}
+
+void AudioSyncView::setAudioFile(const QString& path)
+{
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), audioSyncSettings(), path);
+}
+
+bool AudioSyncView::loopEnabled() const
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    return settings && settings->referenceAudio().loopEnabled && settings->referenceAudio().hasLoop();
+}
+
+void AudioSyncView::setLoopEnabled(bool enabled)
+{
+    project::updateReferenceAudio(audioSyncSettings(), [enabled](project::ReferenceAudioSettings& updated) {
+        updated.loopEnabled = enabled && updated.hasLoop();
+    });
+}
+
+bool AudioSyncView::hasLoopFrom() const
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    return settings && settings->referenceAudio().loopFromSecs >= 0.0;
+}
+
+bool AudioSyncView::hasLoopTo() const
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    return settings && settings->referenceAudio().loopToSecs >= 0.0;
+}
+
+void AudioSyncView::setLoop(double fromSecs, double toSecs)
+{
+    // A after B: swapped, so the loop always goes forward
+    if (fromSecs >= 0.0 && toSecs >= 0.0 && toSecs < fromSecs) {
+        std::swap(fromSecs, toSecs);
+    }
+
+    project::updateReferenceAudio(audioSyncSettings(), [fromSecs, toSecs](project::ReferenceAudioSettings& updated) {
+        updated.loopFromSecs = fromSecs;
+        updated.loopToSecs = toSecs;
+        if (!updated.hasLoop()) {
+            updated.loopEnabled = false;
+        }
+    });
+}
+
+void AudioSyncView::toggleLoopFrom()
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    if (!settings) {
+        return;
+    }
+
+    const project::ReferenceAudioSettings& referenceAudio = settings->referenceAudio();
+    const bool wasSet = referenceAudio.loopFromSecs >= 0.0;
+    const double toSecs = referenceAudio.loopToSecs;
+    setLoop(wasSet ? -1.0 : std::max(0.0, cursorAudioSecs()), toSecs);
+
+    // Both ends set: the loop plays
+    if (!wasSet && hasLoopFrom() && hasLoopTo()) {
+        setLoopEnabled(true);
+    }
+}
+
+void AudioSyncView::toggleLoopTo()
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    if (!settings) {
+        return;
+    }
+
+    const project::ReferenceAudioSettings& referenceAudio = settings->referenceAudio();
+    const bool wasSet = referenceAudio.loopToSecs >= 0.0;
+    const double fromSecs = referenceAudio.loopFromSecs;
+    setLoop(fromSecs, wasSet ? -1.0 : std::max(0.0, cursorAudioSecs()));
+
+    if (!wasSet && hasLoopFrom() && hasLoopTo()) {
+        setLoopEnabled(true);
+    }
+}
+
+struct AudioSyncView::DetectionJob {
+    std::atomic<bool> canceled { false };
+    audiosync::DetectionOptions options;
+};
+
+bool AudioSyncView::detecting() const
+{
+    return m_detectionJob != nullptr;
+}
+
+double AudioSyncView::detectionProgress() const
+{
+    return m_detectionProgress;
+}
+
+void AudioSyncView::detectPoints(const QVariantMap& params)
+{
+    ensureGrid();
+    const QString wavPath = playbackController()->referenceAudioDecodeState().wavPath.toQString();
+    if (m_detectionJob || wavPath.isEmpty() || !m_audioSyncEnabled || m_syncPoints.empty()) {
+        return;
+    }
+
+    // From the selected point (or the first one): the user puts it on a downbeat, which detection can't tell
+    const std::optional<size_t> selected = selectedPointIndex();
+    const audiosync::SyncPoint& anchor = m_syncPoints[selected ? *selected : 0];
+
+    audiosync::BeatDetectionParams detectionParams;
+    detectionParams.sensitivity = params.value("sensitivity", 0.5).toDouble();
+    detectionParams.minBpm = params.value("minBpm", 50.0).toDouble();
+    detectionParams.maxBpm = params.value("maxBpm", 200.0).toDouble();
+    detectionParams.fromSecs = std::max(0.0, anchor.audioSecs - 1.0);
+
+    auto job = std::make_shared<DetectionJob>();
+    job->options.anchorUtick = anchor.utick;
+    job->options.anchorSecs = anchor.audioSecs;
+    job->options.octave = static_cast<audiosync::DetectionOptions::Octave>(std::clamp(params.value("octave", 0).toInt(), 0, 3));
+    job->options.everyMeasure = params.value("everyMeasure", false).toBool();
+    job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
+    m_detectionJob = job;
+    m_detectionProgress = 0.0;
+    emit detectionChanged();
+
+    QPointer<AudioSyncView> self(this);
+    std::thread([self, job, wavPath, detectionParams]() {
+        std::vector<audiosync::DetectedBeatTime> beats;
+        if (std::shared_ptr<MappedWav> wav = MappedWav::open(wavPath)) {
+            const std::vector<audiosync::DetectedBeat> detected = audiosync::detectBeats(*wav, detectionParams, job->canceled,
+                                                                                         [self, job](double progress) {
+                QMetaObject::invokeMethod(qApp, [self, job, progress]() {
+                    if (self && self->m_detectionJob == job) {
+                        self->m_detectionProgress = progress;
+                        emit self->detectionChanged();
+                    }
+                }, Qt::QueuedConnection);
+            });
+            for (const audiosync::DetectedBeat& beat : detected) {
+                beats.push_back({ beat.secs, beat.confidence });
+            }
+        }
+
+        QMetaObject::invokeMethod(qApp, [self, job, beats]() {
+            if (self && self->m_detectionJob == job) {
+                self->onDetectionFinished(job, beats);
+            }
+        }, Qt::QueuedConnection);
+    }).detach();
+}
+
+void AudioSyncView::cancelDetection()
+{
+    if (!m_detectionJob) {
+        return;
+    }
+
+    m_detectionJob->canceled = true;
+    m_detectionJob = nullptr;
+    emit detectionChanged();
+}
+
+void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job, const std::vector<audiosync::DetectedBeatTime>& beats)
+{
+    m_detectionJob = nullptr;
+    emit detectionChanged();
+
+    notation::INotationAutomationPtr automationPtr = automation();
+    const Score* sc = score();
+    if (job->canceled || !automationPtr || !sc) {
+        return;
+    }
+
+    const std::vector<audiosync::MatchedPoint> points = audiosync::matchMeasures(sc, beats, job->options);
+    if (points.size() < 2) {
+        interactive()->warning(muse::trc("playback", "No beats could be detected"),
+                               muse::trc("playback", "Try a higher sensitivity or another tempo range, or place the points by hand."));
+        return;
+    }
+
+    const int fromUtick = points.front().utick;
+    const int toUtick = points.back().utick + 1;
+    if (!audiosync::hasManualPoints(*automationPtr, fromUtick + 1, toUtick)) {
+        audiosync::applyDetectedPoints(*automationPtr, sc, points, false);
+        return;
+    }
+
+    //! NOTE Detected points never silently replace the user's own ones
+    static constexpr int MERGE_BUTTON = int(muse::IInteractive::Button::CustomButton) + 1;
+    static constexpr int REPLACE_BUTTON = int(muse::IInteractive::Button::CustomButton) + 2;
+    interactive()->question(muse::trc("playback", "Some sync points were placed by hand"),
+                            muse::IInteractive::Text(muse::trc("playback", "Keep them and add the detected points around them, "
+                                                                           "or replace them with the detected points? "
+                                                                           "Locked points are always kept.")),
+                            { interactive()->buttonData(muse::IInteractive::Button::Cancel),
+                              muse::IInteractive::ButtonData(REPLACE_BUTTON, muse::trc("playback", "Replace")),
+                              muse::IInteractive::ButtonData(MERGE_BUTTON, muse::trc("playback", "Keep them"), true) },
+                            MERGE_BUTTON)
+    .onResolve(this, [this, points](const muse::IInteractive::Result& result) {
+        notation::INotationAutomationPtr automationPtr = automation();
+        if (!automationPtr || !score()) {
+            return;
+        }
+        if (result.isButton(MERGE_BUTTON) || result.isButton(REPLACE_BUTTON)) {
+            audiosync::applyDetectedPoints(*automationPtr, score(), points, result.isButton(REPLACE_BUTTON));
+        }
+    });
+}
+
+bool AudioSyncView::speedWarning() const
+{
+    return m_speedWarning;
+}
+
+void AudioSyncView::updateSpeedWarning()
+{
+    const bool warning = hasAudio() && std::abs(playbackController()->tempoMultiplier() - 1.0) > 1e-6;
+    if (warning != m_speedWarning) {
+        m_speedWarning = warning;
+        emit speedWarningChanged();
+    }
+}
+
 void AudioSyncView::chooseAudioFile()
 {
-    audiosync::chooseReferenceAudio(interactive().get(), audioSyncSettings());
+    audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), audioSyncSettings());
 }
 
 bool AudioSyncView::canDropUrls(const QList<QUrl>& urls) const
@@ -386,7 +697,7 @@ void AudioSyncView::dropUrls(const QList<QUrl>& urls)
         return;
     }
 
-    audiosync::setReferenceAudioPath(audioSyncSettings(), urls.first().toLocalFile());
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), audioSyncSettings(), urls.first().toLocalFile());
 }
 
 void AudioSyncView::removeAudio()
@@ -473,6 +784,16 @@ void AudioSyncView::setLogarithmic(bool logarithmic)
     m_logarithmic = logarithmic;
     emit viewChanged();
     update();
+}
+
+double AudioSyncView::waveformTop() const
+{
+    return waveformRect().top();
+}
+
+double AudioSyncView::waveformHeight() const
+{
+    return waveformRect().height();
 }
 
 bool AudioSyncView::followPlayback() const
@@ -639,6 +960,7 @@ void AudioSyncView::updatePlaybackCursor()
     }
 
     updatePositionText();
+    updateSpeedWarning();
     update();
 }
 
@@ -647,7 +969,7 @@ void AudioSyncView::updatePositionText()
     ensureGrid();
 
     const double secs = cursorAudioSecs();
-    QString positionText = formatTime(secs, true);
+    QString positionText;
     QString tempoText;
 
     const Score* sc = score();
@@ -663,7 +985,7 @@ void AudioSyncView::updatePositionText()
                 return t.secs <= engineSecs;
             }));
             //: Position in the score: measure number and beat, e.g. "Measure 12, beat 3"
-            positionText = muse::qtrc("playback", "Measure %1, beat %2").arg(measure.number).arg(beat) + "  ·  " + positionText;
+            positionText = muse::qtrc("playback", "Measure %1, beat %2").arg(measure.number).arg(beat);
         }
 
         const TempoTimeline& timeline = sc->tempoTimeline(isPlayRepeatsEnabled());
@@ -672,9 +994,12 @@ void AudioSyncView::updatePositionText()
         tempoText = muse::qtrc("playback", "%1 BPM").arg(timeline.tempo(utick).toBPM().val, 0, 'f', 1);
     }
 
-    if (positionText != m_positionText || tempoText != m_tempoText) {
+    const QString timeText = formatClock(secs) + " / " + formatClock(m_peaks->durationSecs());
+
+    if (positionText != m_positionText || tempoText != m_tempoText || timeText != m_timeText) {
         m_positionText = positionText;
         m_tempoText = tempoText;
+        m_timeText = timeText;
         emit positionTextChanged();
     }
 }
@@ -810,6 +1135,30 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    if (loopBandRect().contains(pos)) {
+        const auto [fromSecs, toSecs] = displayedLoop();
+        const double secs = audioSecsAtX(pos.x());
+        const auto nearHandle = [&](double handleSecs) {
+            return handleSecs >= 0.0 && std::abs(xForAudioSecs(handleSecs) - pos.x()) <= LOOP_HANDLE_SIZE;
+        };
+
+        std::optional<DragMode> mode;
+        if (nearHandle(toSecs)) {
+            mode = DragMode::LoopTo;
+        } else if (nearHandle(fromSecs)) {
+            mode = DragMode::LoopFrom;
+        } else if (fromSecs >= 0.0 && toSecs > fromSecs && secs > fromSecs && secs < toSecs) {
+            mode = DragMode::LoopBoth;
+        }
+
+        if (mode) {
+            m_loopDrag = LoopDrag { fromSecs, toSecs, secs, fromSecs, toSecs };
+            m_dragMode = *mode;
+            event->accept();
+            return;
+        }
+    }
+
     if (const std::optional<size_t> index = pointAt(pos)) {
         const audiosync::SyncPoint& point = m_syncPoints[*index];
         m_selectedPointUtick = point.utick;
@@ -829,9 +1178,6 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
 
     if (railRect().contains(pos)) {
         m_selectedPointUtick = -1;
-        update();
-        event->accept();
-        return;
     }
 
     m_dragMode = DragMode::Seek;
@@ -847,7 +1193,23 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
             m_pointDrag.reset();
             update();
         }
+        m_loopDrag.reset();
         m_dragMode = DragMode::None;
+        return;
+    }
+
+    if (m_loopDrag && (m_dragMode == DragMode::LoopFrom || m_dragMode == DragMode::LoopTo || m_dragMode == DragMode::LoopBoth)) {
+        const double secs = std::max(0.0, audioSecsAtX(event->position().x()));
+        if (m_dragMode == DragMode::LoopFrom) {
+            m_loopDrag->fromSecs = secs;
+        } else if (m_dragMode == DragMode::LoopTo) {
+            m_loopDrag->toSecs = secs;
+        } else {
+            const double delta = std::max(secs - m_loopDrag->grabSecs, -m_loopDrag->originalFromSecs);
+            m_loopDrag->fromSecs = m_loopDrag->originalFromSecs + delta;
+            m_loopDrag->toSecs = m_loopDrag->originalToSecs + delta;
+        }
+        update();
         return;
     }
 
@@ -874,6 +1236,15 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 
 void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
 {
+    if (m_loopDrag) {
+        const LoopDrag drag = *m_loopDrag;
+        m_loopDrag.reset();
+        m_dragMode = DragMode::None;
+        setLoop(drag.fromSecs, drag.toSecs);
+        update();
+        return;
+    }
+
     if (m_dragMode == DragMode::Point && m_pointDrag) {
         const PointDrag drag = *m_pointDrag;
         const int utick = m_syncPoints[drag.index].utick;
@@ -957,6 +1328,69 @@ void AudioSyncView::keyPressEvent(QKeyEvent* event)
 }
 
 // ---- audio sync points ----
+
+std::pair<double, double> AudioSyncView::displayedLoop() const
+{
+    if (m_loopDrag) {
+        return { m_loopDrag->fromSecs, m_loopDrag->toSecs };
+    }
+
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    if (!settings) {
+        return { -1.0, -1.0 };
+    }
+    return { settings->referenceAudio().loopFromSecs, settings->referenceAudio().loopToSecs };
+}
+
+QRectF AudioSyncView::loopBandRect() const
+{
+    const QRectF waveRect = waveformRect();
+    return QRectF(waveRect.left(), waveRect.top(), waveRect.width(), LOOP_BAND_HEIGHT);
+}
+
+void AudioSyncView::paintLoop(QPainter* painter, const QRectF& waveRect) const
+{
+    const auto [fromSecs, toSecs] = displayedLoop();
+    if (fromSecs < 0.0 && toSecs < 0.0) {
+        return;
+    }
+
+    const QRectF band = loopBandRect();
+    const bool enabled = loopEnabled() || (m_loopDrag && fromSecs >= 0.0 && toSecs > fromSecs);
+    static const QColor HANDLE_COLOR(0xFF, 0x7A, 0x4D);
+
+    if (fromSecs >= 0.0 && toSecs > fromSecs) {
+        const double x1 = xForAudioSecs(fromSecs);
+        const double x2 = xForAudioSecs(toSecs);
+        if (x2 >= 0 && x1 <= waveRect.width()) {
+            QColor regionColor = m_accentColor;
+            regionColor.setAlphaF(enabled ? 0.14 : 0.06);
+            painter->fillRect(QRectF(x1, waveRect.top(), x2 - x1, waveRect.height()), regionColor);
+
+            QColor barColor = m_accentColor;
+            barColor.setAlphaF(enabled ? 1.0 : 0.4);
+            painter->fillRect(QRectF(x1, band.top() + 1, x2 - x1, band.height() - 2), barColor);
+        }
+    }
+
+    // The handles (and their lines)
+    for (double secs : { fromSecs, toSecs }) {
+        if (secs < 0.0) {
+            continue;
+        }
+
+        const double x = xForAudioSecs(secs);
+        if (x < -LOOP_HANDLE_SIZE || x > waveRect.width() + LOOP_HANDLE_SIZE) {
+            continue;
+        }
+
+        QColor lineColor = HANDLE_COLOR;
+        lineColor.setAlphaF(0.6);
+        painter->setPen(QPen(lineColor, 1));
+        painter->drawLine(QPointF(x, band.bottom()), QPointF(x, waveRect.bottom()));
+        painter->fillRect(QRectF(x - LOOP_HANDLE_SIZE / 2, band.top(), LOOP_HANDLE_SIZE, band.height()), HANDLE_COLOR);
+    }
+}
 
 std::vector<double> AudioSyncView::displayedPointSecs() const
 {
@@ -1214,12 +1648,18 @@ QRectF AudioSyncView::rulerRect() const
 
 QRectF AudioSyncView::railRect() const
 {
-    return QRectF(0, 3 * RULER_ROW_HEIGHT, width(), RAIL_HEIGHT);
+    return QRectF(0, 2 * RULER_ROW_HEIGHT, width(), RAIL_HEIGHT);
 }
 
 QRectF AudioSyncView::waveformRect() const
 {
-    return QRectF(0, RULER_HEIGHT, width(), std::max(0.0, height() - RULER_HEIGHT - OVERVIEW_HEIGHT - OVERVIEW_GAP));
+    return QRectF(0, RULER_HEIGHT, width(),
+                  std::max(0.0, height() - RULER_HEIGHT - RULER_ROW_HEIGHT - OVERVIEW_HEIGHT - OVERVIEW_GAP));
+}
+
+QRectF AudioSyncView::timeRulerRect() const
+{
+    return QRectF(0, waveformRect().bottom(), width(), RULER_ROW_HEIGHT);
 }
 
 QRectF AudioSyncView::overviewRect() const
@@ -1245,7 +1685,7 @@ void AudioSyncView::paintOverview(QPainter* painter, const QRectF& rect) const
         return;
     }
 
-    painter->fillRect(rect, m_rulerColor);
+    painter->fillRect(rect, m_backgroundColor);
 
     // The whole audio, both channels mixed
     if (m_peaks->isReady()) {
@@ -1274,17 +1714,22 @@ void AudioSyncView::paintOverview(QPainter* painter, const QRectF& rect) const
         }
     }
 
-    // The visible part
-    const double x1 = std::max(0.0, overviewXForSecs(scrollSecs()));
-    const double x2 = std::min(rect.width(), overviewXForSecs(scrollSecs() + visibleSecs()));
-    QColor windowColor = m_textColor;
-    windowColor.setAlphaF(0.14);
-    const QRectF windowRect(x1, rect.top(), std::max(2.0, x2 - x1), rect.height());
-    painter->fillRect(windowRect, windowColor);
+    // The visible part as is, the rest darkened
+    const double x1 = std::clamp(overviewXForSecs(scrollSecs()), 0.0, rect.width());
+    const double x2 = std::clamp(overviewXForSecs(scrollSecs() + visibleSecs()), x1, rect.width());
+    const QColor outsideColor(0, 0, 0, 90);
+    painter->fillRect(QRectF(rect.left(), rect.top(), x1, rect.height()), outsideColor);
+    painter->fillRect(QRectF(x2, rect.top(), rect.width() - x2, rect.height()), outsideColor);
+
     QColor windowBorder = m_textColor;
-    windowBorder.setAlphaF(0.35);
+    windowBorder.setAlphaF(0.45);
     painter->setPen(QPen(windowBorder, 1));
-    painter->drawRect(windowRect.adjusted(0.5, 0.5, -0.5, -0.5));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(QRectF(x1, rect.top(), std::max(2.0, x2 - x1), rect.height()).adjusted(0.5, 0.5, -0.5, -0.5));
+
+    // Its frame
+    painter->setPen(QPen(m_gridColor, 1));
+    painter->drawRect(rect.adjusted(0.5, 0.5, -0.5, -0.5));
 
     // Playback cursor
     const double cursorX = overviewXForSecs(cursorAudioSecs());
@@ -1298,20 +1743,17 @@ void AudioSyncView::paint(QPainter* painter)
 {
     ensureGrid();
 
-    painter->fillRect(boundingRect(), m_backgroundColor);
-
+    //! NOTE Only the parts: the gap above the overview shows the panel's background
     const QRectF waveRect = waveformRect();
+    painter->fillRect(waveRect, m_backgroundColor);
 
-    // Outside the score: dimmed
-    const double scoreStartX = xForAudioSecs(audioSecsOf(GridTime()));
-    const double scoreEndX = xForAudioSecs(audioSecsOf(m_scoreEnd));
-    QColor outsideColor = m_textColor;
-    outsideColor.setAlphaF(0.06);
-    if (scoreStartX > 0) {
-        painter->fillRect(QRectF(0, waveRect.top(), scoreStartX, waveRect.height()), outsideColor);
-    }
-    if (scoreEndX < width()) {
-        painter->fillRect(QRectF(scoreEndX, waveRect.top(), width() - scoreEndX, waveRect.height()), outsideColor);
+    // The score's part lighter, the rest (before/after the score) stays dark
+    const double scoreStartX = std::max(0.0, xForAudioSecs(audioSecsOf(GridTime())));
+    const double scoreEndX = std::min(width(), xForAudioSecs(audioSecsOf(m_scoreEnd)));
+    if (!m_grid.empty() && scoreEndX > scoreStartX) {
+        QColor scoreColor = m_textColor;
+        scoreColor.setAlphaF(0.06);
+        painter->fillRect(QRectF(scoreStartX, waveRect.top(), scoreEndX - scoreStartX, waveRect.height()), scoreColor);
     }
 
     // Range selection of the score
@@ -1332,15 +1774,18 @@ void AudioSyncView::paint(QPainter* painter)
 
     paintWaveform(painter, waveRect);
     paintGrid(painter, waveRect);
+    paintLoop(painter, waveRect);
     paintRuler(painter, rulerRect());
+    paintTimeRuler(painter, timeRulerRect());
     paintSyncPoints(painter, railRect(), waveRect);
+    paintFileName(painter, waveRect);
     paintOverview(painter, overviewRect());
 
     // Playback cursor
     const double cursorX = xForAudioSecs(cursorAudioSecs());
     if (cursorX >= 0 && cursorX <= width()) {
         painter->setPen(QPen(m_cursorColor, 1.5));
-        painter->drawLine(QPointF(cursorX, 0), QPointF(cursorX, waveRect.bottom()));
+        painter->drawLine(QPointF(cursorX, 0), QPointF(cursorX, timeRulerRect().bottom()));
     }
 }
 
@@ -1354,8 +1799,7 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
     const QFontMetricsF metrics(font);
 
     const QRectF measuresRow(rect.left(), rect.top(), rect.width(), RULER_ROW_HEIGHT);
-    const QRectF timeRow(rect.left(), measuresRow.bottom(), rect.width(), RULER_ROW_HEIGHT);
-    const QRectF timeSigRow(rect.left(), timeRow.bottom(), rect.width(), RULER_ROW_HEIGHT);
+    const QRectF timeSigRow(rect.left(), measuresRow.bottom(), rect.width(), RULER_ROW_HEIGHT);
     const double textBaselineOffset = RULER_ROW_HEIGHT - 5;
 
     // Measure numbers (every Nth one when they're too close)
@@ -1378,28 +1822,6 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
             painter->drawText(QPointF(x + 3, measuresRow.top() + textBaselineOffset), measure.number);
             lastLabelEnd = x + 3 + metrics.horizontalAdvance(measure.number);
         }
-    }
-
-    // Real time
-    static const double STEPS[] = { 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600 };
-    const double minLabelSpacing = 70.0;
-    double step = STEPS[std::size(STEPS) - 1];
-    for (double s : STEPS) {
-        if (s * m_pixelsPerSecond >= minLabelSpacing) {
-            step = s;
-            break;
-        }
-    }
-
-    const bool withMs = step < 1.0;
-    const double firstSecs = std::floor(audioSecsAtX(0) / step) * step;
-    const double lastSecs = audioSecsAtX(rect.width());
-    for (double secs = firstSecs; secs <= lastSecs + step; secs += step) {
-        const double x = xForAudioSecs(secs);
-        painter->setPen(QPen(m_gridColor, 1));
-        painter->drawLine(QPointF(x, timeRow.bottom() - 5), QPointF(x, timeRow.bottom()));
-        painter->setPen(m_textColor);
-        painter->drawText(QPointF(x + 3, timeRow.top() + textBaselineOffset), formatTime(std::abs(secs) < step / 2 ? 0.0 : secs, withMs));
     }
 
     // Time signatures, where they change: each one clipped before the next one
@@ -1437,9 +1859,54 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
 
     painter->setPen(QPen(m_gridColor, 1));
     painter->drawLine(QPointF(0, measuresRow.bottom()), QPointF(rect.width(), measuresRow.bottom()));
-    painter->drawLine(QPointF(0, timeRow.bottom()), QPointF(rect.width(), timeRow.bottom()));
     painter->drawLine(QPointF(0, timeSigRow.bottom()), QPointF(rect.width(), timeSigRow.bottom()));
     painter->drawLine(QPointF(0, rect.bottom()), QPointF(rect.width(), rect.bottom()));
+}
+
+void AudioSyncView::paintTimeRuler(QPainter* painter, const QRectF& rect) const
+{
+    painter->fillRect(rect, m_rulerColor);
+
+    QFont font = painter->font();
+    font.setPixelSize(10);
+    painter->setFont(font);
+
+    static const double STEPS[] = { 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600 };
+    const double minLabelSpacing = 70.0;
+    double step = STEPS[std::size(STEPS) - 1];
+    for (double s : STEPS) {
+        if (s * m_pixelsPerSecond >= minLabelSpacing) {
+            step = s;
+            break;
+        }
+    }
+
+    const bool withMs = step < 1.0;
+    const double firstSecs = std::floor(audioSecsAtX(0) / step) * step;
+    const double lastSecs = audioSecsAtX(rect.width());
+    for (double secs = firstSecs; secs <= lastSecs + step; secs += step) {
+        const double x = xForAudioSecs(secs);
+        painter->setPen(QPen(m_gridColor, 1));
+        painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.top() + 5));
+        painter->setPen(m_textColor);
+        painter->drawText(QPointF(x + 3, rect.bottom() - 4), formatTime(std::abs(secs) < step / 2 ? 0.0 : secs, withMs));
+    }
+}
+
+void AudioSyncView::paintFileName(QPainter* painter, const QRectF& rect) const
+{
+    if (!hasAudio() || rect.height() < 24) {
+        return;
+    }
+
+    QFont font = painter->font();
+    font.setPixelSize(11);
+    painter->setFont(font);
+
+    QColor color = m_textColor;
+    color.setAlphaF(0.55);
+    painter->setPen(color);
+    painter->drawText(rect.adjusted(8, 0, -8, -6), Qt::AlignLeft | Qt::AlignBottom, audioFileName());
 }
 
 void AudioSyncView::paintGrid(QPainter* painter, const QRectF& rect) const

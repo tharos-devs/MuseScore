@@ -30,6 +30,8 @@
 #include <QQuickPaintedItem>
 #include <QTimer>
 #include <QUrl>
+#include <QStringList>
+#include <QVariantMap>
 #include <qqmlintegration.h>
 
 #include "async/asyncable.h"
@@ -42,6 +44,7 @@
 #include "notation/inotationautomation.h"
 #include "playback/internal/audiosyncedits.h"
 
+#include "iplaybackconfiguration.h"
 #include "iplaybackcontroller.h"
 
 namespace mu::engraving {
@@ -72,6 +75,19 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
     Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
+    Q_PROPERTY(int latencyMs READ latencyMs WRITE setLatencyMs NOTIFY audioChanged)
+    Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY playingChanged)
+    Q_PROPERTY(bool metronomeEnabled READ metronomeEnabled NOTIFY metronomeChanged)
+    //! NOTE "position / duration", of the reference audio
+    Q_PROPERTY(QString timeText READ timeText NOTIFY positionTextChanged)
+    //! NOTE The A-B loop (see ReferenceAudioSettings::loopEnabled)
+    Q_PROPERTY(bool loopEnabled READ loopEnabled WRITE setLoopEnabled NOTIFY audioChanged)
+    Q_PROPERTY(bool hasLoopFrom READ hasLoopFrom NOTIFY audioChanged)
+    Q_PROPERTY(bool hasLoopTo READ hasLoopTo NOTIFY audioChanged)
+    //! NOTE The playback speed isn't 100%: the reference audio doesn't follow it
+    Q_PROPERTY(bool speedWarning READ speedWarning NOTIFY speedWarningChanged)
+    Q_PROPERTY(bool detecting READ detecting NOTIFY detectionChanged)
+    Q_PROPERTY(double detectionProgress READ detectionProgress NOTIFY detectionChanged)
 
     Q_PROPERTY(double pixelsPerSecond READ pixelsPerSecond WRITE setPixelsPerSecond NOTIFY viewChanged)
     Q_PROPERTY(double scrollSecs READ scrollSecs WRITE setScrollSecs NOTIFY viewChanged)
@@ -80,6 +96,9 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(double visibleSecs READ visibleSecs NOTIFY viewChanged)
     Q_PROPERTY(double amplitudeZoom READ amplitudeZoom WRITE setAmplitudeZoom NOTIFY viewChanged)
     Q_PROPERTY(bool logarithmic READ logarithmic WRITE setLogarithmic NOTIFY viewChanged)
+    //! NOTE Where the main waveform is, for controls placed along it
+    Q_PROPERTY(double waveformTop READ waveformTop NOTIFY viewChanged)
+    Q_PROPERTY(double waveformHeight READ waveformHeight NOTIFY viewChanged)
     Q_PROPERTY(bool followPlayback READ followPlayback WRITE setFollowPlayback NOTIFY viewChanged)
 
     Q_PROPERTY(QString positionText READ positionText NOTIFY positionTextChanged)
@@ -99,6 +118,7 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
+    muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
 
 public:
     explicit AudioSyncView(QQuickItem* parent = nullptr);
@@ -121,6 +141,18 @@ public:
     bool isStereoAudio() const;
     bool audioSyncEnabled() const;
     void setAudioSyncEnabled(bool enabled);
+    int latencyMs() const;
+    void setLatencyMs(int ms);
+    bool isPlaying() const;
+    bool metronomeEnabled() const;
+    QString timeText() const;
+    bool loopEnabled() const;
+    void setLoopEnabled(bool enabled);
+    bool hasLoopFrom() const;
+    bool hasLoopTo() const;
+    bool speedWarning() const;
+    bool detecting() const;
+    double detectionProgress() const;
 
     double pixelsPerSecond() const;
     void setPixelsPerSecond(double pps);
@@ -132,6 +164,8 @@ public:
     double amplitudeZoom() const;
     void setAmplitudeZoom(double zoom);
     bool logarithmic() const;
+    double waveformTop() const;
+    double waveformHeight() const;
     void setLogarithmic(bool logarithmic);
     bool followPlayback() const;
     void setFollowPlayback(bool follow);
@@ -159,6 +193,23 @@ public:
     Q_INVOKABLE void dropUrls(const QList<QUrl>& urls);
     Q_INVOKABLE void removeAudio();
 
+    //! NOTE At the playback position, or cleared if already set
+    Q_INVOKABLE void toggleLoopFrom();
+    Q_INVOKABLE void toggleLoopTo();
+    Q_INVOKABLE void togglePlay();
+    Q_INVOKABLE void stopPlayback();
+    Q_INVOKABLE void rewindToStart();
+    Q_INVOKABLE void toggleMetronome();
+
+    Q_INVOKABLE QStringList recentAudioFiles() const;
+    Q_INVOKABLE void clearRecentAudioFiles();
+    Q_INVOKABLE void setAudioFile(const QString& path);
+
+    //! NOTE Automatic sync points, from the selected sync point (or the first one) on, which must be on a downbeat.
+    //! params: sensitivity [0; 1], minBpm, maxBpm, octave (0 auto, 1 none, 2 double, 3 half), everyMeasure, toleranceMs
+    Q_INVOKABLE void detectPoints(const QVariantMap& params);
+    Q_INVOKABLE void cancelDetection();
+
     Q_INVOKABLE void zoomIn();
     Q_INVOKABLE void zoomOut();
     Q_INVOKABLE void zoomToFit();
@@ -171,6 +222,10 @@ signals:
     void viewChanged();
     void positionTextChanged();
     void syncChanged();
+    void playingChanged();
+    void metronomeChanged();
+    void speedWarningChanged();
+    void detectionChanged();
     void colorsChanged();
 
 protected:
@@ -238,6 +293,12 @@ private:
     void nudgeSelectedPoint(double deltaSecs);
     void deleteSelectedPoint();
     void paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const;
+    void paintLoop(QPainter* painter, const QRectF& waveRect) const;
+    QRectF loopBandRect() const;
+    //! NOTE The A-B loop as shown (following a drag)
+    std::pair<double, double> displayedLoop() const;
+    void setLoop(double fromSecs, double toSecs);
+    void updateSpeedWarning();
     double audioSecsAtX(double x) const;
     double xForAudioSecs(double secs) const;
     double cursorAudioSecs() const;
@@ -250,6 +311,7 @@ private:
 
     QRectF rulerRect() const;
     QRectF railRect() const;
+    QRectF timeRulerRect() const;
     QRectF waveformRect() const;
     //! NOTE The whole audio in small, below the waveform, with the visible part highlighted
     QRectF overviewRect() const;
@@ -258,6 +320,8 @@ private:
     void paintOverview(QPainter* painter, const QRectF& rect) const;
 
     void paintRuler(QPainter* painter, const QRectF& rect) const;
+    void paintTimeRuler(QPainter* painter, const QRectF& rect) const;
+    void paintFileName(QPainter* painter, const QRectF& rect) const;
     void paintGrid(QPainter* painter, const QRectF& rect) const;
     void paintWaveform(QPainter* painter, const QRectF& rect) const;
     void paintChannel(QPainter* painter, const QRectF& rect, int channel) const;
@@ -280,6 +344,12 @@ private:
     mutable double m_audioOffsetSecs = 0.0;
 
     int m_selectedPointUtick = -1;
+
+    struct DetectionJob;
+    std::shared_ptr<DetectionJob> m_detectionJob;
+    double m_detectionProgress = 0.0;
+    void onDetectionFinished(const std::shared_ptr<DetectionJob>& job, const std::vector<audiosync::DetectedBeatTime>& beats);
+    bool m_speedWarning = false;
     std::optional<PointDrag> m_pointDrag;
 
     int m_selectionTickFrom = -1;
@@ -295,13 +365,27 @@ private:
         Seek,
         Overview, // moving the visible window in the overview
         Point,
+        LoopFrom,
+        LoopTo,
+        LoopBoth,
     };
+
+    //! NOTE The A-B loop being dragged, written when released
+    struct LoopDrag {
+        double fromSecs = -1.0;
+        double toSecs = -1.0;
+        double grabSecs = 0.0;
+        double originalFromSecs = -1.0;
+        double originalToSecs = -1.0;
+    };
+    std::optional<LoopDrag> m_loopDrag;
 
     DragMode m_dragMode = DragMode::None;
     double m_overviewGrabOffsetSecs = 0.0; // where the visible window was grabbed, from its start
 
     QString m_positionText;
     QString m_tempoText;
+    QString m_timeText;
 
     QColor m_backgroundColor = QColor(40, 40, 40);
     QColor m_rulerColor = QColor(55, 55, 55);

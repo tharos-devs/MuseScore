@@ -272,3 +272,16 @@ bool PlaybackConfigurationStub::shouldMeasureInputLag() const
 {
     return false;
 }
+
+QStringList PlaybackConfigurationStub::recentReferenceAudioFiles() const
+{
+    return {};
+}
+
+void PlaybackConfigurationStub::addRecentReferenceAudioFile(const QString&)
+{
+}
+
+void PlaybackConfigurationStub::clearRecentReferenceAudioFiles()
+{
+}

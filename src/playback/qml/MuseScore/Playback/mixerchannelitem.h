@@ -71,6 +71,8 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(bool outputOnly READ outputOnly CONSTANT)
     Q_PROPERTY(bool isGroupBus READ isGroupBus CONSTANT)
     Q_PROPERTY(bool isReverbBus READ isReverbBus CONSTANT)
+    //! NOTE: a sound track's channel (the video's, the reference audio's), see SoundTrackChannel
+    Q_PROPERTY(bool isSoundTrack READ isSoundTrack CONSTANT)
     //! NOTE: only meaningful for Type::Aux channels - see auxBusIndex()'s own doc comment.
     //! No NOTIFY: read once by the Mixer's aux drag-and-drop reorder gesture, never bound
     //! to live QML UI.
@@ -135,6 +137,7 @@ public:
         SecondaryInstrument,
         Metronome,
         Video,
+        ReferenceAudio,
         Aux,
         Master,
     };
@@ -155,6 +158,10 @@ public:
     //! NOTE: only meaningful for Type::Aux channels - the Reverb bus is a built-in default
     //! that can be renamed but not deleted (see IPlaybackController::removeAuxBus)
     bool isReverbBus() const;
+
+    //! NOTE: the channels of the sound tracks (see SoundTrackChannel): placed and handled alike
+    static bool isSoundTrackType(Type type);
+    bool isSoundTrack() const;
 
     muse::audio::TrackId trackId() const;
 

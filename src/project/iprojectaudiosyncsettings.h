@@ -43,6 +43,19 @@ struct ReferenceAudioSettings
     //! NOTE Display: left/right channels drawn separately instead of one mixed waveform (a mono file is
     //! always drawn as one)
     bool showStereo = true;
+    //! NOTE Playback only: the reference audio played this much earlier (negative: later), to compensate a
+    //! latency heard between it and the score (the sync points and the display aren't affected)
+    int latencyMs = 0;
+    //! NOTE The Audio sync window's A-B loop, in the audio's time (< 0: not set); while enabled, it's played
+    //! instead of the score's loop
+    double loopFromSecs = -1.0;
+    double loopToSecs = -1.0;
+    bool loopEnabled = false;
+
+    bool hasLoop() const
+    {
+        return loopFromSecs >= 0.0 && loopToSecs > loopFromSecs;
+    }
 
     bool isValid() const
     {
@@ -55,7 +68,11 @@ struct ReferenceAudioSettings
                && muted == other.muted
                && solo == other.solo
                && includeInExport == other.includeInExport
-               && showStereo == other.showStereo;
+               && showStereo == other.showStereo
+               && latencyMs == other.latencyMs
+               && loopFromSecs == other.loopFromSecs
+               && loopToSecs == other.loopToSecs
+               && loopEnabled == other.loopEnabled;
     }
 
     bool operator!=(const ReferenceAudioSettings& other) const

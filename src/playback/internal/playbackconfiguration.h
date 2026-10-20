@@ -83,6 +83,9 @@ public:
     QStringList recentVideoFiles() const override;
     void addRecentVideoFile(const QString& path) override;
     void clearRecentVideoFiles() override;
+    QStringList recentReferenceAudioFiles() const override;
+    void addRecentReferenceAudioFile(const QString& path) override;
+    void clearRecentReferenceAudioFiles() override;
 
     bool isMixerSectionVisible(MixerSectionType sectionType) const override;
     void setMixerSectionVisible(MixerSectionType sectionType, bool visible) override;

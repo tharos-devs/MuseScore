@@ -59,6 +59,54 @@ std::optional<std::pair<double, double> > allowedAudioRange(const std::vector<Sy
 //! NOTE The nearest measure start or beat (the metronome's beats) to a utick of the unrolled score
 std::optional<int> nearestBeatUtick(const engraving::Score* score, int utick);
 
+//! NOTE Detected beats turned into sync points (see beatdetection.h)
+struct DetectedBeatTime {
+    double secs = 0.0;
+    float confidence = 1.f;
+};
+
+struct DetectionOptions {
+    enum class Octave {
+        Auto,   // the audio's beats taken twice as fast/slow as detected if closer to the score's current tempo
+        None,
+        Double, // two score beats per detected beat
+        Half,   // one score beat every two detected beats
+    };
+
+    //! NOTE The score position (normally a measure's start) at a known audio time, where the matching starts
+    int anchorUtick = 0;
+    double anchorSecs = 0.0;
+    //! NOTE Where it ends (< 0: the score's end)
+    int toUtick = -1;
+    Octave octave = Octave::Auto;
+    //! NOTE A point on every measure; otherwise only where the tempo changes (see simplifyPoints())
+    bool everyMeasure = false;
+    double toleranceSecs = 0.02;
+};
+
+//! NOTE Score positions with their audio times, by utick
+struct MatchedPoint {
+    int utick = 0;
+    double secs = 0.0;
+    float confidence = 1.f;
+};
+
+//! NOTE The measure starts matched to detected beats, from the anchor on
+std::vector<MatchedPoint> matchMeasures(const engraving::Score* score, const std::vector<DetectedBeatTime>& beats,
+                                        const DetectionOptions& options);
+
+//! NOTE Only the points the others can't be told apart from, within a tolerance, with a constant tempo between them
+//! (the first and last ones kept)
+std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points, double toleranceSecs);
+
+//! NOTE Manual sync points (other than the first one) in [fromUtick; toUtick): detection asks before replacing them
+bool hasManualPoints(const notation::INotationAutomation& automation, int fromUtick, int toUtick);
+
+//! NOTE Writes detected points (undoable): the converted/detected ones in their range are replaced, the manual ones
+//! too if replaceManual, locked ones never; points that would break the order or the tempo range are dropped
+int applyDetectedPoints(notation::INotationAutomation& automation, const engraving::Score* score, const std::vector<MatchedPoint>& points,
+                        bool replaceManual);
+
 //! NOTE Undoable edits; false if refused (out of the allowed range, initial point...)
 bool addPoint(notation::INotationAutomation& automation, const engraving::Score* score, int utick, double audioSecs);
 bool movePoint(notation::INotationAutomation& automation, int utick, double audioSecs);

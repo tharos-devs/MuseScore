@@ -52,6 +52,10 @@
 #include "notation/utilities/partutilities.h"
 
 #include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
+#include "project/iprojectvideosettings.h"
+
+#include "playback/internal/referenceaudiofile.h"
 
 #include "channeleditundo.h"
 
@@ -85,11 +89,15 @@ TrackListModel::~TrackListModel()
         row.item->setParent(nullptr);
         items.push_back(row.item);
     }
-    for (MixerChannelItem* item : { m_videoChannelItem, m_metronomeChannelItem }) {
-        if (item) {
-            item->setParent(nullptr);
-            items.push_back(item);
+    for (const SoundTrackRow& row : m_soundTrackRows) {
+        if (row.item) {
+            row.item->setParent(nullptr);
+            items.push_back(row.item);
         }
+    }
+    if (m_metronomeChannelItem) {
+        m_metronomeChannelItem->setParent(nullptr);
+        items.push_back(m_metronomeChannelItem);
     }
 
     QMetaObject::invokeMethod(qApp, [items]() {
@@ -103,28 +111,40 @@ void TrackListModel::componentComplete()
 {
     m_auxBusEditor = AuxBusEditor::shared(iocContext());
 
+    for (SoundTrackChannel& channel : makeSoundTrackChannels(iocContext())) {
+        m_soundTrackRows.push_back({ std::move(channel), nullptr, false, std::nullopt });
+    }
+
     controller()->playbackInitedChanged().onReceive(this, [this](bool) {
         scheduleReload();
     });
 
-    //! NOTE: the video's sound track comes and goes with the video (and once its audio is decoded)
-    controller()->trackAdded().onReceive(this, [this](const TrackId) {
-        scheduleReload();
-        if (m_videoChannelItem && m_videoChannelItem->trackId() != controller()->videoTrackId()) {
-            rebuildVideoChannelItem();
+    //! NOTE: a sound track comes and goes with its source (and once its audio is decoded)
+    auto rebuildChangedSoundTrackItems = [this]() {
+        for (SoundTrackRow& row : m_soundTrackRows) {
+            if (row.item && row.item->trackId() != row.channel.trackId()) {
+                rebuildSoundTrackChannelItem(row);
+            }
         }
+    };
+
+    controller()->trackAdded().onReceive(this, [this, rebuildChangedSoundTrackItems](const TrackId) {
+        scheduleReload();
+        rebuildChangedSoundTrackItems();
     });
 
-    controller()->trackRemoved().onReceive(this, [this](const TrackId) {
+    controller()->trackRemoved().onReceive(this, [this, rebuildChangedSoundTrackItems](const TrackId) {
         scheduleReload();
-        if (m_videoChannelItem && m_videoChannelItem->trackId() != controller()->videoTrackId()) {
-            rebuildVideoChannelItem();
-        }
+        rebuildChangedSoundTrackItems();
     });
 
-    controller()->videoMuteStateChanged().onReceive(this, [this](bool, bool) {
-        loadVideoMuteState();
-    });
+    for (const SoundTrackRow& row : m_soundTrackRows) {
+        row.channel.muteStateChanged().onReceive(this, [this, type = row.channel.type](bool, bool) {
+            if (const SoundTrackRow* soundTrackRow = this->soundTrackRow(type); soundTrackRow && soundTrackRow->item) {
+                soundTrackRow->channel.loadMuteState(soundTrackRow->item);
+            }
+        });
+    }
 
     //! NOTE: the live mute (with the one forced by another track's solo), see the Mixer's
     controller()->trackMuteStateChanged().onReceive(
@@ -192,15 +212,17 @@ void TrackListModel::onCurrentNotationChanged()
         m_articulationMaps->editorsOpenedChanged().disconnect(this);
     }
 
-    if (m_videoSettings) {
-        m_videoSettings->settingsChanged().disconnect(this);
+    for (SoundTrackRow& row : m_soundTrackRows) {
+        if (row.settingsChanged) {
+            row.settingsChanged->disconnect(this);
+            row.settingsChanged.reset();
+        }
     }
 
     m_notation = currentNotation();
     m_masterNotation = nullptr;
     m_audioSettings = audioSettings();
     m_articulationMaps = m_notation ? m_notation->masterNotation()->articulationMaps() : nullptr;
-    m_videoSettings = videoSettings();
 
     //! NOTE: even with the same tracks, the solo/mute states are the new notation's
     m_rebuildRequired = true;
@@ -243,23 +265,13 @@ void TrackListModel::onCurrentNotationChanged()
         });
     }
 
-    if (m_videoSettings) {
-        //! NOTE: a video loaded/removed, its mute/solo changed (here, in the Video panel, the Mixer or the Timeline)
-        m_videoSettings->settingsChanged().onNotify(this, [this]() {
-            const bool hasVideo = m_videoSettings->attachment().isValid();
-            if (m_hasVideo != hasVideo) {
-                m_hasVideo = hasVideo;
-                emit hasVideoChanged();
-                emit globalMuteEngagedChanged();
-                emit globalSoloEngagedChanged();
-            }
-            loadVideoMuteState();
-        });
-    }
+    connectSoundTrackSettings();
 
-    m_hasVideo = m_videoSettings && m_videoSettings->attachment().isValid();
-    emit hasVideoChanged();
-    rebuildVideoChannelItem();
+    for (SoundTrackRow& row : m_soundTrackRows) {
+        row.hasSource = row.channel.hasSource();
+        rebuildSoundTrackChannelItem(row);
+    }
+    emit soundTrackSourcesChanged();
 
     if (m_audioSettings) {
         //! NOTE: a color or a bus's name changed from the Mixer, the Timeline or here
@@ -397,6 +409,11 @@ void TrackListModel::rebuildMetronomeChannelItem()
 bool TrackListModel::videoVisible() const
 {
     return isCategoryVisible(ChannelCategory::Video);
+}
+
+bool TrackListModel::referenceAudioVisible() const
+{
+    return isCategoryVisible(ChannelCategory::ReferenceAudio);
 }
 
 bool TrackListModel::metronomeVisible() const
@@ -694,45 +711,109 @@ void TrackListModel::updateColors()
         m_metronomeChannelItem->setColor(settings->trackOutputParams(m_metronomeChannelItem->instrumentTrackId()).color);
     }
 
-    loadVideoColor();
+    loadSoundTrackColors();
+}
+
+const TrackListModel::SoundTrackRow* TrackListModel::soundTrackRow(MixerChannelItem::Type type) const
+{
+    for (const SoundTrackRow& row : m_soundTrackRows) {
+        if (row.channel.type == type) {
+            return &row;
+        }
+    }
+
+    return nullptr;
 }
 
 MixerChannelItem* TrackListModel::videoChannelItem() const
 {
-    return m_videoChannelItem;
+    const SoundTrackRow* row = soundTrackRow(MixerChannelItem::Type::Video);
+    return row ? row->item : nullptr;
 }
 
 bool TrackListModel::hasVideo() const
 {
-    return m_hasVideo;
+    const SoundTrackRow* row = soundTrackRow(MixerChannelItem::Type::Video);
+    return row && row->hasSource;
 }
 
-//! NOTE: like the Mixer's Video channel (see MixerPanelModel::buildVideoChannelItem()), for its mute, solo, color
-//! and level only: its mute/solo go to the video attachment, which PlaybackController applies to the engine
-void TrackListModel::rebuildVideoChannelItem()
+MixerChannelItem* TrackListModel::referenceAudioChannelItem() const
 {
-    MixerChannelItem* oldItem = m_videoChannelItem;
+    const SoundTrackRow* row = soundTrackRow(MixerChannelItem::Type::ReferenceAudio);
+    return row ? row->item : nullptr;
+}
 
-    const TrackId trackId = controller()->videoTrackId();
-    m_videoChannelItem = new MixerChannelItem(this, MixerChannelItem::Type::Video, true /*outputOnly*/, trackId);
-    m_videoChannelItem->setTitle(muse::qtrc("playback", "Video"));
-    connectGlobalMuteSolo(m_videoChannelItem);
-    if (trackId != INVALID_TRACK_ID) {
-        m_videoChannelItem->subscribeOnTrackAudioSignalChanges();
+bool TrackListModel::hasReferenceAudio() const
+{
+    const SoundTrackRow* row = soundTrackRow(MixerChannelItem::Type::ReferenceAudio);
+    return row && row->hasSource;
+}
+
+//! NOTE: a source loaded/removed, its mute/solo changed (here, in the Mixer, or in its own UI: the Video panel and
+//! the Timeline, the Audio sync window)
+void TrackListModel::connectSoundTrackSettings()
+{
+    for (SoundTrackRow& row : m_soundTrackRows) {
+        row.settingsChanged = row.channel.settingsChanged();
+        if (!row.settingsChanged) {
+            continue;
+        }
+
+        row.settingsChanged->onNotify(this, [this, type = row.channel.type]() {
+            updateSoundTrackSources();
+            if (const SoundTrackRow* soundTrackRow = this->soundTrackRow(type); soundTrackRow && soundTrackRow->item) {
+                soundTrackRow->channel.loadMuteState(soundTrackRow->item);
+            }
+        });
+    }
+}
+
+void TrackListModel::updateSoundTrackSources()
+{
+    bool changed = false;
+    for (SoundTrackRow& row : m_soundTrackRows) {
+        const bool hasSource = row.channel.hasSource();
+        if (row.hasSource != hasSource) {
+            row.hasSource = hasSource;
+            changed = true;
+        }
     }
 
-    loadVideoMuteState();
-    loadVideoColor();
+    if (changed) {
+        emit soundTrackSourcesChanged();
+        emit globalMuteEngagedChanged();
+        emit globalSoloEngagedChanged();
+    }
+}
 
-    connect(m_videoChannelItem, &MixerChannelItem::soloMuteStateChanged, this,
-            [this](const INotationSoloMuteState::SoloMuteState& state) {
-        updateVideoAttachment(videoSettings(), [&state](VideoAttachmentSettings& attachment) {
-            attachment.muted = state.solo ? false : state.mute;
-            attachment.solo = state.solo;
-        });
+//! NOTE: like the Mixer's sound track channel (see MixerPanelModel::buildSoundTrackChannelItem()), for its mute,
+//! solo, color and level only: its mute/solo go to its source's settings, which PlaybackController applies to the
+//! engine
+void TrackListModel::rebuildSoundTrackChannelItem(SoundTrackRow& row)
+{
+    MixerChannelItem* oldItem = row.item;
+
+    const TrackId trackId = row.channel.trackId();
+    MixerChannelItem* item = new MixerChannelItem(this, row.channel.type, true /*outputOnly*/, trackId);
+    row.item = item;
+    item->setTitle(row.channel.title());
+    connectGlobalMuteSolo(item);
+    if (trackId != INVALID_TRACK_ID) {
+        item->subscribeOnTrackAudioSignalChanges();
+    }
+
+    //! NOTE: the effective mute includes the live force-mute (another track soloed), like the Mixer's
+    row.channel.loadMuteState(item);
+    if (audioSettings()) {
+        item->setColor(row.channel.outputParams().color);
+    }
+
+    connect(item, &MixerChannelItem::soloMuteStateChanged, this,
+            [channel = row.channel](const INotationSoloMuteState::SoloMuteState& state) {
+        channel.setUserSoloMuteState(state);
     });
 
-    emit videoChannelItemChanged();
+    emit soundTrackChannelItemsChanged();
 
     //! NOTE: only once the view has released it
     if (oldItem) {
@@ -741,40 +822,30 @@ void TrackListModel::rebuildVideoChannelItem()
     }
 }
 
-//! NOTE: the effective mute includes the live force-mute (another track soloed), like the Mixer's
-void TrackListModel::loadVideoMuteState()
+void TrackListModel::loadSoundTrackColors()
 {
-    const IProjectVideoSettingsPtr settings = videoSettings();
-    if (!m_videoChannelItem || !settings) {
+    if (!audioSettings()) {
         return;
     }
 
-    const VideoAttachmentSettings& attachment = settings->attachment();
-    m_videoChannelItem->loadSoloMuteState({ attachment.muted, attachment.solo });
-
-    const bool forceMute = controller()->isVideoForceMuted();
-    m_videoChannelItem->loadMuteForceMuteState((attachment.muted && !attachment.solo) || forceMute, forceMute);
-}
-
-void TrackListModel::loadVideoColor()
-{
-    if (m_videoChannelItem && audioSettings()) {
-        m_videoChannelItem->setColor(controller()->videoOutputParams().color);
+    for (const SoundTrackRow& row : m_soundTrackRows) {
+        if (row.item) {
+            row.item->setColor(row.channel.outputParams().color);
+        }
     }
 }
 
-//! NOTE: not undoable, like the other video output params (volume, pan...) changed from the Mixer
-void TrackListModel::setVideoColor(const QColor& color)
+void TrackListModel::setSoundTrackColor(MixerChannelItem* item, const QColor& color)
 {
-    AudioOutputParams params = controller()->videoOutputParams();
-    params.color = color;
-    controller()->setVideoOutputParams(params);
-    loadVideoColor();
+    if (const SoundTrackRow* row = item ? soundTrackRow(item->type()) : nullptr) {
+        row->channel.setColor(color);
+        loadSoundTrackColors();
+    }
 }
 
-void TrackListModel::resetVideoColor()
+void TrackListModel::resetSoundTrackColor(MixerChannelItem* item)
 {
-    setVideoColor(QColor());
+    setSoundTrackColor(item, QColor());
 }
 
 void TrackListModel::setMetronomeColor(const QColor& color)
@@ -799,7 +870,8 @@ void TrackListModel::applyMetronomeColor(const QColor& color, const Translatable
 
 void TrackListModel::chooseVideoFile()
 {
-    const IProjectVideoSettingsPtr settings = videoSettings();
+    const INotationProjectPtr project = context()->currentProject();
+    const IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
     if (!settings) {
         return;
     }
@@ -824,6 +896,13 @@ void TrackListModel::chooseVideoFile()
     settings->setAttachment(updated);
 
     playbackConfiguration()->addRecentVideoFile(path.toQString());
+}
+
+void TrackListModel::chooseReferenceAudioFile()
+{
+    if (const INotationProjectPtr project = context()->currentProject()) {
+        audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), project->audioSyncSettings());
+    }
 }
 
 //! NOTE: with "Enable stave sharing", the combined part is the one shown (the parts it combines are hidden, see
@@ -1070,7 +1149,7 @@ void TrackListModel::setSoloForSelectedRows(bool solo)
     ChannelSelection::setSolo(channels(), solo);
 }
 
-//! NOTE: the listed channels: the selection's, and the global Mute/Solo's (with the shown Video row)
+//! NOTE: the listed channels: the selection's, and the global Mute/Solo's (with the shown sound tracks' rows)
 GlobalMuteSoloToggle::Channels TrackListModel::channels() const
 {
     GlobalMuteSoloToggle::Channels channels;
@@ -1086,8 +1165,10 @@ GlobalMuteSoloToggle::Channels TrackListModel::globalMuteSoloChannels() const
     //! NOTE: not the metronome, like the Mixer's: its "mute" is the metronome being off (see
     //! PlaybackController::setTrackSoloMuteState()), so the global Mute would turn it on
     GlobalMuteSoloToggle::Channels channels = this->channels();
-    if (m_videoChannelItem && m_hasVideo && videoVisible()) {
-        channels.push_front(m_videoChannelItem);
+    for (auto it = m_soundTrackRows.crbegin(); it != m_soundTrackRows.crend(); ++it) {
+        if (it->item && it->hasSource && isCategoryVisible(it->channel.category)) {
+            channels.push_front(it->item);
+        }
     }
 
     return channels;
@@ -1808,12 +1889,6 @@ IProjectAudioSettingsPtr TrackListModel::audioSettings() const
 {
     const INotationProjectPtr project = context()->currentProject();
     return project ? project->audioSettings() : nullptr;
-}
-
-IProjectVideoSettingsPtr TrackListModel::videoSettings() const
-{
-    const INotationProjectPtr project = context()->currentProject();
-    return project ? project->videoSettings() : nullptr;
 }
 
 IProjectUndoStackPtr TrackListModel::projectUndoStack() const

@@ -40,7 +40,8 @@ bool mu::playback::audiosync::isSupportedAudioFile(const muse::io::path_t& path)
     return AUDIO_FILE_SUFFIXES.contains(QFileInfo(path.toQString()).suffix().toLower());
 }
 
-bool mu::playback::audiosync::chooseReferenceAudio(IInteractive* interactive, const project::IProjectAudioSyncSettingsPtr& settings)
+bool mu::playback::audiosync::chooseReferenceAudio(IInteractive* interactive, IPlaybackConfiguration* configuration,
+                                                   const project::IProjectAudioSyncSettingsPtr& settings)
 {
     if (!interactive || !settings) {
         return false;
@@ -64,14 +65,19 @@ bool mu::playback::audiosync::chooseReferenceAudio(IInteractive* interactive, co
         return false;
     }
 
-    setReferenceAudioPath(settings, path);
+    setReferenceAudioPath(configuration, settings, path);
     return true;
 }
 
-void mu::playback::audiosync::setReferenceAudioPath(const project::IProjectAudioSyncSettingsPtr& settings, const muse::io::path_t& path)
+void mu::playback::audiosync::setReferenceAudioPath(IPlaybackConfiguration* configuration,
+                                                    const project::IProjectAudioSyncSettingsPtr& settings, const muse::io::path_t& path)
 {
-    if (!settings) {
+    if (!settings || path.empty()) {
         return;
+    }
+
+    if (configuration) {
+        configuration->addRecentReferenceAudioFile(path.toQString());
     }
 
     project::ReferenceAudioSettings updated = settings->referenceAudio();

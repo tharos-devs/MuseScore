@@ -271,6 +271,9 @@ private:
     void updateVideoMuteState(bool hasSolo);
 
     void onReferenceAudioChanged();
+    //! NOTE The Audio sync window's A-B loop (see ReferenceAudioSettings::loopEnabled), played instead of the score's
+    bool isReferenceAudioLoopActive() const;
+    void applyReferenceAudioLoop();
     void updateReferenceAudioMuteState(bool hasSolo);
 
     void resetPlayback();
@@ -333,6 +336,7 @@ private:
     std::unique_ptr<SoundTrackSlot> m_videoSlot;
     muse::async::Channel<bool, bool> m_videoMuteStateChanged;
     std::unique_ptr<SoundTrackSlot> m_referenceAudioSlot;
+    bool m_isReferenceAudioLoopApplied = false;
     muse::async::Channel<bool, bool> m_referenceAudioMuteStateChanged;
 
     muse::midi::tick_t m_currentTick = 0;
