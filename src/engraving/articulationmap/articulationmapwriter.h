@@ -34,5 +34,9 @@ public:
     //! NOTE: e.g. "C#0v80", "cc32=10", "pc3" - several messages are chained
     static muse::String messagesCode(const std::vector<muse::mpe::MidiMessage>& messages, int middleCOctave);
     static muse::String noteName(int pitch, int middleCOctave);
+
+    //! NOTE: how an articulation is triggered, for display: e.g. "C0 | CC32:10 | Ch 2"
+    static muse::String triggerText(const std::vector<muse::mpe::MidiMessage>& messages, const std::optional<int>& channel,
+                                    int middleCOctave);
 };
 }

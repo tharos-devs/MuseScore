@@ -53,201 +53,74 @@ Item {
         order: root.navigationOrderStart
     }
 
+    // a pad writes only while entering notes, else it's only heard (see PercussionPanelModel::onPadTriggered()):
+    // no Write / Preview modes
     Row {
         id: centralButtonsRow
-
-        readonly property int buttonWidth: Math.max(writeButton.implicitWidth, previewButton.implicitWidth)
 
         anchors.verticalCenter: parent.verticalCenter
         x: prv.centerX - (centralButtonsRow.width / 2)
 
-        visible: root.model.currentPanelMode !== PanelMode.EDIT_LAYOUT
+        spacing: prv.spacing
 
+        // the three buttons as wide as the widest content
+        readonly property real buttonWidth: Math.max(editPadButton.implicitWidth, layoutButton.implicitWidth,
+                                                     customizeKitButton.implicitWidth)
+
+        // as "Edit pad…" in a pad's menu: the pad of the note selected in the score, else the last one clicked, else the
+        // first one
         FlatButton {
-            id: writeButton
+            id: editPadButton
 
+            visible: root.model.currentPanelMode !== PanelMode.EDIT_LAYOUT
             width: centralButtonsRow.buttonWidth
-
+            minWidth: 0
             enabled: root.model.enabled
 
             icon: IconCode.EDIT
-            text: qsTrc("notation/percussion", "Write")
+            text: qsTrc("notation/percussion", "Edit pad")
             orientation: Qt.Horizontal
-            accentButton: root.model.currentPanelMode === PanelMode.WRITE
-            backgroundRadius: 0
 
             navigation.panel: centralNavPanel
             navigation.row: 0
-            accessible.name: {
-                if (!writeButton.accentButton) {
-                    return writeButton.text
-                }
-                return writeButton.text + ", " + qsTrc("ui", "selected")
-            }
-
-            backgroundItem: RoundedRectangle {
-                id: writeButtonBackground
-
-                property real backgroundOpacity: ui.theme.buttonOpacityNormal
-                color: Utils.colorWithAlpha(writeButton.accentButton ? ui.theme.accentColor : ui.theme.buttonColor, backgroundOpacity)
-
-                topLeftRadius: 3
-                topRightRadius: 0
-                bottomLeftRadius: 3
-                bottomRightRadius: 0
-
-                NavigationFocusBorder {
-                    drawOutsideParent: false
-                    navigationCtrl: writeButton.navigation
-                }
-
-                states: [
-                    State {
-                        name: "PRESSED"
-                        when: writeButton.mouseArea.pressed
-
-                        PropertyChanges {
-                            target: writeButtonBackground
-                            backgroundOpacity: ui.theme.buttonOpacityHit
-                        }
-                    },
-
-                    State {
-                        name: "HOVERED"
-                        when: !writeButton.mouseArea.pressed && writeButton.mouseArea.containsMouse
-
-                        PropertyChanges {
-                            target: writeButtonBackground
-                            backgroundOpacity: ui.theme.buttonOpacityHover
-                        }
-                    }
-                ]
-            }
 
             onClicked: {
-                root.model.currentPanelMode = PanelMode.WRITE
+                root.model.editSelectedPad()
             }
         }
 
-        Rectangle {
-            id: separator
-            height: parent.height
-            width: 1
-            color: ui.theme.strokeColor
-        }
-
+        // while editing the layout: next to Layout (its columns, reset...), in place of Edit pad
         FlatButton {
-            id: previewButton
-
-            width: centralButtonsRow.buttonWidth
+            id: finishEditingButton
 
             enabled: root.model.enabled
 
-            icon: IconCode.PLAY
-            text: qsTrc("notation/percussion", "Preview")
+            visible: root.model.currentPanelMode === PanelMode.EDIT_LAYOUT
+            text: qsTrc("notation/percussion", "Finish editing")
             orientation: Qt.Horizontal
-            accentButton: root.model.currentPanelMode === PanelMode.SOUND_PREVIEW
-            backgroundRadius: 0
+            accentButton: true
 
             navigation.panel: centralNavPanel
-            navigation.row: 1
-            accessible.name: {
-                if (!previewButton.accentButton) {
-                    return previewButton.text
-                }
-                return previewButton.text + ", " + qsTrc("ui", "selected")
-            }
+            navigation.row: 0
 
-            backgroundItem: RoundedRectangle {
-                id: previewButtonBackground
-
-                property real backgroundOpacity: ui.theme.buttonOpacityNormal
-                color: Utils.colorWithAlpha(previewButton.accentButton ? ui.theme.accentColor : ui.theme.buttonColor, backgroundOpacity)
-
-                topLeftRadius: 0
-                topRightRadius: 3
-                bottomLeftRadius: 0
-                bottomRightRadius: 3
-
-                NavigationFocusBorder {
-                    drawOutsideParent: false
-                    navigationCtrl: previewButton.navigation
-                }
-
-                states: [
-                    State {
-                        name: "PRESSED"
-                        when: previewButton.mouseArea.pressed
-
-                        PropertyChanges {
-                            target: previewButtonBackground
-                            backgroundOpacity: ui.theme.buttonOpacityHit
-                        }
-                    },
-
-                    State {
-                        name: "HOVERED"
-                        when: !previewButton.mouseArea.pressed && previewButton.mouseArea.containsMouse
-
-                        PropertyChanges {
-                            target: previewButtonBackground
-                            backgroundOpacity: ui.theme.buttonOpacityHover
-                        }
-                    }
-                ]
-            }
             onClicked: {
-                root.model.currentPanelMode = PanelMode.SOUND_PREVIEW
+                root.model.finishEditing()
             }
         }
-    }
-
-    FlatButton {
-        id: finishEditingButton
-
-        anchors.verticalCenter: parent.verticalCenter
-        x: prv.centerX - (finishEditingButton.width / 2)
-
-        enabled: root.model.enabled
-
-        visible: root.model.currentPanelMode === PanelMode.EDIT_LAYOUT
-        text: qsTrc("notation/percussion", "Finish editing")
-        orientation: Qt.Horizontal
-        accentButton: true
-
-        navigation.panel: centralNavPanel
-        navigation.row: 0
-
-        onClicked: {
-            root.model.finishEditing()
-        }
-    }
-
-    NavigationPanel {
-        id: rightSideNavPanel
-        name: "PercussionPanelToolBarRightSide"
-        section: root.navigationSection
-        order: centralNavPanel.order + 1
-    }
-
-    Row {
-        id: rightSideButtonsRow
-
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        anchors.rightMargin: prv.spacing
-
-        spacing: prv.spacing
 
         FlatButton {
+            id: layoutButton
+
+            width: centralButtonsRow.buttonWidth
+            minWidth: 0
             enabled: root.model.enabled
 
             icon: IconCode.SPLIT_VIEW_HORIZONTAL
             text: qsTrc("notation/percussion", "Layout")
             orientation: Qt.Horizontal
 
-            navigation.panel: rightSideNavPanel
-            navigation.row: 0
+            navigation.panel: centralNavPanel
+            navigation.row: 1
 
             onClicked: {
                 menuLoader.toggleOpened(root.model.layoutMenuItems)
@@ -263,16 +136,22 @@ Item {
         }
 
         FlatButton {
-            enabled: root.model.enabled && root.model.currentPanelMode !== PanelMode.EDIT_LAYOUT
+            id: customizeKitButton
+
+            visible: root.model.currentPanelMode !== PanelMode.EDIT_LAYOUT
+            width: centralButtonsRow.buttonWidth
+            minWidth: 0
+            enabled: root.model.enabled
             text: qsTrc("notation/percussion", "Customize kit")
             orientation: Qt.Horizontal
 
-            navigation.panel: rightSideNavPanel
-            navigation.row: 1
+            navigation.panel: centralNavPanel
+            navigation.row: 2
 
             onClicked: {
                 root.model.customizeKit()
             }
         }
     }
+
 }

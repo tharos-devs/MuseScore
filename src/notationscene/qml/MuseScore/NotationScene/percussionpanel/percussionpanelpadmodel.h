@@ -59,7 +59,9 @@ public:
     int pitch() const { return m_pitch; }
     void setPitch(int pitch);
 
-    QString midiNote() const { return QString::fromStdString(muse::pitchToString(m_pitch)); }
+    //! NOTE: the note the pad plays (see DrumInstrument::playedPitch), named as set (e.g. as in the articulation map)
+    QString midiNote() const { return !m_midiNoteText.isEmpty() ? m_midiNoteText : QString::fromStdString(muse::pitchToString(m_pitch)); }
+    void setMidiNoteText(const QString& text);
 
     void setNotationPreviewItem(mu::engraving::ElementPtr item);
     mu::engraving::ElementPtr notationPreviewItem() const { return m_notationPreviewItem; }
@@ -78,6 +80,7 @@ public:
         DUPLICATE,
         DELETE,
         DEFINE_SHORTCUT,
+        EDIT,
     };
 
     muse::async::Channel<PadAction> padActionTriggered() const { return m_padActionTriggered; }
@@ -95,6 +98,7 @@ private:
 
     QString m_keyboardShortcut;
     int m_pitch = -1;
+    QString m_midiNoteText;
 
     mu::engraving::ElementPtr m_notationPreviewItem;
 

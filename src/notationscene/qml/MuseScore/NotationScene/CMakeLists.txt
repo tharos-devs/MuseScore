@@ -130,6 +130,9 @@ qt_add_qml_module(notationscene_qml
         paintedengravingitem.h
         partlistmodel.cpp
         partlistmodel.h
+        percussionpanel/drumkitarticulationmap.h
+        percussionpanel/editdrumpadmodel.cpp
+        percussionpanel/editdrumpadmodel.h
         percussionpanel/percussionpanelmodel.cpp
         percussionpanel/percussionpanelmodel.h
         percussionpanel/percussionpanelpadlistmodel.cpp
@@ -244,6 +247,7 @@ qt_add_qml_module(notationscene_qml
         NoteInputBar.qml
         PartsDialog.qml
         PercussionPanel.qml
+        percussionpanel/EditDrumPadDialog.qml
         percussionpanel/PercussionPanelPad.qml
         percussionpanel/PercussionPanelPadContent.qml
         percussionpanel/PercussionPanelToolBar.qml

@@ -72,6 +72,10 @@ public:
     int numPads() const { return m_padModels.count(); }
 
     void setDrumset(const engraving::Drumset* drumset);
+
+    //! NOTE: the octave of middle C (60) in the pads' note names, e.g. as in the instrument's articulation map; set before
+    //! the drumset
+    void setNoteNamesMiddleCOctave(int octave) { m_noteNamesMiddleCOctave = octave; }
     const engraving::Drumset* drumset() const { return m_drumset; }
 
     QList<PercussionPanelPadModel*> padList() const { return m_padModels; }
@@ -118,6 +122,7 @@ private:
     QList<PercussionPanelPadModel*> m_padModels;
 
     int m_padSwapStartIndex = -1;
+    int m_noteNamesMiddleCOctave = 4;
 
     muse::async::Notification m_hasActivePadsChanged;
     muse::async::Channel<PercussionPanelPadModel::PadAction, int /*pitch*/> m_padActionRequestChannel;

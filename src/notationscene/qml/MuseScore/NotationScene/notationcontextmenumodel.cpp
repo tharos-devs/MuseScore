@@ -215,8 +215,11 @@ MenuItemList NotationContextMenuModel::makeMeasureItems()
 
     items << makeSeparator();
 
+    // the Percussion panel's Edit pad dialog, on this staff's kit
     if (isDrumsetStaff()) {
-        items << makeMenuItem(OPEN_CUSTOMIZE_KIT_COMMAND);
+        muse::rcommand::CommandQuery query(OPEN_EDIT_DRUM_PAD_COMMAND);
+        query.addParam("staff_context", muse::Val(true));
+        items << makeMenuItem(query, TranslatableString("action", "Customize kit…"));
     }
 
     items << makeMenuItem(OPEN_STAFF_PROPERTIES_COMMAND);

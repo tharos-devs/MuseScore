@@ -47,6 +47,7 @@ public:
         bool useElementColors = false;
         bool colorsInversionEnabled = false;
         int numStaffLines = 0;
+        int staffLinesAlpha = 127; // half of the color's by default
     };
 
     static void paintPreview(std::shared_ptr<engraving::rendering::ISingleRenderer> render, mu::engraving::EngravingItem* element,

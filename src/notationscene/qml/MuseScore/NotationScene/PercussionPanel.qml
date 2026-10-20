@@ -298,6 +298,7 @@ Item {
                         // When swapping, only show the outline for the swap origin  and the swap target...
                         showEditOutline: percModel.currentPanelMode === PanelMode.EDIT_LAYOUT
                                          && (!Boolean(padGrid.swapOriginPad) || padGrid.swapOriginPad === pad)
+                        isEditedPad: padArea.index === percModel.editedPadIndex
                         showOriginBackground: pad.containsDrag || (pad === padGrid.swapOriginPad && !padGrid.isKeyboardSwapActive)
 
                         panelHasActiveKeyboardSwap: padGrid.isKeyboardSwapActive
@@ -321,6 +322,14 @@ Item {
                             padGrid.swapOriginPad = null
                             padGrid.isKeyboardSwapActive = false
                             padGrid.model.endPadSwap(padArea.index)
+                        }
+
+                        onEditEmptyPadRequested: {
+                            percModel.editEmptyPad(padArea.index)
+                        }
+
+                        onEmptyPadClicked: {
+                            percModel.onEmptyPadClicked(padArea.index)
                         }
 
                         onCancelPadSwapRequested: {

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <QColor>
 #include <QQuickPaintedItem>
 #include <qqmlintegration.h>
 
@@ -40,6 +41,10 @@ class PaintedEngravingItem : public QQuickPaintedItem
 
     Q_PROPERTY(double spatium READ spatium WRITE setSpatium NOTIFY spatiumChanged)
 
+    //! NOTE: of the item and the staff lines, these fully opaque (e.g. the theme's text color); unset: the engraving's default
+    //! (black), staff lines half transparent
+    Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+
     QML_ELEMENT
 
     muse::GlobalInject<engraving::IEngravingConfiguration> configuration;
@@ -57,12 +62,16 @@ public:
     double spatium() const;
     void setSpatium(double spatium);
 
+    QColor color() const;
+    void setColor(const QColor& color);
+
     void paint(QPainter* painter) override;
 
 signals:
     void engravingItemVariantChanged();
     void numStaffLinesChanged();
     void spatiumChanged();
+    void colorChanged();
 
 private:
     void paintNotationPreview(muse::draw::Painter& painter) const;
@@ -71,5 +80,6 @@ private:
     int m_numStaffLines = 0;
 
     double m_spatium = 1.0;
+    QColor m_color;
 };
 }

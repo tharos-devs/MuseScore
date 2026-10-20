@@ -92,6 +92,10 @@ NotationMidiInput::NotationMidiInput(IGetScore* getScore, INotationInteractionPt
 
 void NotationMidiInput::onMidiEventReceived(const muse::midi::Event& event)
 {
+    if (m_noteInputSuspended) {
+        return;
+    }
+
     if (event.isChannelVoice20()) {
         auto events = event.toMIDI10();
         for (auto& midi10event : events) {
@@ -151,6 +155,11 @@ Score* NotationMidiInput::score() const
     }
 
     return m_getScore->score();
+}
+
+void NotationMidiInput::setNoteInputSuspended(bool suspended)
+{
+    m_noteInputSuspended = suspended;
 }
 
 void NotationMidiInput::doProcessEvents()

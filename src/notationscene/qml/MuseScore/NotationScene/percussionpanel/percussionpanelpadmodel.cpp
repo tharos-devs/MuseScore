@@ -27,6 +27,7 @@
 static const QString DUPLICATE_PAD_CODE("duplicate-pad");
 static const QString DELETE_PAD_CODE("delete-pad");
 static const QString DEFINE_PAD_SHORTCUT_CODE("define-pad-shortcut");
+static const QString EDIT_PAD_CODE("edit-pad");
 
 using namespace mu::notation;
 using namespace muse::ui;
@@ -56,6 +57,16 @@ void PercussionPanelPadModel::setKeyboardShortcut(const QString& keyboardShortcu
     emit keyboardShortcutChanged();
 }
 
+void PercussionPanelPadModel::setMidiNoteText(const QString& text)
+{
+    if (m_midiNoteText == text) {
+        return;
+    }
+
+    m_midiNoteText = text;
+    emit midiNoteChanged();
+}
+
 void PercussionPanelPadModel::setPitch(int pitch)
 {
     if (m_pitch == pitch) {
@@ -83,11 +94,15 @@ const QVariant PercussionPanelPadModel::notationPreviewItemVariant() const
 
 QList<QVariantMap> PercussionPanelPadModel::contextMenuItems() const
 {
+    static constexpr int editPadIcon = static_cast<int>(IconCode::Code::EDIT);
     static constexpr int definePadShortcutIcon = static_cast<int>(IconCode::Code::SHORTCUTS);
     // static constexpr int duplicatePadIcon = static_cast<int>(IconCode::Code::COPY);
     static constexpr int deletePadIcon = static_cast<int>(IconCode::Code::DELETE_TANK);
 
     QList<QVariantMap> menuItems = {
+        { { "id", EDIT_PAD_CODE }, { "title", muse::qtrc("notation/percussion", "Edit pad…") },
+            { "icon", editPadIcon }, { "enabled", true } },
+
         { { "id", DEFINE_PAD_SHORTCUT_CODE }, { "title", muse::qtrc("shortcuts", "Define keyboard shortcut…") },
             { "icon", definePadShortcutIcon }, { "enabled", true } },
 
@@ -110,6 +125,8 @@ void PercussionPanelPadModel::handleMenuItem(const QString& itemId)
         m_padActionTriggered.send(PadAction::DELETE);
     } else if (itemId == DEFINE_PAD_SHORTCUT_CODE) {
         m_padActionTriggered.send(PadAction::DEFINE_SHORTCUT);
+    } else if (itemId == EDIT_PAD_CODE) {
+        m_padActionTriggered.send(PadAction::EDIT);
     }
 }
 

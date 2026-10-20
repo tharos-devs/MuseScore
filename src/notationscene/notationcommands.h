@@ -183,6 +183,18 @@ inline static const muse::rcommand::Command FLIP_HORIZONTALLY_COMMAND("command:/
 
 inline static const muse::rcommand::Command ADD_NOTE_COMMAND("command://notation/add-note"); // with params
 inline static const muse::rcommand::Command ADD_DRUM_NOTE_COMMAND("command://notation/add-drum-note"); // with params
+//! NOTE: the pad edited in the "Edit pad" dialog, outlined in the Percussion panel
+//! NOTE: the pad before/after one in the Percussion panel's order (its pitch as the response's data, -1 if none)
+inline static const muse::rcommand::Command PERCUSSION_PANEL_ADJACENT_PAD_COMMAND("command://notation/percussion-panel/adjacent-pad"); // with params
+//! NOTE: the Percussion panel's Edit pad dialog: a pad (by default the selected note's, else the first one) or a new pad at a
+//! panel position; already open, it edits that pad
+inline static const muse::rcommand::Command OPEN_EDIT_DRUM_PAD_COMMAND("command://notation/open-edit-drum-pad"); // with params
+//! NOTE: the layout being edited in the Percussion panel applied (the Edit pad dialog changes the kit, which would discard it)
+inline static const muse::rcommand::Command PERCUSSION_PANEL_FINISH_LAYOUT_EDITING_COMMAND(
+    "command://notation/percussion-panel/finish-layout-editing");
+//! NOTE: the Edit pad dialog, open, edits another pad
+inline static const muse::rcommand::Command PERCUSSION_PANEL_EDIT_PAD_COMMAND("command://notation/percussion-panel/edit-pad"); // with params
+inline static const muse::rcommand::Command PERCUSSION_PANEL_SET_EDITED_PAD_COMMAND("command://notation/percussion-panel/set-edited-pad"); // with params
 
 inline static const muse::rcommand::Command ENTER_NOTE_C_COMMAND("command://notation/enter-note-c");
 inline static const muse::rcommand::Command ENTER_NOTE_D_COMMAND("command://notation/enter-note-d");

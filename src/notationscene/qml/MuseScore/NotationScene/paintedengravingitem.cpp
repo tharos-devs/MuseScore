@@ -81,6 +81,22 @@ void PaintedEngravingItem::setSpatium(double spatium)
     emit spatiumChanged();
 }
 
+QColor PaintedEngravingItem::color() const
+{
+    return m_color;
+}
+
+void PaintedEngravingItem::setColor(const QColor& color)
+{
+    if (m_color == color) {
+        return;
+    }
+    m_color = color;
+
+    update();
+    emit colorChanged();
+}
+
 void PaintedEngravingItem::paint(QPainter* painter)
 {
     muse::draw::Painter p(painter, "paintedengravingitem");
@@ -98,7 +114,11 @@ void PaintedEngravingItem::paintNotationPreview(muse::draw::Painter& painter) co
 
     EngravingItemPreviewPainter::PaintParams params;
     params.painter = &painter;
-    params.color = configuration()->defaultColor();
+    params.color = m_color.isValid() ? muse::Color::fromQColor(m_color) : configuration()->defaultColor();
+    // a color set: the staff lines in it too (e.g. white in the dark theme, not grey)
+    if (m_color.isValid()) {
+        params.staffLinesAlpha = 255;
+    }
     params.rect = muse::RectF(0, 0, parentItem()->width(), parentItem()->height());
     params.spatium = m_spatium;
     params.numStaffLines = m_numStaffLines;

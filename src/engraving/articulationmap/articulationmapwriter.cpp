@@ -22,6 +22,7 @@
 #include "articulationmapwriter.h"
 
 #include "mpe/internal/articulationstringutils.h"
+#include "translation.h"
 
 using namespace mu::engraving;
 using namespace muse;
@@ -34,6 +35,37 @@ String ArticulationMapWriter::noteName(int pitch, int middleCOctave)
     const int octave = (pitch - pitchClass - 60) / 12 + middleCOctave;
 
     return String::fromAscii(NAMES[pitchClass]) + String::number(octave);
+}
+
+String ArticulationMapWriter::triggerText(const std::vector<mpe::MidiMessage>& messages, const std::optional<int>& channel,
+                                          int middleCOctave)
+{
+    StringList parts;
+    for (const mpe::MidiMessage& message : messages) {
+        switch (message.type) {
+        case mpe::MidiMessage::Type::Note: {
+            String text = noteName(message.number, middleCOctave);
+            if (message.value != ArticulationMapParser::DEFAULT_KEYSWITCH_VELOCITY) {
+                text += String(u" (v%1)").arg(message.value);
+            }
+            parts << text;
+            break;
+        }
+        case mpe::MidiMessage::Type::ControlChange:
+            parts << String(u"CC%1:%2").arg(message.number).arg(message.value);
+            break;
+        case mpe::MidiMessage::Type::ProgramChange:
+            parts << String(u"PC%1").arg(message.number);
+            break;
+        }
+    }
+
+    if (channel) {
+        //: %1 is a MIDI channel number (1-16), shown after the trigger of an articulation
+        parts << muse::mtrc("notation", "Ch %1").arg(*channel + 1);
+    }
+
+    return parts.join(u" | ");
 }
 
 String ArticulationMapWriter::messagesCode(const std::vector<mpe::MidiMessage>& messages, int middleCOctave)
