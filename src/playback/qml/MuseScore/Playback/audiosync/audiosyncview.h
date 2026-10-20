@@ -379,7 +379,9 @@ private:
         double grabSecs = 0.0;
         double originalFromSecs = -1.0;
         double originalToSecs = -1.0;
+        bool enableOnRelease = false; // a new loop, marked by dragging the playback position
     };
+    double m_seekPressX = 0.0;
     std::optional<LoopDrag> m_loopDrag;
 
     DragMode m_dragMode = DragMode::None;

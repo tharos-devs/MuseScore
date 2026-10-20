@@ -67,6 +67,7 @@ constexpr double RULER_HEIGHT = 2 * RULER_ROW_HEIGHT + RAIL_HEIGHT; // above the
 constexpr double POINT_HIT_DISTANCE = 6.0;
 constexpr double LOOP_BAND_HEIGHT = 10.0; // the A-B loop, at the top of the waveform
 constexpr double LOOP_HANDLE_SIZE = 8.0;
+constexpr double SEEK_DRAG_LOOP_DISTANCE = 4.0; // px: a click moving less only moves the playback position
 constexpr double NUDGE_SECS = 0.001;
 constexpr double LARGE_NUDGE_SECS = 0.010;
 constexpr double OVERVIEW_HEIGHT = 34.0;
@@ -1189,6 +1190,7 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
     }
 
     m_dragMode = DragMode::Seek;
+    m_seekPressX = pos.x();
     seekToAudioSecs(audioSecsAtX(pos.x()));
     event->accept();
 }
@@ -1239,7 +1241,20 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
         return;
     }
 
-    seekToAudioSecs(audioSecsAtX(event->position().x()));
+    //! NOTE Dragging the playback position marks the A-B loop over the dragged range (set on release)
+    const double x = event->position().x();
+    if (m_loopDrag || std::abs(x - m_seekPressX) >= SEEK_DRAG_LOOP_DISTANCE) {
+        const double pressSecs = std::max(0.0, audioSecsAtX(m_seekPressX));
+        const double secs = std::max(0.0, audioSecsAtX(x));
+        if (!m_loopDrag) {
+            m_loopDrag = LoopDrag { pressSecs, secs, pressSecs, -1.0, -1.0, true };
+        }
+        m_loopDrag->fromSecs = std::min(pressSecs, secs);
+        m_loopDrag->toSecs = std::max(pressSecs, secs);
+        update();
+    }
+
+    seekToAudioSecs(audioSecsAtX(x));
 }
 
 void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
@@ -1249,6 +1264,9 @@ void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
         m_loopDrag.reset();
         m_dragMode = DragMode::None;
         setLoop(drag.fromSecs, drag.toSecs);
+        if (drag.enableOnRelease) {
+            setLoopEnabled(true);
+        }
         update();
         return;
     }
