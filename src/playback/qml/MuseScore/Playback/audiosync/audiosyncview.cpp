@@ -56,6 +56,8 @@ using namespace muse;
 namespace {
 constexpr double RULER_ROW_HEIGHT = 18.0;
 constexpr double RULER_HEIGHT = 3 * RULER_ROW_HEIGHT; // measures, time, time signatures
+constexpr double OVERVIEW_HEIGHT = 34.0;
+constexpr double OVERVIEW_GAP = 4.0;
 constexpr double MIN_PIXELS_PER_SECOND = 0.5;
 constexpr double MAX_PIXELS_PER_SECOND = 48000.0; // ~1 px per sample
 constexpr double ZOOM_STEP = 1.41421356237;
@@ -711,16 +713,36 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
     }
 
     forceActiveFocus();
-    m_isSeekDragging = true;
-    seekToAudioSecs(audioSecsAtX(event->position().x()));
+
+    const QPointF pos = event->position();
+    if (overviewRect().contains(pos)) {
+        const double secs = overviewSecsAtX(pos.x());
+        const double windowStart = scrollSecs();
+        if (secs < windowStart || secs > windowStart + visibleSecs()) {
+            // Outside the visible part: centered there
+            setScrollSecs(secs - visibleSecs() / 2.0);
+        }
+        m_overviewGrabOffsetSecs = secs - scrollSecs();
+        m_dragMode = DragMode::Overview;
+        event->accept();
+        return;
+    }
+
+    m_dragMode = DragMode::Seek;
+    seekToAudioSecs(audioSecsAtX(pos.x()));
     event->accept();
 }
 
 void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 {
     //! NOTE A release can be lost (e.g. outside the window): the buttons tell
-    if (!m_isSeekDragging || !(event->buttons() & Qt::LeftButton)) {
-        m_isSeekDragging = false;
+    if (m_dragMode == DragMode::None || !(event->buttons() & Qt::LeftButton)) {
+        m_dragMode = DragMode::None;
+        return;
+    }
+
+    if (m_dragMode == DragMode::Overview) {
+        setScrollSecs(overviewSecsAtX(event->position().x()) - m_overviewGrabOffsetSecs);
         return;
     }
 
@@ -729,7 +751,7 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 
 void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
 {
-    m_isSeekDragging = false;
+    m_dragMode = DragMode::None;
 }
 
 void AudioSyncView::wheelEvent(QWheelEvent* event)
@@ -775,7 +797,79 @@ QRectF AudioSyncView::rulerRect() const
 
 QRectF AudioSyncView::waveformRect() const
 {
-    return QRectF(0, RULER_HEIGHT, width(), std::max(0.0, height() - RULER_HEIGHT));
+    return QRectF(0, RULER_HEIGHT, width(), std::max(0.0, height() - RULER_HEIGHT - OVERVIEW_HEIGHT - OVERVIEW_GAP));
+}
+
+QRectF AudioSyncView::overviewRect() const
+{
+    return QRectF(0, std::max(RULER_HEIGHT, height() - OVERVIEW_HEIGHT), width(), std::min(OVERVIEW_HEIGHT, height() - RULER_HEIGHT));
+}
+
+double AudioSyncView::overviewSecsAtX(double x) const
+{
+    const double start = contentStartSecs();
+    return start + x / std::max(1.0, width()) * (contentEndSecs() - start);
+}
+
+double AudioSyncView::overviewXForSecs(double secs) const
+{
+    const double start = contentStartSecs();
+    return (secs - start) / std::max(0.001, contentEndSecs() - start) * width();
+}
+
+void AudioSyncView::paintOverview(QPainter* painter, const QRectF& rect) const
+{
+    if (rect.height() <= 0) {
+        return;
+    }
+
+    painter->fillRect(rect, m_rulerColor);
+
+    // The whole audio, both channels mixed
+    if (m_peaks->isReady()) {
+        const double sampleRate = m_peaks->sampleRate();
+        const double centerY = rect.center().y();
+        const double halfHeight = rect.height() / 2.0 - 2.0;
+        const int xFrom = std::max(0, static_cast<int>(std::floor(overviewXForSecs(0.0))));
+        const int xTo = std::min(static_cast<int>(std::ceil(rect.width())),
+                                 static_cast<int>(std::ceil(overviewXForSecs(m_peaks->durationSecs()))));
+
+        QColor color = m_waveformColor;
+        color.setAlphaF(0.8);
+        painter->setPen(QPen(color, 1));
+        for (int x = xFrom; x < xTo; ++x) {
+            const int64_t frameFrom = static_cast<int64_t>(std::floor(overviewSecsAtX(x) * sampleRate));
+            const int64_t frameTo = std::max(frameFrom + 1, static_cast<int64_t>(std::floor(overviewSecsAtX(x + 1) * sampleRate)));
+            const ReferenceAudioPeaks::MinMax mm = m_peaks->range(-1, frameFrom, frameTo);
+            if (!mm.valid) {
+                continue;
+            }
+
+            const double yTop = centerY - std::min(1.0, std::abs(static_cast<double>(mm.max))) * halfHeight;
+            const double yBottom = centerY + std::min(1.0, std::abs(static_cast<double>(mm.min))) * halfHeight;
+            painter->drawLine(QPointF(x + 0.5, rect.top() + (yTop - rect.top())),
+                              QPointF(x + 0.5, std::max(yBottom, yTop + 1.0)));
+        }
+    }
+
+    // The visible part
+    const double x1 = std::max(0.0, overviewXForSecs(scrollSecs()));
+    const double x2 = std::min(rect.width(), overviewXForSecs(scrollSecs() + visibleSecs()));
+    QColor windowColor = m_textColor;
+    windowColor.setAlphaF(0.14);
+    const QRectF windowRect(x1, rect.top(), std::max(2.0, x2 - x1), rect.height());
+    painter->fillRect(windowRect, windowColor);
+    QColor windowBorder = m_textColor;
+    windowBorder.setAlphaF(0.35);
+    painter->setPen(QPen(windowBorder, 1));
+    painter->drawRect(windowRect.adjusted(0.5, 0.5, -0.5, -0.5));
+
+    // Playback cursor
+    const double cursorX = overviewXForSecs(cursorAudioSecs());
+    if (cursorX >= 0 && cursorX <= rect.width()) {
+        painter->setPen(QPen(m_cursorColor, 1));
+        painter->drawLine(QPointF(cursorX, rect.top()), QPointF(cursorX, rect.bottom()));
+    }
 }
 
 void AudioSyncView::paint(QPainter* painter)
@@ -817,12 +911,13 @@ void AudioSyncView::paint(QPainter* painter)
     paintWaveform(painter, waveRect);
     paintGrid(painter, waveRect);
     paintRuler(painter, rulerRect());
+    paintOverview(painter, overviewRect());
 
     // Playback cursor
     const double cursorX = xForAudioSecs(cursorAudioSecs());
     if (cursorX >= 0 && cursorX <= width()) {
         painter->setPen(QPen(m_cursorColor, 1.5));
-        painter->drawLine(QPointF(cursorX, 0), QPointF(cursorX, height()));
+        painter->drawLine(QPointF(cursorX, 0), QPointF(cursorX, waveRect.bottom()));
     }
 }
 

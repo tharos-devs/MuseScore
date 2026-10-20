@@ -306,28 +306,5 @@ Item {
                 border.width: 2
             }
         }
-
-        StyledScrollBar {
-            id: horizontalScrollBar
-
-            Layout.fillWidth: true
-            orientation: Qt.Horizontal
-            policy: ScrollBar.AlwaysOn
-
-            readonly property real totalSecs: Math.max(0.001, syncView.contentEndSecs - syncView.contentStartSecs)
-
-            size: Math.min(1, syncView.visibleSecs / totalSecs)
-
-            Binding on position {
-                when: !horizontalScrollBar.pressed
-                value: (syncView.scrollSecs - syncView.contentStartSecs) / horizontalScrollBar.totalSecs
-            }
-
-            onPositionChanged: {
-                if (pressed) {
-                    syncView.scrollSecs = syncView.contentStartSecs + position * totalSecs
-                }
-            }
-        }
     }
 }

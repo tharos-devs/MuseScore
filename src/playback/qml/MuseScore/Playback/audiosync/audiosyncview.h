@@ -54,7 +54,6 @@ class ReferenceAudioPeaks;
 class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public muse::async::Asyncable
 {
     Q_OBJECT
-    QML_ELEMENT
 
     Q_PROPERTY(bool hasAudio READ hasAudio NOTIFY audioChanged)
     Q_PROPERTY(QString audioFileName READ audioFileName NOTIFY audioChanged)
@@ -89,7 +88,9 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(QColor accentColor READ accentColor WRITE setAccentColor NOTIFY colorsChanged)
     Q_PROPERTY(QColor cursorColor READ cursorColor WRITE setCursorColor NOTIFY colorsChanged)
 
-    muse::ContextInject<context::IGlobalContext> globalContext = { this }
+    QML_ELEMENT
+
+    muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
@@ -210,6 +211,11 @@ private:
 
     QRectF rulerRect() const;
     QRectF waveformRect() const;
+    //! NOTE The whole audio in small, below the waveform, with the visible part highlighted
+    QRectF overviewRect() const;
+    double overviewSecsAtX(double x) const;
+    double overviewXForSecs(double secs) const;
+    void paintOverview(QPainter* painter, const QRectF& rect) const;
 
     void paintRuler(QPainter* painter, const QRectF& rect) const;
     void paintGrid(QPainter* painter, const QRectF& rect) const;
@@ -237,7 +243,14 @@ private:
     bool m_isPlaying = false;
     QTimer m_cursorTimer;
 
-    bool m_isSeekDragging = false;
+    enum class DragMode {
+        None,
+        Seek,
+        Overview, // moving the visible window in the overview
+    };
+
+    DragMode m_dragMode = DragMode::None;
+    double m_overviewGrabOffsetSecs = 0.0; // where the visible window was grabbed, from its start
 
     QString m_positionText;
     QString m_tempoText;
