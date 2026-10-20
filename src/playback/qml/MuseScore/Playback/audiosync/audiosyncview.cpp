@@ -1927,7 +1927,8 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
             break;
         }
 
-        painter->setPen(QPen(m_gridColor, 1));
+        //! NOTE In the measure numbers' color (the theme's text color)
+        painter->setPen(QPen(m_textColor, 1));
         painter->drawLine(QPointF(x, measuresRow.top()), QPointF(x, measuresRow.bottom()));
 
         // Its beats: short ticks at the bottom, when they aren't crowded (as in the waveform)
