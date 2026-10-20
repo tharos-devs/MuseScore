@@ -448,32 +448,7 @@ std::unordered_set<const ArticulationMapEditorModel::Node*> ArticulationMapEdito
 
 QString ArticulationMapEditorModel::sequenceText(const Node* node) const
 {
-    QStringList parts;
-    for (const mpe::MidiMessage& message : node->messages) {
-        switch (message.type) {
-        case mpe::MidiMessage::Type::Note: {
-            QString text = ArticulationMapWriter::noteName(message.number, m_middleCOctave).toQString();
-            if (message.value != ArticulationMapParser::DEFAULT_KEYSWITCH_VELOCITY) {
-                text += QString(" (v%1)").arg(message.value);
-            }
-            parts << text;
-            break;
-        }
-        case mpe::MidiMessage::Type::ControlChange:
-            parts << QString("CC%1:%2").arg(message.number).arg(message.value);
-            break;
-        case mpe::MidiMessage::Type::ProgramChange:
-            parts << QString("PC%1").arg(message.number);
-            break;
-        }
-    }
-
-    if (node->channel) {
-        //: %1 is a MIDI channel number (1-16), shown after the trigger of an articulation
-        parts << muse::qtrc("notation", "Ch %1").arg(*node->channel + 1);
-    }
-
-    return parts.join(" | ");
+    return ArticulationMapWriter::triggerText(node->messages, node->channel, m_middleCOctave).toQString();
 }
 
 //! NOTE: only the names' last segment counts (see ArticulationMapParser::ambiguousImplicitAliases()): the nodes' names,

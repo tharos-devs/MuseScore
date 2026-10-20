@@ -31,6 +31,9 @@
 #include "rw/xmlreader.h"
 
 #include "articulation.h"
+#include "instrument.h"
+#include "note.h"
+#include "part.h"
 
 #include "log.h"
 
@@ -140,8 +143,26 @@ void Drumset::save(XmlWriter& xml) const
             xml.tag("panelRow", panelRow(i));
             xml.tag("panelColumn", panelColumn(i));
         }
+        if (!articulationMapEntry(i).empty()) {
+            xml.tag("articulationMapEntry", articulationMapEntry(i));
+        }
+        if (m_drums[i].playedPitch >= 0 && m_drums[i].playedPitch != i) {
+            xml.tag("playedPitch", m_drums[i].playedPitch);
+        }
         xml.endElement();
     }
+}
+
+int Drumset::playedPitchOffset(const Note* note)
+{
+    const Part* part = note->part();
+    const Instrument* instrument = part ? part->instrument(note->tick()) : nullptr;
+    const Drumset* drumset = instrument && instrument->useDrumset() ? instrument->drumset() : nullptr;
+    if (!drumset || note->pitch() < 0 || note->pitch() >= DRUM_INSTRUMENTS || !drumset->isValid(note->pitch())) {
+        return 0;
+    }
+
+    return drumset->playedPitch(note->pitch()) - note->pitch();
 }
 
 bool Drumset::readDrumProperties(XmlReader& e, int pitch)
@@ -195,6 +216,12 @@ bool Drumset::readDrumProperties(XmlReader& e, int pitch)
         m_drums[pitch].panelRow = e.readInt();
     } else if (tag == "panelColumn") {
         m_drums[pitch].panelColumn = e.readInt();
+    } else if (tag == "articulationMapEntry") {
+        m_drums[pitch].articulationMapEntry = e.readText();
+    } else if (tag == "playedPitch") {
+        // out of the MIDI range (e.g. a hand-edited file): its own pitch
+        const int played = e.readInt();
+        m_drums[pitch].playedPitch = (played >= 0 && played < DRUM_INSTRUMENTS) ? played : -1;
     } else {
         return false;
     }
@@ -233,6 +260,8 @@ void Drumset::clear()
         m_drums[i].variants.clear();
         m_drums[i].panelRow = -1;
         m_drums[i].panelColumn = -1;
+        m_drums[i].articulationMapEntry.clear();
+        m_drums[i].playedPitch = -1;
     }
 }
 

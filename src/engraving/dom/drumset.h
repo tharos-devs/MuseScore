@@ -31,6 +31,7 @@ namespace mu::engraving {
 class XmlWriter;
 class XmlReader;
 class Articulation;
+class Note;
 
 struct DrumInstrumentVariant {
     int pitch = INVALID_PITCH;
@@ -67,6 +68,15 @@ struct DrumInstrument {
     String shortcut;
     std::vector<DrumInstrumentVariant> variants;
 
+    //! NOTE: the articulation (ExpressionMapEntry id) of the instrument's articulation map that this drum plays in,
+    //! e.g. the "Rolls" keyswitch of a library: its notes always switch to it, whatever the score says
+    String articulationMapEntry;
+
+    //! NOTE: the note sent to the instrument when the drum plays, -1: its own pitch. Its pitch identifies the drum in the
+    //! score; with a sample library, several drums can play the same note in different articulations (e.g. a hit and a
+    //! roll on the same key, in two keyswitched banks)
+    int playedPitch = -1;
+
     DrumInstrument() {}
     DrumInstrument(const String& n, NoteHeadGroup nh, int l, DirectionV d,
                    int pr = -1, int pc = -1, int v = 0, String sc = String())
@@ -85,7 +95,9 @@ struct DrumInstrument {
                && shortcut == other.shortcut
                && variants == other.variants
                && panelRow == other.panelRow
-               && panelColumn == other.panelColumn;
+               && panelColumn == other.panelColumn
+               && articulationMapEntry == other.articulationMapEntry
+               && playedPitch == other.playedPitch;
     }
 };
 
@@ -112,6 +124,11 @@ public:
     const std::vector<DrumInstrumentVariant>& variants(int pitch) const { return m_drums[pitch].variants; }
     int panelRow(int pitch) const { return m_drums[pitch].panelRow; }
     int panelColumn(int pitch) const { return m_drums[pitch].panelColumn; }
+    const String& articulationMapEntry(int pitch) const { return m_drums[pitch].articulationMapEntry; }
+    int playedPitch(int pitch) const { return m_drums[pitch].playedPitch >= 0 ? m_drums[pitch].playedPitch : pitch; }
+
+    //! NOTE: how far a drum note plays from its pitch in the score (its drum's played pitch), for playback and MIDI export
+    static int playedPitchOffset(const Note* note);
 
     size_t percussionPanelColumns() const { return m_percussionPanelColumns; }
     void setPercussionPanelColumns(size_t columns) { m_percussionPanelColumns = columns; }

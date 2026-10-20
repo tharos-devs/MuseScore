@@ -40,6 +40,8 @@
 #include "notation/inotationinteraction.h"
 #include "notation/inotationnoteinput.h"
 #include "notation/inotationparts.h" // IWYU pragma: keep
+#include "notation/inotationselection.h"
+#include "drumkitarticulationmap.h"
 #include "notationscene/notationcommands.h"
 
 #include "project/inotationproject.h" // IWYU pragma: keep
@@ -55,6 +57,8 @@ using namespace muse;
 using namespace muse::actions;
 using namespace muse::ui;
 using namespace mu::notation;
+
+static const char* EDIT_DRUM_PAD_URI = "musescore://notation/editdrumpad";
 
 static const std::unordered_map<PercussionPanelPadModel::PadAction, NoteAddingMode> WRITE_ACTION_MAP = {
     { PercussionPanelPadModel::PadAction::TRIGGER_STANDARD, NoteAddingMode::NextChord },
@@ -177,10 +181,40 @@ void PercussionPanelModel::init()
             case PercussionPanelPadModel::PadAction::DEFINE_SHORTCUT:
                 onDefinePadShortcutRequested(pitch);
                 break;
+            case PercussionPanelPadModel::PadAction::EDIT:
+                onEditPadRequested(pitch);
+                break;
             default:
                 break;
         }
     });
+
+    commandDispatcher()->onRequest(this, PERCUSSION_PANEL_SET_EDITED_PAD_COMMAND, [this](const muse::rcommand::Params& params) {
+        const bool newPad = params.contains("panel_row") && params.contains("panel_column");
+        m_editedPadPitch = params.at("pitch").toInt();
+        m_editedPadRow = newPad ? params.at("panel_row").toInt() : -1;
+        m_editedPadColumn = newPad ? params.at("panel_column").toInt() : -1;
+        updateEditedPadIndex();
+        return muse::make_ok();
+    });
+
+    commandDispatcher()->onRequest(this, PERCUSSION_PANEL_ADJACENT_PAD_COMMAND, [this](const muse::rcommand::Request& request) {
+        muse::rcommand::Response response = muse::rcommand::make_response(request, muse::make_ok());
+        response.data = adjacentPadPitch(request.params);
+        return response;
+    });
+
+    commandDispatcher()->onRequest(this, PERCUSSION_PANEL_FINISH_LAYOUT_EDITING_COMMAND, [this]() {
+        if (m_currentPanelMode == PanelMode::Mode::EDIT_LAYOUT) {
+            finishEditing();
+        }
+        return muse::make_ok();
+    });
+
+    // the pads move (layout edited, pad moved to another sound...)
+    connect(m_padListModel, &QAbstractItemModel::modelReset, this, &PercussionPanelModel::updateEditedPadIndex);
+    connect(m_padListModel, &QAbstractItemModel::layoutChanged, this, &PercussionPanelModel::updateEditedPadIndex);
+    connect(m_padListModel, &QAbstractItemModel::dataChanged, this, &PercussionPanelModel::updateEditedPadIndex);
 
     configuration()->percussionPanelUseNotationPreviewChanged().onNotify(this, [this]() {
         const bool useNotationPreview = configuration()->percussionPanelUseNotationPreview();
@@ -324,13 +358,60 @@ void PercussionPanelModel::finishEditing(bool discardChanges)
     m_padListModel->focusLastActivePad();
 }
 
+//! NOTE: the Edit pad dialog, on the panel's first pad (a new one in the first slot of an empty kit)
 void PercussionPanelModel::customizeKit()
 {
-    dispatcher()->dispatch("customize-kit");
+    for (const PercussionPanelPadModel* pad : m_padListModel->padList()) {
+        if (pad) {
+            onEditPadRequested(pad->pitch());
+            return;
+        }
+    }
+
+    editEmptyPad(0);
+}
+
+//! NOTE: the pad or empty slot selected in the panel, else the pad of the note selected in the score (of this instrument),
+//! else the first pad
+void PercussionPanelModel::editSelectedPad()
+{
+    const Drumset* drumset = m_padListModel->drumset();
+    if (!drumset || !interaction()) {
+        return;
+    }
+
+    // selected in the panel: a pad, or an empty slot (a new pad there)
+    const bool selection = hasSelectionInCurrentKit();
+    if (selection && m_selectedPadPitch >= 0 && drumset->isValid(m_selectedPadPitch)) {
+        onEditPadRequested(m_selectedPadPitch);
+        return;
+    }
+
+    const int selectedSlot = padIndex(-1, m_selectedPadRow, m_selectedPadColumn);
+    const QList<PercussionPanelPadModel*> pads = m_padListModel->padList();
+    if (selection && selectedSlot >= 0 && selectedSlot < pads.size() && !pads.at(selectedSlot)) {
+        editEmptyPad(selectedSlot);
+        return;
+    }
+
+    const Part* part = getCurrentInstrumentAndPart().second;
+    for (const Note* note : interaction()->selection()->notes()) {
+        if (note->part() == part && drumset->isValid(note->pitch())) {
+            onEditPadRequested(note->pitch());
+            return;
+        }
+    }
+
+    customizeKit();
 }
 
 void PercussionPanelModel::onCurrentNotationChanged()
 {
+    // another score's kit: nothing selected in it
+    m_selectedPadPitch = -1;
+    m_selectedPadRow = -1;
+    m_selectedPadColumn = -1;
+
     const auto updatePadModels = [this](Drumset* drumset) {
         emit notationPreviewNumStaffLinesChanged();
 
@@ -374,8 +455,21 @@ void PercussionPanelModel::onCurrentNotationChanged()
     }
 }
 
+//! NOTE: the pads' notes named as the instrument's articulation map names its keyswitches
+int PercussionPanelModel::noteNamesMiddleCOctave() const
+{
+    const std::pair<Instrument*, Part*> instAndPart = getCurrentInstrumentAndPart();
+    if (!instAndPart.first || !instAndPart.second) {
+        return drumkit::noteNamesMiddleCOctave(nullptr);
+    }
+
+    return drumkit::noteNamesMiddleCOctave(drumkit::articulationMap(globalContext()->currentMasterNotation(),
+                                                                    { instAndPart.second->id(), instAndPart.first->id() }));
+}
+
 void PercussionPanelModel::setDrumset(engraving::Drumset* drumset)
 {
+    m_padListModel->setNoteNamesMiddleCOctave(noteNamesMiddleCOctave());
     m_padListModel->setDrumset(drumset);
 
     // If drumset contained drums with undefined values for panelRow/panelColumn, m_padListModel will have
@@ -438,16 +532,32 @@ bool PercussionPanelModel::eventFilter(QObject* watched, QEvent* event)
     return true;
 }
 
+//! NOTE: like the Piano keyboard panel: a pad writes its note only while entering notes (whatever the input method),
+//! otherwise it's only heard - the panel never starts note input itself
 void PercussionPanelModel::onPadTriggered(int pitch, const PercussionPanelPadModel::PadAction& action)
 {
-    switch (currentPanelMode()) {
-    case PanelMode::Mode::WRITE:
+    if (currentPanelMode() == PanelMode::Mode::EDIT_LAYOUT || !interaction()) {
+        return;
+    }
+
+    m_selectedPadPitch = pitch;
+    m_selectedPadRow = -1;
+    m_selectedPadColumn = -1;
+    m_selectedPadPartId = getCurrentInstrumentAndPart().second ? getCurrentInstrumentAndPart().second->id() : muse::ID();
+    updateEditedPadIndex();
+
+    if (interaction()->noteInput()->isNoteInputMode()) {
         writePitch(pitch, WRITE_ACTION_MAP.at(action));
-        break;
-    case PanelMode::Mode::SOUND_PREVIEW:
+    } else {
         playPitch(pitch);
-        break;
-    default: break;
+    }
+
+    // the Edit pad dialog, open, follows the pads clicked
+    if (interactive()->isOpened(muse::Uri(EDIT_DRUM_PAD_URI)).val) {
+        muse::rcommand::CommandQuery query(PERCUSSION_PANEL_EDIT_PAD_COMMAND);
+        query.set("pitch", muse::Val(pitch));
+        query.set("panel_context", muse::Val(true));
+        commandDispatcher()->dispatch(query);
     }
 }
 
@@ -518,14 +628,145 @@ void PercussionPanelModel::onDefinePadShortcutRequested(int pitch)
     notation()->parts()->replaceDrumset(key, updatedDrumset);
 }
 
+void PercussionPanelModel::onEditPadRequested(int pitch)
+{
+    openEditPadDialog(pitch, -1, -1);
+}
+
+//! NOTE: a single dialog: already open (for another pad), it's raised
+void PercussionPanelModel::openEditPadDialog(int pitch, int newPadRow, int newPadColumn)
+{
+    muse::rcommand::CommandQuery query(OPEN_EDIT_DRUM_PAD_COMMAND);
+    query.set("panel_context", muse::Val(true));
+    if (pitch >= 0) {
+        query.set("pitch", muse::Val(pitch));
+    }
+    if (newPadRow >= 0 && newPadColumn >= 0) {
+        query.set("panel_row", muse::Val(newPadRow));
+        query.set("panel_column", muse::Val(newPadColumn));
+    }
+
+    commandDispatcher()->dispatch(query);
+}
+
+//! NOTE: the new pad gets a free pitch until its sound is chosen in the dialog
+void PercussionPanelModel::editEmptyPad(int padIndex)
+{
+    if (!m_padListModel->drumset()) {
+        return;
+    }
+
+    const int freePitch = m_padListModel->nextAvailablePitch(engraving::DRUM_INSTRUMENTS - 1);
+    if (freePitch < 0) {
+        LOGE() << "No free pitch for a new drum pad";
+        return;
+    }
+
+    openEditPadDialog(freePitch, padIndex / m_padListModel->numColumns(), padIndex % m_padListModel->numColumns());
+}
+
+//! NOTE: selected (for "Edit pad"); the Edit pad dialog, open, follows the slots clicked too: a new pad there
+void PercussionPanelModel::onEmptyPadClicked(int padIndex)
+{
+    if (currentPanelMode() == PanelMode::Mode::EDIT_LAYOUT) {
+        return;
+    }
+
+    m_selectedPadPitch = -1;
+    m_selectedPadRow = padIndex / m_padListModel->numColumns();
+    m_selectedPadColumn = padIndex % m_padListModel->numColumns();
+    m_selectedPadPartId = getCurrentInstrumentAndPart().second ? getCurrentInstrumentAndPart().second->id() : muse::ID();
+    updateEditedPadIndex();
+
+    if (interactive()->isOpened(muse::Uri(EDIT_DRUM_PAD_URI)).val) {
+        editEmptyPad(padIndex);
+    }
+}
+
+int PercussionPanelModel::editedPadIndex() const
+{
+    return m_editedPadIndex;
+}
+
+//! NOTE: an existing pad by its pitch, a new one by its position
+int PercussionPanelModel::padIndex(int pitch, int row, int column) const
+{
+    if (pitch >= 0) {
+        const QList<PercussionPanelPadModel*> pads = m_padListModel->padList();
+        for (int i = 0; i < pads.size(); ++i) {
+            if (pads.at(i) && pads.at(i)->pitch() == pitch) {
+                return i;
+            }
+        }
+    } else if (row >= 0 && column >= 0) {
+        return row * m_padListModel->numColumns() + column;
+    }
+
+    return -1;
+}
+
+//! NOTE: the layout being edited is applied first: the Edit pad dialog then applies its pad, which would discard it
+int PercussionPanelModel::adjacentPadPitch(const muse::rcommand::Params& params)
+{
+    if (m_currentPanelMode == PanelMode::Mode::EDIT_LAYOUT) {
+        finishEditing();
+    }
+
+    const bool newPad = params.contains("panel_row") && params.contains("panel_column");
+    const int index = padIndex(params.at("pitch").toInt(),
+                               newPad ? params.at("panel_row").toInt() : -1,
+                               newPad ? params.at("panel_column").toInt() : -1);
+    const int step = params.at("step").toInt() < 0 ? -1 : 1;
+
+    const QList<PercussionPanelPadModel*> pads = m_padListModel->padList();
+    const int count = static_cast<int>(pads.size());
+    if (count == 0) {
+        return -1;
+    }
+
+    // the empty slots are skipped
+    int i = index >= 0 ? index : (step > 0 ? -1 : count);
+    for (int n = 0; n < count; ++n) {
+        i = ((i + step) % count + count) % count;
+        if (pads.at(i)) {
+            return pads.at(i)->pitch();
+        }
+    }
+
+    return -1;
+}
+
+//! NOTE: the panel shows another instrument's kit (note input moved): the selection made in the other one doesn't apply
+bool PercussionPanelModel::hasSelectionInCurrentKit() const
+{
+    const Part* part = getCurrentInstrumentAndPart().second;
+    return part && part->id() == m_selectedPadPartId;
+}
+
+void PercussionPanelModel::updateEditedPadIndex()
+{
+    const bool editing = m_editedPadPitch >= 0 || (m_editedPadRow >= 0 && m_editedPadColumn >= 0);
+    int index = -1;
+    if (editing) {
+        index = padIndex(m_editedPadPitch, m_editedPadRow, m_editedPadColumn);
+    } else if (hasSelectionInCurrentKit()) {
+        index = padIndex(m_selectedPadPitch, m_selectedPadRow, m_selectedPadColumn);
+    }
+
+    if (m_editedPadIndex == index) {
+        return;
+    }
+
+    m_editedPadIndex = index;
+    emit editedPadIndexChanged();
+}
+
 void PercussionPanelModel::writePitch(int pitch, const NoteAddingMode& addingMode)
 {
     INotationUndoStackPtr undoStack = notation()->undoStack();
     if (!interaction() || !undoStack) {
         return;
     }
-
-    interaction()->noteInput()->startNoteInput(notationConfiguration()->defaultNoteInputMethod(), /*focusNotation*/ false);
 
     muse::rcommand::CommandQuery query(ADD_DRUM_NOTE_COMMAND);
     query.set("pitch", muse::Val(pitch));

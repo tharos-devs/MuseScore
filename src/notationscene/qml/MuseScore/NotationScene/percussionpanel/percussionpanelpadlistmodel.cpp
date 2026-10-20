@@ -21,6 +21,7 @@
  */
 
 #include "percussionpanelpadlistmodel.h"
+#include "engraving/articulationmap/articulationmapwriter.h"
 
 #include "notationscene/utilities/percussionutilities.h"
 
@@ -305,6 +306,9 @@ void PercussionPanelPadListModel::load()
     // Round up to nearest multiple of numColumns()
     requiredSize = ((requiredSize + numColumns() - 1) / numColumns()) * numColumns();
 
+    // an empty kit (e.g. a new one): a row of empty slots to create pads in, as without a drumset
+    requiredSize = std::max(requiredSize, numColumns());
+
     //! NOTE: There is an argument that m_padModels itself should be a map instead of a list, as this would
     //! prevent the following double work. In practice, however, this makes some other operations (such as
     //! adding and removing rows) more complex and significantly less intuitive.
@@ -335,6 +339,7 @@ PercussionPanelPadModel* PercussionPanelPadListModel::createPadModelForPitch(int
     model->setPadName(m_drumset->translatedName(pitch));
     model->setKeyboardShortcut(m_drumset->shortcut(pitch));
     model->setPitch(pitch);
+    model->setMidiNoteText(ArticulationMapWriter::noteName(m_drumset->playedPitch(pitch), m_noteNamesMiddleCOctave).toQString());
 
     model->padActionTriggered().onReceive(this, [this, pitch](PercussionPanelPadModel::PadAction action) {
         m_padActionRequestChannel.send(action, pitch);

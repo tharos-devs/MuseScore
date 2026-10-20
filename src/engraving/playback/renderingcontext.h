@@ -24,6 +24,7 @@
 #include "mpe/events.h"
 
 #include "../dom/chord.h"
+#include "../dom/drumset.h"
 #include "../dom/note.h"
 #include "../dom/sig.h"
 
@@ -117,7 +118,7 @@ struct NominalNoteCtx {
         userVelocityFraction(note->userVelocityFraction()),
         pitchLevel(notePitchLevel(note->playingTpc(),
                                   note->playingOctave(),
-                                  note->playingTuning())),
+                                  note->playingTuning()) + Drumset::playedPitchOffset(note) * muse::mpe::PITCH_LEVEL_STEP), // a drum plays its pad's note
         chordCtx(ctx),
         articulations(ctx.commonArticulations)
     {

@@ -42,6 +42,9 @@ public:
     virtual muse::async::Channel<std::vector<const engraving::Note*> > notesReceived() const = 0;
 
     virtual void onRealtimeAdvance() = 0;
+
+    //! NOTE: while suspended, the MIDI keyboard is ignored by the score (e.g. a dialog learning a key plays it itself)
+    virtual void setNoteInputSuspended(bool suspended) = 0;
 };
 
 using INotationMidiInputPtr = std::shared_ptr<INotationMidiInput>;

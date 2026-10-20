@@ -25,6 +25,7 @@
 #include "log.h"
 
 #include "dom/chord.h"
+#include "dom/drumset.h"
 #include "dom/harmony.h"
 #include "dom/measure.h"
 #include "dom/note.h"
@@ -94,7 +95,32 @@ static muse::mpe::NoteEvent buildMetronomeEvent(const TimeSigFrac& timeSig, cons
                           bps);
 }
 
+//! NOTE: the articulation a drum pad of the chord is linked to (see DrumInstrument::articulationMapEntry): its sound
+//! exists only there. One keyswitch at a time: the first linked note wins
+static const ExpressionMapEntry* drumPadArticulationEntry(const Chord* chord, const ExpressionMap& map)
+{
+    const Instrument* instrument = chord->part()->instrument(chord->tick());
+    const Drumset* drumset = instrument && instrument->useDrumset() ? instrument->drumset() : nullptr;
+    if (!drumset) {
+        return nullptr;
+    }
+
+    for (const Note* note : chord->notes()) {
+        const String& entryId = drumset->articulationMapEntry(note->pitch());
+        if (entryId.empty()) {
+            continue;
+        }
+
+        if (const ExpressionMapEntry* entry = map.entry(entryId)) {
+            return entry;
+        }
+    }
+
+    return nullptr;
+}
+
 //! NOTE: resolves which articulation of the instrument's articulation map this chord plays, by priority:
+//! the articulation a drum pad of the chord is linked to >
 //! a mark on the chord itself > the staff's latest latched mark if it applies to all following notes > a score articulation
 //! mapped by alias > the staff's latest latched mark > the map's default,
 //! and emits it with the chord's notes. The audio side skips it when it doesn't change from the previous chord
@@ -113,14 +139,17 @@ static void appendArticulationMapEvent(const Chord* chord, const RenderingContex
         return;
     }
 
-    const ExpressionMapEntry* entry = nullptr;
-    ResolvedArticulation::Source source = ResolvedArticulation::Source::Default;
+    // shown as automatic, like an alias
+    const ExpressionMapEntry* entry = drumPadArticulationEntry(chord, *map);
+    ResolvedArticulation::Source source = ResolvedArticulation::Source::Alias;
     int tickOffset = 0;
 
-    if (const std::optional<ArticulationMark> ownMark = ctx.playbackCtx->articulationMark(chord)) {
-        entry = map->entry(ownMark->entryId);
-        tickOffset = entry ? ownMark->tickOffset : 0;
-        source = ResolvedArticulation::Source::OwnMark;
+    if (!entry) {
+        if (const std::optional<ArticulationMark> ownMark = ctx.playbackCtx->articulationMark(chord)) {
+            entry = map->entry(ownMark->entryId);
+            tickOffset = entry ? ownMark->tickOffset : 0;
+            source = ResolvedArticulation::Source::OwnMark;
+        }
     }
 
     if (!entry) {

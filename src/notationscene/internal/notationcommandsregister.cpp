@@ -717,6 +717,62 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration()
     },
     CommandInfo{
+        OPEN_EDIT_DRUM_PAD_COMMAND,
+        TranslatableString("action", "Edit drum pads…"),
+        TranslatableString("action", "Edit the pads of the drum kit"),
+        InputSchema({
+            { "pitch", Arg(DataType::Integer, u"Drum pitch of the pad (optional: the selected note's, else the first pad)") },
+            { "panel_row", Arg(DataType::Integer, u"Percussion panel row of a new pad (optional)") },
+            { "panel_column", Arg(DataType::Integer, u"Percussion panel column of a new pad (optional)") },
+            { "staff_context", Arg(DataType::Boolean, u"The kit of the staff of the context menu, not the note input's (optional)") },
+            { "panel_context", Arg(DataType::Boolean, u"The Percussion panel's kit (the note input's) (optional)") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        PERCUSSION_PANEL_FINISH_LAYOUT_EDITING_COMMAND,
+        TranslatableString("action", "Finish editing the drum pads layout"),
+        TranslatableString("action", "Apply the layout being edited in the Percussion panel"),
+        InputSchema(),
+        Decoration()
+    },
+    CommandInfo{
+        PERCUSSION_PANEL_EDIT_PAD_COMMAND,
+        TranslatableString("action", "Edit drum pad"),
+        TranslatableString("action", "Edit another drum pad in the open Edit pad dialog"),
+        InputSchema({
+            { "pitch", Arg(DataType::Integer, u"Drum pitch of the pad, -1 for a new pad", Val(-1), Val(127)) },
+            { "panel_row", Arg(DataType::Integer, u"Percussion panel row of a new pad (optional)") },
+            { "panel_column", Arg(DataType::Integer, u"Percussion panel column of a new pad (optional)") },
+            { "staff_context", Arg(DataType::Boolean, u"The kit of the staff of the context menu (optional)") },
+            { "panel_context", Arg(DataType::Boolean, u"The Percussion panel's kit (the note input's) (optional)") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        PERCUSSION_PANEL_ADJACENT_PAD_COMMAND,
+        TranslatableString("action", "Adjacent drum pad"),
+        TranslatableString("action", "The drum pad before or after one in the Percussion panel"),
+        InputSchema({
+            { "pitch", Arg(DataType::Integer, u"Drum pitch of the pad, -1 for a new pad", Val(-1), Val(127)) },
+            { "panel_row", Arg(DataType::Integer, u"Percussion panel row of a new pad (optional)") },
+            { "panel_column", Arg(DataType::Integer, u"Percussion panel column of a new pad (optional)") },
+            { "step", Arg(DataType::Integer, u"-1: the previous pad, 1: the next one") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
+        PERCUSSION_PANEL_SET_EDITED_PAD_COMMAND,
+        TranslatableString("action", "Set edited drum pad"),
+        TranslatableString("action", "Outline the drum pad edited in the Edit pad dialog"),
+        InputSchema({
+            { "pitch", Arg(DataType::Integer, u"Drum pitch of the pad, -1 for none or a new pad", Val(-1), Val(127)) },
+            { "panel_row", Arg(DataType::Integer, u"Percussion panel row of a new pad (optional)") },
+            { "panel_column", Arg(DataType::Integer, u"Percussion panel column of a new pad (optional)") },
+        }),
+        Decoration()
+    },
+    CommandInfo{
         ENTER_NOTE_C_COMMAND,
         noteC,
         Enter_note_X.arg(noteC),

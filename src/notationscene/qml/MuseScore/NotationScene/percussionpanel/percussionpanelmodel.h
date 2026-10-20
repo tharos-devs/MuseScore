@@ -28,9 +28,10 @@
 #include "modularity/ioc.h"
 #include "async/asyncable.h"
 
-#include "actions/iactionsdispatcher.h"
 #include "rcommand/icommanddispatcher.h"
+#include "rcommand/commandable.h"
 #include "context/iglobalcontext.h"
+#include "interactive/iinteractive.h"
 #include "musesampler/imusesamplerinfo.h"
 #include "notation/iinstrumentsrepository.h"
 #include "notation/inotationconfiguration.h"
@@ -54,9 +55,12 @@ enum Mode
 Q_ENUM_NS(Mode)
 }
 
-class PercussionPanelModel : public QObject, public muse::Contextable, public muse::async::Asyncable
+class PercussionPanelModel : public QObject, public muse::Contextable, public muse::async::Asyncable, public muse::rcommand::Commandable
 {
     Q_OBJECT
+
+    //! NOTE: the pad outlined: the one edited in the "Edit pad" dialog, else the one selected (clicked) (-1: none)
+    Q_PROPERTY(int editedPadIndex READ editedPadIndex NOTIFY editedPadIndexChanged)
 
     Q_PROPERTY(bool enabled READ enabled NOTIFY enabledChanged)
 
@@ -74,12 +78,11 @@ class PercussionPanelModel : public QObject, public muse::Contextable, public mu
     QML_ELEMENT
 
     muse::GlobalInject<INotationSceneConfiguration> configuration;
-    muse::GlobalInject<INotationConfiguration> notationConfiguration;
     muse::GlobalInject<engraving::IEngravingConfiguration> engravingConfiguration;
     muse::GlobalInject<muse::musesampler::IMuseSamplerInfo> museSampler;
     muse::GlobalInject<IInstrumentsRepository> instrumentsRepository;
     muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
+    muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
     muse::ContextInject<mu::playback::IPlaybackController> playbackController = { this };
 
@@ -104,12 +107,17 @@ public:
 
     QList<QVariantMap> layoutMenuItems() const;
     Q_INVOKABLE void handleMenuItem(const QString& itemId);
+    Q_INVOKABLE void editEmptyPad(int padIndex);
+    Q_INVOKABLE void onEmptyPadClicked(int padIndex);
+
+    int editedPadIndex() const;
 
     //! NOTE: There are a handful of circumstances where we should discard changes (e.g. undoing/redoing a layout change mid
     //! edit, resetting the layout mid edit, or selecting a different drumset mid edit)
     Q_INVOKABLE void finishEditing(bool discardChanges = false);
 
     Q_INVOKABLE void customizeKit();
+    Q_INVOKABLE void editSelectedPad();
 
 signals:
     void enabledChanged();
@@ -121,12 +129,15 @@ signals:
     void notationPreviewNumStaffLinesChanged();
 
     void padListModelChanged();
+    void editedPadIndexChanged();
 
 private:
     void onCurrentNotationChanged();
 
     void setEnabled(bool enabled);
     void setDrumset(mu::engraving::Drumset* drumset);
+    int noteNamesMiddleCOctave() const;
+    bool hasSelectionInCurrentKit() const;
 
     void updateSoundTitle(const InstrumentTrackId& trackId);
     void setSoundTitle(const QString& soundTitle);
@@ -139,6 +150,11 @@ private:
     void onDuplicatePadRequested(int pitch);
     void onDeletePadRequested(int pitch);
     void onDefinePadShortcutRequested(int pitch);
+    void onEditPadRequested(int pitch);
+    void openEditPadDialog(int pitch, int newPadRow, int newPadColumn);
+    void updateEditedPadIndex();
+    int padIndex(int pitch, int row, int column) const;
+    int adjacentPadPitch(const muse::rcommand::Params& params);
 
     void writePitch(int pitch, const NoteAddingMode& addingMode);
     void playPitch(int pitch);
@@ -165,6 +181,17 @@ private:
     QString m_soundTitle;
 
     PanelMode::Mode m_currentPanelMode = PanelMode::Mode::WRITE;
+
+    //! NOTE: an existing pad by its pitch, a new one by its position (see PERCUSSION_PANEL_SET_EDITED_PAD_COMMAND)
+    //! NOTE: the pad (by pitch) or empty slot (by position) clicked last: what "Edit pad" edits
+    int m_selectedPadPitch = -1;
+    int m_selectedPadRow = -1;
+    int m_selectedPadColumn = -1;
+    muse::ID m_selectedPadPartId; // the selection belongs to this part's kit
+    int m_editedPadPitch = -1;
+    int m_editedPadRow = -1;
+    int m_editedPadColumn = -1;
+    int m_editedPadIndex = -1;
     PanelMode::Mode m_panelModeToRestore = PanelMode::Mode::WRITE;
 
     PercussionPanelPadListModel* m_padListModel = nullptr;

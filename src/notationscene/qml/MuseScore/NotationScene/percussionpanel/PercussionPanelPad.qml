@@ -40,6 +40,7 @@ DropArea {
     property int notationPreviewNumStaffLines: 0
     property color notationPreviewBackgroundColor: "transparent"
     property bool showEditOutline: false
+    property bool isEditedPad: false // in the "Edit pad" dialog
 
     property alias totalBorderWidth: padLoader.anchors.margins
     property alias showOriginBackground: originBackground.visible
@@ -58,6 +59,8 @@ DropArea {
     signal startPadSwapRequested(var isKeyboardSwap)
     signal endPadSwapRequested()
     signal cancelPadSwapRequested()
+    signal editEmptyPadRequested()
+    signal emptyPadClicked()
 
     onDropped: function(dropEvent)  {
         root.endPadSwapRequested()
@@ -158,7 +161,8 @@ DropArea {
 
         color: ui.theme.backgroundPrimaryColor
 
-        border.color: root.showEditOutline ? ui.theme.accentColor : "transparent"
+        // the edited pad: the text color, unlike the accent color of the pads and of the edit mode outline
+        border.color: root.isEditedPad ? ui.theme.fontPrimaryColor : (root.showEditOutline ? ui.theme.accentColor : "transparent")
         border.width: 2
 
         DragHandler {
@@ -230,6 +234,35 @@ DropArea {
                     id: emptySlotBackground
                     color: root.panelEnabled ? prv.enabledBackgroundColor : prv.disabledBackgroundColor
                     radius: padLoader.cornerRadius
+
+                    // an empty slot can become a pad: the kit is built from scratch in the panel
+                    MouseArea {
+                        id: emptySlotMouseArea
+                        anchors.fill: parent
+
+                        enabled: root.panelEnabled
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                        onPressed: function(event) {
+                            if (event.button === Qt.LeftButton) {
+                                root.emptyPadClicked()
+                                return
+                            }
+
+                            let pos = emptySlotMenuLoader.parent.mapFromItem(emptySlotMouseArea, event.x, event.y)
+                            emptySlotMenuLoader.show(pos, [
+                                { "id": "edit-pad", "title": qsTrc("notation/percussion", "Edit pad…"), "enabled": true }
+                            ])
+                        }
+                    }
+
+                    ContextMenuLoader {
+                        id: emptySlotMenuLoader
+
+                        onHandleMenuItem: function(itemId) {
+                            root.editEmptyPadRequested()
+                        }
+                    }
                 }
             }
         }

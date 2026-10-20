@@ -62,6 +62,8 @@ public:
 
     void onRealtimeAdvance() override;
 
+    void setNoteInputSuspended(bool suspended) override;
+
 private:
     mu::engraving::Score* score() const;
 
@@ -111,6 +113,7 @@ private:
 
     bool m_shouldDisableMetronome = false;
     bool m_holdingNotesInInputByDuration = false;
+    bool m_noteInputSuspended = false;
 
     struct PlayingNote {
         bool isPreview = false;

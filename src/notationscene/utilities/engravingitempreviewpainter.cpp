@@ -133,7 +133,7 @@ double EngravingItemPreviewPainter::paintStaff(PaintParams& params)
     painter->save();
 
     Color staffLinesColor(params.color);
-    staffLinesColor.setAlpha(127); //reduce alpha of staff lines to half
+    staffLinesColor.setAlpha(params.staffLinesAlpha);
     Pen pen(staffLinesColor);
     pen.setWidthF(engraving::DefaultStyle::defaultStyle().styleS(Sid::staffLineWidth).val() * params.spatium);
     painter->setPen(pen);

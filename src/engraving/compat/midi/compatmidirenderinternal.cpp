@@ -33,6 +33,7 @@
 #include "compat/midi/event.h"
 #include "types/constants.h"
 
+#include "dom/drumset.h"
 #include "dom/accidental.h"
 #include "dom/arpeggio.h"
 #include "dom/articulation.h"
@@ -857,7 +858,8 @@ static void collectNote(EventsHolder& events, const Note* note, const CollectNot
             continue;
         }
 
-        int p = std::clamp(note->ppitch() + e.pitch() + note->harmonicPitchOffset(), 0, 127);
+        // a drum plays its pad's note (see DrumInstrument::playedPitch)
+        int p = std::clamp(note->ppitch() + e.pitch() + note->harmonicPitchOffset() + Drumset::playedPitchOffset(note), 0, 127);
         int on = tick1 + (ticks * e.ontime()) / 1000;
         int off = on + (ticks * e.len()) / 1000 - 1;
 

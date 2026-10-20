@@ -547,6 +547,7 @@ void NotationActionController::init()
     registerCommand(OPEN_EDITGRIDSIZE_COMMAND, &Controller::openEditGridSizeDialog);
     registerCommand(OPEN_ARTICULATION_MAP_EDITOR_COMMAND, &Controller::openArticulationMapEditor);
     registerCommandWithParams(NEW_ARTICULATION_MAP_COMMAND, &Controller::newArticulationMap);
+    registerCommandWithParams(OPEN_EDIT_DRUM_PAD_COMMAND, &Controller::openEditDrumPad);
     registerCommandWithParams(LOAD_ARTICULATION_MAP_COMMAND, &Controller::loadArticulationMap);
     registerCommandWithParams(EDIT_ARTICULATION_MAP_COMMAND, &Controller::editArticulationMap);
     registerCommandWithParams(RELOAD_ARTICULATION_MAP_COMMAND, &Controller::reloadArticulationMap);
@@ -2899,6 +2900,45 @@ static std::optional<mu::engraving::InstrumentTrackId> articulationMapTrackId(co
     }
 
     return mu::engraving::InstrumentTrackId { muse::ID(partId), muse::String::fromStdString(params.at("instrumentId").toString()) };
+}
+
+//! NOTE: a single dialog: already open, it edits the pad asked (see EditDrumPadModel::switchToPad())
+muse::Ret NotationActionController::openEditDrumPad(const muse::rcommand::Params& params)
+{
+    static const muse::Uri EDIT_DRUM_PAD_URI("musescore://notation/editdrumpad");
+
+    const int pitch = params.contains("pitch") ? params.at("pitch").toInt() : -1;
+    const bool newPad = params.contains("panel_row") && params.contains("panel_column");
+
+    if (interactive()->isOpened(EDIT_DRUM_PAD_URI).val) {
+        muse::rcommand::CommandQuery query(PERCUSSION_PANEL_EDIT_PAD_COMMAND);
+        query.set("pitch", muse::Val(newPad ? -1 : pitch));
+        if (newPad) {
+            query.set("panel_row", params.at("panel_row"));
+            query.set("panel_column", params.at("panel_column"));
+        }
+        for (const char* context : { "staff_context", "panel_context" }) {
+            if (params.contains(context)) {
+                query.set(context, params.at(context));
+            }
+        }
+        commandDispatcher()->dispatch(query);
+        interactive()->raise(muse::UriQuery(EDIT_DRUM_PAD_URI));
+        return muse::make_ok();
+    }
+
+    muse::UriQuery query(EDIT_DRUM_PAD_URI);
+    query.addParam("padPitch", muse::Val(pitch));
+    if (newPad) {
+        query.addParam("newPadRow", params.at("panel_row"));
+        query.addParam("newPadColumn", params.at("panel_column"));
+    }
+    if (params.contains("staff_context")) {
+        query.addParam("staffContext", params.at("staff_context"));
+    }
+
+    interactive()->open(query);
+    return muse::make_ok();
 }
 
 muse::Ret NotationActionController::newArticulationMap(const muse::rcommand::Params& params)
