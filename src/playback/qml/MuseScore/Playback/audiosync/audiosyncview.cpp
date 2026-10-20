@@ -443,6 +443,14 @@ void AudioSyncView::rewindToStart()
     playbackController()->rewind(0);
 }
 
+void AudioSyncView::goToLoopStart()
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    if (settings && settings->referenceAudio().loopFromSecs >= 0.0) {
+        seekToAudioSecs(settings->referenceAudio().loopFromSecs);
+    }
+}
+
 void AudioSyncView::toggleMetronome()
 {
     playbackController()->toggleMetronome();

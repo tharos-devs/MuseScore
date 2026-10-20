@@ -226,6 +226,18 @@ Item {
                     FlatButton {
                         width: 26
                         height: 26
+                        icon: IconCode.REPEAT_START
+                        enabled: syncView.hasLoopFrom
+                        toolTipTitle: qsTrc("playback", "Go to loop start (A)")
+                        navigation.panel: navigationPanel
+                        navigation.order: 23
+
+                        onClicked: syncView.goToLoopStart()
+                    }
+
+                    FlatButton {
+                        width: 26
+                        height: 26
                         icon: syncView.isPlaying ? IconCode.PAUSE_FILL : IconCode.PLAY_FILL
                         toolTipTitle: syncView.isPlaying ? qsTrc("playback", "Pause") : qsTrc("playback", "Play")
                         navigation.panel: navigationPanel

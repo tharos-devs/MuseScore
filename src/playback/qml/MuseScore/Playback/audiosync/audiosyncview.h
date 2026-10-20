@@ -199,6 +199,8 @@ public:
     Q_INVOKABLE void togglePlay();
     Q_INVOKABLE void stopPlayback();
     Q_INVOKABLE void rewindToStart();
+    //! NOTE To the A-B loop's start (A)
+    Q_INVOKABLE void goToLoopStart();
     Q_INVOKABLE void toggleMetronome();
 
     Q_INVOKABLE QStringList recentAudioFiles() const;
