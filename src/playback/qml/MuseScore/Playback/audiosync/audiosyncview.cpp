@@ -77,6 +77,8 @@ constexpr double OVERVIEW_GAP = 8.0;
 constexpr double MIN_PIXELS_PER_SECOND = 0.5;
 constexpr double MAX_PIXELS_PER_SECOND = 48000.0; // ~1 px per sample
 constexpr double ZOOM_STEP = 1.41421356237;
+//! NOTE 100% of the horizontal zoom
+constexpr double REFERENCE_PIXELS_PER_SECOND = 100.0;
 constexpr double MIN_AMPLITUDE_ZOOM = 0.5;
 constexpr double MAX_AMPLITUDE_ZOOM = 8.0;
 constexpr int CURSOR_INTERVAL_MS = 16;
@@ -127,12 +129,18 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
 
     //! NOTE The zoom and position are saved with the project (see IProjectAudioSyncSettings::viewState())
     connect(this, &AudioSyncView::viewChanged, this, &AudioSyncView::storeViewState);
+    m_viewStateTimer.setSingleShot(true);
+    m_viewStateTimer.setInterval(1000);
+    connect(&m_viewStateTimer, &QTimer::timeout, this, &AudioSyncView::flushViewState);
 
     m_cursorTimer.setInterval(CURSOR_INTERVAL_MS);
     connect(&m_cursorTimer, &QTimer::timeout, this, &AudioSyncView::updatePlaybackCursor);
 }
 
-AudioSyncView::~AudioSyncView() = default;
+AudioSyncView::~AudioSyncView()
+{
+    flushViewState();
+}
 
 void AudioSyncView::componentComplete()
 {
@@ -158,6 +166,12 @@ void AudioSyncView::componentComplete()
         emit metronomeChanged();
     });
 
+    //! NOTE Also notified by a playback speed change (see PlaybackController::setTempoMultiplier())
+    playbackController()->currentTempoChanged().onNotify(this, [this]() {
+        updateSpeed();
+    });
+
+    m_speed = playbackController()->tempoMultiplier();
     listenPlaybackState();
     onProjectChanged();
     onNotationChanged();
@@ -195,10 +209,12 @@ bool AudioSyncView::isPlayRepeatsEnabled() const
 
 void AudioSyncView::onProjectChanged()
 {
+    //! NOTE The previous score's last view, before it's forgotten
+    flushViewState();
+
     if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
         settings->settingsChanged().onNotify(this, [this]() {
             emit audioChanged();
-            updateSpeedWarning();
             update();
         }, Asyncable::Mode::SetReplace);
     }
@@ -398,6 +414,29 @@ bool AudioSyncView::audioSyncEnabled() const
     return automationPtr && automationPtr->isAudioSyncEnabled();
 }
 
+int AudioSyncView::pitchSemitones() const
+{
+    project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    return settings ? settings->referenceAudio().pitchSemitones : 0;
+}
+
+void AudioSyncView::setPitchSemitones(int semitones)
+{
+    project::updateReferenceAudio(audioSyncSettings(), [semitones](project::ReferenceAudioSettings& updated) {
+        updated.pitchSemitones = std::clamp(semitones, -12, 12);
+    });
+}
+
+bool AudioSyncView::pitchShifting() const
+{
+    return playbackController()->referenceAudioDecodeState().pitchShifting;
+}
+
+double AudioSyncView::pitchShiftProgress() const
+{
+    return playbackController()->referenceAudioDecodeState().pitchShiftProgress;
+}
+
 bool AudioSyncView::hasSyncPoints() const
 {
     ensureGrid();
@@ -433,6 +472,11 @@ bool AudioSyncView::metronomeEnabled() const
 QString AudioSyncView::timeText() const
 {
     return m_timeText;
+}
+
+QString AudioSyncView::durationText() const
+{
+    return m_durationText;
 }
 
 void AudioSyncView::togglePlay()
@@ -586,7 +630,10 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     //! NOTE From the score's start (the first sync point): where it is in the audio, or where the music starts
     //! after the silence the audio may begin with (then the score's first note goes there)
     const audiosync::SyncPoint& first = m_syncPoints.front();
-    const bool ignoreLeadingSilence = params.value("ignoreLeadingSilence", true).toBool();
+    //! NOTE A score's start the user placed (moved) is always where to start from: the music's start is only
+    //! looked for when it wasn't
+    const bool ignoreLeadingSilence = params.value("ignoreLeadingSilence", true).toBool()
+                                      && first.origin != engraving::AudioSyncInfo::Origin::Manual;
 
     audiosync::BeatDetectionParams detectionParams;
     detectionParams.sensitivity = params.value("sensitivity", 0.5).toDouble();
@@ -721,18 +768,32 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
     emit detectionChanged();
 }
 
-bool AudioSyncView::speedWarning() const
+double AudioSyncView::speed() const
 {
-    return m_speedWarning;
+    return m_speed;
 }
 
-void AudioSyncView::updateSpeedWarning()
+void AudioSyncView::setSpeed(double speed)
 {
-    const bool warning = hasAudio() && std::abs(playbackController()->tempoMultiplier() - 1.0) > 1e-6;
-    if (warning != m_speedWarning) {
-        m_speedWarning = warning;
-        emit speedWarningChanged();
+    speed = std::clamp(speed, 0.5, 1.5);
+    if (std::abs(speed - playbackController()->tempoMultiplier()) < 1e-6) {
+        return;
     }
+
+    playbackController()->setTempoMultiplier(speed);
+    updateSpeed();
+}
+
+void AudioSyncView::updateSpeed()
+{
+    const double speed = playbackController()->tempoMultiplier();
+    if (std::abs(speed - m_speed) < 1e-6) {
+        return;
+    }
+
+    m_speed = speed;
+    invalidateGrid();
+    emit speedChanged();
 }
 
 void AudioSyncView::chooseAudioFile()
@@ -808,6 +869,26 @@ double AudioSyncView::visibleSecs() const
     return width() / m_pixelsPerSecond;
 }
 
+double AudioSyncView::zoomPercent() const
+{
+    return m_pixelsPerSecond / REFERENCE_PIXELS_PER_SECOND * 100.0;
+}
+
+void AudioSyncView::setZoomPercent(double percent)
+{
+    zoomAround(percent / 100.0 * REFERENCE_PIXELS_PER_SECOND, zoomAnchorX());
+}
+
+double AudioSyncView::minZoomPercent() const
+{
+    return MIN_PIXELS_PER_SECOND / REFERENCE_PIXELS_PER_SECOND * 100.0;
+}
+
+double AudioSyncView::maxZoomPercent() const
+{
+    return MAX_PIXELS_PER_SECOND / REFERENCE_PIXELS_PER_SECOND * 100.0;
+}
+
 double AudioSyncView::amplitudeZoom() const
 {
     return m_amplitudeZoom;
@@ -852,38 +933,47 @@ void AudioSyncView::setFollowPlayback(bool follow)
 
 void AudioSyncView::zoomIn()
 {
-    const double cursorX = xForAudioSecs(cursorAudioSecs());
-    zoomAround(m_pixelsPerSecond * ZOOM_STEP, cursorX >= 0 && cursorX <= width() ? cursorX : width() / 2.0);
+    zoomAround(m_pixelsPerSecond * ZOOM_STEP, zoomAnchorX());
 }
 
 void AudioSyncView::zoomOut()
 {
+    zoomAround(m_pixelsPerSecond / ZOOM_STEP, zoomAnchorX());
+}
+
+double AudioSyncView::zoomAnchorX() const
+{
+    //! NOTE Around the playback cursor when it's shown, else the middle
     const double cursorX = xForAudioSecs(cursorAudioSecs());
-    zoomAround(m_pixelsPerSecond / ZOOM_STEP, cursorX >= 0 && cursorX <= width() ? cursorX : width() / 2.0);
+    return cursorX >= 0 && cursorX <= width() ? cursorX : width() / 2.0;
 }
 
 void AudioSyncView::restoreViewState()
 {
     project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
+    //! NOTE What's shown when opening isn't a change of the project: only what the user changes after it is
+    m_restoringViewState = true;
+
     if (!settings || !settings->viewState().isValid() || width() <= 0) {
         zoomToFit();
-        return;
+    } else {
+        const project::AudioSyncViewState& state = settings->viewState();
+        m_pixelsPerSecond = std::clamp(state.pixelsPerSecond, MIN_PIXELS_PER_SECOND, MAX_PIXELS_PER_SECOND);
+        m_amplitudeZoom = std::clamp(state.amplitudeZoom, MIN_AMPLITUDE_ZOOM, MAX_AMPLITUDE_ZOOM);
+        m_scrollSecs = state.scrollSecs;
+        clampScroll();
+        emit viewChanged();
+        update();
     }
 
-    const project::AudioSyncViewState& state = settings->viewState();
-    m_pixelsPerSecond = std::clamp(state.pixelsPerSecond, MIN_PIXELS_PER_SECOND, MAX_PIXELS_PER_SECOND);
-    m_amplitudeZoom = std::clamp(state.amplitudeZoom, MIN_AMPLITUDE_ZOOM, MAX_AMPLITUDE_ZOOM);
-    m_scrollSecs = state.scrollSecs;
-    clampScroll();
-    emit viewChanged();
-    update();
+    m_restoringViewState = false;
 }
 
 void AudioSyncView::storeViewState()
 {
     //! NOTE Not before it was shown (restored or fitted): the saved one would be lost
     project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
-    if (!settings || m_scrollSecs < 0 || !m_peaks->isReady()) {
+    if (!settings || m_scrollSecs < 0 || !m_peaks->isReady() || m_restoringViewState) {
         return;
     }
 
@@ -891,7 +981,22 @@ void AudioSyncView::storeViewState()
     state.pixelsPerSecond = m_pixelsPerSecond;
     state.scrollSecs = m_scrollSecs;
     state.amplitudeZoom = m_amplitudeZoom;
-    settings->setViewState(state);
+
+    //! NOTE Given to the project a moment after the last change (a zoom or a scroll sends many): that marks it as
+    //! modified once, and it's saved with it
+    m_pendingViewState = state;
+    m_pendingViewStateSettings = settings;
+    m_viewStateTimer.start();
+}
+
+void AudioSyncView::flushViewState()
+{
+    if (m_pendingViewState) {
+        if (project::IProjectAudioSyncSettingsPtr settings = m_pendingViewStateSettings.lock()) {
+            settings->setViewState(*m_pendingViewState);
+        }
+        m_pendingViewState.reset();
+    }
 }
 
 void AudioSyncView::zoomToFit()
@@ -975,7 +1080,7 @@ double AudioSyncView::previewAudioSecs(int utick) const
 
     if (points.size() < 2) {
         const double shift = points.empty() ? 0.0 : points.front().second - m_syncPoints.front().audioSecs;
-        return audioOffsetSecs() + shift + (score() ? score()->tempoTimeline(true).utick2utime(utick) : 0.0);
+        return audioOffsetSecs() + shift + (score() ? score()->tempoTimeline(true).utick2utime(utick) * m_speed : 0.0);
     }
 
     // The segment containing utick (the first/last one beyond the points)
@@ -1009,13 +1114,14 @@ double AudioSyncView::cursorAudioSecs() const
         secs += std::chrono::duration<double>(std::chrono::steady_clock::now() - m_lastPositionTime).count();
     }
 
-    return secs + audioOffsetSecs();
+    //! NOTE Played at the playback speed
+    return secs * m_speed + audioOffsetSecs();
 }
 
 void AudioSyncView::seekToAudioSecs(double secs)
 {
     ensureGrid();
-    const double engineSecs = std::clamp(secs - audioOffsetSecs(), 0.0, m_scoreEndSecs);
+    const double engineSecs = std::clamp(secs - audioOffsetSecs(), 0.0, m_scoreEndSecs) / m_speed;
     playbackController()->rewind(engineSecs);
 }
 
@@ -1031,7 +1137,6 @@ void AudioSyncView::updatePlaybackCursor()
     }
 
     updatePositionText();
-    updateSpeedWarning();
     update();
 }
 
@@ -1045,32 +1150,35 @@ void AudioSyncView::updatePositionText()
 
     const Score* sc = score();
     if (sc) {
-        const double engineSecs = secs - audioOffsetSecs();
-        auto it = std::upper_bound(m_grid.begin(), m_grid.end(), engineSecs, [](double s, const GridMeasure& m) {
+        const double gridSecs = secs - audioOffsetSecs();
+        auto it = std::upper_bound(m_grid.begin(), m_grid.end(), gridSecs, [](double s, const GridMeasure& m) {
             return s < m.start.secs;
         });
         if (it != m_grid.begin()) {
             const GridMeasure& measure = *std::prev(it);
             const int beat = 1
-                             + static_cast<int>(std::count_if(measure.beats.begin(), measure.beats.end(), [engineSecs](const GridTime& t) {
-                return t.secs <= engineSecs;
+                             + static_cast<int>(std::count_if(measure.beats.begin(), measure.beats.end(), [gridSecs](const GridTime& t) {
+                return t.secs <= gridSecs;
             }));
-            //: Position in the score: measure number and beat, e.g. "Measure 12, beat 3"
-            positionText = muse::qtrc("playback", "Measure %1, beat %2").arg(measure.number).arg(beat);
+            //! NOTE measure.beat, e.g. "12.3"
+            positionText = QString("%1.%2").arg(measure.number).arg(beat);
         }
 
         const TempoTimeline& timeline = sc->tempoTimeline(isPlayRepeatsEnabled());
-        const int utick = timeline.utime2utick(std::max(0.0, engineSecs));
-        //: Tempo in beats (quarter notes) per minute
-        tempoText = muse::qtrc("playback", "%1 BPM").arg(timeline.tempo(utick).toBPM().val, 0, 'f', 1);
+        const int utick = timeline.utime2utick(std::max(0.0, gridSecs / m_speed));
+        //! NOTE BPM (quarter notes), a decimal only when not a whole number
+        const double bpm = std::round(timeline.tempo(utick).toBPM().val * 10.0) / 10.0;
+        tempoText = QString::number(bpm, 'f', std::abs(bpm - std::round(bpm)) < 0.05 ? 0 : 1);
     }
 
-    const QString timeText = formatClock(secs) + " / " + formatClock(m_peaks->durationSecs());
+    const QString timeText = formatClock(secs);
+    const QString durationText = formatClock(m_peaks->durationSecs());
 
-    if (positionText != m_positionText || tempoText != m_tempoText || timeText != m_timeText) {
+    if (positionText != m_positionText || tempoText != m_tempoText || timeText != m_timeText || durationText != m_durationText) {
         m_positionText = positionText;
         m_tempoText = tempoText;
         m_timeText = timeText;
+        m_durationText = durationText;
         emit positionTextChanged();
     }
 }
@@ -1133,8 +1241,8 @@ void AudioSyncView::rebuildGrid() const
         GridMeasure gridMeasure;
         gridMeasure.tickFrom = tickFrom;
         gridMeasure.tickTo = tickTo;
-        gridMeasure.start = { tickFrom + tickOffset, timeline.utick2utime(tickFrom + tickOffset) };
-        gridMeasure.end = { tickTo + tickOffset, timeline.utick2utime(tickTo + tickOffset) };
+        gridMeasure.start = { tickFrom + tickOffset, timeline.utick2utime(tickFrom + tickOffset) * m_speed };
+        gridMeasure.end = { tickTo + tickOffset, timeline.utick2utime(tickTo + tickOffset) * m_speed };
         gridMeasure.number = measure->excludeFromNumbering() ? QStringLiteral("( )") : QString::number(measure->measureNumber() + 1);
 
         const TimeSigFrac timeSig = sc->sigmap()->timesig(tickFrom).nominal();
@@ -1152,7 +1260,7 @@ void AudioSyncView::rebuildGrid() const
         }
         for (; beatTick < tickTo; beatTick += step) {
             if (beatTick > tickFrom) {
-                gridMeasure.beats.push_back({ beatTick + tickOffset, timeline.utick2utime(beatTick + tickOffset) });
+                gridMeasure.beats.push_back({ beatTick + tickOffset, timeline.utick2utime(beatTick + tickOffset) * m_speed });
             }
         }
 
@@ -1556,7 +1664,7 @@ void AudioSyncView::addPointAt(double audioSecs, bool snapToBeat)
 
     // The score position there by the current tempo; the new point stays where that position already is
     const TempoTimeline& timeline = sc->tempoTimeline(true);
-    int utick = timeline.utime2utick(std::max(0.0, audioSecs - audioOffsetSecs()));
+    int utick = timeline.utime2utick(std::max(0.0, audioSecs - audioOffsetSecs()) / m_speed);
     if (snapToBeat) {
         if (const std::optional<int> beat = audiosync::nearestBeatUtick(sc, utick)) {
             utick = *beat;
@@ -1946,6 +2054,15 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
             painter->setPen(m_textColor);
             painter->drawText(QPointF(x + 3, measuresRow.top() + textBaselineOffset), measure.number);
             lastLabelEnd = x + 3 + metrics.horizontalAdvance(measure.number);
+        }
+    }
+
+    // The end of the last measure
+    if (!m_grid.empty()) {
+        const double endX = xForAudioSecs(audioSecsOf(m_scoreEnd));
+        if (endX >= 0 && endX <= rect.width()) {
+            painter->setPen(QPen(m_textColor, 1));
+            painter->drawLine(QPointF(endX, measuresRow.top()), QPointF(endX, measuresRow.bottom()));
         }
     }
 

@@ -1318,19 +1318,7 @@ MixerChannelItem* MixerPanelModel::buildSoundTrackChannelItem(const SoundTrackCh
 
     item->subscribeOnTrackAudioSignalChanges();
 
-    connect(item, &MixerChannelItem::controlParamsChanged, this, [this, channel, trackId](const AudioOutputParams& params) {
-        //! NOTE The engine's mute is always the live effective one (force-mute included), whatever the item shows
-        ControlParams control = params.control();
-        control.muted = channel.isEffectivelyMuted();
-        playback()->setControlParams(trackId, control);
-
-        AudioOutputParams outParams = channel.outputParams();
-        outParams.volume = params.volume;
-        outParams.balance = params.balance;
-        outParams.gain = params.gain;
-        outParams.eq = params.eq;
-        channel.setOutputParams(outParams);
-    });
+    channel.connectItem(item, this, [this]() { return playback().get(); }, [this]() { return projectUndoStack(); });
 
     connect(item, &MixerChannelItem::fxChainParamsChanged, this, [this, trackId](const AudioOutputParams& params) {
         updateOutputResourceItemCount();
@@ -1342,18 +1330,7 @@ MixerChannelItem* MixerPanelModel::buildSoundTrackChannelItem(const SoundTrackCh
         updateAuxSendItemCount();
     });
 
-    connect(item, &MixerChannelItem::soloMuteStateChanged, this, [channel](const notation::INotationSoloMuteState::SoloMuteState& state) {
-        //! NOTE Stored with its source's settings, shared with its own UI (e.g. the Video panel's "M" button);
-        //! PlaybackController applies it to the engine (see updateSoloMuteStates())
-        channel.setUserSoloMuteState(state);
-    });
-
-    connect(item, &MixerChannelItem::colorChanged, this, [channel, item]() {
-        channel.setColor(item->color());
-    });
-
     connectGlobalMuteSoloAggregate(item);
-    ChannelEditUndo::connectContinuousChanges(item, this, [this]() { return projectUndoStack(); });
 
     return item;
 }

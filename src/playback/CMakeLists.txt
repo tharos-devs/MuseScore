@@ -61,7 +61,11 @@ target_sources(playback PRIVATE
     internal/referenceaudiofile.h
     internal/audiosyncedits.cpp
     internal/audiosyncedits.h
+    internal/fft.cpp
+    internal/fft.h
     internal/mappedwav.cpp
+    internal/pitchshifter.cpp
+    internal/pitchshifter.h
     internal/mappedwav.h
     internal/beatdetection.cpp
     internal/beatdetection.h

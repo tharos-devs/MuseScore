@@ -27,6 +27,7 @@
 #include <complex>
 #include <numeric>
 
+#include "fft.h"
 #include "mappedwav.h"
 
 #ifdef MUE_PLAYBACK_HAS_BEATROOT
@@ -45,37 +46,6 @@ constexpr double MIN_ONSET_INTERVAL_SECS = 0.05;
 constexpr int PEAK_HALF_WIDTH = 3;       // local maximum over ±3 hops
 constexpr int THRESHOLD_HALF_WIDTH = 8;  // adaptive threshold over ±80 ms
 constexpr double BEAT_ONSET_TOLERANCE_SECS = 0.04;
-
-//! NOTE In-place iterative radix-2 FFT, size a power of 2
-void fft(std::vector<std::complex<float> >& data)
-{
-    const size_t n = data.size();
-    for (size_t i = 1, j = 0; i < n; ++i) {
-        size_t bit = n >> 1;
-        for (; j& bit; bit >>= 1) {
-            j ^= bit;
-        }
-        j ^= bit;
-        if (i < j) {
-            std::swap(data[i], data[j]);
-        }
-    }
-
-    for (size_t len = 2; len <= n; len <<= 1) {
-        const float angle = -2.f * static_cast<float>(M_PI) / static_cast<float>(len);
-        const std::complex<float> wlen(std::cos(angle), std::sin(angle));
-        for (size_t i = 0; i < n; i += len) {
-            std::complex<float> w(1.f, 0.f);
-            for (size_t k = 0; k < len / 2; ++k) {
-                const std::complex<float> u = data[i + k];
-                const std::complex<float> v = data[i + k + len / 2] * w;
-                data[i + k] = u + v;
-                data[i + k + len / 2] = u - v;
-                w *= wlen;
-            }
-        }
-    }
-}
 }
 
 std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,

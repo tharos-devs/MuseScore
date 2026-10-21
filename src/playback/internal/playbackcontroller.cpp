@@ -1568,6 +1568,8 @@ IPlaybackController::ReferenceAudioDecodeState PlaybackController::referenceAudi
         state.progress = m_referenceAudioSlot->decodeProgress();
         state.wavPath = m_referenceAudioSlot->wavPath();
         state.failed = m_referenceAudioSlot->decodeFailed();
+        state.pitchShifting = m_referenceAudioSlot->isPitchShifting();
+        state.pitchShiftProgress = m_referenceAudioSlot->pitchShiftProgress();
     }
 
     return state;
@@ -1586,6 +1588,9 @@ void PlaybackController::onReferenceAudioChanged()
         const ReferenceAudioSettings& referenceAudio = audioSyncSettingsPtr->referenceAudio();
         source.mediaPath = referenceAudio.path;
         source.includeInExport = referenceAudio.includeInExport;
+        source.pitchSemitones = referenceAudio.pitchSemitones;
+        //! NOTE It follows the score's playback speed (its sync kept)
+        source.speed = tempoMultiplier();
 
         //! NOTE Audio time = score playback time + the audio time of the score's start (the audio sync points')
         if (m_masterNotation && m_masterNotation->automation()) {
@@ -1631,11 +1636,13 @@ void PlaybackController::applyReferenceAudioLoop()
         return;
     }
 
-    //! NOTE In the audio's time as heard: playback time = audio time - the sound track's offset
+    //! NOTE In the audio's time as heard: playback time = (audio time - the sound track's offset) / its speed
     const ReferenceAudioSettings& referenceAudio = audioSyncSettings()->referenceAudio();
-    const double offsetSecs = m_referenceAudioSlot->source().offsetMs / 1000.0;
-    const secs_t fromSecs = std::max(0.0, referenceAudio.loopFromSecs - offsetSecs);
-    const secs_t toSecs = std::max(fromSecs.raw() + 0.01, referenceAudio.loopToSecs - offsetSecs);
+    const SoundTrackSlot::Source& source = m_referenceAudioSlot->source();
+    const double offsetSecs = source.offsetMs / 1000.0;
+    const double speed = source.speed > 0.0 ? source.speed : 1.0;
+    const secs_t fromSecs = std::max(0.0, (referenceAudio.loopFromSecs - offsetSecs) / speed);
+    const secs_t toSecs = std::max(fromSecs.raw() + 0.01, (referenceAudio.loopToSecs - offsetSecs) / speed);
 
     currentPlayer()->setLoop(fromSecs, toSecs);
     m_isReferenceAudioLoopApplied = true;
@@ -2850,6 +2857,8 @@ void PlaybackController::setTempoMultiplier(double multiplier)
     notationPlayback()->setTempoMultiplier(multiplier);
     seekRawTick(tick);
     updateLoop();
+    onReferenceAudioChanged();
+    m_currentTempoChanged.notify();
 
     if (playing) {
         doResume();

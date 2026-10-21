@@ -33,6 +33,8 @@ qt_add_qml_module(playback_qml
     SOURCES
         abstractaudioresourceitem.cpp
         abstractaudioresourceitem.h
+        audiosync/audiosyncchannelmodel.cpp
+        audiosync/audiosyncchannelmodel.h
         audiosync/audiosyncview.cpp
         audiosync/audiosyncview.h
         audiosync/referenceaudiopeaks.cpp
@@ -100,6 +102,9 @@ qt_add_qml_module(playback_qml
         MidiInputActivityIndicator.qml
         internal/AudioProcessingProgressBar.qml
         internal/AudioSyncDetectionPopup.qml
+        internal/ChannelMainControls.qml
+        internal/ChannelNameBar.qml
+        internal/ToolBarValueSlider.qml
         internal/AudioResourceControl.qml
         internal/AudioResourceMenuLoader.qml
         internal/AuxSendControl.qml

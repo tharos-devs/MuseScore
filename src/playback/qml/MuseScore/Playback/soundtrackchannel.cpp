@@ -22,6 +22,8 @@
 
 #include "soundtrackchannel.h"
 
+#include "channeleditundo.h"
+
 #include "context/iglobalcontext.h"
 #include "translation.h"
 
@@ -203,6 +205,41 @@ void SoundTrackChannel::setColor(const QColor& color) const
     AudioOutputParams params = outputParams();
     params.color = color;
     setOutputParams(params);
+}
+
+void SoundTrackChannel::connectItem(MixerChannelItem* item, QObject* context, const std::function<IPlayback*()>& playback,
+                                    const std::function<IProjectUndoStackPtr()>& undoStack) const
+{
+    const SoundTrackChannel channel = *this;
+    const TrackId trackId = item->trackId();
+
+    QObject::connect(item, &MixerChannelItem::controlParamsChanged, context,
+                     [channel, trackId, playback](const AudioOutputParams& params) {
+        //! NOTE The engine's mute is always the live effective one (force-mute included), whatever the item shows
+        ControlParams control = params.control();
+        control.muted = channel.isEffectivelyMuted();
+        playback()->setControlParams(trackId, control);
+
+        AudioOutputParams outParams = channel.outputParams();
+        outParams.volume = params.volume;
+        outParams.balance = params.balance;
+        outParams.gain = params.gain;
+        outParams.eq = params.eq;
+        channel.setOutputParams(outParams);
+    });
+
+    QObject::connect(item, &MixerChannelItem::soloMuteStateChanged, context,
+                     [channel](const notation::INotationSoloMuteState::SoloMuteState& state) {
+        //! NOTE Stored with its source's settings, shared with its own UI (e.g. the Video panel's "M" button);
+        //! PlaybackController applies it to the engine (see updateSoloMuteStates())
+        channel.setUserSoloMuteState(state);
+    });
+
+    QObject::connect(item, &MixerChannelItem::colorChanged, context, [channel, item]() {
+        channel.setColor(item->color());
+    });
+
+    ChannelEditUndo::connectContinuousChanges(item, context, undoStack);
 }
 
 SoundTrackChannels mu::playback::makeSoundTrackChannels(const muse::modularity::ContextPtr& iocContext)

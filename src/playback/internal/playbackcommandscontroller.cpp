@@ -194,14 +194,15 @@ muse::Ret PlaybackCommandsController::addAudioSyncPointAtPlayback()
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
 
-    //! NOTE Audio time = playback time + offset; the beat is the score's one playing now
+    //! NOTE Audio time = playback time * playback speed + offset; the beat is the score's one playing now
     const double playbackSecs = playbackState->playbackPosition();
-    const std::optional<int> beat = audiosync::nearestBeatUtick(score, score->tempoTimeline(true).utime2utick(playbackSecs));
+    const engraving::TempoTimeline& timeline = score->tempoTimeline(true);
+    const std::optional<int> beat = audiosync::nearestBeatUtick(score, timeline.utime2utick(playbackSecs));
     if (!beat) {
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
 
-    audiosync::addPoint(*automation, score, *beat, automation->audioSyncOffsetSecs() + playbackSecs);
+    audiosync::addPoint(*automation, score, *beat, automation->audioSyncOffsetSecs() + playbackSecs * timeline.tempoMultiplier().val);
     return muse::make_ok();
 }
 

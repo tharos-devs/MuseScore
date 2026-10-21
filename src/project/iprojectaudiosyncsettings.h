@@ -46,6 +46,8 @@ struct ReferenceAudioSettings
     //! NOTE Its track delay (the Mixer's): played this much later (negative: earlier), to compensate a latency
     //! heard between it and the score; the sync points and the display aren't affected
     int delayMs = 0;
+    //! NOTE Played transposed by this many semitones (its duration kept): to hear it in the score's key
+    int pitchSemitones = 0;
     //! NOTE The Audio sync window's A-B loop, in the audio's time (< 0: not set); while enabled, it's played
     //! instead of the score's loop
     double loopFromSecs = -1.0;
@@ -70,6 +72,7 @@ struct ReferenceAudioSettings
                && includeInExport == other.includeInExport
                && showStereo == other.showStereo
                && delayMs == other.delayMs
+               && pitchSemitones == other.pitchSemitones
                && loopFromSecs == other.loopFromSecs
                && loopToSecs == other.loopToSecs
                && loopEnabled == other.loopEnabled;
@@ -92,6 +95,11 @@ struct AudioSyncViewState
     {
         return pixelsPerSecond > 0.0;
     }
+
+    bool operator==(const AudioSyncViewState& other) const
+    {
+        return pixelsPerSecond == other.pixelsPerSecond && scrollSecs == other.scrollSecs && amplitudeZoom == other.amplitudeZoom;
+    }
 };
 
 class IProjectAudioSyncSettings
@@ -105,9 +113,11 @@ public:
 
     virtual muse::async::Notification settingsChanged() const = 0;
 
-    //! NOTE Doesn't notify settingsChanged (nor mark the project as modified)
+    //! NOTE Saved with the project (a change marks it as modified), but not a change of the reference audio:
+    //! notifies viewStateChanged, not settingsChanged
     virtual const AudioSyncViewState& viewState() const = 0;
     virtual void setViewState(const AudioSyncViewState& state) = 0;
+    virtual muse::async::Notification viewStateChanged() const = 0;
 };
 
 using IProjectAudioSyncSettingsPtr = std::shared_ptr<IProjectAudioSyncSettings>;

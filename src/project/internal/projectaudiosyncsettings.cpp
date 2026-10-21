@@ -80,7 +80,17 @@ const AudioSyncViewState& ProjectAudioSyncSettings::viewState() const
 
 void ProjectAudioSyncSettings::setViewState(const AudioSyncViewState& state)
 {
+    if (state == m_viewState) {
+        return;
+    }
+
     m_viewState = state;
+    m_viewStateChanged.notify();
+}
+
+muse::async::Notification ProjectAudioSyncSettings::viewStateChanged() const
+{
+    return m_viewStateChanged;
 }
 
 muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, const muse::io::path_t& projectPath)
@@ -133,6 +143,7 @@ muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, con
     m_referenceAudio.includeInExport = audioObj.value("includeInExport").toBool(false);
     m_referenceAudio.showStereo = audioObj.value("showStereo").toBool(true);
     m_referenceAudio.delayMs = std::clamp(audioObj.value("delayMs").toInt(0), -500, 500);
+    m_referenceAudio.pitchSemitones = std::clamp(audioObj.value("pitchSemitones").toInt(0), -12, 12);
     m_referenceAudio.loopFromSecs = audioObj.value("loopFromSecs").toDouble(-1.0);
     m_referenceAudio.loopToSecs = audioObj.value("loopToSecs").toDouble(-1.0);
     m_referenceAudio.loopEnabled = audioObj.value("loopEnabled").toBool(false);
@@ -162,6 +173,7 @@ muse::Ret ProjectAudioSyncSettings::write(engraving::MscWriter& writer, const mu
     audioObj["includeInExport"] = m_referenceAudio.includeInExport;
     audioObj["showStereo"] = m_referenceAudio.showStereo;
     audioObj["delayMs"] = m_referenceAudio.delayMs;
+    audioObj["pitchSemitones"] = m_referenceAudio.pitchSemitones;
     audioObj["loopFromSecs"] = m_referenceAudio.loopFromSecs;
     audioObj["loopToSecs"] = m_referenceAudio.loopToSecs;
     audioObj["loopEnabled"] = m_referenceAudio.loopEnabled;

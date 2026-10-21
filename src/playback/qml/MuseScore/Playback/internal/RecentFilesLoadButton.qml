@@ -38,6 +38,9 @@ RowLayout {
     //! NOTE Returns the recent files, most recent first
     property var recentFiles: function() { return [] }
 
+    //! NOTE The Load button's size (the recent files arrow is smaller)
+    property int buttonSize: 30
+
     property NavigationPanel navigationPanel: null
     property int navigationOrderStart: 0
 
@@ -46,19 +49,31 @@ RowLayout {
 
     spacing: 4
 
-    FilePicker {
-        Layout.preferredWidth: 30
-        Layout.preferredHeight: 30
-        showPathField: false
-        path: root.path
-        dialogTitle: root.dialogTitle
-        filter: root.filter
-        buttonType: FlatButton.IconOnly
-        navigation: root.navigationPanel
-        navigationRowOrderStart: root.navigationOrderStart
+    //! NOTE: its own button (not FilePicker's) for its size
+    FilePickerModel {
+        id: filePickerModel
 
-        onPathEdited: function(newPath) {
-            root.pathChosen(newPath)
+        title: root.dialogTitle
+        filter: root.filter
+        dir: root.path.length > 0 ? root.path.substring(0, Math.max(root.path.lastIndexOf("/"), 0)) : ""
+    }
+
+    FlatButton {
+        Layout.preferredWidth: root.buttonSize
+        Layout.preferredHeight: root.buttonSize
+        icon: IconCode.OPEN_FILE
+        buttonType: FlatButton.IconOnly
+        toolTipTitle: root.dialogTitle
+        navigation.name: "LoadFileButton"
+        navigation.panel: root.navigationPanel
+        navigation.order: root.navigationOrderStart
+        accessible.name: qsTrc("ui", "Choose file")
+
+        onClicked: {
+            var selectedFile = filePickerModel.selectFile()
+            if (Boolean(selectedFile)) {
+                root.pathChosen(selectedFile)
+            }
         }
     }
 

@@ -33,6 +33,8 @@ Row {
 
     required property MixerChannelItem channelItem
     property bool compact: false
+    //! NOTE: between the fader and the meters (with their ruler)
+    property int metersSpacing: root.compact ? 2 : 8
 
     property NavigationPanel navigationPanel: channelItem.panel
     property int navigationRowStart: 0
@@ -42,7 +44,7 @@ Row {
 
     //! NOTE: compact narrows this to bring the L/R meters closer to the fader -- the fader itself keeps its dB ruler
     //! (see VolumeSlider.qml), unlike the meters' own ruler below, so the width saving has to come from spacing instead
-    spacing: root.compact ? 2 : 8
+    spacing: root.metersSpacing
 
     VolumeSlider {
         volumeLevel: root.channelItem.volumeLevel

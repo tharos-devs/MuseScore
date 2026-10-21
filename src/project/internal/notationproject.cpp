@@ -1190,6 +1190,12 @@ void NotationProject::listenIfNeedSaveChanges()
         markAsUnsaved();
         m_hasNonUndoStackChanges = true;
     });
+
+    //! NOTE The Audio sync window's zoom and position are saved with the project too
+    m_projectAudioSyncSettings->viewStateChanged().onNotify(this, [this]() {
+        markAsUnsaved();
+        m_hasNonUndoStackChanges = true;
+    });
 }
 
 void NotationProject::markAsSaved(const muse::io::path_t& path)

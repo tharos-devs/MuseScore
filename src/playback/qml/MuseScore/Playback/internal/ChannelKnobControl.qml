@@ -38,6 +38,8 @@ Row {
     //! rebuilds what the instrument plays
     property bool isDelay: false
     property bool compact: false
+    //! NOTE: the knob's size (KnobControl's default)
+    property real knobRadius: 16
 
     property NavigationPanel navigationPanel: channelItem.panel
     property int navigationRowStart: 0
@@ -105,6 +107,7 @@ Row {
     KnobControl {
         id: knob
 
+        radius: root.knobRadius
         from: root.minValue
         to: root.maxValue
         value: root.value

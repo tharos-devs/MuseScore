@@ -158,6 +158,9 @@ public:
         //! NOTE The decoded 16-bit stereo PCM WAV file; empty while decoding or if decoding failed
         muse::io::path_t wavPath;
         bool failed = false;
+        //! NOTE Its transposed copy being made (see ReferenceAudioSettings::pitchSemitones)
+        bool pitchShifting = false;
+        double pitchShiftProgress = 0.0;
     };
     virtual ReferenceAudioDecodeState referenceAudioDecodeState() const = 0;
     virtual muse::async::Notification referenceAudioDecodeStateChanged() const = 0;

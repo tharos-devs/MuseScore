@@ -75,18 +75,23 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
     Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
+    //! NOTE The reference audio played transposed (see ReferenceAudioSettings::pitchSemitones)
+    Q_PROPERTY(int pitchSemitones READ pitchSemitones WRITE setPitchSemitones NOTIFY audioChanged)
+    Q_PROPERTY(bool pitchShifting READ pitchShifting NOTIFY decodeStateChanged)
+    Q_PROPERTY(double pitchShiftProgress READ pitchShiftProgress NOTIFY decodeStateChanged)
     //! NOTE Points other than the first one (the score's start)
     Q_PROPERTY(bool hasSyncPoints READ hasSyncPoints NOTIFY syncChanged)
     Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY playingChanged)
     Q_PROPERTY(bool metronomeEnabled READ metronomeEnabled NOTIFY metronomeChanged)
-    //! NOTE "position / duration", of the reference audio
+    //! NOTE The reference audio's playback position and duration (mm:ss.cc)
     Q_PROPERTY(QString timeText READ timeText NOTIFY positionTextChanged)
+    Q_PROPERTY(QString durationText READ durationText NOTIFY positionTextChanged)
     //! NOTE The A-B loop (see ReferenceAudioSettings::loopEnabled)
     Q_PROPERTY(bool loopEnabled READ loopEnabled WRITE setLoopEnabled NOTIFY audioChanged)
     Q_PROPERTY(bool hasLoopFrom READ hasLoopFrom NOTIFY audioChanged)
     Q_PROPERTY(bool hasLoopTo READ hasLoopTo NOTIFY audioChanged)
-    //! NOTE The playback speed isn't 100%: the reference audio doesn't follow it
-    Q_PROPERTY(bool speedWarning READ speedWarning NOTIFY speedWarningChanged)
+    //! NOTE The score's playback speed (its tempo multiplier, e.g. 0.75): the reference audio follows it
+    Q_PROPERTY(double speed READ speed WRITE setSpeed NOTIFY speedChanged)
     Q_PROPERTY(bool detecting READ detecting NOTIFY detectionChanged)
     Q_PROPERTY(double detectionProgress READ detectionProgress NOTIFY detectionChanged)
     //! NOTE What the last detection found (e.g. its tempo), empty before
@@ -97,12 +102,17 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(double contentStartSecs READ contentStartSecs NOTIFY viewChanged)
     Q_PROPERTY(double contentEndSecs READ contentEndSecs NOTIFY viewChanged)
     Q_PROPERTY(double visibleSecs READ visibleSecs NOTIFY viewChanged)
+    //! NOTE The horizontal zoom in percents of 100 px per second (see pixelsPerSecond), and its range
+    Q_PROPERTY(double zoomPercent READ zoomPercent WRITE setZoomPercent NOTIFY viewChanged)
+    Q_PROPERTY(double minZoomPercent READ minZoomPercent CONSTANT)
+    Q_PROPERTY(double maxZoomPercent READ maxZoomPercent CONSTANT)
     Q_PROPERTY(double amplitudeZoom READ amplitudeZoom WRITE setAmplitudeZoom NOTIFY viewChanged)
     //! NOTE Where the main waveform is, for controls placed along it
     Q_PROPERTY(double waveformTop READ waveformTop NOTIFY viewChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight NOTIFY viewChanged)
     Q_PROPERTY(bool followPlayback READ followPlayback WRITE setFollowPlayback NOTIFY viewChanged)
 
+    //! NOTE At the playback position: measure.beat, tempo (BPM)
     Q_PROPERTY(QString positionText READ positionText NOTIFY positionTextChanged)
     Q_PROPERTY(QString tempoText READ tempoText NOTIFY positionTextChanged)
 
@@ -142,16 +152,22 @@ public:
     void setShowStereo(bool showStereo);
     bool isStereoAudio() const;
     bool audioSyncEnabled() const;
+    int pitchSemitones() const;
+    void setPitchSemitones(int semitones);
+    bool pitchShifting() const;
+    double pitchShiftProgress() const;
     bool hasSyncPoints() const;
     void setAudioSyncEnabled(bool enabled);
     bool isPlaying() const;
     bool metronomeEnabled() const;
     QString timeText() const;
+    QString durationText() const;
     bool loopEnabled() const;
     void setLoopEnabled(bool enabled);
     bool hasLoopFrom() const;
     bool hasLoopTo() const;
-    bool speedWarning() const;
+    double speed() const;
+    void setSpeed(double speed);
     bool detecting() const;
     double detectionProgress() const;
     QString detectionSummary() const;
@@ -163,6 +179,10 @@ public:
     double contentStartSecs() const;
     double contentEndSecs() const;
     double visibleSecs() const;
+    double zoomPercent() const;
+    void setZoomPercent(double percent);
+    double minZoomPercent() const;
+    double maxZoomPercent() const;
     double amplitudeZoom() const;
     void setAmplitudeZoom(double zoom);
     double waveformTop() const;
@@ -229,7 +249,7 @@ signals:
     void syncChanged();
     void playingChanged();
     void metronomeChanged();
-    void speedWarningChanged();
+    void speedChanged();
     void detectionChanged();
     void colorsChanged();
 
@@ -306,14 +326,16 @@ private:
     //! NOTE The A-B loop as shown (following a drag)
     std::pair<double, double> displayedLoop() const;
     void setLoop(double fromSecs, double toSecs);
-    void updateSpeedWarning();
+    void updateSpeed();
     double audioSecsAtX(double x) const;
     double xForAudioSecs(double secs) const;
     double cursorAudioSecs() const;
 
     void zoomAround(double pps, double anchorX);
+    double zoomAnchorX() const;
     void restoreViewState();
     void storeViewState();
+    void flushViewState();
     void clampScroll();
     void updatePlaybackCursor();
     void updatePositionText();
@@ -346,6 +368,7 @@ private:
 
     mutable bool m_gridDirty = true;
     mutable std::vector<GridMeasure> m_grid;
+    //! NOTE The grid's times are the audio's ones from the score's start: the score's times at 100%
     mutable double m_scoreEndSecs = 0.0;
     mutable GridTime m_scoreEnd;
     mutable std::vector<audiosync::SyncPoint> m_syncPoints;
@@ -360,7 +383,7 @@ private:
     QString m_detectionSummary;
     void onDetectionFinished(const std::shared_ptr<DetectionJob>& job, const std::vector<audiosync::DetectedBeatTime>& beats,
                              std::optional<double> musicStartSecs);
-    bool m_speedWarning = false;
+    double m_speed = 1.0;
     std::optional<PointDrag> m_pointDrag;
 
     int m_selectionTickFrom = -1;
@@ -370,6 +393,11 @@ private:
     std::chrono::steady_clock::time_point m_lastPositionTime;
     bool m_isPlaying = false;
     QTimer m_cursorTimer;
+
+    QTimer m_viewStateTimer;
+    std::optional<project::AudioSyncViewState> m_pendingViewState;
+    std::weak_ptr<project::IProjectAudioSyncSettings> m_pendingViewStateSettings;
+    bool m_restoringViewState = false;
 
     enum class DragMode {
         None,
@@ -399,6 +427,7 @@ private:
     QString m_positionText;
     QString m_tempoText;
     QString m_timeText;
+    QString m_durationText;
 
     QColor m_backgroundColor = QColor(40, 40, 40);
     QColor m_rulerColor = QColor(55, 55, 55);

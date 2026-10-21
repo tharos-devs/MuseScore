@@ -22,6 +22,15 @@
 
 #include "soundtrackslot.h"
 
+#include <algorithm>
+#include <cmath>
+#include <thread>
+
+#include <QFileInfo>
+#include <QMetaObject>
+#include <QPointer>
+
+#include "pitchshifter.h"
 #include "videoaudiodecoder.h"
 
 #include "log.h"
@@ -57,6 +66,7 @@ bool SoundTrackSlot::isReady() const
     return m_trackId != INVALID_TRACK_ID
            && !m_isBeingAdded
            && !m_isDecodePending
+           && !isPitchShifting()
            && m_decodedSourcePath == m_source.mediaPath
            && m_lastAppliedMuteState.has_value();
 }
@@ -74,6 +84,101 @@ double SoundTrackSlot::decodeProgress() const
 const muse::io::path_t& SoundTrackSlot::wavPath() const
 {
     return m_wavPath;
+}
+
+bool SoundTrackSlot::isPitchShifting() const
+{
+    return m_pitchShiftCanceled != nullptr;
+}
+
+double SoundTrackSlot::pitchShiftProgress() const
+{
+    return m_pitchShiftProgress;
+}
+
+void SoundTrackSlot::cancelPitchShift()
+{
+    if (m_pitchShiftCanceled) {
+        *m_pitchShiftCanceled = true;
+        m_pitchShiftCanceled = nullptr;
+        m_pitchShiftTarget.clear();
+    }
+}
+
+void SoundTrackSlot::updatePlayedWav()
+{
+    //! NOTE Whole percents: a speed slider's steps
+    const double speed = std::clamp(std::round(m_source.speed * 100.0) / 100.0, 0.1, 4.0);
+    const bool transformed = m_source.pitchSemitones != 0 || std::abs(speed - 1.0) > 1e-6;
+
+    if (m_wavPath.empty() || !transformed) {
+        cancelPitchShift();
+        m_playedWavPath = m_wavPath;
+        m_playedSpeed = 1.0;
+        return;
+    }
+
+    //! NOTE Kept next to the decoded file (and pruned with the decoder's cache)
+    QString target = m_wavPath.toQString();
+    target.chop(4); // ".wav"
+    target += QString(".pitch%1%2.speed%3.wav").arg(m_source.pitchSemitones > 0 ? "+" : "").arg(m_source.pitchSemitones)
+              .arg(static_cast<int>(std::lround(speed * 100.0)));
+
+    if (QFileInfo::exists(target)) {
+        cancelPitchShift();
+        m_playedWavPath = muse::io::path_t(target);
+        m_playedSpeed = speed;
+        return;
+    }
+
+    if (m_pitchShiftCanceled && m_pitchShiftTarget == target) {
+        return; // already being made
+    }
+
+    cancelPitchShift();
+
+    if (!m_pitchShiftContext) {
+        m_pitchShiftContext = std::make_unique<QObject>();
+    }
+
+    auto canceled = std::make_shared<std::atomic<bool> >(false);
+    m_pitchShiftCanceled = canceled;
+    m_pitchShiftTarget = target;
+    m_pitchShiftProgress = 0.0;
+
+    const QString source = m_wavPath.toQString();
+    const int semitones = m_source.pitchSemitones;
+    QPointer<QObject> context(m_pitchShiftContext.get());
+
+    std::thread([this, context, canceled, source, target, semitones, speed]() {
+        const bool ok = audiosync::transformWav(source, target, semitones, speed, *canceled, [context, canceled, this](double progress) {
+            QMetaObject::invokeMethod(context, [this, canceled, progress]() {
+                if (m_pitchShiftCanceled == canceled) {
+                    m_pitchShiftProgress = progress;
+                    m_decodeStateChanged.notify();
+                }
+            }, Qt::QueuedConnection);
+        });
+
+        QMetaObject::invokeMethod(context, [this, canceled, target, ok, speed]() {
+            if (m_pitchShiftCanceled != canceled) {
+                return;
+            }
+
+            m_pitchShiftCanceled = nullptr;
+            m_pitchShiftTarget.clear();
+            if (ok) {
+                m_playedWavPath = muse::io::path_t(target);
+                m_playedSpeed = speed;
+                applySourceParams();
+            } else {
+                LOGE() << "unable to transpose " << target;
+            }
+            m_decodeStateChanged.notify();
+        }, Qt::QueuedConnection);
+    }).detach();
+
+    m_decodeStateChanged.notify();
 }
 
 bool SoundTrackSlot::decodeFailed() const
@@ -102,6 +207,8 @@ void SoundTrackSlot::update(const Source& source)
 
     if (m_source.mediaPath != m_decodedSourcePath) {
         startDecoding(m_source.mediaPath);
+    } else {
+        updatePlayedWav();
     }
 
     if (m_trackId == INVALID_TRACK_ID) {
@@ -130,6 +237,8 @@ void SoundTrackSlot::reset()
     m_decodeProgress = 0.0;
     m_decodedSourcePath = muse::io::path_t();
     m_wavPath = muse::io::path_t();
+    m_playedWavPath = muse::io::path_t();
+    cancelPitchShift();
     m_lastAppliedSourceParams = AudioSourceParams();
     m_lastAppliedMuteState.reset();
     m_isForceMuted = false;
@@ -143,6 +252,8 @@ void SoundTrackSlot::startDecoding(const muse::io::path_t& mediaPath)
 {
     m_decodedSourcePath = mediaPath;
     m_wavPath = muse::io::path_t();
+    m_playedWavPath = muse::io::path_t();
+    cancelPitchShift();
 
     //! NOTE Silent until decoded, rather than keep playing the previous file's audio
     applySourceParams();
@@ -165,6 +276,7 @@ void SoundTrackSlot::startDecoding(const muse::io::path_t& mediaPath)
         m_decodeFailed = wavPath.empty();
         m_decodeProgress = 1.0;
         m_wavPath = wavPath;
+        updatePlayedWav();
         applySourceParams();
         m_decodeStateChanged.notify();
     }, [this, mediaPath](double progress) {
@@ -180,8 +292,9 @@ void SoundTrackSlot::startDecoding(const muse::io::path_t& mediaPath)
 AudioSourceParams SoundTrackSlot::sourceParams() const
 {
     AudioSourceParams params;
-    params.configuration[SOUND_TRACK_FILE_PATH_KEY] = m_wavPath.toStdString();
-    params.configuration[SOUND_TRACK_OFFSET_MS_KEY] = std::to_string(m_source.offsetMs);
+    params.configuration[SOUND_TRACK_FILE_PATH_KEY] = m_playedWavPath.toStdString();
+    //! NOTE In the played file's time (its speed changes it)
+    params.configuration[SOUND_TRACK_OFFSET_MS_KEY] = std::to_string(static_cast<int>(std::lround(m_source.offsetMs / m_playedSpeed)));
     params.configuration[SOUND_TRACK_INCLUDE_IN_EXPORT_KEY] = m_source.includeInExport ? "1" : "0";
 
     return params;
@@ -269,6 +382,8 @@ void SoundTrackSlot::remove()
     m_decodeFailed = false;
     m_decodedSourcePath = muse::io::path_t();
     m_wavPath = muse::io::path_t();
+    m_playedWavPath = muse::io::path_t();
+    cancelPitchShift();
 
     if (wasDecoding) {
         m_decodeStateChanged.notify();

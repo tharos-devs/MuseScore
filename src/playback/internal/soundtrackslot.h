@@ -26,7 +26,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <atomic>
 #include <utility>
+
+#include <QObject>
+#include <QString>
 
 #include "async/asyncable.h"
 #include "async/notification.h"
@@ -50,6 +54,10 @@ public:
         //! NOTE File position = score position + offset
         int offsetMs = 0;
         bool includeInExport = false;
+        //! NOTE Played transposed, and at this speed (the score's playback speed: it follows it), each one
+        //! without changing the other (see transformWav()): a transformed copy is made first
+        int pitchSemitones = 0;
+        double speed = 1.0;
     };
 
     struct Hooks {
@@ -82,8 +90,11 @@ public:
     bool isDecoding() const;
     //! NOTE In [0; 1], meaningful while decoding
     double decodeProgress() const;
-    //! NOTE The decoded WAV file, empty while decoding or if decoding failed
+    //! NOTE The decoded WAV file, empty while decoding or if decoding failed (not transposed)
     const muse::io::path_t& wavPath() const;
+    //! NOTE A transposed copy is being made (the previous file plays meanwhile); progress in [0; 1]
+    bool isPitchShifting() const;
+    double pitchShiftProgress() const;
     //! NOTE The last decoding finished without any audio (missing file, unsupported format, no audio stream)
     bool decodeFailed() const;
     //! NOTE Decoding started/progressed/finished
@@ -99,6 +110,9 @@ private:
     void startDecoding(const muse::io::path_t& mediaPath);
     muse::audio::AudioSourceParams sourceParams() const;
     void applySourceParams();
+    //! NOTE The file to play: the decoded one, or its transposed copy (made if needed)
+    void updatePlayedWav();
+    void cancelPitchShift();
 
     Hooks m_hooks;
     Source m_source;
@@ -113,6 +127,13 @@ private:
     double m_decodeProgress = 0.0;
     muse::io::path_t m_decodedSourcePath; //! the file m_wavPath is (being) decoded from
     muse::io::path_t m_wavPath;
+    muse::io::path_t m_playedWavPath;
+    double m_playedSpeed = 1.0; // of the played file: its offset is in its own time
+
+    std::unique_ptr<QObject> m_pitchShiftContext; // results are delivered in its thread (the main one)
+    std::shared_ptr<std::atomic<bool> > m_pitchShiftCanceled;
+    QString m_pitchShiftTarget;
+    double m_pitchShiftProgress = 0.0;
     muse::async::Notification m_decodeStateChanged;
 
     muse::audio::AudioSourceParams m_lastAppliedSourceParams;
