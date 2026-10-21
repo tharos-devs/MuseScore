@@ -176,3 +176,8 @@ if (TARGET Qt6::Multimedia)
 endif()
 
 fixup_qml_module_dependencies(playback_qml)
+
+# Necessary for the auto-generated sources
+target_include_directories(playback_qml PRIVATE
+    audiosync
+)
