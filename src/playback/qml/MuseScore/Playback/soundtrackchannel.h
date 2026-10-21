@@ -94,7 +94,7 @@ struct SoundTrackChannel
 
     //! NOTE: what a channel of it changes goes to the engine and is stored (volume, pan, gain, EQ, solo/mute, color),
     //! undoably for the gestures; the same in every panel showing it. context: the connections' lifetime
-    void connectItem(MixerChannelItem* item, QObject* context, const std::function<muse::audio::IPlayback*()>& playback,
+    void connectItem(MixerChannelItem* item, QObject* context, const std::function<muse::audio::IPlayback* ()>& playback,
                      const std::function<project::IProjectUndoStackPtr()>& undoStack) const;
 };
 

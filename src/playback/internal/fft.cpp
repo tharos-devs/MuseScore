@@ -31,7 +31,7 @@ void fft(std::vector<std::complex<float> >& data, bool inverse)
     const size_t n = data.size();
     for (size_t i = 1, j = 0; i < n; ++i) {
         size_t bit = n >> 1;
-        for (; j & bit; bit >>= 1) {
+        for (; (j & bit) != 0; bit >>= 1) {
             j ^= bit;
         }
         j ^= bit;

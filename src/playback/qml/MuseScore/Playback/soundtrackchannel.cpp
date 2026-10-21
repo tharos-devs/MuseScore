@@ -207,7 +207,7 @@ void SoundTrackChannel::setColor(const QColor& color) const
     setOutputParams(params);
 }
 
-void SoundTrackChannel::connectItem(MixerChannelItem* item, QObject* context, const std::function<IPlayback*()>& playback,
+void SoundTrackChannel::connectItem(MixerChannelItem* item, QObject* context, const std::function<IPlayback* ()>& playback,
                                     const std::function<IProjectUndoStackPtr()>& undoStack) const
 {
     const SoundTrackChannel channel = *this;

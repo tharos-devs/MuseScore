@@ -39,10 +39,9 @@ namespace mu::playback {
 class AudioSyncChannelModel : public QObject, public muse::Contextable, public muse::async::Asyncable
 {
     Q_OBJECT
-    QML_ELEMENT
-
     //! NOTE null without a reference audio track
     Q_PROPERTY(MixerChannelItem * channelItem READ channelItem NOTIFY channelItemChanged)
+    QML_ELEMENT
 
     muse::ContextInject<context::IGlobalContext> globalContext = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
