@@ -38,6 +38,7 @@
 #include "notation/inotationconfiguration.h"
 #include "projectaudiosettings.h"
 #include "projectvideosettings.h"
+#include "projectaudiosyncsettings.h"
 #include "projectundostack.h"
 #include "iprojectmigrator.h"
 
@@ -119,6 +120,7 @@ public:
     notation::IMasterNotationPtr masterNotation() const override;
     IProjectAudioSettingsPtr audioSettings() const override;
     IProjectVideoSettingsPtr videoSettings() const override;
+    IProjectAudioSyncSettingsPtr audioSyncSettings() const override;
     IProjectUndoStackPtr undoStack() const override;
 
 private:
@@ -150,6 +152,7 @@ private:
     notation::IMasterNotationPtr m_masterNotation = nullptr;
     ProjectAudioSettingsPtr m_projectAudioSettings = nullptr;
     ProjectVideoSettingsPtr m_projectVideoSettings = nullptr;
+    ProjectAudioSyncSettingsPtr m_projectAudioSyncSettings = nullptr;
     ProjectUndoStackPtr m_projectUndoStack = nullptr;
     mutable CloudProjectInfo m_cloudInfo;
     mutable CloudAudioInfo m_cloudAudioInfo;

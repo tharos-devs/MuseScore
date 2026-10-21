@@ -33,6 +33,8 @@
 #include "project/inotationproject.h"
 #include "project/iprojectaudiosettings.h"
 
+#include "soundtrackchannel.h"
+
 using namespace mu::playback;
 
 //! NOTE: how long everything must have been loaded, with the application responsive, before the window closes:
@@ -89,8 +91,8 @@ QString ProjectLoadingModel::message() const
     return m_message;
 }
 
-//! NOTE: the VST3 instruments and effects of the project's tracks, aux buses, video and master: each one is loaded
-//! and its saved state restored on the main thread, the long part of a project's loading
+//! NOTE: the VST3 instruments and effects of the project's tracks, aux buses, sound tracks (video, reference audio)
+//! and master: each one is loaded and its saved state restored on the main thread, the long part of a project's loading
 size_t ProjectLoadingModel::projectPluginCount() const
 {
     const project::INotationProjectPtr project = context()->currentProject();
@@ -125,7 +127,9 @@ size_t ProjectLoadingModel::projectPluginCount() const
     }
 
     countFx(settings->masterAudioOutputParams().fxChain);
-    countFx(playbackController()->videoOutputParams().fxChain);
+    for (const SoundTrackChannel& channel : makeSoundTrackChannels(iocContext())) {
+        countFx(channel.outputParams().fxChain);
+    }
 
     return count;
 }

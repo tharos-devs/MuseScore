@@ -123,6 +123,7 @@ enum class ChannelListPanel {
 
 enum class ChannelCategory {
     Video,
+    ReferenceAudio,
     Metronome,
     Instruments,
     AuxFx,
@@ -136,6 +137,7 @@ static const std::map<ChannelListPanel, std::string> CHANNEL_LIST_PANEL_STR = {
 
 static const std::map<ChannelCategory, std::string> CHANNEL_CATEGORY_STR = {
     { ChannelCategory::Video, "video" },
+    { ChannelCategory::ReferenceAudio, "reference-audio" },
     { ChannelCategory::Metronome, "metronome" },
     { ChannelCategory::Instruments, "instruments" },
     { ChannelCategory::AuxFx, "aux-fx" },
@@ -176,6 +178,7 @@ inline QList<ChannelCategory> allChannelCategories()
 {
     static const QList<ChannelCategory> categories {
         ChannelCategory::Video,
+        ChannelCategory::ReferenceAudio,
         ChannelCategory::Metronome,
         ChannelCategory::Instruments,
         ChannelCategory::AuxFx,

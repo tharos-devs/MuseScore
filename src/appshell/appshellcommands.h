@@ -56,5 +56,6 @@ inline static const muse::rcommand::Command DOCK_TOGGLE_PERCUSSION_COMMAND("comm
 inline static const muse::rcommand::Command DOCK_TOGGLE_STATUSBAR_COMMAND("command://app/dock/toggle-statusbar");
 inline static const muse::rcommand::Command DOCK_TOGGLE_VIDEO_PANEL_COMMAND("command://app/dock/toggle-video-panel");
 inline static const muse::rcommand::Command DOCK_TOGGLE_TRACK_LIST_COMMAND("command://app/dock/toggle-track-list");
+inline static const muse::rcommand::Command DOCK_TOGGLE_AUDIO_SYNC_PANEL_COMMAND("command://app/dock/toggle-audio-sync-panel");
 inline static const muse::rcommand::Command DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND("command://app/dock/toggle-secondary-window");
 }

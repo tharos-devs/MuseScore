@@ -71,6 +71,8 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     Q_PROPERTY(bool outputOnly READ outputOnly CONSTANT)
     Q_PROPERTY(bool isGroupBus READ isGroupBus CONSTANT)
     Q_PROPERTY(bool isReverbBus READ isReverbBus CONSTANT)
+    //! NOTE: a sound track's channel (the video's, the reference audio's), see SoundTrackChannel
+    Q_PROPERTY(bool isSoundTrack READ isSoundTrack CONSTANT)
     //! NOTE: only meaningful for Type::Aux channels - see auxBusIndex()'s own doc comment.
     //! No NOTIFY: read once by the Mixer's aux drag-and-drop reorder gesture, never bound
     //! to live QML UI.
@@ -135,6 +137,7 @@ public:
         SecondaryInstrument,
         Metronome,
         Video,
+        ReferenceAudio,
         Aux,
         Master,
     };
@@ -155,6 +158,10 @@ public:
     //! NOTE: only meaningful for Type::Aux channels - the Reverb bus is a built-in default
     //! that can be renamed but not deleted (see IPlaybackController::removeAuxBus)
     bool isReverbBus() const;
+
+    //! NOTE: the channels of the sound tracks (see SoundTrackChannel): placed and handled alike
+    static bool isSoundTrackType(Type type);
+    bool isSoundTrack() const;
 
     muse::audio::TrackId trackId() const;
 
@@ -349,6 +356,10 @@ public:
     Q_INVOKABLE void endGainChange();
     //! NOTE: a delay typed in a field: set, and undoable (see delayChangeCommitted)
     Q_INVOKABLE void commitDelayMs(int delayMs);
+
+    //! NOTE: a channel whose track delay isn't in its input params (a sound track's): read and written through these;
+    //! called again when it may have changed
+    void bindExternalDelay(std::function<int()> getter, std::function<void(int)> setter);
 
     //! NOTE The EQ: each call is one undoable change, except within beginEqChange()/endEqChange() (e.g. dragging
     //! a band on the curve), which makes the whole gesture one
@@ -564,5 +575,8 @@ protected:
     std::optional<int> m_balanceChangeStart;
     std::optional<int> m_gainChangeStart;
     std::optional<muse::audio::EqParams> m_eqChangeStart;
+
+    std::function<int()> m_externalDelayGetter;
+    std::function<void(int)> m_externalDelaySetter;
 };
 }

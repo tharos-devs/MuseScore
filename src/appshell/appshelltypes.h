@@ -50,6 +50,7 @@ static const DockName TIMELINE_PANEL_NAME("timelinePanel");
 static const DockName PERCUSSION_PANEL_NAME("percussionPanel");
 static const DockName VIDEO_PANEL_NAME("videoPanel");
 static const DockName TRACK_LIST_PANEL_NAME("trackListPanel");
+static const DockName AUDIO_SYNC_PANEL_NAME("audioSyncPanel");
 
 // Toolbars:
 static const DockName NOTATION_TOOLBAR_NAME("notationToolBar");

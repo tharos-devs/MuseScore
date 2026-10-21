@@ -23,6 +23,8 @@
 #include "scoreautomationcontroller.h"
 
 #include <algorithm>
+#include <limits>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -353,17 +355,15 @@ void ScoreAutomationController::insertTime(const Fraction& tick, const Fraction&
     TRACEFUNC;
 
     const int diff = len.ticks();
-    if (!m_score || !m_automationData || m_automationData->isEmpty() || diff == 0) {
+    if (!m_score || !m_automationData || diff == 0
+        || (m_automationData->isEmpty() && m_automationData->inactiveTempoCurve().empty())) {
         return;
     }
 
     const int rawInsertTick = tick.ticks();
     const std::vector<RepeatSegmentInfo> newSegments = m_score->expandedRepeatList().segmentInfoList();
 
-    AutomationCurveMap curves = m_automationData->curves();
-
-    for (auto& entry : curves) {
-        AutomationCurve& curve = entry.second;
+    auto shiftCurve = [&](AutomationCurve& curve) {
         AutomationCurve shifted;
 
         for (const auto& [utick, point] : curve) {
@@ -396,7 +396,17 @@ void ScoreAutomationController::insertTime(const Fraction& tick, const Fraction&
         }
 
         curve = std::move(shifted);
+    };
+
+    AutomationCurveMap curves = m_automationData->curves();
+    for (auto& entry : curves) {
+        shiftCurve(entry.second);
     }
+
+    //! NOTE The tempo points not in use (see setAudioSyncEnabled()) move with the score too
+    AutomationCurve inactiveTempoCurve = m_automationData->inactiveTempoCurve();
+    shiftCurve(inactiveTempoCurve);
+    m_automationData->setInactiveTempoCurve(inactiveTempoCurve);
 
     // Kept as empty entries, not erased: replaceCurves() only clears a key when given it with an
     // empty curve - a key absent from the map below would leave stale data untouched instead
@@ -511,8 +521,14 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
     const StaffRange range(m_score, request.staffIdxFrom, request.staffIdxTo);
     const RepeatSegment* firstSeg = *repeatFromIt;
 
+    //! NOTE Audio sync on: the tempo curve is the sync points only (see applyAudioSyncTempos()), nothing is
+    //! generated from the score's tempo markings, fermatas or pauses
+    const bool audioSync = isAudioSyncEnabled();
+    const bool generateTempo = request.includeTempo && !audioSync;
+
     UpdateContext ctx;
     ctx.request = request;
+    ctx.request.includeTempo = generateTempo;
     ctx.tempoMultiplier = m_tempoTimeline.tempoMultiplier();
 
     // The first utick the rebuild will regenerate; everything before it is kept as is
@@ -526,7 +542,9 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
 
     if (request.includeTempo) {
         ctx.tempoCurve = &ctx.curves[TEMPO_KEY];
-        fillNoRepeatTempoCurve(*ctx.tempoCurve, ctx.noRepeatTempoCurve);
+        if (generateTempo) {
+            fillNoRepeatTempoCurve(*ctx.tempoCurve, ctx.noRepeatTempoCurve);
+        }
     } else {
         // Read-only access for e.g. compound dynamics,
         // which need the current tempo even when this update doesn't rebuild it
@@ -540,7 +558,7 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
         const RepeatSegment* seg = *it;
         const int tickOffset = seg->utick - seg->tick;
 
-        if (request.includeTempo && prevSegRawEndTick != -1 && seg->tick != prevSegRawEndTick) {
+        if (generateTempo && prevSegRawEndTick != -1 && seg->tick != prevSegRawEndTick) {
             // Playback jumped elsewhere in the score (repeat loop-back / volta switch) - this
             // pass's start needs its tempo reset from raw tick order; resolved after Step 2, once
             // any volta reset affecting the lookup has landed in noRepeatTempoCurve
@@ -559,7 +577,7 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
                 continue;
             }
 
-            if (request.includeTempo) {
+            if (generateTempo) {
                 collectPauses(measure, tickOffset, ctx.pauses, ctx.noRepeatPauses);
                 if (measure->isAnacrusis()) {
                     std::optional<utick_t> nextMeasureUTick;
@@ -607,10 +625,15 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
     // Step 5: measure repeats
     addMeasureRepeatPoints(ctx);
 
-    // Step 6: Mirror directly-authored points to repeats
-    mirrorAuthoredPointsToRepeats(ctx);
+    // Step 6: Mirror directly-authored points to repeats (not audio sync points: each pass has its own)
+    mirrorAuthoredPointsToRepeats(ctx, audioSync);
 
     if (request.includeTempo) {
+        if (audioSync) {
+            applyAudioSyncTempos(*ctx.tempoCurve);
+            fillNoRepeatTempoCurve(*ctx.tempoCurve, ctx.noRepeatTempoCurve);
+        }
+
         // TempoTimeline falls back to the default tempo when the curve has no points
         m_tempoTimeline.rebuild(*ctx.tempoCurve, ctx.pauses);
         m_flattenedTempoTimeline.rebuild(ctx.noRepeatTempoCurve, ctx.noRepeatPauses);
@@ -618,6 +641,372 @@ void ScoreAutomationController::update(const UpdateRequest& request, const Autom
 
     // Passed through as-is: replaceCurves() clears a key when given an empty curve for it
     m_automationData->replaceCurves(ctx.curves);
+}
+
+// ---- Audio sync ----
+
+bool ScoreAutomationController::isAudioSyncEnabled() const
+{
+    return m_automationData && m_automationData->isAudioSyncEnabled();
+}
+
+AutomationCurve ScoreAutomationController::inactiveTempoCurve() const
+{
+    return m_automationData ? m_automationData->inactiveTempoCurve() : AutomationCurve();
+}
+
+void ScoreAutomationController::setInactiveTempoCurve(const AutomationCurve& curve)
+{
+    if (!m_automationData) {
+        m_automationData = std::make_shared<AutomationData>();
+    }
+
+    //! NOTE Notified: out of a rebuild, nothing else tells
+    m_automationData->setInactiveTempoCurve(curve, /*notify*/ true);
+}
+
+void ScoreAutomationController::setAudioSyncEnabled(bool enabled)
+{
+    if (!m_automationData) {
+        m_automationData = std::make_shared<AutomationData>();
+    }
+
+    if (m_automationData->isAudioSyncEnabled() == enabled) {
+        return;
+    }
+
+    // The authored tempo points in use and the inactive ones swap (generated points are regenerated)
+    AutomationCurveMap curves = m_automationData->curves();
+    AutomationCurve authored;
+    for (const auto& [utick, point] : curves[TEMPO_KEY]) {
+        if (!point.generated) {
+            authored.emplace_hint(authored.end(), utick, point);
+        }
+    }
+
+    curves[TEMPO_KEY] = m_automationData->inactiveTempoCurve();
+    m_automationData->setInactiveTempoCurve(authored);
+    m_automationData->setAudioSyncEnabled(enabled);
+
+    fullRebuild(curves, /*includeTempo*/ true, /*includeDynamics*/ false);
+}
+
+double ScoreAutomationController::timelineSecsAtUtick(int utick) const
+{
+    return m_tempoTimeline.utick2utime(utick) * m_tempoTimeline.tempoMultiplier().val;
+}
+
+double ScoreAutomationController::audioSyncOffsetSecs() const
+{
+    if (!m_automationData) {
+        return 0.0;
+    }
+
+    const AutomationCurve& syncCurve = isAudioSyncEnabled() ? m_automationData->curve(TEMPO_KEY) : m_automationData->inactiveTempoCurve();
+    for (const auto& [utick, point] : syncCurve) {
+        if (point.audioSync) {
+            //! NOTE A sync point at the score's start, normally: its audio time
+            return point.audioSync->audioSecs - (isAudioSyncEnabled() ? timelineSecsAtUtick(utick) : 0.0);
+        }
+    }
+
+    return 0.0;
+}
+
+bool ScoreAutomationController::hasAudioSyncPoints() const
+{
+    if (!m_automationData) {
+        return false;
+    }
+
+    const AutomationCurve& syncCurve = isAudioSyncEnabled() ? m_automationData->curve(TEMPO_KEY) : m_automationData->inactiveTempoCurve();
+    return std::any_of(syncCurve.begin(), syncCurve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); });
+}
+
+bool ScoreAutomationController::hasAudioSyncMap() const
+{
+    if (!m_automationData) {
+        return false;
+    }
+
+    const AutomationCurve& syncCurve = isAudioSyncEnabled() ? m_automationData->curve(TEMPO_KEY) : m_automationData->inactiveTempoCurve();
+    return std::count_if(syncCurve.begin(), syncCurve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); }) > 1;
+}
+
+AutomationCurve ScoreAutomationController::inactiveSyncCurveShiftedBy(double deltaSecs) const
+{
+    AutomationCurve curve = m_automationData ? m_automationData->inactiveTempoCurve() : AutomationCurve();
+    const bool hasSyncPoints = std::any_of(curve.begin(), curve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); });
+
+    if (!hasSyncPoints) {
+        AutomationPoint point;
+        point.value.inValue = AutomationPoint::ArrivalFromPrevious {};
+        point.value.outValue = normalizeTempo(m_tempoTimeline.tempo(0));
+
+        AudioSyncInfo sync;
+        sync.audioSecs = deltaSecs;
+        sync.origin = AudioSyncInfo::Origin::Manual;
+        point.audioSync = sync;
+        curve.insert_or_assign(0, point);
+        return curve;
+    }
+
+    for (auto& [utick, point] : curve) {
+        if (point.audioSync) {
+            point.audioSync->audioSecs += deltaSecs;
+        }
+    }
+    return curve;
+}
+
+double ScoreAutomationController::audioSecsAtUtick(int utick) const
+{
+    return audioSyncOffsetSecs() + timelineSecsAtUtick(utick);
+}
+
+void ScoreAutomationController::applyAudioSyncTempos(AutomationCurve& tempoCurve) const
+{
+    TRACEFUNC;
+
+    if (tempoCurve.empty()) {
+        return;
+    }
+
+    // Points without an audio time (shouldn't happen, see prepareAudioSyncEdits()): their current one
+    double offset = 0.0;
+    for (const auto& [utick, point] : tempoCurve) {
+        if (point.audioSync) {
+            offset = point.audioSync->audioSecs - timelineSecsAtUtick(utick);
+            break;
+        }
+    }
+    for (auto& [utick, point] : tempoCurve) {
+        if (!point.audioSync) {
+            AudioSyncInfo sync;
+            sync.audioSecs = offset + timelineSecsAtUtick(utick);
+            sync.origin = AudioSyncInfo::Origin::FromTempo;
+            point.audioSync = sync;
+        }
+    }
+
+    //! NOTE Each segment is computed from the time actually reached at its start: when one can't reach its
+    //! sync point (out of order audio times, tempo limits), the next ones make up for it
+    std::optional<real_t> lastValue;
+    double reachedSecs = tempoCurve.begin()->second.audioSync->audioSecs;
+    for (auto it = tempoCurve.begin(); it != tempoCurve.end(); ++it) {
+        AutomationPoint& point = it->second;
+        point.generated = false;
+        //! TODO Ramps between sync points: tempo steps for now
+        point.value.inValue = AutomationPoint::ArrivalFromPrevious {};
+
+        const auto next = std::next(it);
+        if (next == tempoCurve.end()) {
+            // After the last sync point: the tempo of the segment before it
+            if (lastValue) {
+                point.value.outValue = *lastValue;
+            }
+            break;
+        }
+
+        const double quarters = static_cast<double>(next->first - it->first) / Constants::DIVISION;
+        if (quarters <= 0.0) {
+            continue;
+        }
+
+        const double secs = next->second.audioSync->audioSecs - reachedSecs;
+        const real_t value = secs > 0.0
+                             ? std::clamp(normalizeTempo(BeatsPerSecond(quarters / secs)), MIN_NORMALIZED_TEMPO, MAX_NORMALIZED_TEMPO)
+                             : MAX_NORMALIZED_TEMPO;
+        point.value.outValue = value;
+        lastValue = value;
+        reachedSecs += quarters / denormalizeTempo(value).val;
+    }
+}
+
+AutomationPointEdits ScoreAutomationController::audioSyncConversionEdits() const
+{
+    AutomationPointEdits edits;
+    if (!m_automationData || !m_score) {
+        return edits;
+    }
+
+    // At the score's start, then wherever the current tempo changes, at their current time: nothing moves
+    const AutomationCurve& curve = m_automationData->curve(TEMPO_KEY);
+    //! NOTE Where the reference (see inactiveSyncCurveShiftedBy()) puts the score's start, if it was set
+    const double offset = audioSyncOffsetSecs();
+
+    auto makePoint = [&](utick_t utick, real_t value) {
+        AutomationPoint point;
+        point.value.inValue = AutomationPoint::ArrivalFromPrevious {};
+        point.value.outValue = value;
+
+        AudioSyncInfo sync;
+        sync.audioSecs = offset + timelineSecsAtUtick(utick);
+        sync.origin = AudioSyncInfo::Origin::FromTempo;
+        point.audioSync = sync;
+        return point;
+    };
+
+    if (curve.find(0) == curve.end()) {
+        edits.push_back({ 0, AutomationPointEdit::SetPoint { makePoint(0, normalizeTempo(m_tempoTimeline.tempo(0))) } });
+    }
+
+    for (const auto& [utick, point] : curve) {
+        edits.push_back({ utick, AutomationPointEdit::SetPoint { makePoint(utick, point.value.outValue) } });
+    }
+
+    return edits;
+}
+
+void ScoreAutomationController::prepareAudioSyncEdits(const AutomationCurveKey& key, AutomationPointEdits& edits) const
+{
+    if (key.type != AutomationType::Tempo || !isAudioSyncEnabled() || !m_automationData) {
+        return;
+    }
+
+    //! NOTE Sync points are kept at least this far apart in the audio, so that their audio times stay in order
+    static constexpr double MIN_SYNC_GAP_SECS = 0.001;
+
+    const AutomationCurve& curve = m_automationData->curve(TEMPO_KEY);
+    const double offset = audioSyncOffsetSecs();
+
+    auto editedPoint = [](AutomationPointEdit& edit) -> AutomationPoint* {
+        if (auto* setPoint = std::get_if<AutomationPointEdit::SetPoint>(&edit.change)) {
+            return &setPoint->point;
+        }
+        if (auto* movePoint = std::get_if<AutomationPointEdit::MovePoint>(&edit.change)) {
+            return &movePoint->point;
+        }
+        return nullptr;
+    };
+
+    // The sync points around it, in the curve as it will be
+    auto prevSyncPoint = [](const AutomationCurve& c, AutomationCurve::const_iterator it) -> const AutomationPoint* {
+        while (it != c.begin()) {
+            --it;
+            if (it->second.audioSync) {
+                return &it->second;
+            }
+        }
+        return nullptr;
+    };
+    auto nextSyncPoint = [](AutomationCurve& c, AutomationCurve::iterator it) {
+        return std::find_if(std::next(it), c.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); });
+    };
+
+    // Step 1: audio times for the new points, the curve as it will be, the sync points given a new tempo only
+    AutomationCurve result = curve;
+    std::map<utick_t, size_t> editIdxByTick;
+    std::vector<utick_t> tempoEditTicks;
+    std::set<utick_t> timedTicks;
+
+    for (size_t i = 0; i < edits.size(); ++i) {
+        AutomationPointEdit& edit = edits[i];
+        AutomationPoint* point = editedPoint(edit);
+        if (!point) {
+            result.erase(edit.tick);
+            editIdxByTick.erase(edit.tick);
+            timedTicks.erase(edit.tick);
+            continue;
+        }
+
+        point->generated = false;
+        point->itemId.reset();
+
+        //! NOTE A MovePoint to its own tick is a value change (e.g. a vertical drag on the tempo curve)
+        const auto* movePoint = std::get_if<AutomationPointEdit::MovePoint>(&edit.change);
+        const bool inPlace = !movePoint || movePoint->from == edit.tick;
+        if (!inPlace) {
+            result.erase(movePoint->from);
+            editIdxByTick.erase(movePoint->from);
+            timedTicks.erase(movePoint->from);
+        }
+
+        if (!point->audioSync) {
+            // E.g. drawn on the tempo curve: where the tick currently falls, so nothing moves
+            AudioSyncInfo sync;
+            sync.audioSecs = offset + timelineSecsAtUtick(edit.tick);
+            sync.origin = AudioSyncInfo::Origin::Manual;
+            point->audioSync = sync;
+        } else {
+            const auto it = curve.find(edit.tick);
+            if (it == curve.end() || !it->second.audioSync || it->second.audioSync->audioSecs != point->audioSync->audioSecs) {
+                timedTicks.insert(edit.tick);
+            } else if (inPlace && it->second.value.outValue != point->value.outValue) {
+                tempoEditTicks.push_back(edit.tick);
+            }
+        }
+
+        result.insert_or_assign(edit.tick, *point);
+        editIdxByTick.insert_or_assign(edit.tick, i);
+    }
+
+    // Step 2: the edited sync points stay in order in the audio (e.g. moved past another one)
+    for (const auto& [tick, idx] : editIdxByTick) {
+        const auto it = result.find(tick);
+        IF_ASSERT_FAILED(it != result.end() && it->second.audioSync) {
+            continue;
+        }
+
+        const AutomationPoint* prev = prevSyncPoint(result, it);
+        const auto next = nextSyncPoint(result, it);
+        const double lo = prev ? prev->audioSync->audioSecs + MIN_SYNC_GAP_SECS : -std::numeric_limits<double>::infinity();
+        const double hi = next != result.end() ? next->second.audioSync->audioSecs - MIN_SYNC_GAP_SECS
+                          : std::numeric_limits<double>::infinity();
+        const double secs = it->second.audioSync->audioSecs;
+        const double ordered = lo <= hi ? std::clamp(secs, lo, hi) : (lo + hi) / 2.0;
+        if (ordered != secs) {
+            it->second.audioSync->audioSecs = ordered;
+            editedPoint(edits[idx])->audioSync->audioSecs = ordered;
+        }
+    }
+
+    // Step 3: a new tempo given to an existing sync point (e.g. on the tempo curve): its segment gets it, by moving
+    // the next sync point in the audio; in tick order, so that each step starts from the audio times already moved
+    std::sort(tempoEditTicks.begin(), tempoEditTicks.end());
+    tempoEditTicks.erase(std::unique(tempoEditTicks.begin(), tempoEditTicks.end()), tempoEditTicks.end());
+
+    auto setAudioSecs = [&](AutomationCurve::iterator it, double secs) {
+        it->second.audioSync->audioSecs = secs;
+        if (const auto idx = editIdxByTick.find(it->first); idx != editIdxByTick.end()) {
+            // Merged into the edit already made at this tick
+            editedPoint(edits[idx->second])->audioSync->audioSecs = secs;
+        } else {
+            editIdxByTick.emplace(it->first, edits.size());
+            edits.push_back({ it->first, AutomationPointEdit::SetPoint { it->second } });
+        }
+    };
+
+    for (const utick_t tick : tempoEditTicks) {
+        const auto it = result.find(tick);
+        if (it == result.end() || !it->second.audioSync) {
+            continue; // e.g. erased by a later edit
+        }
+
+        //! NOTE A locked next sync point stays, as one given its audio time by this edit: the segment's tempo
+        //! then results from the audio times
+        const auto next = nextSyncPoint(result, it);
+        if (next == result.end() || next->second.audioSync->locked || muse::contains(timedTicks, next->first)) {
+            continue;
+        }
+
+        const double bps = denormalizeTempo(it->second.value.outValue).val;
+        if (bps <= 0.0) {
+            continue;
+        }
+
+        const double startSecs = it->second.audioSync->audioSecs;
+        const auto afterNext = nextSyncPoint(result, next);
+        const double lo = startSecs + MIN_SYNC_GAP_SECS;
+        const double hi = afterNext != result.end() ? afterNext->second.audioSync->audioSecs - MIN_SYNC_GAP_SECS
+                          : std::numeric_limits<double>::infinity();
+        if (lo > hi) {
+            continue; // no room
+        }
+
+        const double secs = startSecs + static_cast<double>(next->first - tick) / Constants::DIVISION / bps;
+        setAudioSecs(next, std::clamp(secs, lo, hi));
+    }
 }
 
 void ScoreAutomationController::fillNoRepeatTempoCurve(const AutomationCurve& tempoCurve, AutomationCurve& noRepeatTempoCurve)
@@ -638,12 +1027,12 @@ void ScoreAutomationController::fillNoRepeatTempoCurve(const AutomationCurve& te
     }
 }
 
-void ScoreAutomationController::mirrorAuthoredPointsToRepeats(UpdateContext& ctx)
+void ScoreAutomationController::mirrorAuthoredPointsToRepeats(UpdateContext& ctx, bool skipTempo)
 {
     TRACEFUNC;
 
     for (auto& [key, curve] : ctx.curves) {
-        if (curve.empty()) {
+        if (curve.empty() || (skipTempo && key.type == AutomationType::Tempo)) {
             continue;
         }
 

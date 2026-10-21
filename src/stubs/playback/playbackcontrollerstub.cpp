@@ -274,6 +274,42 @@ muse::async::Channel<bool, bool> PlaybackControllerStub::videoMuteStateChanged()
     return channel;
 }
 
+muse::audio::TrackId PlaybackControllerStub::referenceAudioTrackId() const
+{
+    return muse::audio::INVALID_TRACK_ID;
+}
+
+mu::project::AudioOutputParams PlaybackControllerStub::referenceAudioOutputParams() const
+{
+    return {};
+}
+
+void PlaybackControllerStub::setReferenceAudioOutputParams(const mu::project::AudioOutputParams&)
+{
+}
+
+bool PlaybackControllerStub::isReferenceAudioForceMuted() const
+{
+    return false;
+}
+
+muse::async::Channel<bool, bool> PlaybackControllerStub::referenceAudioMuteStateChanged() const
+{
+    static muse::async::Channel<bool, bool> channel;
+    return channel;
+}
+
+mu::playback::IPlaybackController::ReferenceAudioDecodeState PlaybackControllerStub::referenceAudioDecodeState() const
+{
+    return {};
+}
+
+muse::async::Notification PlaybackControllerStub::referenceAudioDecodeStateChanged() const
+{
+    static muse::async::Notification notification;
+    return notification;
+}
+
 bool PlaybackControllerStub::isTrackForceMuted(const engraving::InstrumentTrackId&) const
 {
     return false;

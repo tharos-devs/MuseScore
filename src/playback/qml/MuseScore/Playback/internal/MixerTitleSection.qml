@@ -64,12 +64,13 @@ MixerPanelSection {
 
         //! NOTE: channels whose title color/selection can be customized
         readonly property bool isColorable: content.isInstrument || channelItem.type === MixerChannelItem.Aux
-        //! NOTE: the video's color menu applies to it alone (it can't be selected), see MixerPanelModel::setVideoColor()
-        readonly property bool isVideo: channelItem.type === MixerChannelItem.Video
+        //! NOTE: a sound track's (video, reference audio) color menu applies to it alone (it can't be selected), see
+        //! MixerPanelModel::setSoundTrackColor()
+        readonly property bool isSoundTrack: channelItem.isSoundTrack
 
         function resolveLabelColor() {
             //! NOTE: the metronome's color is chosen in the Track list (see TrackListModel::setMetronomeColor())
-            if ((content.isColorable || content.isVideo || channelItem.type === MixerChannelItem.Metronome) && channelItem.hasCustomColor) {
+            if ((content.isColorable || content.isSoundTrack || channelItem.type === MixerChannelItem.Metronome) && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 
@@ -77,6 +78,7 @@ MixerPanelSection {
             case MixerChannelItem.PrimaryInstrument:
             case MixerChannelItem.SecondaryInstrument:
             case MixerChannelItem.Video:
+            case MixerChannelItem.ReferenceAudio:
                 return ui.theme.accentColor
             case MixerChannelItem.Aux:
                 return "#63D47B"
@@ -99,7 +101,7 @@ MixerPanelSection {
         function buildContextMenuItems() {
             let items = []
 
-            if (content.isVideo) {
+            if (content.isSoundTrack) {
                 items.push({ id: "editColor", title: qsTrc("playback", "Edit color…") })
                 items.push({ id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: content.channelItem.hasCustomColor })
             }
@@ -430,7 +432,7 @@ MixerPanelSection {
                 //! NOTE: isColorable already covers Aux channels (see its definition above),
                 //! so this single guard also gates the FX/Group/rename/delete context menu -
                 //! no separate isAux-only branch is needed here
-                if (content.isVideo) {
+                if (content.isSoundTrack) {
                     if (mouse.button === Qt.RightButton) {
                         contextMenuLoader.items = content.buildContextMenuItems()
                         contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
@@ -469,8 +471,8 @@ MixerPanelSection {
             id: colorPickerModel
 
             onColorSelected: function(color) {
-                if (content.isVideo) {
-                    root.model.setVideoColor(color)
+                if (content.isSoundTrack) {
+                    root.model.setSoundTrackColor(content.channelItem, color)
                     return
                 }
                 root.model.setColorForSelectedChannels(color)
@@ -487,8 +489,8 @@ MixerPanelSection {
                 if (itemId === "editColor") {
                     colorPickerModel.selectColor(content.labelColor, false)
                 } else if (itemId === "resetColor") {
-                    if (content.isVideo) {
-                        root.model.resetVideoColor()
+                    if (content.isSoundTrack) {
+                        root.model.resetSoundTrackColor(content.channelItem)
                         return
                     }
                     root.model.resetColorForSelectedChannels()

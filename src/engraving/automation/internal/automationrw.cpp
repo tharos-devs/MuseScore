@@ -56,8 +56,23 @@ static constexpr const char* POINTS_KEY = "points";
 static constexpr const char* CONTROLLER_KEY = "controller";
 static constexpr const char* CONTROLLERS_KEY = "controllers";
 
+static constexpr const char* AUDIO_SYNC_KEY = "audioSync";
+static constexpr const char* AUDIO_SECS_KEY = "audioSecs";
+static constexpr const char* ORIGIN_KEY = "origin";
+static constexpr const char* LOCKED_KEY = "locked";
+static constexpr const char* CONFIDENCE_KEY = "confidence";
+static constexpr const char* ENABLED_KEY = "enabled";
+
 //! NOTE: not a curve - holds the score's custom MIDI CC list (see AutomationData::customMidiCcs)
 static const muse::String CUSTOM_MIDI_CC_LIST_TYPE = u"MidiCCList";
+//! NOTE: not a curve - whether audio sync is on (see AutomationData::isAudioSyncEnabled)
+static const muse::String AUDIO_SYNC_TYPE = u"AudioSync";
+
+static const std::unordered_map<AudioSyncInfo::Origin, std::string> AUDIO_SYNC_ORIGIN_TO_STRING {
+    { AudioSyncInfo::Origin::Manual, "manual" },
+    { AudioSyncInfo::Origin::Detected, "detected" },
+    { AudioSyncInfo::Origin::FromTempo, "fromTempo" },
+};
 
 static const std::string IN_VALUE_KIND_FROM_PREVIOUS = "FromPrevious";
 
@@ -128,6 +143,15 @@ static AutomationPoint readPoint(const muse::JsonObject& obj)
     if (obj.contains(GENERATED_KEY)) {
         point.generated = obj.value(GENERATED_KEY).toBool();
     }
+    if (obj.contains(AUDIO_SYNC_KEY)) {
+        const muse::JsonObject syncObj = obj.value(AUDIO_SYNC_KEY).toObject();
+        AudioSyncInfo sync;
+        sync.audioSecs = syncObj.value(AUDIO_SECS_KEY).toDouble();
+        sync.origin = muse::key(AUDIO_SYNC_ORIGIN_TO_STRING, syncObj.value(ORIGIN_KEY).toStdString(), AudioSyncInfo::Origin::Manual);
+        sync.locked = syncObj.contains(LOCKED_KEY) && syncObj.value(LOCKED_KEY).toBool();
+        sync.confidence = syncObj.contains(CONFIDENCE_KEY) ? static_cast<float>(syncObj.value(CONFIDENCE_KEY).toDouble()) : 1.f;
+        point.audioSync = sync;
+    }
 
     return point;
 }
@@ -180,6 +204,18 @@ static void writePoint(const AutomationPoint& point, muse::JsonObject& obj)
     if (point.generated) {
         obj[GENERATED_KEY] = point.generated;
     }
+    if (point.audioSync) {
+        muse::JsonObject syncObj;
+        syncObj[AUDIO_SECS_KEY] = point.audioSync->audioSecs;
+        syncObj[ORIGIN_KEY] = muse::value(AUDIO_SYNC_ORIGIN_TO_STRING, point.audioSync->origin);
+        if (point.audioSync->locked) {
+            syncObj[LOCKED_KEY] = true;
+        }
+        if (point.audioSync->confidence < 1.f) {
+            syncObj[CONFIDENCE_KEY] = static_cast<double>(point.audioSync->confidence);
+        }
+        obj[AUDIO_SYNC_KEY] = syncObj;
+    }
 }
 
 void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
@@ -199,6 +235,8 @@ void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
 
     AutomationCurveMap curves;
     std::vector<uint8_t> customMidiCcs;
+    bool audioSyncEnabled = false;
+    AutomationCurve inactiveTempoCurve;
 
     const muse::JsonArray rootArray = doc.rootArray();
     for (size_t i = 0; i < rootArray.size(); ++i) {
@@ -211,6 +249,16 @@ void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
                 if (controller >= 0 && controller <= MAX_MIDI_CC && !muse::contains(customMidiCcs, static_cast<uint8_t>(controller))) {
                     customMidiCcs.push_back(static_cast<uint8_t>(controller));
                 }
+            }
+            continue;
+        }
+
+        if (curveObj.value(TYPE_KEY).toString() == AUDIO_SYNC_TYPE) {
+            audioSyncEnabled = curveObj.value(ENABLED_KEY).toBool();
+            const muse::JsonArray pointArray = curveObj.value(POINTS_KEY).toArray();
+            for (size_t j = 0; j < pointArray.size(); ++j) {
+                const muse::JsonObject pointObj = pointArray.at(j).toObject();
+                inactiveTempoCurve.try_emplace(inactiveTempoCurve.end(), pointObj.value(TICK_KEY).toInt(), readPoint(pointObj));
             }
             continue;
         }
@@ -242,6 +290,8 @@ void AutomationRW::read(AutomationData& data, const muse::ByteArray& json)
 
     data.setCurves(curves);
     data.setCustomMidiCcs(customMidiCcs);
+    data.setAudioSyncEnabled(audioSyncEnabled);
+    data.setInactiveTempoCurve(inactiveTempoCurve);
 }
 
 muse::ByteArray AutomationRW::write(const AutomationData& data, bool writeGenerated)
@@ -284,6 +334,23 @@ muse::ByteArray AutomationRW::write(const AutomationData& data, bool writeGenera
         listObj[TYPE_KEY] = CUSTOM_MIDI_CC_LIST_TYPE;
         listObj[CONTROLLERS_KEY] = controllers;
         rootArray << listObj;
+    }
+
+    //! NOTE The Tempo curve above is the one in use (a version without audio sync plays it as is)
+    if (data.isAudioSyncEnabled() || !data.inactiveTempoCurve().empty()) {
+        muse::JsonArray pointArray;
+        for (const auto& [tick, point] : data.inactiveTempoCurve()) {
+            muse::JsonObject pointObj;
+            pointObj[TICK_KEY] = tick;
+            writePoint(point, pointObj);
+            pointArray << pointObj;
+        }
+
+        muse::JsonObject syncObj;
+        syncObj[TYPE_KEY] = AUDIO_SYNC_TYPE;
+        syncObj[ENABLED_KEY] = data.isAudioSyncEnabled();
+        syncObj[POINTS_KEY] = pointArray;
+        rootArray << syncObj;
     }
 
     return muse::JsonDocument(rootArray).toJson();

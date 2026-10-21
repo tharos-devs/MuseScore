@@ -66,8 +66,6 @@ Item {
 
     readonly property real naturalHeight: content.height + root.margin + root.bottomMargin
 
-    readonly property color trackColor: root.channelItem.hasCustomColor ? root.channelItem.color : ui.theme.accentColor
-
     component BlockTitle: StyledTextLabel {
         width: root.controlWidth
         horizontalAlignment: Text.AlignHCenter
@@ -90,29 +88,12 @@ Item {
             width: root.width - 2 * root.margin
             height: titleBar.height + root.margin + Math.max(leftColumn.height, rightColumn.height)
 
-            Rectangle {
+            ChannelNameBar {
                 id: titleBar
 
                 width: parent.width
-                height: 24
-                radius: 2
-
-                color: root.trackColor
+                channelItem: root.channelItem
                 opacity: root.channelSelected ? 1.0 : 0.5
-
-                StyledTextLabel {
-                    anchors.fill: parent
-                    anchors.leftMargin: 6
-                    anchors.rightMargin: 6
-
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    font: ui.theme.bodyBoldFont
-                    //! NOTE: readable on light and dark track colors alike
-                    color: (0.299 * root.trackColor.r + 0.587 * root.trackColor.g + 0.114 * root.trackColor.b) > 0.6
-                           ? "black" : "white"
-                    text: root.channelItem.title
-                }
             }
 
             //! NOTE: at the bottom, ending with the right column (Mute/Solo by its last aux send)
@@ -124,94 +105,21 @@ Item {
 
                 spacing: root.blockSpacing
 
-                Column {
+                ChannelMainControls {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 4
+                    channelItem: root.channelItem
+                    controlWidth: root.controlWidth
+                    spacing: root.blockSpacing
+                    navigationPanel: root.navigationPanel
+                    navigationRowStart: root.gainRow
+                    navigationName: "ChannelStrip"
 
-                    BlockTitle {
-                        text: qsTrc("playback", "Gain")
+                    onMuteToggled: function(muted) {
+                        root.muteToggled(muted)
                     }
 
-                    ChannelKnobControl {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        channelItem: root.channelItem
-                        isGain: true
-                        navigationPanel: root.navigationPanel
-                        navigationRowStart: root.gainRow
-                        accessibleName: root.channelItem.title + " " + qsTrc("playback", "Gain")
-                    }
-                }
-
-                Column {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 4
-
-                    BlockTitle {
-                        text: qsTrc("playback", "Pan")
-                    }
-
-                    ChannelKnobControl {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        channelItem: root.channelItem
-                        navigationPanel: root.navigationPanel
-                        navigationRowStart: root.panRow
-                        accessibleName: root.channelItem.title + " " + qsTrc("playback", "Pan")
-                    }
-                }
-
-                Column {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 6
-
-                    BlockTitle {
-                        text: qsTrc("playback", "Volume")
-                    }
-
-                    ChannelVolumeField {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        channelItem: root.channelItem
-                        navigationPanel: root.navigationPanel
-                        navigationRowStart: root.volumeRow
-                        accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
-                    }
-
-                    ChannelFader {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        channelItem: root.channelItem
-                        navigationPanel: root.navigationPanel
-                        navigationRowStart: root.faderRow
-                        accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
-                    }
-
-                    //! NOTE: closer to the fader: its meters' scale ends below its handle
-                    Item {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: muteSoloButtons.width
-                        height: muteSoloButtons.height - 8
-
-                        ChannelMuteSoloButtons {
-                            id: muteSoloButtons
-
-                            y: -8
-                            spacing: 6
-
-                            channelItem: root.channelItem
-                            navigationPanel: root.navigationPanel
-                            navigationName: "ChannelStrip"
-                            muteNavigationRow: root.muteRow
-                            muteNavigationColumn: 0
-                            soloNavigationRow: root.muteRow + 1
-                            soloNavigationColumn: 0
-                            accessibleName: root.channelItem.title
-
-                            onMuteToggled: function(muted) {
-                                root.muteToggled(muted)
-                            }
-
-                            onSoloToggled: function(solo) {
-                                root.soloToggled(solo)
-                            }
-                        }
+                    onSoloToggled: function(solo) {
+                        root.soloToggled(solo)
                     }
                 }
             }
@@ -250,6 +158,8 @@ Item {
                         channelItem: root.channelItem
                         navigationPanel: root.navigationPanel
                         navigationRowStart: root.eqRow
+                        //! NOTE: in the column of the strip's other controls (see ChannelMainControls)
+                        navigationColumn: -1
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "EQ")
                     }
                 }

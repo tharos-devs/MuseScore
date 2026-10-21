@@ -187,7 +187,7 @@ Item {
             headerPositioning: ListView.OverlayHeader
             header: Rectangle {
                 width: ListView.view.width
-                height: 32 + metronomeRow.height + videoRow.height
+                height: 32 + metronomeRow.height + videoRow.height + referenceAudioRow.height
                 z: 2
 
                 color: ui.theme.backgroundSecondaryColor
@@ -429,140 +429,71 @@ Item {
                     }
                 }
 
-                //! NOTE: the video's row: its buttons in the parts' columns (Load video in the sound one)
-                Rectangle {
+                TrackListSoundTrackRow {
                     id: videoRow
-
-                    readonly property MixerChannelItem channelItem: trackListModel.videoChannelItem
-                    readonly property color trackColor: channelItem && channelItem.hasCustomColor ? channelItem.color : ui.theme.accentColor
 
                     anchors.top: metronomeRow.bottom
                     width: parent.width
-                    height: visible ? 28 : 0
-                    visible: Boolean(channelItem) && trackListModel.videoVisible
 
-                    color: ui.theme.backgroundPrimaryColor
+                    channelItem: trackListModel.videoChannelItem
+                    hasSource: trackListModel.hasVideo
+                    categoryVisible: trackListModel.videoVisible
 
-                    ChannelColorStrip {
-                        id: videoColorStrip
+                    title: qsTrc("playback", "Video")
+                    noSourceTitle: qsTrc("playback", "No video")
+                    loadTitle: qsTrc("playback", "Load video")
 
-                        anchors.left: parent.left
-                        anchors.leftMargin: 4
-                        anchors.verticalCenter: parent.verticalCenter
+                    hasArticulationMapColumn: trackListModel.hasArticulationMapColumn
+                    hasEditorColumn: trackListModel.hasEditorColumn
 
-                        trackColor: videoRow.trackColor
-                        resetEnabled: videoRow.channelItem ? videoRow.channelItem.hasCustomColor : false
+                    navigationPanel: navPanel
+                    navigationName: "Video"
+                    navigationRow: 2
 
-                        onColorSelected: function(color) {
-                            trackListModel.setVideoColor(color)
-                        }
-
-                        onResetRequested: {
-                            trackListModel.resetVideoColor()
-                        }
+                    onColorSelected: function(color) {
+                        trackListModel.setSoundTrackColor(channelItem, color)
                     }
 
-                    ChannelMeters {
-                        id: videoMeter
-
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        meterLength: 22
-                        meterThickness: 3
-                        overloadLength: 2
-                        gap: 1
-
-                        leftChannelPressure: videoRow.channelItem ? videoRow.channelItem.leftChannelPressure : -60
-                        rightChannelPressure: videoRow.channelItem ? videoRow.channelItem.rightChannelPressure : -60
+                    onResetColorRequested: {
+                        trackListModel.resetSoundTrackColor(channelItem)
                     }
 
-                    StyledTextLabel {
-                        anchors.left: videoColorStrip.right
-                        anchors.leftMargin: 6
-                        anchors.right: videoButtonsRow.left
-                        anchors.rightMargin: 6
-                        anchors.verticalCenter: parent.verticalCenter
+                    onLoadRequested: {
+                        trackListModel.chooseVideoFile()
+                    }
+                }
 
-                        horizontalAlignment: Text.AlignLeft
-                        text: trackListModel.hasVideo ? qsTrc("playback", "Video") : qsTrc("playback", "No video")
-                        opacity: trackListModel.hasVideo ? 1 : 0.5
+                TrackListSoundTrackRow {
+                    id: referenceAudioRow
+
+                    anchors.top: videoRow.bottom
+                    width: parent.width
+
+                    channelItem: trackListModel.referenceAudioChannelItem
+                    hasSource: trackListModel.hasReferenceAudio
+                    categoryVisible: trackListModel.referenceAudioVisible
+
+                    title: qsTrc("playback", "Audio")
+                    noSourceTitle: qsTrc("playback", "No reference audio")
+                    loadTitle: qsTrc("playback", "Load reference audio")
+
+                    hasArticulationMapColumn: trackListModel.hasArticulationMapColumn
+                    hasEditorColumn: trackListModel.hasEditorColumn
+
+                    navigationPanel: navPanel
+                    navigationName: "ReferenceAudio"
+                    navigationRow: 3
+
+                    onColorSelected: function(color) {
+                        trackListModel.setSoundTrackColor(channelItem, color)
                     }
 
-                    Row {
-                        id: videoButtonsRow
-
-                        anchors.right: videoMeter.left
-                        anchors.rightMargin: 6
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        spacing: 4
-
-                        FlatButton {
-                            width: 20
-                            height: 20
-
-                            transparent: true
-                            icon: IconCode.OPEN_FILE
-
-                            navigation.panel: navPanel
-                            navigation.name: "LoadVideoButton"
-                            navigation.row: 2
-                            navigation.column: 0
-                            navigation.accessible.name: qsTrc("playback", "Load video")
-
-                            onClicked: {
-                                trackListModel.chooseVideoFile()
-                            }
-                        }
-
-                        ChannelMuteSoloButtons {
-                            spacing: 4
-
-                            enabled: trackListModel.hasVideo
-                            channelItem: videoRow.channelItem
-
-                            navigationPanel: navPanel
-                            navigationName: "VideoRow"
-                            muteNavigationRow: 2
-                            muteNavigationColumn: 1
-                            soloNavigationRow: 2
-                            soloNavigationColumn: 2
-                            accessibleName: qsTrc("playback", "Video")
-
-                            onMuteToggled: function(muted) {
-                                videoRow.channelItem.muted = muted
-                            }
-
-                            onSoloToggled: function(solo) {
-                                videoRow.channelItem.solo = solo
-                            }
-                        }
-
-                        //! NOTE: the parts' articulation map and editor columns
-                        Item {
-                            width: 20
-                            height: 20
-                            visible: trackListModel.hasArticulationMapColumn
-                        }
-
-                        Item {
-                            width: 20
-                            height: 20
-                            visible: trackListModel.hasEditorColumn
-                        }
-
-                        //! NOTE: the rows' bus label room (see the rows' own)
-                        Item {
-                            width: 20
-                            height: 20
-                            visible: !trackListModel.hasArticulationMapColumn && !trackListModel.hasEditorColumn
-                        }
+                    onResetColorRequested: {
+                        trackListModel.resetSoundTrackColor(channelItem)
                     }
 
-                    SeparatorLine {
-                        anchors.bottom: parent.bottom
+                    onLoadRequested: {
+                        trackListModel.chooseReferenceAudioFile()
                     }
                 }
             }
@@ -744,7 +675,7 @@ Item {
 
                                 navigation.panel: navPanel
                                 navigation.name: "FolderMuteButton" + rowItem.index
-                                navigation.row: rowItem.index + 3
+                                navigation.row: rowItem.index + 4
                                 navigation.column: 1
                                 navigation.accessible.name: rowItem.folderName + " " + qsTrc("playback", "Mute")
 
@@ -760,7 +691,7 @@ Item {
 
                                 navigation.panel: navPanel
                                 navigation.name: "FolderSoloButton" + rowItem.index
-                                navigation.row: rowItem.index + 3
+                                navigation.row: rowItem.index + 4
                                 navigation.column: 2
                                 navigation.accessible.name: rowItem.folderName + " " + qsTrc("playback", "Solo")
 
@@ -988,7 +919,7 @@ Item {
 
                                 navigation.panel: navPanel
                                 navigation.name: "SoundButton" + rowItem.index
-                                navigation.row: rowItem.index + 3
+                                navigation.row: rowItem.index + 4
                                 navigation.column: 0
                                 navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Sound")
 
@@ -1018,9 +949,9 @@ Item {
 
                                 navigationPanel: navPanel
                                 navigationName: "Row" + rowItem.index
-                                muteNavigationRow: rowItem.index + 3
+                                muteNavigationRow: rowItem.index + 4
                                 muteNavigationColumn: 1
-                                soloNavigationRow: rowItem.index + 3
+                                soloNavigationRow: rowItem.index + 4
                                 soloNavigationColumn: 2
                                 accessibleName: rowItem.channelItem.title
 
@@ -1063,7 +994,7 @@ Item {
 
                                     navigation.panel: navPanel
                                     navigation.name: "ArticulationMapButton" + rowItem.index
-                                    navigation.row: rowItem.index + 3
+                                    navigation.row: rowItem.index + 4
                                     navigation.column: 3
                                     navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Edit articulation map")
 
@@ -1116,7 +1047,7 @@ Item {
 
                                     navigation.panel: navPanel
                                     navigation.name: "EditorButton" + rowItem.index
-                                    navigation.row: rowItem.index + 3
+                                    navigation.row: rowItem.index + 4
                                     navigation.column: 4
                                     navigation.accessible.name: rowItem.channelItem.title + " " + qsTrc("playback", "Open instrument window")
 

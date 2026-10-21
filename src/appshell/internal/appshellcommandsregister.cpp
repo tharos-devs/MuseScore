@@ -219,6 +219,13 @@ static const std::vector<CommandInfo> s_commandInfos = {
         Decoration(rcommand::Checkable::Yes)
         ),
     CommandInfo(
+        DOCK_TOGGLE_AUDIO_SYNC_PANEL_COMMAND,
+        TranslatableString("action", "Audio &sync"),
+        TranslatableString("action", "Show/hide the audio sync window"),
+        InputSchema(),
+        Decoration(IconCode::Code::WAVEFORM, rcommand::Checkable::Yes)
+        ),
+    CommandInfo(
         DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND,
         TranslatableString("action", "Secondary &window"),
         TranslatableString("action", "Show/hide secondary window"),

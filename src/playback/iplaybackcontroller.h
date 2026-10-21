@@ -26,6 +26,7 @@
 #include "async/notification.h"
 #include "async/promise.h"
 #include "audio/common/audiotypes.h"
+#include "global/io/path.h"
 #include "global/progress.h"
 #include "modularity/imoduleinterface.h"
 
@@ -142,6 +143,28 @@ public:
     //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
     virtual muse::async::Channel<bool, bool> videoMuteStateChanged() const = 0;
 
+    //! NOTE The Audio sync window's reference audio: a sound track like the video's (see videoTrackId()),
+    //! existing as long as a reference audio file is set. Its solo/mute are stored in ReferenceAudioSettings
+    virtual muse::audio::TrackId referenceAudioTrackId() const = 0;
+    virtual project::AudioOutputParams referenceAudioOutputParams() const = 0;
+    virtual void setReferenceAudioOutputParams(const project::AudioOutputParams& params) = 0;
+    virtual bool isReferenceAudioForceMuted() const = 0;
+    //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
+    virtual muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const = 0;
+
+    struct ReferenceAudioDecodeState {
+        bool decoding = false;
+        double progress = 0.0; // in [0; 1]
+        //! NOTE The decoded 16-bit stereo PCM WAV file; empty while decoding or if decoding failed
+        muse::io::path_t wavPath;
+        bool failed = false;
+        //! NOTE Its transposed copy being made (see ReferenceAudioSettings::pitchSemitones)
+        bool pitchShifting = false;
+        double pitchShiftProgress = 0.0;
+    };
+    virtual ReferenceAudioDecodeState referenceAudioDecodeState() const = 0;
+    virtual muse::async::Notification referenceAudioDecodeStateChanged() const = 0;
+
     //! NOTE: whether this track is CURRENTLY muted only because some other track/group bus
     //! is soloed (as opposed to the user's own manual mute, see trackSoloMuteState() above) -
     //! reflects the last value actually computed/sent by updateSoloMuteStates(), so it's only
@@ -149,7 +172,7 @@ public:
     virtual bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const = 0;
     //! NOTE: same as isTrackForceMuted() above, but for an Aux/Group bus's own channel
     virtual bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const = 0;
-    //! NOTE: a Group bus's Solo set by the user also goes to the channels routed to it (tracks, the video, and the
+    //! NOTE: a Group bus's Solo set by the user also goes to the channels routed to it (tracks, the video, the reference audio, and the
     //! Group buses feeding it with their own channels): soloing skips a muted one, un-soloing applies to all
     virtual void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) = 0;
 

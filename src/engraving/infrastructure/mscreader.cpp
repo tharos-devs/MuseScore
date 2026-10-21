@@ -247,6 +247,15 @@ ByteArray MscReader::readVideoSettingsJsonFile() const
     return fileData(u"videosettings.json");
 }
 
+ByteArray MscReader::readAudioSyncJsonFile() const
+{
+    if (!fileExists(u"audiosync.json")) {
+        return ByteArray();
+    }
+
+    return fileData(u"audiosync.json");
+}
+
 ByteArray MscReader::readViewSettingsJsonFile(const muse::io::path_t& pathPrefix) const
 {
     return fileData(pathPrefix.toString() + u"viewsettings.json");

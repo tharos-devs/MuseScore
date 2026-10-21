@@ -61,6 +61,17 @@ public:
     const std::vector<uint8_t>& customMidiCcs() const;
     void setCustomMidiCcs(const std::vector<uint8_t>& controllers);
 
+    //! NOTE Audio sync on: the tempo comes from the audio sync points only (see AudioSyncInfo), the score's
+    //! tempo markings, fermatas and pauses being ignored for playback
+    bool isAudioSyncEnabled() const;
+    void setAudioSyncEnabled(bool enabled);
+
+    //! NOTE The authored tempo points not in use: the audio sync points while audio sync is off, the other tempo
+    //! points while it's on (turning it on or off swaps them with the Tempo curve's, see ScoreAutomationController)
+    const AutomationCurve& inactiveTempoCurve() const;
+    //! NOTE notify: as a change of the Tempo curve (its listeners, e.g. the reference audio's offset)
+    void setInactiveTempoCurve(const AutomationCurve& curve, bool notify = false);
+
     std::string dump() const;
 
 private:
@@ -68,6 +79,8 @@ private:
 
     AutomationCurveMap m_curveMap;
     std::vector<uint8_t> m_customMidiCcs;
+    bool m_audioSyncEnabled = false;
+    AutomationCurve m_inactiveTempoCurve;
     muse::async::Channel<AutomationChanges> m_changesChannel;
 };
 

@@ -33,6 +33,12 @@ qt_add_qml_module(playback_qml
     SOURCES
         abstractaudioresourceitem.cpp
         abstractaudioresourceitem.h
+        audiosync/audiosyncchannelmodel.cpp
+        audiosync/audiosyncchannelmodel.h
+        audiosync/audiosyncview.cpp
+        audiosync/audiosyncview.h
+        audiosync/referenceaudiopeaks.cpp
+        audiosync/referenceaudiopeaks.h
         auxbuseditor.cpp
         auxbuseditor.h
         auxsenditem.cpp
@@ -47,6 +53,8 @@ qt_add_qml_module(playback_qml
     channeleditundo.h
         channelselection.cpp
         channelselection.h
+    soundtrackchannel.cpp
+    soundtrackchannel.h
         globalmutesolotoggle.cpp
         globalmutesolotoggle.h
         inputresourceitem.cpp
@@ -93,6 +101,10 @@ qt_add_qml_module(playback_qml
     QML_FILES
         MidiInputActivityIndicator.qml
         internal/AudioProcessingProgressBar.qml
+        internal/AudioSyncDetectionPopup.qml
+        internal/ChannelMainControls.qml
+        internal/ChannelNameBar.qml
+        internal/ToolBarValueSlider.qml
         internal/AudioResourceControl.qml
         internal/AudioResourceMenuLoader.qml
         internal/AuxSendControl.qml
@@ -125,16 +137,19 @@ qt_add_qml_module(playback_qml
         internal/MixerTitleSection.qml
         internal/MixerVolumeSection.qml
         internal/PlaybackSpeedPopup.qml
+        internal/RecentFilesLoadButton.qml
         internal/PlaybackSpeedSlider.qml
         internal/SlotReorderState.qml
         internal/PlaybackToolBarActions.qml
         internal/SoundFlag/MuseSoundsParams.qml
         internal/SoundFlag/ParamsGridView.qml
         internal/TrackListChannelStrip.qml
+    internal/TrackListSoundTrackRow.qml
         internal/VideoHitPointRow.qml
         internal/VideoHitPointsPanel.qml
         internal/VolumePressureMeter.qml
         internal/VolumeSlider.qml
+        AudioSyncPanel.qml
         MixerPanel.qml
         NotationRegionsBeingProcessedView.qml
         OnlineSoundsStatusView.qml

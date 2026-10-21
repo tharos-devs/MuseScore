@@ -40,6 +40,28 @@
 #include <vector>
 
 namespace mu::engraving {
+//! NOTE A tempo point that is also an audio sync point (Audio sync window): where it falls in the reference audio.
+//! While audio sync is on, the audio times are what counts: the tempo between two sync points is derived from
+//! their musical distance and their audio times (see ScoreAutomationController)
+struct AudioSyncInfo {
+    enum class Origin : unsigned char {
+        Manual = 0,     // placed or moved by the user
+        Detected,       // proposed by beat detection
+        FromTempo,      // converted from the score's tempo when audio sync was turned on
+    };
+
+    double audioSecs = 0.0;
+    Origin origin = Origin::Manual;
+    bool locked = false;
+    //! NOTE For detected points, in [0; 1]
+    float confidence = 1.f;
+
+    bool operator==(const AudioSyncInfo& other) const
+    {
+        return audioSecs == other.audioSecs && origin == other.origin && locked == other.locked && confidence == other.confidence;
+    }
+};
+
 struct AutomationPoint {
     using Ease = muse::mpe::AutomationPoint::Ease;
     using ArrivalFromPrevious = muse::mpe::AutomationPoint::ArrivalFromPrevious;
@@ -49,10 +71,11 @@ struct AutomationPoint {
     muse::mpe::AutomationPoint value;
     std::optional<EID> itemId; // valid if it was created from an engraving item (e.g., Dynamic)
     bool generated = false; // true if the point was generated automatically and hasn't been edited by the user
+    std::optional<AudioSyncInfo> audioSync; // Tempo only: set on audio sync points
 
     bool operator==(const AutomationPoint& p) const
     {
-        return value == p.value && itemId == p.itemId && generated == p.generated;
+        return value == p.value && itemId == p.itemId && generated == p.generated && audioSync == p.audioSync;
     }
 };
 

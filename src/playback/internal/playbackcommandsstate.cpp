@@ -24,6 +24,10 @@
 
 #include "notation/inotation.h"
 #include "notation/inotationinteraction.h"
+#include "notation/imasternotation.h"
+#include "notation/inotationautomation.h"
+#include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
 
 #include "../playbackcommands.h"
 
@@ -43,6 +47,22 @@ void PlaybackCommandsState::init()
 {
     globalContext()->currentProjectChanged().onNotify(this, [this]() {
         updateCommandStates();
+
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        if (project && project->audioSyncSettings()) {
+            project->audioSyncSettings()->settingsChanged().onNotify(this, [this]() {
+                updateCommandStates({ REMOVE_REFERENCE_AUDIO_COMMAND, AUDIO_SYNC_ADD_POINT_COMMAND });
+            }, Asyncable::Mode::SetReplace);
+        }
+
+        //! NOTE Turned on/off (also by undo/redo): the Tempo curve changes
+        notation::INotationAutomationPtr automation = project && project->masterNotation()
+                                                      ? project->masterNotation()->automation() : nullptr;
+        if (automation && automation->automationData()) {
+            automation->automationData()->changed().onReceive(this, [this](const engraving::AutomationChanges&) {
+                updateCommandStates({ AUDIO_SYNC_TOGGLE_COMMAND, AUDIO_SYNC_ADD_POINT_COMMAND });
+            }, Asyncable::Mode::SetReplace);
+        }
     });
 
     globalContext()->currentNotationChanged().onNotify(this, [this]() {
@@ -180,6 +200,24 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
 {
     if (!isProjectOpened()) {
         return CommandState(false, false);
+    }
+
+    if (command == LOAD_REFERENCE_AUDIO_COMMAND) {
+        return CommandState(true, false);
+    } else if (command == AUDIO_SYNC_TOGGLE_COMMAND) {
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        notation::INotationAutomationPtr automation = project && project->masterNotation()
+                                                      ? project->masterNotation()->automation() : nullptr;
+        return CommandState(automation != nullptr, automation && automation->isAudioSyncEnabled());
+    } else if (command == AUDIO_SYNC_ADD_POINT_COMMAND) {
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        notation::INotationAutomationPtr automation = project && project->masterNotation()
+                                                      ? project->masterNotation()->automation() : nullptr;
+        const bool hasAudio = project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid();
+        return CommandState(hasAudio && automation && automation->isAudioSyncEnabled(), false);
+    } else if (command == REMOVE_REFERENCE_AUDIO_COMMAND) {
+        project::INotationProjectPtr project = globalContext()->currentProject();
+        return CommandState(project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid(), false);
     }
 
     if (!playbackController()->isPlayAllowed()) {

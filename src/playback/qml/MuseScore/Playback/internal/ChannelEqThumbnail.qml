@@ -35,8 +35,9 @@ Rectangle {
 
     required property MixerChannelItem channelItem
 
-    property NavigationPanel navigationPanel: channelItem.panel
+    property NavigationPanel navigationPanel: channelItem?.panel ?? null
     property int navigationRowStart: 0
+    property int navigationColumn: 0
     property string accessibleName: ""
 
     signal navigateControlIndexChanged(var index)
@@ -68,7 +69,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 1
 
-        eq: root.channelItem.eq
+        eq: root.channelItem?.eq ?? null
         editable: false
 
         backgroundColor: ui.theme.textFieldColor
@@ -102,7 +103,7 @@ Rectangle {
         enabled: root.visible
         panel: root.navigationPanel
         row: root.navigationRowStart
-        column: 0
+        column: root.navigationColumn
 
         accessible.role: MUAccessible.Button
         accessible.name: root.accessibleName

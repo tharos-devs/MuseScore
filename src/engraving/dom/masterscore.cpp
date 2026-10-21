@@ -154,11 +154,74 @@ void MasterScore::editAutomationPoints(const AutomationCurveKey& key, Automation
         return;
     }
 
+    //! NOTE Before the undoable command is made: what it records must include what this adds
+    m_automationController->prepareAudioSyncEdits(key, edits);
+
     if (undoable) {
         undo(new EditAutomationPoints(this, m_automationController, key, edits));
     } else {
         m_automationController->editPoints(key, edits);
     }
+}
+
+bool MasterScore::isAudioSyncEnabled() const
+{
+    return m_automationController->isAudioSyncEnabled();
+}
+
+void MasterScore::setAudioSyncEnabled(bool enabled)
+{
+    if (m_automationController->isAudioSyncEnabled() == enabled) {
+        return;
+    }
+
+    //! NOTE The conversion is computed from the tempo as it is before audio sync is on
+    //! NOTE The first time only (a reference alone doesn't count, see moveAudioSyncPoints()): afterwards, the sync
+    //! points are kept while audio sync is off
+    AutomationPointEdits conversion = enabled && !m_automationController->hasAudioSyncMap()
+                                      ? m_automationController->audioSyncConversionEdits() : AutomationPointEdits();
+
+    undo(new EditAudioSyncEnabled(this, m_automationController, enabled));
+
+    if (!conversion.empty()) {
+        undo(new EditAutomationPoints(this, m_automationController, TEMPO_KEY, conversion));
+    }
+}
+
+void MasterScore::moveAudioSyncPoints(double deltaSecs)
+{
+    if (m_automationController->isAudioSyncEnabled() || deltaSecs == 0.0) {
+        return;
+    }
+
+    undo(new EditInactiveTempoCurve(this, m_automationController, m_automationController->inactiveSyncCurveShiftedBy(deltaSecs)));
+}
+
+bool MasterScore::hasAudioSync() const
+{
+    return m_automationController->isAudioSyncEnabled() || m_automationController->hasAudioSyncPoints();
+}
+
+void MasterScore::clearAudioSync()
+{
+    if (m_automationController->isAudioSyncEnabled()) {
+        undo(new EditAudioSyncEnabled(this, m_automationController, false));
+    }
+
+    //! NOTE Off, the sync points are the inactive ones
+    if (!m_automationController->inactiveTempoCurve().empty()) {
+        undo(new EditInactiveTempoCurve(this, m_automationController, AutomationCurve()));
+    }
+}
+
+double MasterScore::audioSyncOffsetSecs() const
+{
+    return m_automationController->audioSyncOffsetSecs();
+}
+
+double MasterScore::audioSecsAtUtick(int utick) const
+{
+    return m_automationController->audioSecsAtUtick(utick);
 }
 
 void MasterScore::setCustomMidiCcs(const std::vector<uint8_t>& controllers)

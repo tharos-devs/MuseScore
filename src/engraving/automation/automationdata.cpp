@@ -327,6 +327,41 @@ void AutomationData::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
     m_customMidiCcs = controllers;
 }
 
+bool AutomationData::isAudioSyncEnabled() const
+{
+    return m_audioSyncEnabled;
+}
+
+void AutomationData::setAudioSyncEnabled(bool enabled)
+{
+    m_audioSyncEnabled = enabled;
+}
+
+const AutomationCurve& AutomationData::inactiveTempoCurve() const
+{
+    return m_inactiveTempoCurve;
+}
+
+void AutomationData::setInactiveTempoCurve(const AutomationCurve& curve, bool notify)
+{
+    //! NOTE Over both the old and new points (e.g. the reference audio's offset comes from the sync points)
+    utick_t tickTo = 0;
+    if (!m_inactiveTempoCurve.empty()) {
+        tickTo = std::max(tickTo, m_inactiveTempoCurve.rbegin()->first);
+    }
+    if (!curve.empty()) {
+        tickTo = std::max(tickTo, curve.rbegin()->first);
+    }
+
+    m_inactiveTempoCurve = curve;
+
+    if (notify) {
+        AutomationChanges changes;
+        changes.extend(TEMPO_KEY, 0, tickTo);
+        notifyChanged(changes);
+    }
+}
+
 std::string AutomationData::dump() const
 {
     auto typeName = [](AutomationType type) -> const char* {

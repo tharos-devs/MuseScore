@@ -38,22 +38,29 @@ Row {
     //! rebuilds what the instrument plays
     property bool isDelay: false
     property bool compact: false
+    //! NOTE: the knob's size (KnobControl's default)
+    property real knobRadius: 16
 
-    property NavigationPanel navigationPanel: channelItem.panel
+    property NavigationPanel navigationPanel: channelItem?.panel ?? null
     property int navigationRowStart: 0
     property string accessibleName: ""
 
     signal navigateControlIndexChanged(var index)
 
-    readonly property int value: root.isDelay ? (prv.delayDragging ? prv.draggedDelay : root.channelItem.delayMs)
-                                              : root.isGain ? root.channelItem.gain : root.channelItem.balance
-    readonly property int minValue: root.isDelay ? root.channelItem.delayMsMin
-                                                 : root.isGain ? root.channelItem.gainMin : root.channelItem.balanceMin
-    readonly property int maxValue: root.isDelay ? root.channelItem.delayMsMax
-                                                 : root.isGain ? root.channelItem.gainMax : root.channelItem.balanceMax
+    //! NOTE: channelItem may be null for a moment (e.g. the Audio sync window's reference audio being removed)
+    readonly property int value: !root.channelItem ? 0
+                                 : root.isDelay ? (prv.delayDragging ? prv.draggedDelay : root.channelItem.delayMs)
+                                 : root.isGain ? root.channelItem.gain : root.channelItem.balance
+    readonly property int minValue: !root.channelItem ? 0
+                                    : root.isDelay ? root.channelItem.delayMsMin
+                                    : root.isGain ? root.channelItem.gainMin : root.channelItem.balanceMin
+    readonly property int maxValue: !root.channelItem ? 0
+                                    : root.isDelay ? root.channelItem.delayMsMax
+                                    : root.isGain ? root.channelItem.gainMax : root.channelItem.balanceMax
     //! NOTE: the pan curve drawn on the score sets it then
-    readonly property bool editable: root.isDelay ? root.channelItem.delayAvailable
-                                                  : root.isGain || !root.channelItem.hasBalanceAutomation
+    readonly property bool editable: !root.channelItem ? false
+                                     : root.isDelay ? root.channelItem.delayAvailable
+                                     : root.isGain || !root.channelItem.hasBalanceAutomation
     readonly property string unit: root.isDelay ? qsTrc("global", "ms") : root.isGain ? "dB" : ""
 
     QtObject {
@@ -105,12 +112,13 @@ Row {
     KnobControl {
         id: knob
 
+        radius: root.knobRadius
         from: root.minValue
         to: root.maxValue
         value: root.value
         stepSize: 1
         isBalanceKnob: true
-        accentColor: root.channelItem.hasCustomColor ? root.channelItem.color : ui.theme.accentColor
+        accentColor: root.channelItem && root.channelItem.hasCustomColor ? root.channelItem.color : ui.theme.accentColor
         enabled: root.editable
         opacity: enabled ? 1.0 : ui.theme.itemOpacityDisabled
 

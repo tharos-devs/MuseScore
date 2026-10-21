@@ -38,7 +38,6 @@
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
-#include "project/iprojectvideosettings.h"
 #include "project/iprojectundostack.h"
 #include "ui/qml/Muse/Ui/navigationsection.h"
 
@@ -48,6 +47,7 @@
 #include "channelselection.h"
 #include "globalmutesolotoggle.h"
 #include "mixerchannelitem.h"
+#include "soundtrackchannel.h"
 
 namespace mu::playback {
 class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, public muse::async::Asyncable, public muse::Contextable
@@ -81,9 +81,10 @@ public:
     Q_INVOKABLE void selectChannel(mu::playback::MixerChannelItem* item, bool extendSelection, bool rangeSelection);
     Q_INVOKABLE void setColorForSelectedChannels(const QColor& color);
     Q_INVOKABLE void resetColorForSelectedChannels();
-    //! NOTE: like the Track list's Video row (not undoable, like the video's other output params)
-    Q_INVOKABLE void setVideoColor(const QColor& color);
-    Q_INVOKABLE void resetVideoColor();
+    //! NOTE: a sound track's channel (video, reference audio), like the Track list's rows (not undoable, like its other
+    //! output params)
+    Q_INVOKABLE void setSoundTrackColor(mu::playback::MixerChannelItem* item, const QColor& color);
+    Q_INVOKABLE void resetSoundTrackColor(mu::playback::MixerChannelItem* item);
     Q_INVOKABLE void clearSelection();
 
     //! NOTE: same "apply to every currently-selected channel" idiom as
@@ -196,14 +197,14 @@ private:
     static void deleteItemsLater(const QList<MixerChannelItem*>& items);
     void setupConnections();
 
-    void onVideoAttachmentChanged();
+    void onSoundTrackSettingsChanged(const SoundTrackChannel& channel);
     //! NOTE: shared by setColorForSelectedChannels()/resetColorForSelectedChannels() -
     //! applies color to every currently-selected channel as a single undo command (see
     //! ChannelColorChange)
     void applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName);
     QList<muse::audio::TrackId> selectedInstrumentTrackIds() const;
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
-    int resolveVideoInsertIndex() const;
+    int resolveSoundTrackInsertIndex(MixerChannelItem::Type type) const;
     //! NOTE: whether a kind of channels is shown ("…" menu, see ChannelCategoriesMenu)
     bool isCategoryVisible(ChannelCategory category) const;
     bool isAuxBusVisible(muse::audio::aux_channel_idx_t index) const;
@@ -214,8 +215,7 @@ private:
 
     MixerChannelItem* buildInstrumentChannelItem(const muse::audio::TrackId trackId, const engraving::InstrumentTrackId& instrumentTrackId,
                                                  bool isPrimary = true);
-    MixerChannelItem* buildVideoChannelItem(const muse::audio::TrackId trackId);
-    void loadVideoMuteState(MixerChannelItem* item);
+    MixerChannelItem* buildSoundTrackChannelItem(const SoundTrackChannel& channel, const muse::audio::TrackId trackId);
     MixerChannelItem* buildAuxChannelItem(muse::audio::aux_channel_idx_t index, const muse::audio::TrackId trackId);
     MixerChannelItem* buildMasterChannelItem();
 
@@ -239,13 +239,15 @@ private:
 
     project::INotationProjectPtr currentProject() const;
     project::IProjectAudioSettingsPtr audioSettings() const;
-    project::IProjectVideoSettingsPtr videoSettings() const;
     project::IProjectUndoStackPtr projectUndoStack() const;
     notation::INotationPlaybackPtr notationPlayback() const;
     notation::INotationPartsPtr masterNotationParts() const;
 
     QList<MixerChannelItem*> m_mixerChannelList;
     MixerChannelItem* m_masterChannelItem = nullptr;
+
+    //! NOTE: the sound tracks' channels, in display order (see SoundTrackChannel)
+    SoundTrackChannels m_soundTrackChannels;
 
     muse::ui::NavigationSection* m_navigationSection = nullptr;
     int m_navigationOrderStart = 1;

@@ -129,6 +129,12 @@ public:
     virtual const AudioOutputParams& videoOutputParams() const = 0;
     virtual void setVideoOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) = 0;
 
+    //! NOTE Same for the Audio sync window's reference audio (see IPlaybackController::referenceAudioTrackId()),
+    //! its solo/mute being in ReferenceAudioSettings
+    virtual bool containsReferenceAudioOutputParams() const = 0;
+    virtual const AudioOutputParams& referenceAudioOutputParams() const = 0;
+    virtual void setReferenceAudioOutputParams(const AudioOutputParams& params, bool notifySettingsChanged = true) = 0;
+
     virtual bool containsAuxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual const AudioOutputParams& auxOutputParams(muse::audio::aux_channel_idx_t index) const = 0;
     virtual void setAuxOutputParams(muse::audio::aux_channel_idx_t index, const AudioOutputParams& params,

@@ -72,6 +72,29 @@ public:
 
     void setTempoTimelineOverride(std::optional<TempoTimeline> timeline);
 
+    // Audio sync (see AudioSyncInfo)
+    bool isAudioSyncEnabled() const;
+    void setAudioSyncEnabled(bool enabled);
+    //! NOTE The tempo points not in use (see AutomationData::inactiveTempoCurve)
+    AutomationCurve inactiveTempoCurve() const;
+    void setInactiveTempoCurve(const AutomationCurve& curve);
+    //! NOTE The reference audio's time at the score's start (audio time = playback time + offset); 0 without sync points
+    double audioSyncOffsetSecs() const;
+    //! NOTE The audio time of a utick, by the current tempo (the sync points' own ones while audio sync is on)
+    double audioSecsAtUtick(int utick) const;
+    //! NOTE The edits turning the current tempo into audio sync points (sync points at each tempo point and at the
+    //! score's start, at their current time), when audio sync is turned on for the first time
+    AutomationPointEdits audioSyncConversionEdits() const;
+    bool hasAudioSyncPoints() const;
+    //! NOTE Sync points other than the score's start one (the reference, which can be set while audio sync is off)
+    bool hasAudioSyncMap() const;
+    //! NOTE While audio sync is off: the inactive sync points all moved by deltaSecs in the audio (the reference made
+    //! at the score's start when there's none yet)
+    AutomationCurve inactiveSyncCurveShiftedBy(double deltaSecs) const;
+    //! NOTE Completes Tempo edits before they're applied (undoably), while audio sync is on: a point without audio time
+    //! gets its current one; a new tempo value on a sync point moves the next sync point to match it
+    void prepareAudioSyncEdits(const AutomationCurveKey& key, AutomationPointEdits& edits) const;
+
 private:
     struct UpdateRequest {
         int tickFrom = 0;
@@ -174,7 +197,11 @@ private:
     static void collectMeasureRepeats(const Segment* segment, int tickOffset, const StaffRange& range, MeasureRepeats& result);
     static void addMeasureRepeatPoints(UpdateContext& ctx);
 
-    void mirrorAuthoredPointsToRepeats(UpdateContext& ctx);
+    void mirrorAuthoredPointsToRepeats(UpdateContext& ctx, bool skipTempo);
+    //! NOTE The tempo of each segment between two audio sync points: its musical length over its audio length
+    void applyAudioSyncTempos(AutomationCurve& tempoCurve) const;
+    //! NOTE Time of a utick by the current tempo timeline, regardless of the playback speed
+    double timelineSecsAtUtick(int utick) const;
     void fillNoRepeatTempoCurve(const AutomationCurve& tempoCurve, AutomationCurve& noRepeatTempoCurve);
 
     static void collectPauses(const Measure* measure, int tickOffset, PausesMap& pauses, PausesMap& noRepeatPauses);

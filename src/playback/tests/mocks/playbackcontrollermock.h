@@ -105,6 +105,13 @@ public:
     MOCK_METHOD(bool, isVideoAudioIncludedInExport, (), (const, override));
     MOCK_METHOD(bool, isVideoForceMuted, (), (const, override));
     MOCK_METHOD((muse::async::Channel<bool, bool>), videoMuteStateChanged, (), (const, override));
+    MOCK_METHOD(muse::audio::TrackId, referenceAudioTrackId, (), (const, override));
+    MOCK_METHOD(project::AudioOutputParams, referenceAudioOutputParams, (), (const, override));
+    MOCK_METHOD(void, setReferenceAudioOutputParams, (const project::AudioOutputParams&), (override));
+    MOCK_METHOD(bool, isReferenceAudioForceMuted, (), (const, override));
+    MOCK_METHOD((muse::async::Channel<bool, bool>), referenceAudioMuteStateChanged, (), (const, override));
+    MOCK_METHOD(ReferenceAudioDecodeState, referenceAudioDecodeState, (), (const, override));
+    MOCK_METHOD(muse::async::Notification, referenceAudioDecodeStateChanged, (), (const, override));
 
     MOCK_METHOD(void, playElements, (const std::vector<const engraving::EngravingItem*>&, const PlayParams&, bool), (override));
     MOCK_METHOD(void, playNotes, (const engraving::NoteValList&, engraving::staff_idx_t, const engraving::Segment*, const PlayParams&),

@@ -1072,61 +1072,22 @@ Item {
                     // defense against the transport cluster overlapping Load.
                     visible: buttonRow.width >= root.buttonRowMinWidth
 
-                    FilePicker {
-                        id: filePicker
-
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        showPathField: false
+                    RecentFilesLoadButton {
                         path: videoModel.videoPath
                         dialogTitle: qsTrc("playback", "Choose video")
                         filter: qsTrc("playback", "Video files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm);;All files (*)")
-                        buttonType: FlatButton.IconOnly
-                        navigation: navigationPanel
-                        navigationRowOrderStart: root.contentNavigationPanelOrderStart + 2
+                        recentFilesTitle: qsTrc("playback", "Recently opened videos")
+                        recentFiles: function() { return videoModel.recentVideoFiles() }
+                        spacing: root.buttonSpacing
+                        navigationPanel: navigationPanel
+                        navigationOrderStart: root.contentNavigationPanelOrderStart + 2
 
-                        onPathEdited: function(newPath) {
+                        onPathChosen: function(newPath) {
                             videoModel.videoPath = newPath
                         }
-                    }
 
-                    FlatButton {
-                        id: recentFilesButton
-
-                        Layout.preferredWidth: 22
-                        Layout.preferredHeight: 22
-                        Layout.alignment: Qt.AlignVCenter
-                        icon: IconCode.SMALL_ARROW_DOWN
-                        buttonType: FlatButton.IconOnly
-                        transparent: true
-                        toolTipTitle: qsTrc("playback", "Recently opened videos")
-                        navigation.panel: navigationPanel
-                        navigation.order: root.contentNavigationPanelOrderStart + 5
-
-                        onClicked: {
-                            var recentFiles = videoModel.recentVideoFiles()
-                            var menuItems = recentFiles.map(function(path) {
-                                return { id: path, title: path }
-                            })
-                            if (recentFiles.length > 0) {
-                                menuItems.push({ id: "", title: "" }) // separator
-                                menuItems.push({ id: "__clearRecent__", title: qsTrc("playback", "Clear list") })
-                            }
-                            recentFilesMenu.items = menuItems
-                            recentFilesMenu.show(Qt.point(0, height))
-                        }
-
-                        ContextMenuLoader {
-                            id: recentFilesMenu
-
-                            onHandleMenuItem: function(itemId) {
-                                if (itemId === "__clearRecent__") {
-                                    videoModel.clearRecentVideoFiles()
-                                    return
-                                }
-
-                                videoModel.videoPath = itemId
-                            }
+                        onClearRecentFilesRequested: {
+                            videoModel.clearRecentVideoFiles()
                         }
                     }
                 }

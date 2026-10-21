@@ -59,6 +59,20 @@ public:
     virtual void editPoints(std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> >& editsByCurve,
                             const muse::TranslatableString& actionName) = 0;
 
+    //! NOTE: audio sync (Audio sync window): the tempo comes from the audio sync points (undoable, saved with the score;
+    //! turned on for the first time, the current tempo becomes sync points)
+    virtual bool isAudioSyncEnabled() const = 0;
+    virtual void setAudioSyncEnabled(bool enabled) = 0;
+    //! NOTE: undoable, while audio sync is off: its sync points all moved in the audio, i.e. where the score starts in it
+    //! (the score's own tempo is played)
+    virtual void moveAudioSyncPoints(double deltaSecs) = 0;
+    //! NOTE: undoable: audio sync off and its sync points removed (the score's own tempo back)
+    virtual void clearAudioSync() = 0;
+    //! NOTE: the reference audio's time at the score's start (audio time = playback time + offset)
+    virtual double audioSyncOffsetSecs() const = 0;
+    //! NOTE: the audio time of a utick by the current tempo
+    virtual double audioSecsAtUtick(int utick) const = 0;
+
     //! NOTE: MIDI CCs the user picked for this score, besides the predefined ones (undoable, saved with the score)
     virtual std::vector<uint8_t> customMidiCcs() const = 0;
     virtual void addCustomMidiCc(uint8_t controller) = 0;

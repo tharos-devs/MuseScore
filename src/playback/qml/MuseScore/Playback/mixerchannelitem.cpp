@@ -38,6 +38,7 @@
 #include "project/inotationproject.h"
 
 #include "auxbuseditor.h"
+#include "soundtrackchannel.h"
 
 using namespace mu::playback;
 using namespace muse;
@@ -213,6 +214,16 @@ bool MixerChannelItem::isReverbBus() const
     return m_type == Type::Aux && m_auxBusIndex == REVERB_CHANNEL_IDX;
 }
 
+bool MixerChannelItem::isSoundTrackType(Type type)
+{
+    return type == Type::Video || type == Type::ReferenceAudio;
+}
+
+bool MixerChannelItem::isSoundTrack() const
+{
+    return isSoundTrackType(m_type);
+}
+
 aux_channel_idx_t MixerChannelItem::auxBusIndex() const
 {
     return m_auxBusIndex;
@@ -306,12 +317,19 @@ static constexpr int MAX_DELAY_MS = 500;
 
 int MixerChannelItem::delayMs() const
 {
-    return m_inputParams.delayMs;
+    return m_externalDelayGetter ? m_externalDelayGetter() : m_inputParams.delayMs;
 }
 
 bool MixerChannelItem::delayAvailable() const
 {
-    return !m_outputOnly && m_inputParams.type() == AudioSourceType::Vsti;
+    return m_externalDelayGetter || (!m_outputOnly && m_inputParams.type() == AudioSourceType::Vsti);
+}
+
+void MixerChannelItem::bindExternalDelay(std::function<int()> getter, std::function<void(int)> setter)
+{
+    m_externalDelayGetter = std::move(getter);
+    m_externalDelaySetter = std::move(setter);
+    emit delayChanged();
 }
 
 int MixerChannelItem::delayMsMin() const
@@ -543,10 +561,14 @@ void MixerChannelItem::persistAuxSendsOrder(const std::vector<aux_channel_idx_t>
         project->audioSettings()->setAuxOutputParams(m_auxBusIndex, params);
         break;
     }
-    case Type::Video: {
-        AudioOutputParams params = playbackController()->videoOutputParams();
-        params.auxSendsOrder = order;
-        playbackController()->setVideoOutputParams(params);
+    case Type::Video:
+    case Type::ReferenceAudio: {
+        const SoundTrackChannels channels = makeSoundTrackChannels(iocContext());
+        if (const SoundTrackChannel* channel = findSoundTrackChannel(channels, m_type)) {
+            AudioOutputParams params = channel->outputParams();
+            params.auxSendsOrder = order;
+            channel->setOutputParams(params);
+        }
         break;
     }
     default:
@@ -1266,6 +1288,15 @@ void MixerChannelItem::setGain(int gain)
 void MixerChannelItem::setDelayMs(int delayMs)
 {
     delayMs = std::clamp(delayMs, -MAX_DELAY_MS, MAX_DELAY_MS);
+
+    if (m_externalDelaySetter) {
+        if (this->delayMs() != delayMs) {
+            m_externalDelaySetter(delayMs);
+            emit delayChanged();
+        }
+        return;
+    }
+
     if (m_outputOnly || !m_inputResourceItem || m_inputParams.delayMs == delayMs) {
         return;
     }
