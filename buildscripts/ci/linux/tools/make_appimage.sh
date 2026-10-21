@@ -158,7 +158,7 @@ done
 additional_qt_components=(
   # Video panel playback
   lib/libQt6Multimedia.so.6
-  lib/libQt6MultimediaQuickPrivate.so.6
+  lib/libQt6MultimediaQuick.so.6
   qml/QtMultimedia
   plugins/multimedia
 
