@@ -51,7 +51,7 @@ void PlaybackCommandsState::init()
         project::INotationProjectPtr project = globalContext()->currentProject();
         if (project && project->audioSyncSettings()) {
             project->audioSyncSettings()->settingsChanged().onNotify(this, [this]() {
-                updateCommandStates({ REMOVE_REFERENCE_AUDIO_COMMAND });
+                updateCommandStates({ REMOVE_REFERENCE_AUDIO_COMMAND, AUDIO_SYNC_ADD_POINT_COMMAND });
             }, Asyncable::Mode::SetReplace);
         }
 
@@ -213,7 +213,8 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
         project::INotationProjectPtr project = globalContext()->currentProject();
         notation::INotationAutomationPtr automation = project && project->masterNotation()
                                                       ? project->masterNotation()->automation() : nullptr;
-        return CommandState(automation && automation->isAudioSyncEnabled(), false);
+        const bool hasAudio = project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid();
+        return CommandState(hasAudio && automation && automation->isAudioSyncEnabled(), false);
     } else if (command == REMOVE_REFERENCE_AUDIO_COMMAND) {
         project::INotationProjectPtr project = globalContext()->currentProject();
         return CommandState(project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid(), false);

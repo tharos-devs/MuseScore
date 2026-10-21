@@ -27,6 +27,7 @@
 
 #include <QFile>
 #include <QObject>
+#include <QStringList>
 
 #include "global/io/path.h"
 
@@ -59,6 +60,14 @@ public:
 
     bool isDecoding() const;
 
+    //! NOTE Cached files (decoded, or transformed copies made next to them) the owner still plays/reads: never pruned.
+    //! Empty paths: none. Main thread only
+    static void setFilesInUse(const void* owner, const QStringList& paths);
+    //! NOTE Keeps keepPath, the files in use, the most recent decoded files and the most recent transformed copies
+    //! (`<decoded>.pitch*.wav`, counted apart) of decoded files still cached
+    static void pruneCache(const QString& keepPath);
+    static QString cacheDir();
+
 private:
     void onBufferReady();
     void onFinished();
@@ -66,9 +75,6 @@ private:
 
     bool writeBuffer(const QAudioBuffer& buffer);
     void finish(bool ok);
-    void pruneCache(const QString& keepPath) const;
-
-    QString cacheDir() const;
 
     QAudioDecoder* m_decoder = nullptr;
     QFile m_file;

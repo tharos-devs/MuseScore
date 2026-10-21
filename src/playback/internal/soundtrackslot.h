@@ -53,6 +53,8 @@ public:
         muse::io::path_t mediaPath; // empty: no track
         //! NOTE File position = score position + offset
         int offsetMs = 0;
+        //! NOTE Plays it later by this real time (not scaled by the speed)
+        int delayMs = 0;
         bool includeInExport = false;
         //! NOTE Played transposed, and at this speed (the score's playback speed: it follows it), each one
         //! without changing the other (see transformWav()): a transformed copy is made first
@@ -113,6 +115,8 @@ private:
     //! NOTE The file to play: the decoded one, or its transposed copy (made if needed)
     void updatePlayedWav();
     void cancelPitchShift();
+    //! NOTE Keeps the files read/played from the decoder's cache pruning
+    void updateFilesInUse();
 
     Hooks m_hooks;
     Source m_source;
@@ -130,9 +134,10 @@ private:
     muse::io::path_t m_playedWavPath;
     double m_playedSpeed = 1.0; // of the played file: its offset is in its own time
 
-    std::unique_ptr<QObject> m_pitchShiftContext; // results are delivered in its thread (the main one)
+    //! NOTE Set when superseded or destroyed: results (delivered in the main thread) are dropped then
     std::shared_ptr<std::atomic<bool> > m_pitchShiftCanceled;
     QString m_pitchShiftTarget;
+    QString m_failedPitchShiftTarget; // not attempted again
     double m_pitchShiftProgress = 0.0;
     muse::async::Notification m_decodeStateChanged;
 

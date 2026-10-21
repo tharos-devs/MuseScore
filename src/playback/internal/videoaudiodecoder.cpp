@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <vector>
 
 #include <QCoreApplication>
@@ -50,6 +51,26 @@ namespace {
 constexpr int OUT_CHANNELS = 2;
 constexpr int WAV_HEADER_SIZE = 44;
 constexpr int MAX_CACHED_FILES = 8;
+constexpr int MAX_CACHED_TRANSFORMED_FILES = 4;
+const QString TRANSFORMED_FILE_MARK(".pitch");
+
+std::map<const void*, QStringList>& filesInUse()
+{
+    static std::map<const void*, QStringList> files;
+    return files;
+}
+
+bool isInUse(const QString& absolutePath)
+{
+    for (const auto& pair : filesInUse()) {
+        for (const QString& path : pair.second) {
+            if (!path.isEmpty() && QFileInfo(path).absoluteFilePath() == absolutePath) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 void putLE16(char* p, quint16 v)
 {
@@ -95,7 +116,7 @@ VideoAudioDecoder::~VideoAudioDecoder()
     cancel();
 }
 
-QString VideoAudioDecoder::cacheDir() const
+QString VideoAudioDecoder::cacheDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/videoaudio";
 }
@@ -369,16 +390,57 @@ void VideoAudioDecoder::finish(bool ok)
     }
 }
 
-void VideoAudioDecoder::pruneCache(const QString& keepPath) const
+void VideoAudioDecoder::setFilesInUse(const void* owner, const QStringList& paths)
+{
+    QStringList nonEmpty;
+    for (const QString& path : paths) {
+        if (!path.isEmpty()) {
+            nonEmpty << path;
+        }
+    }
+
+    if (nonEmpty.isEmpty()) {
+        filesInUse().erase(owner);
+    } else {
+        filesInUse()[owner] = nonEmpty;
+    }
+}
+
+void VideoAudioDecoder::pruneCache(const QString& keepPath)
 {
     QDir dir(cacheDir());
+    const QString keepAbsolutePath = QFileInfo(keepPath).absoluteFilePath();
     const QFileInfoList files = dir.entryInfoList({ "*.wav" }, QDir::Files, QDir::Time);
+
+    //! NOTE Decoded files first: a transformed copy goes with its decoded file
     int kept = 0;
     for (const QFileInfo& info : files) {
-        if (info.absoluteFilePath() == QFileInfo(keepPath).absoluteFilePath() || ++kept < MAX_CACHED_FILES) {
+        if (info.fileName().contains(TRANSFORMED_FILE_MARK)) {
             continue;
         }
-        QFile::remove(info.absoluteFilePath());
+        const QString path = info.absoluteFilePath();
+        if (path == keepAbsolutePath || isInUse(path) || ++kept < MAX_CACHED_FILES) {
+            continue;
+        }
+        QFile::remove(path);
+    }
+
+    int keptTransformed = 0;
+    for (const QFileInfo& info : files) {
+        const QString name = info.fileName();
+        const qsizetype mark = name.indexOf(TRANSFORMED_FILE_MARK);
+        if (mark < 0) {
+            continue;
+        }
+        const QString path = info.absoluteFilePath();
+        if (path == keepAbsolutePath || isInUse(path)) {
+            continue;
+        }
+        const bool hasDecoded = dir.exists(name.left(mark) + ".wav");
+        if (hasDecoded && keptTransformed++ < MAX_CACHED_TRANSFORMED_FILES) {
+            continue;
+        }
+        QFile::remove(path);
     }
 
     //! NOTE Leftovers of decodings interrupted by a crash (an old one can't still be in progress)

@@ -31,6 +31,8 @@
 
 #include "types/bytearray.h"
 
+#include "log.h"
+
 using namespace mu::project;
 using namespace muse;
 
@@ -109,8 +111,14 @@ muse::Ret ProjectAudioSyncSettings::read(const engraving::MscReader& reader, con
     }
 
     const QJsonObject rootObj = document.object();
-    if (rootObj.value("version").toInt(0) != AUDIO_SYNC_SETTINGS_VERSION) {
+    const int version = rootObj.value("version").toInt(0);
+    if (version < 1) {
         return make_ret(Ret::Code::Ok);
+    }
+
+    //! NOTE A newer version: the keys known here are read, the others ignored
+    if (version > AUDIO_SYNC_SETTINGS_VERSION) {
+        LOGW() << "Audio sync settings version " << version << " is newer than " << AUDIO_SYNC_SETTINGS_VERSION;
     }
 
     const QJsonObject audioObj = rootObj.value("referenceAudio").toObject();

@@ -259,6 +259,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseUngrabEvent() override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -283,7 +284,7 @@ private:
 
     //! NOTE An audio sync point being dragged: the grid follows it before the edit is made
     struct PointDrag {
-        size_t index = 0;
+        int utick = 0; // not an index: the points are rebuilt by any change during the drag
         double grabOffsetSecs = 0.0;
         double originalSecs = 0.0;
         double audioSecs = 0.0;
@@ -310,7 +311,10 @@ private:
     double audioOffsetSecs() const;
     //! NOTE Where a score position is in the audio (following a point being dragged)
     double audioSecsOf(const GridTime& time) const;
-    double previewAudioSecs(int utick) const;
+    double previewAudioSecs(const GridTime& time) const;
+    //! NOTE The dragged point's (tick, audio seconds) list, in the grid's ticks: built once per drag move
+    void ensurePreviewPoints() const;
+    std::optional<size_t> draggedPointIndex() const;
 
     // Audio sync points
     std::vector<double> displayedPointSecs() const;
@@ -332,6 +336,8 @@ private:
     double cursorAudioSecs() const;
 
     void zoomAround(double pps, double anchorX);
+    //! NOTE zoomToFit() without storing the view (see storeViewState()): what's shown when opening
+    void fitView();
     double zoomAnchorX() const;
     void restoreViewState();
     void storeViewState();
@@ -351,6 +357,7 @@ private:
     double overviewXForSecs(double secs) const;
     void paintOverview(QPainter* painter, const QRectF& rect) const;
 
+    std::vector<GridMeasure>::const_iterator firstVisibleMeasure() const;
     void paintRuler(QPainter* painter, const QRectF& rect) const;
     void paintTimeRuler(QPainter* painter, const QRectF& rect) const;
     void paintFileName(QPainter* painter, const QRectF& rect) const;
@@ -362,7 +369,10 @@ private:
     ReferenceAudioPeaks* m_peaks = nullptr;
 
     double m_pixelsPerSecond = 50.0;
-    double m_scrollSecs = -1.0;
+    double m_scrollSecs = 0.0;
+    //! NOTE Restored or fitted once its audio is ready: nothing is stored or clamped before (its scroll can be
+    //! negative, the audio starting before the score)
+    bool m_viewShown = false;
     double m_amplitudeZoom = 1.0;
     bool m_followPlayback = true;
 
@@ -374,6 +384,11 @@ private:
     mutable std::vector<audiosync::SyncPoint> m_syncPoints;
     mutable bool m_audioSyncEnabled = false;
     mutable double m_audioOffsetSecs = 0.0;
+    bool m_gridRefreshPending = false;
+
+    mutable std::vector<std::pair<int, double> > m_previewPoints;
+    mutable bool m_previewPointsDirty = true;
+    mutable double m_previewShiftSecs = 0.0; // a single point dragged: the whole grid follows it
 
     int m_selectedPointUtick = -1;
 

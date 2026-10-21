@@ -36,7 +36,7 @@ Row {
     //! NOTE: between the fader and the meters (with their ruler)
     property int metersSpacing: root.compact ? 2 : 8
 
-    property NavigationPanel navigationPanel: channelItem.panel
+    property NavigationPanel navigationPanel: channelItem?.panel ?? null
     property int navigationRowStart: 0
     property string accessibleName: ""
 
@@ -47,10 +47,11 @@ Row {
     spacing: root.metersSpacing
 
     VolumeSlider {
-        volumeLevel: root.channelItem.volumeLevel
+        //! NOTE: channelItem may be null for a moment (e.g. the Audio sync window's reference audio being removed)
+        volumeLevel: root.channelItem?.volumeLevel ?? 0
         stepSize: 1.0
         //! NOTE: the volume curve drawn on the score moves it then
-        enabled: !root.channelItem.hasVolumeAutomation
+        enabled: Boolean(root.channelItem) && !root.channelItem.hasVolumeAutomation
         opacity: enabled ? 1.0 : ui.theme.itemOpacityDisabled
 
         navigation.panel: root.navigationPanel
@@ -90,8 +91,8 @@ Row {
     ChannelMeters {
         anchors.verticalCenter: parent.verticalCenter
 
-        leftChannelPressure: root.channelItem.leftChannelPressure
-        rightChannelPressure: root.channelItem.rightChannelPressure
+        leftChannelPressure: root.channelItem?.leftChannelPressure ?? -60.0
+        rightChannelPressure: root.channelItem?.rightChannelPressure ?? -60.0
         //! NOTE: compact drops the dB ruler to save the 20px it costs (see VolumePressureMeter.qml)
         showRuler: !root.compact
     }

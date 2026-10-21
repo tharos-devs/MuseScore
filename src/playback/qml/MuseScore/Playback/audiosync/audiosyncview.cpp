@@ -118,7 +118,7 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
 
     m_peaks = new ReferenceAudioPeaks(this);
     connect(m_peaks, &ReferenceAudioPeaks::readyChanged, this, [this]() {
-        if (m_peaks->isReady() && m_scrollSecs < 0) {
+        if (m_peaks->isReady() && !m_viewShown) {
             restoreViewState();
         }
         emit decodeStateChanged();
@@ -127,8 +127,8 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
         update();
     });
 
-    //! NOTE The zoom and position are saved with the project (see IProjectAudioSyncSettings::viewState())
-    connect(this, &AudioSyncView::viewChanged, this, &AudioSyncView::storeViewState);
+    //! NOTE The zoom and position are saved with the project (see IProjectAudioSyncSettings::viewState()): only the
+    //! user's changes (see storeViewState()), not following the playback, a resize or a restore
     m_viewStateTimer.setSingleShot(true);
     m_viewStateTimer.setInterval(1000);
     connect(&m_viewStateTimer, &QTimer::timeout, this, &AudioSyncView::flushViewState);
@@ -137,8 +137,18 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
     connect(&m_cursorTimer, &QTimer::timeout, this, &AudioSyncView::updatePlaybackCursor);
 }
 
+struct AudioSyncView::DetectionJob {
+    std::atomic<bool> canceled { false };
+    audiosync::DetectionOptions options;
+    int firstNoteUtick = -1; // >= 0: put on the music's start (the silence at the beginning ignored)
+};
+
 AudioSyncView::~AudioSyncView()
 {
+    if (m_detectionJob) {
+        m_detectionJob->canceled = true;
+    }
+
     flushViewState();
 }
 
@@ -219,7 +229,19 @@ void AudioSyncView::onProjectChanged()
         }, Asyncable::Mode::SetReplace);
     }
 
-    m_scrollSecs = -1.0;
+    //! NOTE Nothing of the previous score applies to the new one
+    cancelDetection();
+    if (!m_detectionSummary.isEmpty()) {
+        m_detectionSummary.clear();
+        emit detectionChanged();
+    }
+    m_selectedPointUtick = -1;
+    m_pointDrag.reset();
+    m_loopDrag.reset();
+    m_dragMode = DragMode::None;
+
+    m_scrollSecs = 0.0;
+    m_viewShown = false;
     invalidateGrid();
     emit audioChanged();
 }
@@ -598,12 +620,6 @@ void AudioSyncView::toggleLoopTo()
     }
 }
 
-struct AudioSyncView::DetectionJob {
-    std::atomic<bool> canceled { false };
-    audiosync::DetectionOptions options;
-    int firstNoteUtick = -1; // >= 0: put on the music's start (the silence at the beginning ignored)
-};
-
 bool AudioSyncView::detecting() const
 {
     return m_detectionJob != nullptr;
@@ -670,7 +686,11 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
 
             const std::vector<audiosync::DetectedBeat> detected = audiosync::detectBeats(*wav, params, job->canceled,
                                                                                          [self, job](double progress) {
-                QMetaObject::invokeMethod(qApp, [self, job, progress]() {
+                QCoreApplication* app = QCoreApplication::instance();
+                if (!app || job->canceled) {
+                    return;
+                }
+                QMetaObject::invokeMethod(app, [self, job, progress]() {
                     if (self && self->m_detectionJob == job) {
                         self->m_detectionProgress = progress;
                         emit self->detectionChanged();
@@ -682,7 +702,13 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
             }
         }
 
-        QMetaObject::invokeMethod(qApp, [self, job, beats, musicStartSecs]() {
+        //! NOTE Canceled (e.g. the view destroyed): nothing to give back, and the app may be quitting
+        QCoreApplication* app = QCoreApplication::instance();
+        if (!app || job->canceled) {
+            return;
+        }
+
+        QMetaObject::invokeMethod(app, [self, job, beats, musicStartSecs]() {
             if (self && self->m_detectionJob == job) {
                 self->onDetectionFinished(job, beats, musicStartSecs);
             }
@@ -833,6 +859,7 @@ double AudioSyncView::pixelsPerSecond() const
 void AudioSyncView::setPixelsPerSecond(double pps)
 {
     zoomAround(pps, width() / 2.0);
+    storeViewState();
 }
 
 double AudioSyncView::scrollSecs() const
@@ -850,6 +877,7 @@ void AudioSyncView::setScrollSecs(double secs)
     clampScroll();
     emit viewChanged();
     update();
+    storeViewState();
 }
 
 double AudioSyncView::contentStartSecs() const
@@ -877,6 +905,7 @@ double AudioSyncView::zoomPercent() const
 void AudioSyncView::setZoomPercent(double percent)
 {
     zoomAround(percent / 100.0 * REFERENCE_PIXELS_PER_SECOND, zoomAnchorX());
+    storeViewState();
 }
 
 double AudioSyncView::minZoomPercent() const
@@ -904,6 +933,7 @@ void AudioSyncView::setAmplitudeZoom(double zoom)
     m_amplitudeZoom = zoom;
     emit viewChanged();
     update();
+    storeViewState();
 }
 
 double AudioSyncView::waveformTop() const
@@ -934,11 +964,13 @@ void AudioSyncView::setFollowPlayback(bool follow)
 void AudioSyncView::zoomIn()
 {
     zoomAround(m_pixelsPerSecond * ZOOM_STEP, zoomAnchorX());
+    storeViewState();
 }
 
 void AudioSyncView::zoomOut()
 {
     zoomAround(m_pixelsPerSecond / ZOOM_STEP, zoomAnchorX());
+    storeViewState();
 }
 
 double AudioSyncView::zoomAnchorX() const
@@ -955,7 +987,7 @@ void AudioSyncView::restoreViewState()
     m_restoringViewState = true;
 
     if (!settings || !settings->viewState().isValid() || width() <= 0) {
-        zoomToFit();
+        fitView();
     } else {
         const project::AudioSyncViewState& state = settings->viewState();
         m_pixelsPerSecond = std::clamp(state.pixelsPerSecond, MIN_PIXELS_PER_SECOND, MAX_PIXELS_PER_SECOND);
@@ -966,6 +998,7 @@ void AudioSyncView::restoreViewState()
         update();
     }
 
+    m_viewShown = width() > 0;
     m_restoringViewState = false;
 }
 
@@ -973,7 +1006,7 @@ void AudioSyncView::storeViewState()
 {
     //! NOTE Not before it was shown (restored or fitted): the saved one would be lost
     project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
-    if (!settings || m_scrollSecs < 0 || !m_peaks->isReady() || m_restoringViewState) {
+    if (!settings || !m_viewShown || !m_peaks->isReady() || m_restoringViewState) {
         return;
     }
 
@@ -981,6 +1014,11 @@ void AudioSyncView::storeViewState()
     state.pixelsPerSecond = m_pixelsPerSecond;
     state.scrollSecs = m_scrollSecs;
     state.amplitudeZoom = m_amplitudeZoom;
+
+    //! NOTE Unchanged (e.g. zooming in at the maximum): the project isn't modified
+    if (state == (m_pendingViewState ? *m_pendingViewState : settings->viewState())) {
+        return;
+    }
 
     //! NOTE Given to the project a moment after the last change (a zoom or a scroll sends many): that marks it as
     //! modified once, and it's saved with it
@@ -1000,6 +1038,12 @@ void AudioSyncView::flushViewState()
 }
 
 void AudioSyncView::zoomToFit()
+{
+    fitView();
+    storeViewState();
+}
+
+void AudioSyncView::fitView()
 {
     if (width() <= 0) {
         return;
@@ -1039,13 +1083,16 @@ void AudioSyncView::geometryChange(const QRectF& newGeometry, const QRectF& oldG
 {
     QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
 
-    if (newGeometry.width() > 0 && m_scrollSecs < 0 && m_peaks->isReady()) {
+    if (newGeometry.width() > 0 && !m_viewShown && m_peaks->isReady()) {
         restoreViewState();
         return;
     }
 
     if (newGeometry.size() != oldGeometry.size()) {
-        clampScroll();
+        //! NOTE Not before the view was shown: it's restored once the audio is ready
+        if (m_viewShown) {
+            clampScroll();
+        }
         emit viewChanged();
     }
 }
@@ -1061,40 +1108,111 @@ double AudioSyncView::audioOffsetSecs() const
 double AudioSyncView::audioSecsOf(const GridTime& time) const
 {
     if (m_pointDrag) {
-        return previewAudioSecs(time.utick);
+        return previewAudioSecs(time);
     }
 
     return time.secs + audioOffsetSecs();
 }
 
-double AudioSyncView::previewAudioSecs(int utick) const
+std::optional<size_t> AudioSyncView::draggedPointIndex() const
+{
+    if (!m_pointDrag) {
+        return std::nullopt;
+    }
+
+    //! NOTE By its utick: the points are rebuilt by any change during the drag (they're sorted by utick)
+    const auto it = std::lower_bound(m_syncPoints.begin(), m_syncPoints.end(), m_pointDrag->utick,
+                                     [](const audiosync::SyncPoint& point, int utick) { return point.utick < utick; });
+    if (it == m_syncPoints.end() || it->utick != m_pointDrag->utick) {
+        return std::nullopt;
+    }
+    return static_cast<size_t>(std::distance(m_syncPoints.begin(), it));
+}
+
+void AudioSyncView::ensurePreviewPoints() const
+{
+    ensureGrid();
+    if (!m_previewPointsDirty) {
+        return;
+    }
+
+    m_previewPointsDirty = false;
+    m_previewPoints.clear();
+    m_previewShiftSecs = 0.0;
+
+    //! NOTE In the grid's ticks: the sync points' uticks are the unrolled score's ones; without the repeats played,
+    //! the grid's ticks are the raw ones, and each point is taken at its raw tick, the first pass winning (as the
+    //! tempo timeline without the repeats, see ScoreAutomationController::fillNoRepeatTempoCurve())
+    const Score* sc = score();
+    const RepeatList* repeatList = sc && !isPlayRepeatsEnabled() ? &sc->expandedRepeatList() : nullptr;
+    const std::optional<size_t> dragged = draggedPointIndex();
+
+    struct Point {
+        int tick = 0;
+        double secs = 0.0;
+        bool dragged = false;
+    };
+
+    std::vector<Point> points;
+    points.reserve(m_syncPoints.size());
+    for (size_t i = 0; i < m_syncPoints.size(); ++i) {
+        int tick = m_syncPoints[i].utick;
+        if (repeatList) {
+            const auto segIt = repeatList->findRepeatSegmentFromUTick(tick);
+            if (segIt == repeatList->cend()) {
+                continue;
+            }
+            tick -= (*segIt)->utick - (*segIt)->tick;
+        }
+
+        const bool isDragged = dragged && *dragged == i;
+        points.push_back({ tick, isDragged ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs, isDragged });
+    }
+
+    if (repeatList) {
+        std::stable_sort(points.begin(), points.end(), [](const Point& a, const Point& b) {
+            return a.tick < b.tick;
+        });
+        points.erase(std::unique(points.begin(), points.end(), [](const Point& a, const Point& b) {
+            return a.tick == b.tick;
+        }), points.end());
+    }
+
+    m_previewPoints.reserve(points.size());
+    for (const Point& point : points) {
+        m_previewPoints.emplace_back(point.tick, point.secs);
+    }
+
+    //! NOTE A single point: the whole grid follows it
+    if (points.size() == 1 && points.front().dragged) {
+        m_previewShiftSecs = m_pointDrag->audioSecs - m_pointDrag->originalSecs;
+    }
+}
+
+double AudioSyncView::previewAudioSecs(const GridTime& time) const
 {
     //! NOTE While audio sync is on, the tempo is constant between two sync points: audio time is linear in
     //! ticks there, so the grid can follow a dragged point without any engraving edit
-    std::vector<std::pair<int, double> > points;
-    points.reserve(m_syncPoints.size());
-    for (size_t i = 0; i < m_syncPoints.size(); ++i) {
-        const double secs = m_pointDrag && m_pointDrag->index == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs;
-        points.emplace_back(m_syncPoints[i].utick, secs);
-    }
+    ensurePreviewPoints();
+    const std::vector<std::pair<int, double> >& points = m_previewPoints;
 
     if (points.size() < 2) {
-        const double shift = points.empty() ? 0.0 : points.front().second - m_syncPoints.front().audioSecs;
-        return audioOffsetSecs() + shift + (score() ? score()->tempoTimeline(true).utick2utime(utick) * m_speed : 0.0);
+        return time.secs + audioOffsetSecs() + m_previewShiftSecs;
     }
 
-    // The segment containing utick (the first/last one beyond the points)
-    size_t i = 0;
-    while (i + 2 < points.size() && utick >= points[i + 1].first) {
-        ++i;
-    }
+    // The segment containing the tick (the first/last one beyond the points)
+    const auto it = std::upper_bound(points.begin(), points.end(), time.utick, [](int utick, const std::pair<int, double>& point) {
+        return utick < point.first;
+    });
+    const size_t i = std::min(static_cast<size_t>(std::max<std::ptrdiff_t>(std::distance(points.begin(), it) - 1, 0)),
+                              points.size() - 2);
 
     const auto& [u1, s1] = points[i];
     const auto& [u2, s2] = points[i + 1];
     if (u2 == u1) {
         return s1;
     }
-    return s1 + (s2 - s1) * static_cast<double>(utick - u1) / static_cast<double>(u2 - u1);
+    return s1 + (s2 - s1) * static_cast<double>(time.utick - u1) / static_cast<double>(u2 - u1);
 }
 
 double AudioSyncView::audioSecsAtX(double x) const
@@ -1199,6 +1317,24 @@ void AudioSyncView::invalidateGrid()
 {
     m_gridDirty = true;
     update();
+
+    //! NOTE The content's length and the position's measure may have changed (speed, tempo, score edits): refreshed
+    //! once after a burst of changes. Not a change of the view by the user: not stored (see storeViewState())
+    if (m_gridRefreshPending) {
+        return;
+    }
+
+    m_gridRefreshPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_gridRefreshPending = false;
+        //! NOTE Not before the view was shown (restored or fitted, see restoreViewState())
+        if (m_viewShown) {
+            clampScroll();
+        }
+        emit viewChanged();
+        updatePositionText();
+        update();
+    });
 }
 
 void AudioSyncView::ensureGrid() const
@@ -1211,6 +1347,7 @@ void AudioSyncView::ensureGrid() const
 void AudioSyncView::rebuildGrid() const
 {
     m_gridDirty = false;
+    m_previewPointsDirty = true;
     m_grid.clear();
     m_scoreEndSecs = 0.0;
     m_scoreEnd = GridTime();
@@ -1343,11 +1480,12 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
         m_selectedPointUtick = point.utick;
         if (m_audioSyncEnabled && !point.locked) {
             PointDrag drag;
-            drag.index = *index;
+            drag.utick = point.utick;
             drag.originalSecs = point.audioSecs;
             drag.audioSecs = point.audioSecs;
             drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
             m_pointDrag = drag;
+            m_previewPointsDirty = true;
             m_dragMode = DragMode::Point;
         }
         update();
@@ -1394,14 +1532,23 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
     }
 
     if (m_dragMode == DragMode::Point && m_pointDrag) {
+        //! NOTE The point is gone (e.g. undone meanwhile): the drag too
+        ensureGrid();
+        if (!draggedPointIndex()) {
+            m_pointDrag.reset();
+            m_dragMode = DragMode::None;
+            update();
+            return;
+        }
+
         // Kept where both neighboring segments stay within the allowed tempos
-        const audiosync::SyncPoint& point = m_syncPoints[m_pointDrag->index];
         const double wantedSecs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
         double secs = wantedSecs;
-        if (const auto range = audiosync::allowedAudioRange(m_syncPoints, point.utick)) {
+        if (const auto range = audiosync::allowedAudioRange(m_syncPoints, m_pointDrag->utick)) {
             secs = std::clamp(secs, range->first, range->second);
         }
         m_pointDrag->audioSecs = secs;
+        m_previewPointsDirty = true;
         m_pointDrag->atLimit = std::abs(wantedSecs - secs) > 1e-6;
         m_pointDrag->moved = m_pointDrag->moved || std::abs(secs - m_pointDrag->originalSecs) > 1e-6;
         update();
@@ -1444,20 +1591,38 @@ void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
     }
 
     if (m_dragMode == DragMode::Point && m_pointDrag) {
+        ensureGrid();
         const PointDrag drag = *m_pointDrag;
-        const int utick = m_syncPoints[drag.index].utick;
+        const bool exists = draggedPointIndex().has_value();
         m_pointDrag.reset();
         m_dragMode = DragMode::None;
 
         notation::INotationAutomationPtr automationPtr = automation();
-        if (drag.moved && automationPtr) {
-            audiosync::movePoint(*automationPtr, utick, drag.audioSecs);
+        if (drag.moved && exists && automationPtr) {
+            audiosync::movePoint(*automationPtr, drag.utick, drag.audioSecs);
         }
         update();
         return;
     }
 
+    if (m_pointDrag) {
+        m_pointDrag.reset();
+        update();
+    }
     m_dragMode = DragMode::None;
+}
+
+void AudioSyncView::mouseUngrabEvent()
+{
+    //! NOTE The mouse taken by another item (or the window): the drag ends without being applied
+    QQuickPaintedItem::mouseUngrabEvent();
+
+    if (m_pointDrag || m_loopDrag || m_dragMode != DragMode::None) {
+        m_pointDrag.reset();
+        m_loopDrag.reset();
+        m_dragMode = DragMode::None;
+        update();
+    }
 }
 
 void AudioSyncView::mouseDoubleClickEvent(QMouseEvent* event)
@@ -1610,10 +1775,11 @@ bool AudioSyncView::isUncertainPoint(const audiosync::SyncPoint& point)
 
 std::vector<double> AudioSyncView::displayedPointSecs() const
 {
+    const std::optional<size_t> dragged = draggedPointIndex();
     std::vector<double> result;
     result.reserve(m_syncPoints.size());
     for (size_t i = 0; i < m_syncPoints.size(); ++i) {
-        result.push_back(m_pointDrag && m_pointDrag->index == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
+        result.push_back(dragged && *dragged == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
     }
     return result;
 }
@@ -1662,9 +1828,16 @@ void AudioSyncView::addPointAt(double audioSecs, bool snapToBeat)
         return;
     }
 
-    // The score position there by the current tempo; the new point stays where that position already is
-    const TempoTimeline& timeline = sc->tempoTimeline(true);
+    // The score position there by the current tempo (as the grid shows it); the new point stays where that position
+    // already is
+    const bool expandRepeats = isPlayRepeatsEnabled();
+    const TempoTimeline& timeline = sc->tempoTimeline(expandRepeats);
     int utick = timeline.utime2utick(std::max(0.0, audioSecs - audioOffsetSecs()) / m_speed);
+    //! NOTE The points are in the unrolled score's ticks: without the repeats played, the grid's raw tick is taken at
+    //! its first pass (as the tempo timeline without the repeats, see ScoreAutomationController::fillNoRepeatTempoCurve())
+    if (!expandRepeats) {
+        utick = sc->expandedRepeatList().tick2utick(utick);
+    }
     if (snapToBeat) {
         if (const std::optional<int> beat = audiosync::nearestBeatUtick(sc, utick)) {
             utick = *beat;
@@ -1743,6 +1916,7 @@ void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, c
     }
 
     const std::optional<size_t> selected = selectedPointIndex();
+    const std::optional<size_t> dragged = draggedPointIndex();
 
     for (size_t i = 0; i < displayed.size(); ++i) {
         const audiosync::SyncPoint& point = displayed[i];
@@ -1757,7 +1931,7 @@ void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, c
         const bool uncertain = isUncertainPoint(point);
 
         const bool isSelected = selected && *selected == i;
-        if (m_pointDrag && m_pointDrag->index == i && m_pointDrag->atLimit) {
+        if (dragged && *dragged == i && m_pointDrag->atLimit) {
             color = LIMIT_COLOR;
         }
 
@@ -1791,8 +1965,8 @@ void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, c
     }
 
     // While dragging: the tempos of both segments and the position
-    if (m_pointDrag) {
-        const size_t i = m_pointDrag->index;
+    if (dragged) {
+        const size_t i = *dragged;
         const std::optional<double> before = i > 0 ? audiosync::segmentBpm(displayed, i - 1) : std::nullopt;
         const std::optional<double> after = audiosync::segmentBpm(displayed, i);
 
@@ -1835,6 +2009,7 @@ void AudioSyncView::wheelEvent(QWheelEvent* event)
     if (modifiers & (Qt::ControlModifier | Qt::MetaModifier)) {
         const double steps = angleDelta.y() / 120.0;
         zoomAround(m_pixelsPerSecond * std::pow(ZOOM_STEP, steps), event->position().x());
+        storeViewState();
         event->accept();
         return;
     }
@@ -1981,13 +2156,17 @@ void AudioSyncView::paint(QPainter* painter)
     if (m_selectionTickFrom >= 0) {
         QColor selectionColor = m_accentColor;
         selectionColor.setAlphaF(0.18);
-        for (const GridMeasure& measure : m_grid) {
+        for (auto it = firstVisibleMeasure(); it != m_grid.cend(); ++it) {
+            const GridMeasure& measure = *it;
             if (measure.tickTo <= m_selectionTickFrom || measure.tickFrom >= m_selectionTickTo) {
                 continue;
             }
             const double x1 = xForAudioSecs(audioSecsOf(measure.start));
+            if (x1 > width()) {
+                break;
+            }
             const double x2 = xForAudioSecs(audioSecsOf(measure.end));
-            if (x2 >= 0 && x1 <= width()) {
+            if (x2 >= 0) {
                 painter->fillRect(QRectF(x1, waveRect.top(), x2 - x1, waveRect.height()), selectionColor);
             }
         }
@@ -2010,6 +2189,15 @@ void AudioSyncView::paint(QPainter* painter)
     }
 }
 
+std::vector<AudioSyncView::GridMeasure>::const_iterator AudioSyncView::firstVisibleMeasure() const
+{
+    //! NOTE The grid is in time order, its measures' ends too (also following a dragged point: the points stay in order)
+    const double fromSecs = audioSecsAtX(0);
+    return std::partition_point(m_grid.cbegin(), m_grid.cend(), [this, fromSecs](const GridMeasure& measure) {
+        return audioSecsOf(measure.end) < fromSecs;
+    });
+}
+
 void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
 {
     painter->fillRect(rect, m_rulerColor);
@@ -2025,7 +2213,8 @@ void AudioSyncView::paintRuler(QPainter* painter, const QRectF& rect) const
 
     // Measure numbers (every Nth one when they're too close)
     double lastLabelEnd = -1e9;
-    for (const GridMeasure& measure : m_grid) {
+    for (auto it = firstVisibleMeasure(); it != m_grid.cend(); ++it) {
+        const GridMeasure& measure = *it;
         const double x = xForAudioSecs(audioSecsOf(measure.start));
         const double endX = xForAudioSecs(audioSecsOf(measure.end));
         if (endX < 0) {
@@ -2160,7 +2349,8 @@ void AudioSyncView::paintGrid(QPainter* painter, const QRectF& rect) const
     beatColor.setAlphaF(0.6);
     QPen beatPen(beatColor, 1, Qt::DotLine);
 
-    for (const GridMeasure& measure : m_grid) {
+    for (auto it = firstVisibleMeasure(); it != m_grid.cend(); ++it) {
+        const GridMeasure& measure = *it;
         const double x = xForAudioSecs(audioSecsOf(measure.start));
         const double endX = xForAudioSecs(audioSecsOf(measure.end));
         if (endX < 0) {

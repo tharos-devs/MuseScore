@@ -48,6 +48,7 @@
 
 #include "../playbacktypes.h"
 #include "onlinesoundscontroller.h"
+#include "pitchshifter.h"
 
 using namespace muse;
 using namespace muse::async;
@@ -1589,15 +1590,15 @@ void PlaybackController::onReferenceAudioChanged()
         source.mediaPath = referenceAudio.path;
         source.includeInExport = referenceAudio.includeInExport;
         source.pitchSemitones = referenceAudio.pitchSemitones;
-        //! NOTE It follows the score's playback speed (its sync kept)
-        source.speed = tempoMultiplier();
+        //! NOTE It follows the score's playback speed (its sync kept), within what the transform supports
+        source.speed = audiosync::clampTransformSpeed(tempoMultiplier());
 
         //! NOTE Audio time = score playback time + the audio time of the score's start (the audio sync points')
         if (m_masterNotation && m_masterNotation->automation()) {
             source.offsetMs = static_cast<int>(std::lround(m_masterNotation->automation()->audioSyncOffsetSecs() * 1000.0));
         }
         //! NOTE A track delay plays it later: an earlier file position at the same playback time
-        source.offsetMs -= referenceAudio.delayMs;
+        source.delayMs = referenceAudio.delayMs;
     }
 
     const bool hadTrack = m_referenceAudioSlot->trackId() != INVALID_TRACK_ID;
@@ -1636,13 +1637,15 @@ void PlaybackController::applyReferenceAudioLoop()
         return;
     }
 
-    //! NOTE In the audio's time as heard: playback time = (audio time - the sound track's offset) / its speed
+    //! NOTE In the audio's time as heard: playback time = (audio time - the sound track's offset) / its speed + its
+    //! delay (real time)
     const ReferenceAudioSettings& referenceAudio = audioSyncSettings()->referenceAudio();
     const SoundTrackSlot::Source& source = m_referenceAudioSlot->source();
     const double offsetSecs = source.offsetMs / 1000.0;
+    const double delaySecs = source.delayMs / 1000.0;
     const double speed = source.speed > 0.0 ? source.speed : 1.0;
-    const secs_t fromSecs = std::max(0.0, (referenceAudio.loopFromSecs - offsetSecs) / speed);
-    const secs_t toSecs = std::max(fromSecs.raw() + 0.01, (referenceAudio.loopToSecs - offsetSecs) / speed);
+    const secs_t fromSecs = std::max(0.0, (referenceAudio.loopFromSecs - offsetSecs) / speed + delaySecs);
+    const secs_t toSecs = std::max(fromSecs.raw() + 0.01, (referenceAudio.loopToSecs - offsetSecs) / speed + delaySecs);
 
     currentPlayer()->setLoop(fromSecs, toSecs);
     m_isReferenceAudioLoopApplied = true;

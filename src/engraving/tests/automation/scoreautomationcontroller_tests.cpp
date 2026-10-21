@@ -834,3 +834,91 @@ TEST_F(ScoreAutomationController_Tests, Update_RepeatStructureChange_ForcesFullR
 
     checkCurvesMatch(controller.automationData()->curve(key), expectedCurve);
 }
+
+static AutomationPoint syncPoint(double audioSecs, bool locked = false)
+{
+    AutomationPoint point;
+    point.value.outValue = normalizeTempo(BeatsPerSecond(2.0));
+    AudioSyncInfo sync;
+    sync.audioSecs = audioSecs;
+    sync.locked = locked;
+    point.audioSync = sync;
+    return point;
+}
+
+TEST_F(ScoreAutomationController_Tests, InsertTime_AudioSync_ShiftsInactiveTempoPoints)
+{
+    // [GIVEN] Two authored tempo points, set aside by turning audio sync on
+    ScoreAutomationController controller;
+    controller.init(s_dynamicsScore);
+
+    AutomationPointEdits edits {
+        { 1000, AutomationPointEdit::SetPoint { customPoint(TEMPO_3, TEMPO_3) } },
+        { 2500, AutomationPointEdit::SetPoint { customPoint(TEMPO_2, TEMPO_2) } },
+    };
+    controller.editPoints(TEMPO_KEY, edits);
+    controller.setAudioSyncEnabled(true);
+    ASSERT_EQ(controller.automationData()->inactiveTempoCurve().size(), size_t(2));
+
+    // [WHEN] Remove the first measure: -1920 ticks starting at tick 0
+    controller.insertTime(Fraction(0, 1), Fraction(-4, 4), s_dynamicsScore->repeatList().segmentInfoList());
+
+    // [THEN] The inactive point inside the range is gone, the other one shifts back by 1920 ticks
+    const AutomationCurve& inactive = controller.automationData()->inactiveTempoCurve();
+    ASSERT_EQ(inactive.size(), size_t(1));
+    EXPECT_EQ(inactive.begin()->first, 2500 - 1920);
+}
+
+TEST_F(ScoreAutomationController_Tests, PrepareAudioSyncEdits_VerticalMove_ChainsWithinNextSyncPoint)
+{
+    // [GIVEN] Sync points at 0 s, 2 s and 4 s, one measure (4 quarters) apart
+    ScoreAutomationController controller;
+    controller.init(s_dynamicsScore);
+    controller.setAudioSyncEnabled(true);
+
+    AutomationPointEdits edits {
+        { 0, AutomationPointEdit::SetPoint { syncPoint(0.0) } },
+        { 1920, AutomationPointEdit::SetPoint { syncPoint(2.0) } },
+        { 3840, AutomationPointEdit::SetPoint { syncPoint(4.0) } },
+    };
+    controller.editPoints(TEMPO_KEY, edits);
+
+    // [WHEN] The first point's tempo is dragged to 1 bps (a MovePoint to its own tick)
+    AutomationPoint edited = controller.automationData()->curve(TEMPO_KEY).at(0);
+    edited.value.outValue = normalizeTempo(BeatsPerSecond(1.0));
+    AutomationPointEdits moveEdits { { 0, AutomationPointEdit::MovePoint { edited, 0 } } };
+    controller.prepareAudioSyncEdits(TEMPO_KEY, moveEdits);
+
+    // [THEN] The next point moves, but stays before the one after it (4 s would be reached at 1 bps)
+    ASSERT_EQ(moveEdits.size(), size_t(2));
+    EXPECT_EQ(moveEdits[1].tick, 1920);
+    const auto* setPoint = std::get_if<AutomationPointEdit::SetPoint>(&moveEdits[1].change);
+    ASSERT_TRUE(setPoint && setPoint->point.audioSync);
+    EXPECT_NEAR(setPoint->point.audioSync->audioSecs, 3.999, TIME_ERROR);
+}
+
+TEST_F(ScoreAutomationController_Tests, PrepareAudioSyncEdits_LockedNextSyncPoint_StaysInPlace)
+{
+    // [GIVEN] Sync points at 0 s and 2 s, the second one locked
+    ScoreAutomationController controller;
+    controller.init(s_dynamicsScore);
+    controller.setAudioSyncEnabled(true);
+
+    AutomationPointEdits edits {
+        { 0, AutomationPointEdit::SetPoint { syncPoint(0.0) } },
+        { 1920, AutomationPointEdit::SetPoint { syncPoint(2.0, /*locked*/ true) } },
+    };
+    controller.editPoints(TEMPO_KEY, edits);
+
+    // [WHEN] The first point's tempo is edited
+    AutomationPoint edited = controller.automationData()->curve(TEMPO_KEY).at(0);
+    edited.value.outValue = normalizeTempo(BeatsPerSecond(1.0));
+    AutomationPointEdits setEdits { { 0, AutomationPointEdit::SetPoint { edited } } };
+    controller.prepareAudioSyncEdits(TEMPO_KEY, setEdits);
+
+    // [THEN] Nothing is chained into the locked point
+    ASSERT_EQ(setEdits.size(), size_t(1));
+    const auto* setPoint = std::get_if<AutomationPointEdit::SetPoint>(&setEdits[0].change);
+    ASSERT_TRUE(setPoint && setPoint->point.audioSync);
+    EXPECT_DOUBLE_EQ(setPoint->point.audioSync->audioSecs, 0.0);
+}

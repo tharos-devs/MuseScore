@@ -36,7 +36,9 @@ Rectangle {
     //! color; otherwise the color as is, rounded, the text black or white
     property bool mixerStyle: false
 
-    readonly property color trackColor: root.channelItem.hasCustomColor ? root.channelItem.color : ui.theme.accentColor
+    //! NOTE: channelItem may be null for a moment (e.g. the Audio sync window's reference audio being removed)
+    readonly property color trackColor: root.channelItem && root.channelItem.hasCustomColor ? root.channelItem.color
+                                                                                            : ui.theme.accentColor
 
     height: root.mixerStyle ? 22 : 24
     radius: root.mixerStyle ? 0 : 2
@@ -56,6 +58,6 @@ Rectangle {
         //! NOTE: readable on light and dark track colors alike
         color: root.mixerStyle ? ui.theme.fontPrimaryColor
                : (0.299 * root.trackColor.r + 0.587 * root.trackColor.g + 0.114 * root.trackColor.b) > 0.6 ? "black" : "white"
-        text: root.channelItem.title
+        text: root.channelItem ? root.channelItem.title : ""
     }
 }

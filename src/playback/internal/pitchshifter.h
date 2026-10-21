@@ -22,12 +22,22 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 
 #include <QString>
 
 namespace mu::playback::audiosync {
+//! NOTE The speeds transformWav() supports (clamped to them): the played speed outside of them isn't the score's one
+constexpr double MIN_TRANSFORM_SPEED = 0.25;
+constexpr double MAX_TRANSFORM_SPEED = 2.0;
+
+inline double clampTransformSpeed(double speed)
+{
+    return std::clamp(speed, MIN_TRANSFORM_SPEED, MAX_TRANSFORM_SPEED);
+}
+
 //! NOTE Writes a 16-bit PCM WAV file (e.g. the reference audio, decoded) transposed by semitones and played at speed
 //! (its length divided by it), each one without changing the other: a phase vocoder (with identity phase locking)
 //! stretches it, then it's resampled. Progress in [0; 1]; false if canceled or the file can't be read/written

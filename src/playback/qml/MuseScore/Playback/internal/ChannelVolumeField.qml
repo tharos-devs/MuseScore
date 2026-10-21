@@ -33,7 +33,7 @@ TextInputField {
 
     required property MixerChannelItem channelItem
 
-    property NavigationPanel navigationPanel: channelItem.panel
+    property NavigationPanel navigationPanel: channelItem?.panel ?? null
     property int navigationRowStart: 0
     property string accessibleName: ""
 
@@ -43,7 +43,8 @@ TextInputField {
     width: 46
 
     //! NOTE: the volume curve drawn on the score sets it then
-    enabled: !root.channelItem.hasVolumeAutomation
+    //! NOTE: channelItem may be null for a moment (e.g. the Audio sync window's reference audio being removed)
+    enabled: Boolean(root.channelItem) && !root.channelItem.hasVolumeAutomation
 
     textHorizontalAlignment: Qt.AlignHCenter
     textSidePadding: 0
@@ -60,12 +61,12 @@ TextInputField {
     }
 
     validator: DoubleInputValidator {
-        top: root.channelItem.volumeLevelMax
-        bottom: root.channelItem.volumeLevelMin
+        top: root.channelItem?.volumeLevelMax ?? 0
+        bottom: root.channelItem?.volumeLevelMin ?? 0
         decimal: 1
     }
 
-    currentText: Math.round(root.channelItem.volumeLevel * 10) / 10
+    currentText: Math.round((root.channelItem?.volumeLevel ?? 0) * 10) / 10
 
     onTextEdited: function(newTextValue) {
         if (root.channelItem.volumeLevel !== Number(newTextValue)) {

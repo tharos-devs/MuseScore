@@ -42,9 +42,13 @@ Column {
     property bool showEq: false
 
     property NavigationPanel navigationPanel: null
-    //! NOTE: its navigation rows, from this one: Gain and Pan (knob, field), volume field, fader, Mute/Solo, EQ
+    //! NOTE: its navigation rows, from this one: Gain and Pan (knob, field), volume field, fader, Mute/Solo, EQ; all
+    //! in one column (the knobs', the fader's: -1), for a vertical panel
     property int navigationRowStart: 0
     property string navigationName: "ChannelControls"
+
+    //! NOTE: may be null for a moment (e.g. the Audio sync window's reference audio being removed)
+    readonly property string channelTitle: root.channelItem ? root.channelItem.title : ""
 
     //! NOTE: what a click on Mute/Solo changes is up to the panel (see ChannelMuteSoloButtons)
     signal muteToggled(bool muted)
@@ -73,7 +77,7 @@ Column {
             knobRadius: root.knobRadius
             navigationPanel: root.navigationPanel
             navigationRowStart: root.navigationRowStart
-            accessibleName: root.channelItem.title + " " + qsTrc("playback", "Gain")
+            accessibleName: root.channelTitle + " " + qsTrc("playback", "Gain")
         }
 
         ChannelEqThumbnail {
@@ -84,7 +88,8 @@ Column {
             channelItem: root.channelItem
             navigationPanel: root.navigationPanel
             navigationRowStart: root.navigationRowStart + 8
-            accessibleName: root.channelItem.title + " " + qsTrc("playback", "EQ")
+            navigationColumn: -1
+            accessibleName: root.channelTitle + " " + qsTrc("playback", "EQ")
         }
     }
 
@@ -102,7 +107,7 @@ Column {
             navigationPanel: root.navigationPanel
             knobRadius: root.knobRadius
             navigationRowStart: root.navigationRowStart + 2
-            accessibleName: root.channelItem.title + " " + qsTrc("playback", "Pan")
+            accessibleName: root.channelTitle + " " + qsTrc("playback", "Pan")
         }
     }
 
@@ -119,7 +124,7 @@ Column {
             channelItem: root.channelItem
             navigationPanel: root.navigationPanel
             navigationRowStart: root.navigationRowStart + 4
-            accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
+            accessibleName: root.channelTitle + " " + qsTrc("playback", "Volume")
         }
 
         ChannelFader {
@@ -128,7 +133,7 @@ Column {
             metersSpacing: root.faderMetersSpacing
             navigationPanel: root.navigationPanel
             navigationRowStart: root.navigationRowStart + 5
-            accessibleName: root.channelItem.title + " " + qsTrc("playback", "Volume")
+            accessibleName: root.channelTitle + " " + qsTrc("playback", "Volume")
         }
 
         //! NOTE: closer to the fader: its meters' scale ends below its handle
@@ -147,10 +152,10 @@ Column {
                 navigationPanel: root.navigationPanel
                 navigationName: root.navigationName
                 muteNavigationRow: root.navigationRowStart + 6
-                muteNavigationColumn: 0
+                muteNavigationColumn: -1
                 soloNavigationRow: root.navigationRowStart + 6 + 1
-                soloNavigationColumn: 0
-                accessibleName: root.channelItem.title
+                soloNavigationColumn: -1
+                accessibleName: root.channelTitle
 
                 onMuteToggled: function(muted) {
                     root.muteToggled(muted)

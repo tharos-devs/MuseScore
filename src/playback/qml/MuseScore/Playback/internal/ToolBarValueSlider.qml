@@ -47,6 +47,8 @@ Row {
 
     property NavigationPanel navigationPanel: null
     property int navigationOrder: 0
+    //! NOTE Its title, or a name of its own without one (e.g. the zoom)
+    property string accessibleName: root.title
 
     //! NOTE The slider's position, while dragged too
     readonly property real currentValue: slider.value
@@ -79,7 +81,7 @@ Row {
             value: root.value
             navigation.panel: root.navigationPanel
             navigation.order: root.navigationOrder
-            navigation.accessible.name: root.title
+            navigation.accessible.name: root.accessibleName
 
             //! NOTE Two presses close together: a MouseArea over it would have to let the presses through to the
             //! slider, and then never gets the double-click
@@ -88,6 +90,7 @@ Row {
 
             onPressedChanged: {
                 if (pressed) {
+                    keyEditTimer.stop()
                     const now = Date.now()
                     resetOnRelease = now - lastPressTime < 400
                     lastPressTime = resetOnRelease ? 0 : now
@@ -106,9 +109,21 @@ Row {
             }
 
             onMoved: {
-                if (!pressed || root.live) {
+                if (root.live) {
                     root.valueEdited(value)
+                } else if (!pressed) {
+                    keyEditTimer.restart()
                 }
+            }
+
+            //! NOTE The keys (or the wheel) not live: the last value sent once they stop, not each step (each one may
+            //! start a transformed copy of the audio)
+            Timer {
+                id: keyEditTimer
+
+                interval: 400
+
+                onTriggered: root.valueEdited(slider.value)
             }
         }
     }

@@ -37,6 +37,7 @@
 #include "project/iprojectaudiosyncsettings.h"
 
 #include "audiosyncedits.h"
+#include "pitchshifter.h"
 #include "referenceaudiofile.h"
 
 #include "../playbackcommands.h"
@@ -190,11 +191,14 @@ muse::Ret PlaybackCommandsController::addAudioSyncPointAtPlayback()
     notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     context::IPlaybackStatePtr playbackState = globalContext()->playbackState();
     const engraving::Score* score = masterNotation ? masterNotation->masterScore() : nullptr;
-    if (!automation || !automation->isAudioSyncEnabled() || !playbackState || !score) {
+    project::IProjectAudioSyncSettingsPtr audioSyncSettings = project ? project->audioSyncSettings() : nullptr;
+    if (!automation || !automation->isAudioSyncEnabled() || !playbackState || !score || !audioSyncSettings
+        || !audioSyncSettings->referenceAudio().isValid()) {
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
 
-    //! NOTE Audio time = playback time * playback speed + offset; the beat is the score's one playing now
+    //! NOTE Audio time heard = (playback time - the track delay) * its played speed + offset: the delay is real time (it
+    //! plays the audio later); the beat is the score's one playing now
     const double playbackSecs = playbackState->playbackPosition();
     const engraving::TempoTimeline& timeline = score->tempoTimeline(true);
     const std::optional<int> beat = audiosync::nearestBeatUtick(score, timeline.utime2utick(playbackSecs));
@@ -202,7 +206,9 @@ muse::Ret PlaybackCommandsController::addAudioSyncPointAtPlayback()
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
 
-    audiosync::addPoint(*automation, score, *beat, automation->audioSyncOffsetSecs() + playbackSecs * timeline.tempoMultiplier().val);
+    const double delaySecs = audioSyncSettings->referenceAudio().delayMs / 1000.0;
+    const double speed = audiosync::clampTransformSpeed(timeline.tempoMultiplier().val);
+    audiosync::addPoint(*automation, score, *beat, automation->audioSyncOffsetSecs() + (playbackSecs - delaySecs) * speed);
     return muse::make_ok();
 }
 

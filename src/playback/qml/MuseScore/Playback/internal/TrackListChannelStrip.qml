@@ -158,6 +158,8 @@ Item {
                         channelItem: root.channelItem
                         navigationPanel: root.navigationPanel
                         navigationRowStart: root.eqRow
+                        //! NOTE: in the column of the strip's other controls (see ChannelMainControls)
+                        navigationColumn: -1
                         accessibleName: root.channelItem.title + " " + qsTrc("playback", "EQ")
                     }
                 }

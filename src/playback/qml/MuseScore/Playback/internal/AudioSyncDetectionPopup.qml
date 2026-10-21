@@ -93,6 +93,9 @@ StyledPopupView {
             stepSize: 0.05
             value: root.sensitivity
             fillBackground: false
+            navigation.panel: navPanel
+            navigation.order: 1
+            navigation.accessible.name: qsTrc("playback", "Sensitivity")
 
             onMoved: root.sensitivity = value
         }
@@ -117,7 +120,7 @@ StyledPopupView {
                 decimals: 0
                 measureUnitsSymbol: qsTrc("playback", "BPM")
                 navigation.panel: navPanel
-                navigation.order: 1
+                navigation.order: 2
 
                 onValueEdited: function(newValue) { root.minBpm = newValue }
             }
@@ -135,7 +138,7 @@ StyledPopupView {
                 decimals: 0
                 measureUnitsSymbol: qsTrc("playback", "BPM")
                 navigation.panel: navPanel
-                navigation.order: 2
+                navigation.order: 3
 
                 onValueEdited: function(newValue) { root.maxBpm = newValue }
             }
@@ -160,7 +163,7 @@ StyledPopupView {
                 ]
                 currentIndex: indexOfValue(root.octave)
                 navigation.panel: navPanel
-                navigation.order: 3
+                navigation.order: 4
 
                 onActivated: function(index, value) { root.octave = value }
             }
@@ -170,7 +173,7 @@ StyledPopupView {
             checked: root.everyMeasure
             text: qsTrc("playback", "Add a point on every measure")
             navigation.panel: navPanel
-            navigation.order: 4
+            navigation.order: 5
 
             onClicked: root.everyMeasure = !root.everyMeasure
         }
@@ -204,7 +207,7 @@ StyledPopupView {
                 decimals: 0
                 measureUnitsSymbol: qsTrc("global", "ms")
                 navigation.panel: navPanel
-                navigation.order: 5
+                navigation.order: 6
 
                 onValueEdited: function(newValue) { root.toleranceMs = newValue }
             }
@@ -217,7 +220,7 @@ StyledPopupView {
             FlatButton {
                 text: qsTrc("global", "Cancel")
                 navigation.panel: navPanel
-                navigation.order: 6
+                navigation.order: 7
 
                 onClicked: root.close()
             }
@@ -226,7 +229,7 @@ StyledPopupView {
                 text: qsTrc("playback", "Detect")
                 accentButton: true
                 navigation.panel: navPanel
-                navigation.order: 7
+                navigation.order: 8
 
                 onClicked: {
                     root.detectRequested({

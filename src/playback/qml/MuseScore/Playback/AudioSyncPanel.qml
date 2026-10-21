@@ -47,6 +47,30 @@ Item {
         direction: NavigationPanel.Horizontal
     }
 
+    //! NOTE The channel side bar's controls, after the toolbar's (as the Track list's channel strip)
+    NavigationPanel {
+        id: sidebarNavigationPanel
+        name: "AudioSyncChannelSidebar"
+        section: root.navigationSection
+        order: root.contentNavigationPanelOrderStart + 1
+        direction: NavigationPanel.Vertical
+        enabled: root.visible && channelSidebarLoader.active
+        accessible.name: channelModel.channelItem ? channelModel.channelItem.title : ""
+    }
+
+    //! NOTE The beat detection settings, kept for the session (its popup is made again each time it opens)
+    QtObject {
+        id: detectionSettings
+
+        property real sensitivity: 0.5
+        property int minBpm: 50
+        property int maxBpm: 200
+        property int octave: 0
+        property bool everyMeasure: false
+        property bool ignoreLeadingSilence: true
+        property int toleranceMs: 20
+    }
+
     ColumnLayout {
         anchors.fill: parent
         //! NOTE Up into the dock frame's 12 px margin below its tabs (DockFrame.qml), leaving 4 px: the same space
@@ -131,6 +155,22 @@ Item {
                     navigation.order: 7
 
                     popupComponent: AudioSyncDetectionPopup {
+                        sensitivity: detectionSettings.sensitivity
+                        minBpm: detectionSettings.minBpm
+                        maxBpm: detectionSettings.maxBpm
+                        octave: detectionSettings.octave
+                        everyMeasure: detectionSettings.everyMeasure
+                        ignoreLeadingSilence: detectionSettings.ignoreLeadingSilence
+                        toleranceMs: detectionSettings.toleranceMs
+
+                        onSensitivityChanged: detectionSettings.sensitivity = sensitivity
+                        onMinBpmChanged: detectionSettings.minBpm = minBpm
+                        onMaxBpmChanged: detectionSettings.maxBpm = maxBpm
+                        onOctaveChanged: detectionSettings.octave = octave
+                        onEveryMeasureChanged: detectionSettings.everyMeasure = everyMeasure
+                        onIgnoreLeadingSilenceChanged: detectionSettings.ignoreLeadingSilence = ignoreLeadingSilence
+                        onToleranceMsChanged: detectionSettings.toleranceMs = toleranceMs
+
                         onDetectRequested: function(params) {
                             syncView.detectPoints(params)
                         }
@@ -168,7 +208,7 @@ Item {
                     transparent: true
                     toolTipTitle: qsTrc("playback", "Cancel detection")
                     navigation.panel: navigationPanel
-                    navigation.order: 8
+                    navigation.order: 9
 
                     onClicked: syncView.cancelDetection()
                 }
@@ -176,169 +216,180 @@ Item {
 
             //! NOTE Compact, like a transport bar: small grey buttons under the playback clock
             //! NOTE Centered between the left and right groups (not in the toolbar: they aren't as wide, so the gaps on
-            //! its sides wouldn't be either)
+            //! its sides wouldn't be either). Without the room for it all: the Pitch and Speed sliders hidden first,
+            //! then clipped
             Item {
                 id: transportGroup
 
-                anchors.fill: parent
+                //! NOTE From the buttons' and the sliders' own widths, not the row's (it changes with them)
+                readonly property bool showSliders: width >= transportCore.width + pitchSlider.width + speedSlider.width
+                                                    + 2 * transportButtons.spacing
+
+                x: leftGroup.x + leftGroup.width
+                width: Math.max(0, rightGroup.x - x)
+                height: parent.height
+                clip: transportButtons.width > width
 
                 Row {
                     id: transportButtons
 
-                    x: {
-                        const freeLeft = leftGroup.x + leftGroup.width
-                        const freeWidth = rightGroup.x - freeLeft
-                        return Math.round(freeLeft + Math.max(0, (freeWidth - width) / 2))
-                    }
+                    x: Math.round(Math.max(0, (parent.width - width) / 2))
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: IconCode.REWIND_START_FILL
-                        toolTipTitle: qsTrc("playback", "Go to start")
-                        navigation.panel: navigationPanel
-                        navigation.order: 23
+                    Row {
+                        id: transportCore
 
-                        onClicked: syncView.rewindToStart()
-                    }
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: IconCode.REPEAT_START
-                        enabled: syncView.hasLoopFrom
-                        toolTipTitle: qsTrc("playback", "Go to loop start (A)")
-                        navigation.panel: navigationPanel
-                        navigation.order: 23
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: IconCode.REWIND_START_FILL
+                            toolTipTitle: qsTrc("playback", "Go to start")
+                            navigation.panel: navigationPanel
+                            navigation.order: 22
 
-                        onClicked: syncView.goToLoopStart()
-                    }
+                            onClicked: syncView.rewindToStart()
+                        }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: syncView.isPlaying ? IconCode.PAUSE_FILL : IconCode.PLAY_FILL
-                        toolTipTitle: syncView.isPlaying ? qsTrc("playback", "Pause") : qsTrc("playback", "Play")
-                        navigation.panel: navigationPanel
-                        navigation.order: 24
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: IconCode.REPEAT_START
+                            enabled: syncView.hasLoopFrom
+                            toolTipTitle: qsTrc("playback", "Go to loop start (A)")
+                            navigation.panel: navigationPanel
+                            navigation.order: 23
 
-                        onClicked: syncView.togglePlay()
-                    }
+                            onClicked: syncView.goToLoopStart()
+                        }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: IconCode.STOP_FILL
-                        toolTipTitle: qsTrc("playback", "Stop")
-                        navigation.panel: navigationPanel
-                        navigation.order: 25
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: syncView.isPlaying ? IconCode.PAUSE_FILL : IconCode.PLAY_FILL
+                            toolTipTitle: syncView.isPlaying ? qsTrc("playback", "Pause") : qsTrc("playback", "Play")
+                            navigation.panel: navigationPanel
+                            navigation.order: 24
 
-                        onClicked: syncView.stopPlayback()
-                    }
+                            onClicked: syncView.togglePlay()
+                        }
 
-                    //! NOTE Playback position and duration on the left, measure.beat and tempo on the right; fixed-width
-                    //! digits, so nothing moves while it runs
-                    Item {
-                        width: clockGrid.implicitWidth + 16
-                        height: 26
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: IconCode.STOP_FILL
+                            toolTipTitle: qsTrc("playback", "Stop")
+                            navigation.panel: navigationPanel
+                            navigation.order: 25
 
-                        GridLayout {
-                            id: clockGrid
+                            onClicked: syncView.stopPlayback()
+                        }
 
-                            anchors.centerIn: parent
-                            columns: 2
-                            columnSpacing: 12
-                            rowSpacing: -2
+                        //! NOTE Playback position and duration on the left, measure.beat and tempo on the right; fixed-width
+                        //! digits, so nothing moves while it runs
+                        Item {
+                            width: clockGrid.implicitWidth + 16
+                            height: 26
 
-                            StyledTextLabel {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: syncView.timeText
-                                font.pixelSize: 14
-                                font.features: { "tnum": 1 }
-                            }
+                            GridLayout {
+                                id: clockGrid
 
-                            StyledTextLabel {
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.minimumWidth: 36
-                                text: syncView.positionText
-                                font.pixelSize: 14
-                                font.features: { "tnum": 1 }
-                            }
+                                anchors.centerIn: parent
+                                columns: 2
+                                columnSpacing: 12
+                                rowSpacing: -2
 
-                            StyledTextLabel {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: syncView.durationText
-                                font.pixelSize: 9
-                                font.features: { "tnum": 1 }
-                                opacity: 0.75
-                            }
+                                StyledTextLabel {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: syncView.timeText
+                                    font.pixelSize: 14
+                                    font.features: { "tnum": 1 }
+                                }
 
-                            StyledTextLabel {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: syncView.tempoText
-                                font.pixelSize: 9
-                                font.features: { "tnum": 1 }
-                                opacity: 0.75
+                                StyledTextLabel {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.minimumWidth: 36
+                                    text: syncView.positionText
+                                    font.pixelSize: 14
+                                    font.features: { "tnum": 1 }
+                                }
+
+                                StyledTextLabel {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: syncView.durationText
+                                    font.pixelSize: 9
+                                    font.features: { "tnum": 1 }
+                                    opacity: 0.75
+                                }
+
+                                StyledTextLabel {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: syncView.tempoText
+                                    font.pixelSize: 9
+                                    font.features: { "tnum": 1 }
+                                    opacity: 0.75
+                                }
                             }
                         }
-                    }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        minWidth: 26
-                        enabled: syncView.hasAudio
-                        text: "A"
-                        accentButton: syncView.hasLoopFrom
-                        toolTipTitle: qsTrc("playback", "Set loop start (A)")
-                        toolTipDescription: qsTrc("playback", "At the playback position; click again to clear it")
-                        navigation.panel: navigationPanel
-                        navigation.order: 26
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            minWidth: 26
+                            enabled: syncView.hasAudio
+                            text: "A"
+                            accentButton: syncView.hasLoopFrom
+                            toolTipTitle: qsTrc("playback", "Set loop start (A)")
+                            toolTipDescription: qsTrc("playback", "At the playback position; click again to clear it")
+                            navigation.panel: navigationPanel
+                            navigation.order: 26
 
-                        onClicked: syncView.toggleLoopFrom()
-                    }
+                            onClicked: syncView.toggleLoopFrom()
+                        }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        minWidth: 26
-                        enabled: syncView.hasAudio
-                        text: "B"
-                        accentButton: syncView.hasLoopTo
-                        toolTipTitle: qsTrc("playback", "Set loop end (B)")
-                        toolTipDescription: qsTrc("playback", "At the playback position; click again to clear it")
-                        navigation.panel: navigationPanel
-                        navigation.order: 27
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            minWidth: 26
+                            enabled: syncView.hasAudio
+                            text: "B"
+                            accentButton: syncView.hasLoopTo
+                            toolTipTitle: qsTrc("playback", "Set loop end (B)")
+                            toolTipDescription: qsTrc("playback", "At the playback position; click again to clear it")
+                            navigation.panel: navigationPanel
+                            navigation.order: 27
 
-                        onClicked: syncView.toggleLoopTo()
-                    }
+                            onClicked: syncView.toggleLoopTo()
+                        }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: IconCode.LOOP
-                        enabled: syncView.hasLoopFrom && syncView.hasLoopTo
-                        accentButton: syncView.loopEnabled
-                        toolTipTitle: qsTrc("playback", "Loop A-B")
-                        navigation.panel: navigationPanel
-                        navigation.order: 28
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: IconCode.LOOP
+                            enabled: syncView.hasLoopFrom && syncView.hasLoopTo
+                            accentButton: syncView.loopEnabled
+                            toolTipTitle: qsTrc("playback", "Loop A-B")
+                            navigation.panel: navigationPanel
+                            navigation.order: 28
 
-                        onClicked: syncView.loopEnabled = !syncView.loopEnabled
-                    }
+                            onClicked: syncView.loopEnabled = !syncView.loopEnabled
+                        }
 
-                    FlatButton {
-                        width: 26
-                        height: 26
-                        icon: IconCode.PAN_SCORE
-                        accentButton: syncView.followPlayback
-                        toolTipTitle: qsTrc("playback", "Follow playback")
-                        toolTipDescription: qsTrc("playback", "Scroll the waveform along with the playback cursor")
-                        navigation.panel: navigationPanel
-                        navigation.order: 29
+                        FlatButton {
+                            width: 26
+                            height: 26
+                            icon: IconCode.PAN_SCORE
+                            accentButton: syncView.followPlayback
+                            toolTipTitle: qsTrc("playback", "Follow playback")
+                            toolTipDescription: qsTrc("playback", "Scroll the waveform along with the playback cursor")
+                            navigation.panel: navigationPanel
+                            navigation.order: 29
 
-                        onClicked: syncView.followPlayback = !syncView.followPlayback
+                            onClicked: syncView.followPlayback = !syncView.followPlayback
+                        }
                     }
 
                     //! NOTE The reference audio transposed by semitones (its duration kept): applied when released,
@@ -347,6 +398,7 @@ Item {
                         id: pitchSlider
 
                         anchors.verticalCenter: parent.verticalCenter
+                        visible: transportGroup.showSliders
                         leftPadding: 8
                         enabled: syncView.hasAudio
                         title: qsTrc("playback", "Pitch")
@@ -371,7 +423,10 @@ Item {
                     //! NOTE The score's playback speed (the playback toolbar's one): the reference audio follows it,
                     //! its pitch kept (a stretched copy being made first), the sync kept
                     ToolBarValueSlider {
+                        id: speedSlider
+
                         anchors.verticalCenter: parent.verticalCenter
+                        visible: transportGroup.showSliders
                         enabled: syncView.hasAudio
                         title: qsTrc("playback", "Speed")
                         from: 50
@@ -422,6 +477,7 @@ Item {
                     to: Math.floor(Math.log(syncView.maxZoomPercent / 100) / stepFactor)
                     value: Math.round(Math.log(syncView.zoomPercent / 100) / stepFactor)
                     defaultValue: 0
+                    accessibleName: qsTrc("playback", "Zoom")
                     navigationPanel: navigationPanel
                     navigationOrder: 42
 
@@ -484,6 +540,8 @@ Item {
 
                 //! NOTE Made with the reference audio's channel only (its controls need one)
                 Loader {
+                    id: channelSidebarLoader
+
                     anchors.fill: parent
                     active: Boolean(channelModel.channelItem)
 
@@ -536,7 +594,7 @@ Item {
                                         faderMetersSpacing: 2
                                         showEq: true
                                         spacing: 10
-                                        navigationPanel: navigationPanel
+                                        navigationPanel: sidebarNavigationPanel
                                         navigationRowStart: 0
                                         navigationName: "AudioSyncChannel"
 
@@ -561,8 +619,9 @@ Item {
                                             toolTipTitle: syncView.showStereo && syncView.isStereoAudio
                                                           ? qsTrc("playback", "Stereo waveform") : qsTrc("playback", "Mono waveform")
                                             toolTipDescription: qsTrc("playback", "Show the left and right channels separately, or mixed")
-                                            navigation.panel: navigationPanel
-                                            navigation.order: 19
+                                            //! NOTE Below the channel's controls (rows 0-8, see ChannelMainControls)
+                                            navigation.panel: sidebarNavigationPanel
+                                            navigation.row: 9
 
                                             onClicked: syncView.showStereo = !syncView.showStereo
                                         }
@@ -573,8 +632,8 @@ Item {
                                             icon: IconCode.METRONOME
                                             accentButton: syncView.metronomeEnabled
                                             toolTipTitle: qsTrc("playback", "Metronome")
-                                            navigation.panel: navigationPanel
-                                            navigation.order: 20
+                                            navigation.panel: sidebarNavigationPanel
+                                            navigation.row: 10
 
                                             onClicked: syncView.toggleMetronome()
                                         }
