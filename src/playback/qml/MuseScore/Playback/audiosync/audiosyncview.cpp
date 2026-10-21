@@ -225,7 +225,8 @@ void AudioSyncView::onProjectChanged()
     if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
         settings->settingsChanged().onNotify(this, [this]() {
             emit audioChanged();
-            update();
+            //! NOTE The reference is shown with an audio only (see rebuildGrid())
+            invalidateGrid();
         }, Asyncable::Mode::SetReplace);
     }
 
@@ -842,11 +843,37 @@ void AudioSyncView::dropUrls(const QList<QUrl>& urls)
     audiosync::setReferenceAudioPath(playbackConfiguration().get(), audioSyncSettings(), urls.first().toLocalFile());
 }
 
-void AudioSyncView::removeAudio()
+void AudioSyncView::startNew()
 {
-    if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
-        settings->clearReferenceAudio();
+    cancelDetection();
+    m_selectedPointUtick = -1;
+    m_pointDrag.reset();
+    m_loopDrag.reset();
+    m_dragMode = DragMode::None;
+
+    if (notation::INotationAutomationPtr automationPtr = automation()) {
+        automationPtr->clearAudioSync();
     }
+
+    if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
+        //! NOTE The pitch, delay and loop are the reference audio's settings
+        settings->clearReferenceAudio();
+
+        //! NOTE The next audio is fitted
+        m_viewStateTimer.stop();
+        m_pendingViewState.reset();
+        settings->setViewState(project::AudioSyncViewState());
+    }
+
+    m_viewShown = false;
+    m_scrollSecs = 0.0;
+    m_amplitudeZoom = 1.0;
+    if (std::abs(playbackController()->tempoMultiplier() - 1.0) > 1e-6) {
+        playbackController()->setTempoMultiplier(1.0);
+    }
+
+    invalidateGrid();
+    emit viewChanged();
 }
 
 // ---- view ----
@@ -1107,6 +1134,9 @@ double AudioSyncView::audioOffsetSecs() const
 
 double AudioSyncView::audioSecsOf(const GridTime& time) const
 {
+    if (m_pointDrag && m_pointDrag->shiftAll) {
+        return time.secs + audioOffsetSecs() + m_pointDrag->audioSecs - m_pointDrag->originalSecs;
+    }
     if (m_pointDrag) {
         return previewAudioSecs(time);
     }
@@ -1359,6 +1389,14 @@ void AudioSyncView::rebuildGrid() const
         m_syncPoints = audiosync::syncPoints(*automationPtr);
         m_audioSyncEnabled = automationPtr->isAudioSyncEnabled();
         m_audioOffsetSecs = automationPtr->audioSyncOffsetSecs();
+
+        //! NOTE Off without any sync point yet: the reference (the score's start) is shown all the same, to be moved
+        //! (made when it is, see INotationAutomation::moveAudioSyncPoints())
+        if (!m_audioSyncEnabled && m_syncPoints.empty() && hasAudio()) {
+            audiosync::SyncPoint reference;
+            reference.audioSecs = m_audioOffsetSecs;
+            m_syncPoints.push_back(reference);
+        }
     }
 
     const Score* sc = score();
@@ -1478,9 +1516,11 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
     if (const std::optional<size_t> index = pointAt(pos)) {
         const audiosync::SyncPoint& point = m_syncPoints[*index];
         m_selectedPointUtick = point.utick;
-        if (m_audioSyncEnabled && !point.locked) {
+        //! NOTE Off, only the reference moves (the other points don't drive the tempo then)
+        if (!point.locked && (m_audioSyncEnabled || *index == 0)) {
             PointDrag drag;
             drag.utick = point.utick;
+            drag.shiftAll = !m_audioSyncEnabled;
             drag.originalSecs = point.audioSecs;
             drag.audioSecs = point.audioSecs;
             drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
@@ -1544,7 +1584,9 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
         // Kept where both neighboring segments stay within the allowed tempos
         const double wantedSecs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
         double secs = wantedSecs;
-        if (const auto range = audiosync::allowedAudioRange(m_syncPoints, m_pointDrag->utick)) {
+        if (m_pointDrag->shiftAll) {
+            // All moved together: no segment changes
+        } else if (const auto range = audiosync::allowedAudioRange(m_syncPoints, m_pointDrag->utick)) {
             secs = std::clamp(secs, range->first, range->second);
         }
         m_pointDrag->audioSecs = secs;
@@ -1599,7 +1641,11 @@ void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
 
         notation::INotationAutomationPtr automationPtr = automation();
         if (drag.moved && exists && automationPtr) {
-            audiosync::movePoint(*automationPtr, drag.utick, drag.audioSecs);
+            if (drag.shiftAll) {
+                automationPtr->moveAudioSyncPoints(drag.audioSecs - drag.originalSecs);
+            } else {
+                audiosync::movePoint(*automationPtr, drag.utick, drag.audioSecs);
+            }
         }
         update();
         return;
@@ -1633,12 +1679,22 @@ void AudioSyncView::mouseDoubleClickEvent(QMouseEvent* event)
         return;
     }
 
-    //! NOTE On a point: deletes it (not the first one, the score's start)
+    //! NOTE On a point: deletes it; on the first one (the reference, the score's start): puts it back at the audio's
+    //! start (off, all the points with it, as when dragged)
     if (const std::optional<size_t> index = pointAt(pos)) {
         m_pointDrag.reset();
         m_dragMode = DragMode::None;
         if (notation::INotationAutomationPtr automationPtr = automation()) {
-            if (audiosync::removePoint(*automationPtr, m_syncPoints[*index].utick)) {
+            const audiosync::SyncPoint& point = m_syncPoints[*index];
+            if (*index == 0) {
+                if (!point.locked) {
+                    if (m_audioSyncEnabled) {
+                        audiosync::movePoint(*automationPtr, point.utick, 0.0);
+                    } else {
+                        automationPtr->moveAudioSyncPoints(-point.audioSecs);
+                    }
+                }
+            } else if (audiosync::removePoint(*automationPtr, point.utick)) {
                 m_selectedPointUtick = -1;
             }
         }
@@ -1779,7 +1835,11 @@ std::vector<double> AudioSyncView::displayedPointSecs() const
     std::vector<double> result;
     result.reserve(m_syncPoints.size());
     for (size_t i = 0; i < m_syncPoints.size(); ++i) {
-        result.push_back(dragged && *dragged == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
+        if (m_pointDrag && m_pointDrag->shiftAll) {
+            result.push_back(m_syncPoints[i].audioSecs + m_pointDrag->audioSecs - m_pointDrag->originalSecs);
+        } else {
+            result.push_back(dragged && *dragged == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
+        }
     }
     return result;
 }
@@ -1797,6 +1857,12 @@ std::optional<size_t> AudioSyncView::pointAt(const QPointF& pos) const
     const std::vector<double> secs = displayedPointSecs();
     std::optional<size_t> nearest;
     double nearestDistance = inRail ? POINT_HIT_DISTANCE : POINT_HIT_DISTANCE / 2.0;
+
+    //! NOTE Off, the reference first: the only one that moves then
+    if (!m_audioSyncEnabled && !secs.empty() && std::abs(xForAudioSecs(secs.front()) - pos.x()) <= nearestDistance) {
+        return 0;
+    }
+
     for (size_t i = 0; i < secs.size(); ++i) {
         const double distance = std::abs(xForAudioSecs(secs[i]) - pos.x());
         if (distance <= nearestDistance) {
@@ -1927,7 +1993,8 @@ void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, c
 
         //! NOTE All the points look the same, whatever placed them; only an uncertain detected one has a hollow handle
         QColor color = m_accentColor;
-        color.setAlphaF(opacity);
+        //! NOTE Off, the reference still applies (where the score starts in the audio)
+        color.setAlphaF(i == 0 ? 1.0 : opacity);
         const bool uncertain = isUncertainPoint(point);
 
         const bool isSelected = selected && *selected == i;

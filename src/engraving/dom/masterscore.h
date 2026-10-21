@@ -114,6 +114,12 @@ public:
     bool isAudioSyncEnabled() const;
     //! NOTE Undoable; turning it on also converts the current tempo into sync points
     void setAudioSyncEnabled(bool enabled);
+    //! NOTE Undoable, while audio sync is off: its sync points all moved in the audio (where the score starts in it)
+    void moveAudioSyncPoints(double deltaSecs);
+    //! NOTE Audio sync on, or sync points kept while it's off
+    bool hasAudioSync() const;
+    //! NOTE Undoable: audio sync off (the score's own tempo back) and its sync points removed
+    void clearAudioSync();
     double audioSyncOffsetSecs() const;
     double audioSecsAtUtick(int utick) const;
 

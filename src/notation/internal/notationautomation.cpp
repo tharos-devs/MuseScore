@@ -117,6 +117,36 @@ void NotationAutomation::setAudioSyncEnabled(bool enabled)
     });
 }
 
+void NotationAutomation::moveAudioSyncPoints(double deltaSecs)
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    if (m_masterScore->isAudioSyncEnabled() || deltaSecs == 0.0) {
+        return;
+    }
+
+    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Move audio sync start"), [&](engraving::Transaction&) {
+        m_masterScore->moveAudioSyncPoints(deltaSecs);
+    });
+}
+
+void NotationAutomation::clearAudioSync()
+{
+    IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
+        return;
+    }
+
+    if (!m_masterScore->hasAudioSync()) {
+        return;
+    }
+
+    m_undoStack->transaction(muse::TranslatableString("undoableAction", "Clear audio sync"), [&](engraving::Transaction&) {
+        m_masterScore->clearAudioSync();
+    });
+}
+
 double NotationAutomation::audioSyncOffsetSecs() const
 {
     return m_masterScore ? m_masterScore->audioSyncOffsetSecs() : 0.0;

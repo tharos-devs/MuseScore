@@ -201,3 +201,30 @@ void EditAudioSyncEnabled::flip()
     m_controller->setAudioSyncEnabled(m_enabled);
     m_enabled = previous;
 }
+
+EditInactiveTempoCurve::EditInactiveTempoCurve(Score* score, ScoreAutomationController* controller, AutomationCurve curve)
+    : m_score(score), m_controller(controller), m_curve(std::move(curve))
+{
+    assert(score && controller);
+}
+
+std::optional<ChangedRange> EditInactiveTempoCurve::changedRange() const
+{
+    const Measure* lastMeasure = m_score ? m_score->lastMeasure() : nullptr;
+    if (!lastMeasure) {
+        return std::nullopt;
+    }
+
+    return ChangedRange { Fraction(0, 1), lastMeasure->endTick(), muse::nidx, muse::nidx };
+}
+
+void EditInactiveTempoCurve::flip()
+{
+    IF_ASSERT_FAILED(m_controller) {
+        return;
+    }
+
+    AutomationCurve previous = m_controller->inactiveTempoCurve();
+    m_controller->setInactiveTempoCurve(m_curve);
+    m_curve = std::move(previous);
+}

@@ -154,6 +154,7 @@ enum class CommandType : signed char {
     EditAutomationPoints,
     EditCustomMidiCcs,
     EditAudioSyncEnabled,
+    EditInactiveTempoCurve,
 
     // Articulation maps
     EditArticulationMap,

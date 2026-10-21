@@ -101,13 +101,13 @@ Item {
                     icon: IconCode.NEW_FILE
                     buttonType: FlatButton.IconOnly
                     transparent: true
-                    enabled: syncView.hasAudio
+                    enabled: syncView.hasAudio || syncView.audioSyncEnabled || syncView.hasSyncPoints
                     toolTipTitle: qsTrc("playback", "New")
-                    toolTipDescription: qsTrc("playback", "Removes the reference audio")
+                    toolTipDescription: qsTrc("playback", "Removes the reference audio and the sync points, and resets the pitch, speed and zoom")
                     navigation.panel: navigationPanel
                     navigation.order: 0
 
-                    onClicked: syncView.removeAudio()
+                    onClicked: syncView.startNew()
                 }
 
                 RecentFilesLoadButton {

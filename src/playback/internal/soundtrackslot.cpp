@@ -256,7 +256,7 @@ void SoundTrackSlot::reset()
         m_decoder->cancel();
     }
 
-    const bool wasDecoding = m_isDecodePending;
+    const bool hadDecodeState = m_isDecodePending || !m_wavPath.empty() || m_decodeFailed;
 
     m_source = Source();
     m_trackId = INVALID_TRACK_ID;
@@ -274,7 +274,7 @@ void SoundTrackSlot::reset()
     m_lastAppliedMuteState.reset();
     m_isForceMuted = false;
 
-    if (wasDecoding) {
+    if (hadDecodeState) {
         m_decodeStateChanged.notify();
     }
 }
@@ -411,7 +411,8 @@ void SoundTrackSlot::remove()
         m_decoder->cancel();
     }
 
-    const bool wasDecoding = m_isDecodePending;
+    //! NOTE A decoded file going away is a change too (e.g. the Audio sync window's waveform)
+    const bool hadDecodeState = m_isDecodePending || !m_wavPath.empty() || m_decodeFailed;
     m_isDecodePending = false;
     m_decodeFailed = false;
     m_decodedSourcePath = muse::io::path_t();
@@ -420,7 +421,7 @@ void SoundTrackSlot::remove()
     cancelPitchShift();
     updateFilesInUse();
 
-    if (wasDecoding) {
+    if (hadDecodeState) {
         m_decodeStateChanged.notify();
     }
 

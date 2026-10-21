@@ -650,6 +650,21 @@ bool ScoreAutomationController::isAudioSyncEnabled() const
     return m_automationData && m_automationData->isAudioSyncEnabled();
 }
 
+AutomationCurve ScoreAutomationController::inactiveTempoCurve() const
+{
+    return m_automationData ? m_automationData->inactiveTempoCurve() : AutomationCurve();
+}
+
+void ScoreAutomationController::setInactiveTempoCurve(const AutomationCurve& curve)
+{
+    if (!m_automationData) {
+        m_automationData = std::make_shared<AutomationData>();
+    }
+
+    //! NOTE Notified: out of a rebuild, nothing else tells
+    m_automationData->setInactiveTempoCurve(curve, /*notify*/ true);
+}
+
 void ScoreAutomationController::setAudioSyncEnabled(bool enabled)
 {
     if (!m_automationData) {
@@ -706,6 +721,42 @@ bool ScoreAutomationController::hasAudioSyncPoints() const
 
     const AutomationCurve& syncCurve = isAudioSyncEnabled() ? m_automationData->curve(TEMPO_KEY) : m_automationData->inactiveTempoCurve();
     return std::any_of(syncCurve.begin(), syncCurve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); });
+}
+
+bool ScoreAutomationController::hasAudioSyncMap() const
+{
+    if (!m_automationData) {
+        return false;
+    }
+
+    const AutomationCurve& syncCurve = isAudioSyncEnabled() ? m_automationData->curve(TEMPO_KEY) : m_automationData->inactiveTempoCurve();
+    return std::count_if(syncCurve.begin(), syncCurve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); }) > 1;
+}
+
+AutomationCurve ScoreAutomationController::inactiveSyncCurveShiftedBy(double deltaSecs) const
+{
+    AutomationCurve curve = m_automationData ? m_automationData->inactiveTempoCurve() : AutomationCurve();
+    const bool hasSyncPoints = std::any_of(curve.begin(), curve.end(), [](const auto& pair) { return pair.second.audioSync.has_value(); });
+
+    if (!hasSyncPoints) {
+        AutomationPoint point;
+        point.value.inValue = AutomationPoint::ArrivalFromPrevious {};
+        point.value.outValue = normalizeTempo(m_tempoTimeline.tempo(0));
+
+        AudioSyncInfo sync;
+        sync.audioSecs = deltaSecs;
+        sync.origin = AudioSyncInfo::Origin::Manual;
+        point.audioSync = sync;
+        curve.insert_or_assign(0, point);
+        return curve;
+    }
+
+    for (auto& [utick, point] : curve) {
+        if (point.audioSync) {
+            point.audioSync->audioSecs += deltaSecs;
+        }
+    }
+    return curve;
 }
 
 double ScoreAutomationController::audioSecsAtUtick(int utick) const
@@ -781,6 +832,8 @@ AutomationPointEdits ScoreAutomationController::audioSyncConversionEdits() const
 
     // At the score's start, then wherever the current tempo changes, at their current time: nothing moves
     const AutomationCurve& curve = m_automationData->curve(TEMPO_KEY);
+    //! NOTE Where the reference (see inactiveSyncCurveShiftedBy()) puts the score's start, if it was set
+    const double offset = audioSyncOffsetSecs();
 
     auto makePoint = [&](utick_t utick, real_t value) {
         AutomationPoint point;
@@ -788,7 +841,7 @@ AutomationPointEdits ScoreAutomationController::audioSyncConversionEdits() const
         point.value.outValue = value;
 
         AudioSyncInfo sync;
-        sync.audioSecs = timelineSecsAtUtick(utick);
+        sync.audioSecs = offset + timelineSecsAtUtick(utick);
         sync.origin = AudioSyncInfo::Origin::FromTempo;
         point.audioSync = sync;
         return point;

@@ -48,6 +48,8 @@ public:
 
     bool isAudioSyncEnabled() const override;
     void setAudioSyncEnabled(bool enabled) override;
+    void moveAudioSyncPoints(double deltaSecs) override;
+    void clearAudioSync() override;
     double audioSyncOffsetSecs() const override;
     double audioSecsAtUtick(int utick) const override;
 

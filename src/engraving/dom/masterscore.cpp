@@ -176,14 +176,41 @@ void MasterScore::setAudioSyncEnabled(bool enabled)
     }
 
     //! NOTE The conversion is computed from the tempo as it is before audio sync is on
-    //! NOTE The first time only: afterwards, the sync points are kept while audio sync is off
-    AutomationPointEdits conversion = enabled && !m_automationController->hasAudioSyncPoints()
+    //! NOTE The first time only (a reference alone doesn't count, see moveAudioSyncPoints()): afterwards, the sync
+    //! points are kept while audio sync is off
+    AutomationPointEdits conversion = enabled && !m_automationController->hasAudioSyncMap()
                                       ? m_automationController->audioSyncConversionEdits() : AutomationPointEdits();
 
     undo(new EditAudioSyncEnabled(this, m_automationController, enabled));
 
     if (!conversion.empty()) {
         undo(new EditAutomationPoints(this, m_automationController, TEMPO_KEY, conversion));
+    }
+}
+
+void MasterScore::moveAudioSyncPoints(double deltaSecs)
+{
+    if (m_automationController->isAudioSyncEnabled() || deltaSecs == 0.0) {
+        return;
+    }
+
+    undo(new EditInactiveTempoCurve(this, m_automationController, m_automationController->inactiveSyncCurveShiftedBy(deltaSecs)));
+}
+
+bool MasterScore::hasAudioSync() const
+{
+    return m_automationController->isAudioSyncEnabled() || m_automationController->hasAudioSyncPoints();
+}
+
+void MasterScore::clearAudioSync()
+{
+    if (m_automationController->isAudioSyncEnabled()) {
+        undo(new EditAudioSyncEnabled(this, m_automationController, false));
+    }
+
+    //! NOTE Off, the sync points are the inactive ones
+    if (!m_automationController->inactiveTempoCurve().empty()) {
+        undo(new EditInactiveTempoCurve(this, m_automationController, AutomationCurve()));
     }
 }
 

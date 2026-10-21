@@ -211,7 +211,9 @@ public:
     Q_INVOKABLE void chooseAudioFile();
     Q_INVOKABLE bool canDropUrls(const QList<QUrl>& urls) const;
     Q_INVOKABLE void dropUrls(const QList<QUrl>& urls);
-    Q_INVOKABLE void removeAudio();
+    //! NOTE Starts again: no reference audio, no sync points (the score's own tempo back), pitch, speed and zoom by
+    //! default
+    Q_INVOKABLE void startNew();
 
     //! NOTE At the playback position, or cleared if already set
     Q_INVOKABLE void toggleLoopFrom();
@@ -289,6 +291,8 @@ private:
         double originalSecs = 0.0;
         double audioSecs = 0.0;
         bool moved = false;
+        //! NOTE Audio sync off: the reference (where the score starts in the audio) moves all the points with it
+        bool shiftAll = false;
         //! NOTE Stopped by a neighboring segment's tempo limit (MIN/MAX_SYNC_BPM): shown, so the user knows why
         bool atLimit = false;
     };

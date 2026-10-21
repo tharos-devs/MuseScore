@@ -69,7 +69,8 @@ public:
     //! NOTE The authored tempo points not in use: the audio sync points while audio sync is off, the other tempo
     //! points while it's on (turning it on or off swaps them with the Tempo curve's, see ScoreAutomationController)
     const AutomationCurve& inactiveTempoCurve() const;
-    void setInactiveTempoCurve(const AutomationCurve& curve);
+    //! NOTE notify: as a change of the Tempo curve (its listeners, e.g. the reference audio's offset)
+    void setInactiveTempoCurve(const AutomationCurve& curve, bool notify = false);
 
     std::string dump() const;
 

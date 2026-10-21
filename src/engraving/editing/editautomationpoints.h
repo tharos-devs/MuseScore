@@ -80,6 +80,29 @@ private:
     bool m_enabled = false;
 };
 
+//! NOTE: replaces the tempo points not in use (see AutomationData::inactiveTempoCurve): the audio sync points while
+//! audio sync is off
+class EditInactiveTempoCurve : public UndoableCommand
+{
+    OBJECT_ALLOCATOR(engraving, EditInactiveTempoCurve)
+
+public:
+    EditInactiveTempoCurve(Score* score, ScoreAutomationController* controller, AutomationCurve curve);
+
+    UNDO_TYPE(CommandType::EditInactiveTempoCurve)
+    UNDO_NAME("EditInactiveTempoCurve")
+    UNDO_CHANGED_OBJECTS({ m_score })
+
+    std::optional<ChangedRange> changedRange() const override;
+
+private:
+    void flip() override;
+
+    Score* m_score = nullptr;
+    ScoreAutomationController* m_controller = nullptr;
+    AutomationCurve m_curve;
+};
+
 //! NOTE: replaces the score's custom MIDI CC list (see AutomationData::customMidiCcs)
 class EditCustomMidiCcs : public UndoableCommand
 {

@@ -869,6 +869,33 @@ TEST_F(ScoreAutomationController_Tests, InsertTime_AudioSync_ShiftsInactiveTempo
     EXPECT_EQ(inactive.begin()->first, 2500 - 1920);
 }
 
+TEST_F(ScoreAutomationController_Tests, AudioSyncOff_MovedReference_KeptByFirstConversion)
+{
+    // [GIVEN] Audio sync never turned on
+    ScoreAutomationController controller;
+    controller.init(s_dynamicsScore);
+    ASSERT_FALSE(controller.hasAudioSyncPoints());
+
+    // [WHEN] The reference is moved twice while off
+    controller.setInactiveTempoCurve(controller.inactiveSyncCurveShiftedBy(1.5));
+    controller.setInactiveTempoCurve(controller.inactiveSyncCurveShiftedBy(0.5));
+
+    // [THEN] One reference at the score's start, 2 s into the audio; not a sync map yet
+    const AutomationCurve inactive = controller.inactiveTempoCurve();
+    ASSERT_EQ(inactive.size(), size_t(1));
+    EXPECT_EQ(inactive.begin()->first, 0);
+    EXPECT_DOUBLE_EQ(controller.audioSyncOffsetSecs(), 2.0);
+    EXPECT_FALSE(controller.hasAudioSyncMap());
+
+    // [THEN] The first conversion starts the score there
+    const AutomationPointEdits conversion = controller.audioSyncConversionEdits();
+    ASSERT_FALSE(conversion.empty());
+    const auto* first = std::get_if<AutomationPointEdit::SetPoint>(&conversion.front().change);
+    ASSERT_TRUE(first && first->point.audioSync);
+    EXPECT_EQ(conversion.front().tick, 0);
+    EXPECT_DOUBLE_EQ(first->point.audioSync->audioSecs, 2.0);
+}
+
 TEST_F(ScoreAutomationController_Tests, PrepareAudioSyncEdits_VerticalMove_ChainsWithinNextSyncPoint)
 {
     // [GIVEN] Sync points at 0 s, 2 s and 4 s, one measure (4 quarters) apart
