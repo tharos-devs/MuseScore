@@ -493,7 +493,7 @@ void AudioSyncView::setMoveFollowingPoints(bool move)
 
 bool AudioSyncView::dragMovesFollowing() const
 {
-    return m_pointDrag && !m_pointDrag->shiftAll && m_moveFollowingPoints != m_pointDrag->altSeen;
+    return m_pointDrag && !m_pointDrag->shiftAll && m_moveFollowingPoints != m_pointDrag->modifierSeen;
 }
 
 std::optional<size_t> AudioSyncView::draggedFollowingEnd() const
@@ -1581,7 +1581,7 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
             drag.originalSecs = point.audioSecs;
             drag.audioSecs = point.audioSecs;
             drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
-            drag.altSeen = event->modifiers() & Qt::AltModifier;
+            drag.modifierSeen = event->modifiers() & Qt::ControlModifier;
             m_pointDrag = drag;
             m_previewPointsDirty = true;
             m_dragMode = DragMode::Point;
@@ -1639,7 +1639,7 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
             return;
         }
 
-        m_pointDrag->altSeen = m_pointDrag->altSeen || (event->modifiers() & Qt::AltModifier);
+        m_pointDrag->modifierSeen = m_pointDrag->modifierSeen || (event->modifiers() & Qt::ControlModifier);
 
         // Kept where both neighboring segments (the one before it only, the ones after moved with it) stay within the
         // allowed tempos
@@ -1798,15 +1798,17 @@ void AudioSyncView::keyPressEvent(QKeyEvent* event)
         deleteSelectedPoint();
         break;
     case Qt::Key_Left:
-        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? -LARGE_NUDGE_SECS : -NUDGE_SECS, event->modifiers() & Qt::AltModifier);
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? -LARGE_NUDGE_SECS : -NUDGE_SECS,
+                           event->modifiers() & Qt::ControlModifier);
         break;
     case Qt::Key_Right:
-        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS, event->modifiers() & Qt::AltModifier);
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS,
+                           event->modifiers() & Qt::ControlModifier);
         break;
-    case Qt::Key_Alt:
+    case Qt::Key_Control:
         // While dragging a point: shown at once, not at the next mouse move
-        if (m_pointDrag && !m_pointDrag->altSeen) {
-            m_pointDrag->altSeen = true;
+        if (m_pointDrag && !m_pointDrag->modifierSeen) {
+            m_pointDrag->modifierSeen = true;
             m_previewPointsDirty = true;
             update();
         }
@@ -1990,7 +1992,7 @@ void AudioSyncView::addPointAt(double audioSecs, bool snapToBeat)
     }
 }
 
-void AudioSyncView::nudgeSelectedPoint(double deltaSecs, bool altPressed)
+void AudioSyncView::nudgeSelectedPoint(double deltaSecs, bool modifierPressed)
 {
     const std::optional<size_t> index = selectedPointIndex();
     notation::INotationAutomationPtr automationPtr = automation();
@@ -1999,7 +2001,7 @@ void AudioSyncView::nudgeSelectedPoint(double deltaSecs, bool altPressed)
     }
 
     audiosync::movePoint(*automationPtr, m_syncPoints[*index].utick, m_syncPoints[*index].audioSecs + deltaSecs,
-                         m_moveFollowingPoints != altPressed);
+                         m_moveFollowingPoints != modifierPressed);
 }
 
 void AudioSyncView::deleteSelectedPoint()

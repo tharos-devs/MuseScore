@@ -201,7 +201,9 @@ Item {
                     accentButton: syncView.moveFollowingPoints
                     enabled: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Move the following points too")
-                    toolTipDescription: qsTrc("playback", "Moving a sync point also moves the ones after it, keeping their tempo: only the tempo before it changes. Alt: the other way round, for one move.")
+                    //: %1: the Cmd key (macOS) or the Ctrl key
+                    toolTipDescription: qsTrc("playback", "Moving a sync point also moves the ones after it, keeping their tempo: only the tempo before it changes. %1: the other way round, for one move.")
+                                        .arg(Qt.platform.os === "osx" ? "Cmd" : "Ctrl")
                     navigation.panel: navigationPanel
                     navigation.order: 10
 
