@@ -1596,6 +1596,8 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
 
     m_dragMode = DragMode::Seek;
     m_seekPressX = pos.x();
+    //! NOTE Dragging marks the A-B loop on the waveform only: elsewhere (the rulers) it only moves the position
+    m_seekPressOnWaveform = waveformRect().contains(pos);
     seekToAudioSecs(audioSecsAtX(pos.x()));
     event->accept();
 }
@@ -1664,7 +1666,7 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
 
     //! NOTE Dragging the playback position marks the A-B loop over the dragged range (set on release)
     const double x = event->position().x();
-    if (m_loopDrag || std::abs(x - m_seekPressX) >= SEEK_DRAG_LOOP_DISTANCE) {
+    if (m_seekPressOnWaveform && (m_loopDrag || std::abs(x - m_seekPressX) >= SEEK_DRAG_LOOP_DISTANCE)) {
         const double pressSecs = std::max(0.0, audioSecsAtX(m_seekPressX));
         const double secs = std::max(0.0, audioSecsAtX(x));
         if (!m_loopDrag) {
@@ -1763,8 +1765,19 @@ void AudioSyncView::mouseDoubleClickEvent(QMouseEvent* event)
         return;
     }
 
-    //! NOTE On the nearest beat, unless Shift is held (anywhere)
-    addPointAt(audioSecsAtX(pos.x()), !(event->modifiers() & Qt::ShiftModifier));
+    //! NOTE On the measures' ruler: plays from there (the click moved the position there)
+    if (pos.y() < railRect().top()) {
+        if (!m_isPlaying) {
+            togglePlay();
+        }
+        event->accept();
+        return;
+    }
+
+    //! NOTE A point is added on the points' rail only: on the nearest beat, unless Shift is held (anywhere)
+    if (railRect().contains(pos)) {
+        addPointAt(audioSecsAtX(pos.x()), !(event->modifiers() & Qt::ShiftModifier));
+    }
     event->accept();
 }
 

@@ -452,6 +452,7 @@ private:
         bool enableOnRelease = false; // a new loop, marked by dragging the playback position
     };
     double m_seekPressX = 0.0;
+    bool m_seekPressOnWaveform = false;
     std::optional<LoopDrag> m_loopDrag;
 
     DragMode m_dragMode = DragMode::None;

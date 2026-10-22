@@ -134,7 +134,7 @@ Item {
                     text: qsTrc("playback", "Sync", "Use audio sync: the score's tempo follows the audio sync points")
                     accentButton: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Use audio sync")
-                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click: add a point on the nearest beat (Shift: anywhere), or delete a point. Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
+                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click on the points row: add a point on the nearest beat (Shift: anywhere); on a point: delete it. Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
                     navigation.panel: navigationPanel
                     navigation.order: 6
 
