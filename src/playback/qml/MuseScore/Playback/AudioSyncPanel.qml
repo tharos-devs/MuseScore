@@ -202,7 +202,9 @@ Item {
                     enabled: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Move the following points too")
                     //: %1: the Cmd key (macOS) or the Ctrl key
-                    toolTipDescription: qsTrc("playback", "Moving a sync point also moves the ones after it, keeping their tempo: only the tempo before it changes. %1: the other way round, for one move.")
+                    toolTipDescription: (syncView.moveFollowingPoints
+                                         ? qsTrc("playback", "Hold %1 while dragging to move one point only")
+                                         : qsTrc("playback", "Hold %1 while dragging to move the following points too"))
                                         .arg(Qt.platform.os === "osx" ? "Cmd" : "Ctrl")
                     navigation.panel: navigationPanel
                     navigation.order: 10
