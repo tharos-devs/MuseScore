@@ -690,10 +690,11 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     //! NOTE From the score's start (the first sync point): where it is in the audio, or where the music starts
     //! after the silence the audio may begin with (then the score's first note goes there)
     const audiosync::SyncPoint& first = m_syncPoints.front();
-    //! NOTE A score's start the user placed (moved) is always where to start from: the music's start is only
-    //! looked for when it wasn't
-    const bool ignoreLeadingSilence = params.value("ignoreLeadingSilence", true).toBool()
-                                      && first.origin != engraving::AudioSyncInfo::Origin::Manual;
+    //! NOTE A score's start the user placed (moved), or with the silence at the beginning not ignored, is where to
+    //! start from as it is: the music's start is only looked for otherwise, and it's not moved onto a beat
+    const bool startKept = first.origin == engraving::AudioSyncInfo::Origin::Manual
+                           || !params.value("ignoreLeadingSilence", true).toBool();
+    const bool ignoreLeadingSilence = !startKept;
 
     audiosync::BeatDetectionParams detectionParams;
     detectionParams.flexibility = params.value("flexibility", 0.5).toDouble();
@@ -712,7 +713,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
     job->options.flexibility = detectionParams.flexibility;
     job->approxTempoGiven = detectionParams.approxBpm > 0.0;
-    job->options.keepAnchor = first.origin == engraving::AudioSyncInfo::Origin::Manual;
+    job->options.keepAnchor = startKept;
     job->options.findDownbeats = !job->options.keepAnchor && firstNoteUtick < 0;
     m_detectionJob = job;
     m_detectionProgress = 0.0;
