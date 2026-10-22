@@ -30,7 +30,9 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # x86_64 on Ubuntu 22.04 with GCC 12: the AppImage then needs glibc 2.35 and GCC 12's libstdc++, so it runs on older
+    # systems too (built on 24.04 with GCC 14, it needs glibc 2.39 and GCC 14's libstdc++). Qt for ARM needs 24.04
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-22.04' }}
     steps:
     - name: Clone repository
       uses: actions/checkout@v7
@@ -137,6 +139,8 @@ jobs:
         modules: 'qt5compat qtnetworkauth qtshadertools qtwebsockets qtmultimedia'
         cache: true
     - name: Setup environment
+      env:
+        MUSE_GCC_VERSION: ${{ inputs.arch == 'aarch64' && '14' || '12' }}
       run: |
         bash ./buildscripts/ci/linux/setup.sh --arch ${{ inputs.arch }} --build-pipewire
 
