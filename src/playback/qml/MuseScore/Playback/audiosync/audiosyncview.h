@@ -75,6 +75,8 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
     Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
+    //! NOTE Moving a sync point moves the ones after it too (Alt: the other way round, for one move)
+    Q_PROPERTY(bool moveFollowingPoints READ moveFollowingPoints WRITE setMoveFollowingPoints NOTIFY moveFollowingPointsChanged)
     //! NOTE The reference audio played transposed (see ReferenceAudioSettings::pitchSemitones)
     Q_PROPERTY(int pitchSemitones READ pitchSemitones WRITE setPitchSemitones NOTIFY audioChanged)
     Q_PROPERTY(bool pitchShifting READ pitchShifting NOTIFY decodeStateChanged)
@@ -152,6 +154,8 @@ public:
     void setShowStereo(bool showStereo);
     bool isStereoAudio() const;
     bool audioSyncEnabled() const;
+    bool moveFollowingPoints() const;
+    void setMoveFollowingPoints(bool move);
     int pitchSemitones() const;
     void setPitchSemitones(int semitones);
     bool pitchShifting() const;
@@ -249,6 +253,7 @@ signals:
     void viewChanged();
     void positionTextChanged();
     void syncChanged();
+    void moveFollowingPointsChanged();
     void playingChanged();
     void metronomeChanged();
     void speedChanged();
@@ -295,6 +300,8 @@ private:
         bool shiftAll = false;
         //! NOTE Stopped by a neighboring segment's tempo limit (MIN/MAX_SYNC_BPM): shown, so the user knows why
         bool atLimit = false;
+        //! NOTE The points after it move with it (see moveFollowingPoints()); Alt seen during the drag inverts it
+        bool altSeen = false;
     };
 
     project::IProjectAudioSyncSettingsPtr audioSyncSettings() const;
@@ -326,7 +333,8 @@ private:
     std::optional<size_t> pointAt(const QPointF& pos) const;
     std::optional<size_t> selectedPointIndex() const;
     void addPointAt(double audioSecs, bool snapToBeat);
-    void nudgeSelectedPoint(double deltaSecs);
+    void nudgeSelectedPoint(double deltaSecs, bool altPressed);
+    bool dragMovesFollowing() const;
     void deleteSelectedPoint();
     void paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const;
     void paintLoop(QPainter* painter, const QRectF& waveRect) const;
@@ -387,6 +395,7 @@ private:
     mutable GridTime m_scoreEnd;
     mutable std::vector<audiosync::SyncPoint> m_syncPoints;
     mutable bool m_audioSyncEnabled = false;
+    bool m_moveFollowingPoints = false;
     mutable double m_audioOffsetSecs = 0.0;
     bool m_gridRefreshPending = false;
 

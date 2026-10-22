@@ -56,6 +56,9 @@ std::optional<double> segmentBpm(const std::vector<SyncPoint>& points, size_t in
 //! (the point at utick itself, if any, ignored); nullopt if none
 std::optional<std::pair<double, double> > allowedAudioRange(const std::vector<SyncPoint>& points, int utick);
 
+//! NOTE allowedAudioRange() for a point moved, alone or with the ones after it
+std::optional<std::pair<double, double> > allowedMoveRange(const std::vector<SyncPoint>& points, int utick, bool moveFollowing);
+
 //! NOTE The nearest measure start or beat (the metronome's beats) to a utick of the unrolled score
 std::optional<int> nearestBeatUtick(const engraving::Score* score, int utick);
 
@@ -138,9 +141,11 @@ struct AppliedDetection {
 AppliedDetection applyDetectedPoints(notation::INotationAutomation& automation, const engraving::Score* score,
                                      const std::vector<MatchedPoint>& points, std::optional<double> scoreStartSecs);
 
-//! NOTE Undoable edits; false if refused (out of the allowed range, initial point...)
+//! NOTE Undoable edits; false if refused (out of the allowed range, initial point...). moveFollowing: the points
+//! after it move by as much (up to a locked one), only the tempo before it changes: an offset from there on fixed
+//! at once
 bool addPoint(notation::INotationAutomation& automation, const engraving::Score* score, int utick, double audioSecs);
-bool movePoint(notation::INotationAutomation& automation, int utick, double audioSecs);
+bool movePoint(notation::INotationAutomation& automation, int utick, double audioSecs, bool moveFollowing = false);
 bool removePoint(notation::INotationAutomation& automation, int utick);
 //! NOTE All of them but the first one (the score's start) and the locked ones, in one undoable step; false if none
 bool removeAllPoints(notation::INotationAutomation& automation);

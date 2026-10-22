@@ -65,7 +65,7 @@ Item {
         property real flexibility: 0.5
         property int approxBpm: 0
         property int octave: 0
-        property bool everyMeasure: false
+        property bool everyMeasure: true
         property bool ignoreLeadingSilence: true
         property int toleranceMs: 20
     }
@@ -190,6 +190,22 @@ Item {
                     navigation.order: 8
 
                     onClicked: syncView.clearSyncPoints()
+                }
+
+                FlatButton {
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    icon: IconCode.LINK
+                    buttonType: FlatButton.IconOnly
+                    transparent: !syncView.moveFollowingPoints
+                    accentButton: syncView.moveFollowingPoints
+                    enabled: syncView.audioSyncEnabled
+                    toolTipTitle: qsTrc("playback", "Move the following points too")
+                    toolTipDescription: qsTrc("playback", "Moving a sync point also moves the ones after it, keeping their tempo: only the tempo before it changes. Alt: the other way round, for one move.")
+                    navigation.panel: navigationPanel
+                    navigation.order: 10
+
+                    onClicked: syncView.moveFollowingPoints = !syncView.moveFollowingPoints
                 }
 
                 ProgressBar {

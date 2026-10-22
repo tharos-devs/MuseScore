@@ -206,7 +206,23 @@ bool addPoint(INotationAutomation& automation, const Score* score, int utick, do
                      muse::TranslatableString("undoableAction", "Add audio sync point"));
 }
 
-bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
+std::optional<std::pair<double, double> > allowedMoveRange(const std::vector<SyncPoint>& points, int utick, bool moveFollowing)
+{
+    if (!moveFollowing) {
+        return allowedAudioRange(points, utick);
+    }
+
+    // The ones after it move with it: only the segment before it changes
+    std::vector<SyncPoint> before;
+    for (const SyncPoint& point : points) {
+        if (point.utick <= utick) {
+            before.push_back(point);
+        }
+    }
+    return allowedAudioRange(before, utick);
+}
+
+bool movePoint(INotationAutomation& automation, int utick, double audioSecs, bool moveFollowing)
 {
     const AutomationDataConstPtr data = automation.automationData();
     if (!data || !data->isAudioSyncEnabled()) {
@@ -219,7 +235,7 @@ bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
         return false;
     }
 
-    const std::optional<std::pair<double, double> > range = allowedAudioRange(syncPoints(automation), utick);
+    const std::optional<std::pair<double, double> > range = allowedMoveRange(syncPoints(automation), utick, moveFollowing);
     if (!range) {
         return false;
     }
@@ -231,8 +247,26 @@ bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
         return false;
     }
 
-    return editPoint(automation, utick, AutomationPointEdit::SetPoint { point },
-                     muse::TranslatableString("undoableAction", "Move audio sync point"));
+    AutomationPointEdits edits { { utick, AutomationPointEdit::SetPoint { point } } };
+    if (moveFollowing) {
+        const double deltaSecs = point.audioSync->audioSecs - it->second.audioSync->audioSecs;
+        for (auto next = std::next(it); next != curve.end(); ++next) {
+            if (!next->second.audioSync) {
+                continue;
+            }
+            if (next->second.audioSync->locked) {
+                break;
+            }
+            AutomationPoint moved = next->second;
+            moved.audioSync->audioSecs += deltaSecs;
+            edits.push_back({ next->first, AutomationPointEdit::SetPoint { moved } });
+        }
+    }
+
+    std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve { { TEMPO_KEY, edits } };
+    automation.editPoints(editsByCurve, moveFollowing ? muse::TranslatableString("undoableAction", "Move audio sync points")
+                          : muse::TranslatableString("undoableAction", "Move audio sync point"));
+    return true;
 }
 
 bool removePoint(INotationAutomation& automation, int utick)

@@ -41,7 +41,7 @@ StyledPopupView {
     //! NOTE 0: automatic
     property int approxBpm: 0
     property int octave: 0
-    property bool everyMeasure: false
+    property bool everyMeasure: true
     property bool ignoreLeadingSilence: true
     property int toleranceMs: 20
 

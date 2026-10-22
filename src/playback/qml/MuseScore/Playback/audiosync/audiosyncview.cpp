@@ -476,6 +476,26 @@ void AudioSyncView::clearSyncPoints()
     }
 }
 
+bool AudioSyncView::moveFollowingPoints() const
+{
+    return m_moveFollowingPoints;
+}
+
+void AudioSyncView::setMoveFollowingPoints(bool move)
+{
+    if (m_moveFollowingPoints == move) {
+        return;
+    }
+
+    m_moveFollowingPoints = move;
+    emit moveFollowingPointsChanged();
+}
+
+bool AudioSyncView::dragMovesFollowing() const
+{
+    return m_pointDrag && !m_pointDrag->shiftAll && m_moveFollowingPoints != m_pointDrag->altSeen;
+}
+
 void AudioSyncView::setAudioSyncEnabled(bool enabled)
 {
     if (notation::INotationAutomationPtr automationPtr = automation()) {
@@ -662,7 +682,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->options.anchorUtick = first.utick;
     job->options.anchorSecs = first.audioSecs;
     job->options.octave = static_cast<audiosync::DetectionOptions::Octave>(std::clamp(params.value("octave", 0).toInt(), 0, 3));
-    job->options.everyMeasure = params.value("everyMeasure", false).toBool();
+    job->options.everyMeasure = params.value("everyMeasure", true).toBool();
     job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
     std::tie(job->options.minBpm, job->options.maxBpm) = audiosync::tempoRange(detectionParams.approxBpm);
     //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
@@ -1184,6 +1204,7 @@ void AudioSyncView::ensurePreviewPoints() const
     const Score* sc = score();
     const RepeatList* repeatList = sc && !isPlayRepeatsEnabled() ? &sc->expandedRepeatList() : nullptr;
     const std::optional<size_t> dragged = draggedPointIndex();
+    const bool moveFollowing = dragMovesFollowing();
 
     struct Point {
         int tick = 0;
@@ -1204,7 +1225,11 @@ void AudioSyncView::ensurePreviewPoints() const
         }
 
         const bool isDragged = dragged && *dragged == i;
-        points.push_back({ tick, isDragged ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs, isDragged });
+        double secs = isDragged ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs;
+        if (dragged && i > *dragged && moveFollowing && !m_syncPoints[i].locked) {
+            secs += m_pointDrag->audioSecs - m_pointDrag->originalSecs;
+        }
+        points.push_back({ tick, secs, isDragged });
     }
 
     if (repeatList) {
@@ -1532,6 +1557,7 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
             drag.originalSecs = point.audioSecs;
             drag.audioSecs = point.audioSecs;
             drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
+            drag.altSeen = event->modifiers() & Qt::AltModifier;
             m_pointDrag = drag;
             m_previewPointsDirty = true;
             m_dragMode = DragMode::Point;
@@ -1589,12 +1615,15 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
             return;
         }
 
-        // Kept where both neighboring segments stay within the allowed tempos
+        m_pointDrag->altSeen = m_pointDrag->altSeen || (event->modifiers() & Qt::AltModifier);
+
+        // Kept where both neighboring segments (the one before it only, the ones after moved with it) stay within the
+        // allowed tempos
         const double wantedSecs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
         double secs = wantedSecs;
         if (m_pointDrag->shiftAll) {
             // All moved together: no segment changes
-        } else if (const auto range = audiosync::allowedAudioRange(m_syncPoints, m_pointDrag->utick)) {
+        } else if (const auto range = audiosync::allowedMoveRange(m_syncPoints, m_pointDrag->utick, dragMovesFollowing())) {
             secs = std::clamp(secs, range->first, range->second);
         }
         m_pointDrag->audioSecs = secs;
@@ -1643,6 +1672,7 @@ void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
     if (m_dragMode == DragMode::Point && m_pointDrag) {
         ensureGrid();
         const PointDrag drag = *m_pointDrag;
+        const bool moveFollowing = dragMovesFollowing();
         const bool exists = draggedPointIndex().has_value();
         m_pointDrag.reset();
         m_dragMode = DragMode::None;
@@ -1652,7 +1682,7 @@ void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
             if (drag.shiftAll) {
                 automationPtr->moveAudioSyncPoints(drag.audioSecs - drag.originalSecs);
             } else {
-                audiosync::movePoint(*automationPtr, drag.utick, drag.audioSecs);
+                audiosync::movePoint(*automationPtr, drag.utick, drag.audioSecs, moveFollowing);
             }
         }
         update();
@@ -1744,10 +1774,10 @@ void AudioSyncView::keyPressEvent(QKeyEvent* event)
         deleteSelectedPoint();
         break;
     case Qt::Key_Left:
-        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? -LARGE_NUDGE_SECS : -NUDGE_SECS);
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? -LARGE_NUDGE_SECS : -NUDGE_SECS, event->modifiers() & Qt::AltModifier);
         break;
     case Qt::Key_Right:
-        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS);
+        nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS, event->modifiers() & Qt::AltModifier);
         break;
     case Qt::Key_Escape:
         if (m_pointDrag) {
@@ -1923,7 +1953,7 @@ void AudioSyncView::addPointAt(double audioSecs, bool snapToBeat)
     }
 }
 
-void AudioSyncView::nudgeSelectedPoint(double deltaSecs)
+void AudioSyncView::nudgeSelectedPoint(double deltaSecs, bool altPressed)
 {
     const std::optional<size_t> index = selectedPointIndex();
     notation::INotationAutomationPtr automationPtr = automation();
@@ -1931,7 +1961,8 @@ void AudioSyncView::nudgeSelectedPoint(double deltaSecs)
         return;
     }
 
-    audiosync::movePoint(*automationPtr, m_syncPoints[*index].utick, m_syncPoints[*index].audioSecs + deltaSecs);
+    audiosync::movePoint(*automationPtr, m_syncPoints[*index].utick, m_syncPoints[*index].audioSecs + deltaSecs,
+                         m_moveFollowingPoints != altPressed);
 }
 
 void AudioSyncView::deleteSelectedPoint()
