@@ -89,6 +89,8 @@ struct DetectionOptions {
     //! NOTE In [0; 1]: how readily a measure gets a beat more or less, and the tempo jumps between measures (see
     //! BeatDetectionParams::flexibility)
     double flexibility = 0.5;
+    //! NOTE The anchor placed by hand: kept where it is, not moved onto the nearest detected beat
+    bool keepAnchor = false;
     //! NOTE The anchor only guessed (an empty score, its start not placed by hand): the measures' first beats are
     //! put on the beats with the strongest attacks
     bool findDownbeats = false;
@@ -109,8 +111,9 @@ struct MatchInfo {
     double detectedBpm = 0.0; // the beats as detected
     DetectionOptions::Octave octave = DetectionOptions::Octave::None; // as applied (never Auto)
     double appliedBpm = 0.0; // the beats the score's beats were matched to
-    //! NOTE The anchor's audio time, moved onto the nearest detected beat (within half a beat): placed by hand or
-    //! found from the music's start, it's rarely exactly on it, and the beats after it would be off by one beat
+    //! NOTE The anchor's audio time, moved onto the nearest detected beat (within half a beat) unless placed by hand
+    //! (DetectionOptions::keepAnchor): found from the music's start, it's rarely exactly on it, and the beats after
+    //! it would be off by one beat
     double anchorSecs = 0.0;
 };
 

@@ -705,7 +705,8 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
     job->options.flexibility = detectionParams.flexibility;
     job->approxTempoGiven = detectionParams.approxBpm > 0.0;
-    job->options.findDownbeats = first.origin != engraving::AudioSyncInfo::Origin::Manual && firstNoteUtick < 0;
+    job->options.keepAnchor = first.origin == engraving::AudioSyncInfo::Origin::Manual;
+    job->options.findDownbeats = !job->options.keepAnchor && firstNoteUtick < 0;
     m_detectionJob = job;
     m_detectionProgress = 0.0;
     m_detectionSummary.clear();

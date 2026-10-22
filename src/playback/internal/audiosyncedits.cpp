@@ -397,8 +397,10 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
     });
     float anchorStrength = 0.f;
     if (nearest != beats.end() && std::abs(nearest->secs - options.anchorSecs) < medianInterval * 0.5) {
-        anchorSecs = nearest->secs;
         anchorStrength = nearest->strength;
+        if (!options.keepAnchor) {
+            anchorSecs = nearest->secs;
+        }
     }
 
     audioBeats.push_back({ anchorSecs, 1.f, anchorStrength });
