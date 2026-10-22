@@ -560,7 +560,11 @@ void AudioSyncView::goToLoopStart()
 {
     project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings();
     if (settings && settings->referenceAudio().loopFromSecs >= 0.0) {
-        seekToAudioSecs(settings->referenceAudio().loopFromSecs);
+        const double fromSecs = settings->referenceAudio().loopFromSecs;
+        seekToAudioSecs(fromSecs);
+
+        //! NOTE A in view too, wherever it was scrolled to: a little in from the left, its handle visible
+        setScrollSecs(fromSecs - visibleSecs() * 0.1);
     }
 }
 
