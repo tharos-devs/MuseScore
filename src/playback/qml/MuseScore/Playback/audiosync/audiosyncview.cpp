@@ -653,7 +653,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
                                       && first.origin != engraving::AudioSyncInfo::Origin::Manual;
 
     audiosync::BeatDetectionParams detectionParams;
-    detectionParams.sensitivity = params.value("sensitivity", 0.5).toDouble();
+    detectionParams.flexibility = params.value("flexibility", 0.5).toDouble();
     detectionParams.minBpm = params.value("minBpm", 50.0).toDouble();
     detectionParams.maxBpm = params.value("maxBpm", 200.0).toDouble();
     detectionParams.fromSecs = std::max(0.0, first.audioSecs - 1.0);
@@ -669,6 +669,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
     const int firstNoteUtick = audiosync::firstNoteUtick(score());
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
+    job->options.flexibility = detectionParams.flexibility;
     job->options.findDownbeats = first.origin != engraving::AudioSyncInfo::Origin::Manual && firstNoteUtick < 0;
     m_detectionJob = job;
     m_detectionProgress = 0.0;
@@ -754,7 +755,7 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
     const std::vector<audiosync::MatchedPoint> points = audiosync::matchMeasures(sc, beats, options, &info);
     if (points.size() < 2) {
         interactive()->warning(muse::trc("playback", "No beats could be detected"),
-                               muse::trc("playback", "Try a higher sensitivity or another tempo range, or place the points by hand."));
+                               muse::trc("playback", "Try another expected tempo or a more flexible tempo, or place the points by hand."));
         return;
     }
 

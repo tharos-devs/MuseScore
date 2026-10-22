@@ -83,6 +83,9 @@ struct DetectionOptions {
     //! NOTE The expected tempo of the score's beats (Octave::Auto)
     double minBpm = 50.0;
     double maxBpm = 200.0;
+    //! NOTE In [0; 1]: how readily a measure gets a beat more or less, and the tempo jumps between measures (see
+    //! BeatDetectionParams::flexibility)
+    double flexibility = 0.5;
     //! NOTE The anchor only guessed (an empty score, its start not placed by hand): the measures' first beats are
     //! put on the beats with the strongest attacks
     bool findDownbeats = false;

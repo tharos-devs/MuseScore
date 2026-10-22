@@ -40,6 +40,8 @@
 
 #include "translation.h"
 
+#include "beatdetection.h"
+
 using namespace mu::engraving;
 using namespace mu::notation;
 
@@ -455,8 +457,9 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
         }
     }
 
-    static constexpr double SLIP_COST = 0.3; // in strengths (the strongest beat's is 1)
-    static constexpr double TEMPO_CHANGE_COST = 2.0; // per tempo ratio (natural log) between two measures
+    //! NOTE In strengths (the strongest beat's is 1), the default ones (flexibility 0.5) and the steady ones (0)
+    const double slipCost = flexibilityCost(options.flexibility, 1.5, 0.3);
+    const double tempoChangeCost = flexibilityCost(options.flexibility, 6.0, 2.0); // per tempo ratio (natural log)
     static constexpr double UNREACHED = -std::numeric_limits<double>::infinity();
     const int beatCount = static_cast<int>(audioBeats.size());
     auto beatsOf = [&boundaries](size_t k) { return static_cast<int>(boundaries[k + 1] - boundaries[k]); };
@@ -492,8 +495,8 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
 
                     const double bps = beats / (audioBeats[next].secs - audioBeats[i].secs);
                     const double tempoChange = previousBps > 0.0 ? std::abs(std::log(bps / previousBps)) : 0.0;
-                    const double nextScore = score + audioBeats[next].strength - SLIP_COST * std::abs(nextSlip)
-                                             - TEMPO_CHANGE_COST * tempoChange;
+                    const double nextScore = score + audioBeats[next].strength - slipCost * std::abs(nextSlip)
+                                             - tempoChangeCost * tempoChange;
                     State& nextState = states[k + 1][next][nextSlip + 1];
                     if (nextScore > nextState.score) {
                         nextState.score = nextScore;

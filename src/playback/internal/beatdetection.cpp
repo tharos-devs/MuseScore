@@ -44,7 +44,9 @@ constexpr double BEAT_ONSET_TOLERANCE_SECS = 0.04;
 constexpr double LOCAL_MEAN_SECS = 0.5;  // what an attack stands out from, for the beat tracking
 constexpr double PREFERRED_BPM = 120.0;
 constexpr double PREFERRED_BPM_OCTAVES = 1.0; // how far from it the tempo can be (a log-normal weight's deviation)
-//! NOTE How much the beats keep to the tempo: low enough for the tempo to drift, as in orchestral music
+//! NOTE How much the beats keep to the tempo, steady and by default: low enough for the tempo to drift, as in
+//! orchestral music
+constexpr double STEADY_TIGHTNESS = 120.0;
 constexpr double TIGHTNESS = 30.0;
 
 //! NOTE The envelope's attacks only: what stands out from its surroundings, normalized
@@ -241,7 +243,12 @@ double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& p
     return bestLag > 0 ? 60.0 / (static_cast<double>(bestLag) * envelope.hopSecs) : 0.0;
 }
 
-std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm)
+double flexibilityCost(double flexibility, double steadyCost, double middleCost)
+{
+    return steadyCost * std::pow(middleCost / steadyCost, 2.0 * std::clamp(flexibility, 0.0, 1.0));
+}
+
+std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm, double flexibility)
 {
     std::vector<DetectedBeat> beats;
 
@@ -254,10 +261,11 @@ std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::v
 
     // Each hop's best score as a beat: its attack plus the best previous beat's, minus how far their interval is
     // from the tempo's (in octaves, squared)
+    const double tightness = flexibilityCost(flexibility, STEADY_TIGHTNESS, TIGHTNESS);
     std::vector<double> penalties(static_cast<size_t>(2 * period + 1), 0.0);
     for (int64_t interval = period / 2; interval <= 2 * period; ++interval) {
         const double ratio = std::log(static_cast<double>(interval) / static_cast<double>(period));
-        penalties[interval] = TIGHTNESS * ratio * ratio;
+        penalties[interval] = tightness * ratio * ratio;
     }
 
     std::vector<double> scores(static_cast<size_t>(n), 0.0);
@@ -380,7 +388,7 @@ std::vector<DetectedBeat> detectBeats(const MappedWav& wav, const BeatDetectionP
 
     const std::vector<Onset> onsets = detectOnsets(envelope, params);
     const double bpm = estimateTempo(envelope, params);
-    std::vector<DetectedBeat> beats = trackBeats(envelope, onsets, bpm);
+    std::vector<DetectedBeat> beats = trackBeats(envelope, onsets, bpm, params.flexibility);
     if (progress) {
         progress(1.0);
     }

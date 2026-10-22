@@ -62,7 +62,7 @@ Item {
     QtObject {
         id: detectionSettings
 
-        property real sensitivity: 0.5
+        property real flexibility: 0.5
         property int minBpm: 50
         property int maxBpm: 200
         property int octave: 0
@@ -155,7 +155,7 @@ Item {
                     navigation.order: 7
 
                     popupComponent: AudioSyncDetectionPopup {
-                        sensitivity: detectionSettings.sensitivity
+                        flexibility: detectionSettings.flexibility
                         minBpm: detectionSettings.minBpm
                         maxBpm: detectionSettings.maxBpm
                         octave: detectionSettings.octave
@@ -163,7 +163,7 @@ Item {
                         ignoreLeadingSilence: detectionSettings.ignoreLeadingSilence
                         toleranceMs: detectionSettings.toleranceMs
 
-                        onSensitivityChanged: detectionSettings.sensitivity = sensitivity
+                        onFlexibilityChanged: detectionSettings.flexibility = flexibility
                         onMinBpmChanged: detectionSettings.minBpm = minBpm
                         onMaxBpmChanged: detectionSettings.maxBpm = maxBpm
                         onOctaveChanged: detectionSettings.octave = octave

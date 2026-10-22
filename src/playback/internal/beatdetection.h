@@ -38,6 +38,9 @@ namespace mu::playback::audiosync {
 struct BeatDetectionParams {
     //! NOTE In [0; 1]: higher finds weaker attacks
     double sensitivity = 0.5;
+    //! NOTE In [0; 1]: how much the beats may stray from the tempo to follow the attacks (0: steady, as music played
+    //! to a click; 1: flexible, as rubato)
+    double flexibility = 0.5;
     double minBpm = 50.0;
     double maxBpm = 200.0;
     //! NOTE The part of the audio to analyze (to < 0: until the end)
@@ -79,7 +82,11 @@ std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetecti
 double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params);
 
 //! NOTE Beats every 60/bpm s or so, on the strongest attacks
-std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm);
+std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm, double flexibility);
+
+//! NOTE A cost from a flexibility in [0; 1]: steadyCost at 0, middleCost at 0.5 (the default), in between and beyond
+//! on a log scale
+double flexibilityCost(double flexibility, double steadyCost, double middleCost);
 
 //! NOTE Where the music starts, after the silence the audio may start with: the first sustained sound above
 //! the silence threshold (relative to the loudest part); nullopt if the audio is silent

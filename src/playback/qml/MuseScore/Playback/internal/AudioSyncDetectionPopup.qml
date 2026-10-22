@@ -33,7 +33,7 @@ StyledPopupView {
 
     signal detectRequested(var params)
 
-    property real sensitivity: 0.5
+    property real flexibility: 0.5
     property int minBpm: 50
     property int maxBpm: 200
     property int octave: 0
@@ -81,23 +81,45 @@ StyledPopupView {
         }
 
         StyledTextLabel {
-            text: qsTrc("playback", "Sensitivity")
+            text: qsTrc("playback", "Tempo")
             horizontalAlignment: Text.AlignLeft
         }
 
-        StyledSlider {
+        //! NOTE Steady: music played to a click (pop, rock); flexible: rubato (orchestral music)
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            from: 0
-            to: 1
-            stepSize: 0.05
-            value: root.sensitivity
-            fillBackground: false
-            navigation.panel: navPanel
-            navigation.order: 1
-            navigation.accessible.name: qsTrc("playback", "Sensitivity")
+            spacing: 0
 
-            onMoved: root.sensitivity = value
+            StyledSlider {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                from: 0
+                to: 1
+                stepSize: 0.05
+                value: root.flexibility
+                fillBackground: false
+                navigation.panel: navPanel
+                navigation.order: 1
+                navigation.accessible.name: qsTrc("playback", "Tempo: steady or flexible")
+
+                onMoved: root.flexibility = value
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                StyledTextLabel {
+                    Layout.fillWidth: true
+                    text: qsTrc("playback", "Steady", "tempo")
+                    horizontalAlignment: Text.AlignLeft
+                }
+
+                StyledTextLabel {
+                    Layout.fillWidth: true
+                    text: qsTrc("playback", "Flexible", "tempo")
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
         }
 
         RowLayout {
@@ -233,7 +255,7 @@ StyledPopupView {
 
                 onClicked: {
                     root.detectRequested({
-                        sensitivity: root.sensitivity,
+                        flexibility: root.flexibility,
                         minBpm: root.minBpm,
                         maxBpm: root.maxBpm,
                         octave: root.octave,
