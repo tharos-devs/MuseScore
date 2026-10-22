@@ -168,9 +168,12 @@ Item {
                         onIgnoreLeadingSilenceChanged: detectionSettings.ignoreLeadingSilence = ignoreLeadingSilence
                         onToleranceMsChanged: detectionSettings.toleranceMs = toleranceMs
 
+                        isPlaying: syncView.isPlaying
+
                         onDetectRequested: function(params) {
                             syncView.detectPoints(params)
                         }
+                        onTogglePlayRequested: syncView.togglePlay()
                     }
                 }
 

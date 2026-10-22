@@ -32,6 +32,10 @@ StyledPopupView {
     id: root
 
     signal detectRequested(var params)
+    signal togglePlayRequested()
+
+    //! NOTE Played from here, to tap the tempo: the popup closes when clicking outside it
+    property bool isPlaying: false
 
     property real flexibility: 0.5
     //! NOTE 0: automatic
@@ -190,13 +194,24 @@ StyledPopupView {
             }
 
             FlatButton {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                icon: root.isPlaying ? IconCode.PAUSE_FILL : IconCode.PLAY_FILL
+                toolTipTitle: root.isPlaying ? qsTrc("playback", "Pause") : qsTrc("playback", "Play")
+                navigation.panel: navPanel
+                navigation.order: 4
+
+                onClicked: root.togglePlayRequested()
+            }
+
+            FlatButton {
                 minWidth: 40
                 Layout.preferredHeight: 26
                 text: qsTrc("playback", "Tap", "tap tempo")
                 toolTipTitle: qsTrc("playback", "Tap tempo")
                 toolTipDescription: qsTrc("playback", "Click on the beats, or press Space, while the music plays")
                 navigation.panel: navPanel
-                navigation.order: 4
+                navigation.order: 5
 
                 onClicked: root.tap()
             }
@@ -221,7 +236,7 @@ StyledPopupView {
                 ]
                 currentIndex: indexOfValue(root.octave)
                 navigation.panel: navPanel
-                navigation.order: 5
+                navigation.order: 6
 
                 onActivated: function(index, value) { root.octave = value }
             }
@@ -231,7 +246,7 @@ StyledPopupView {
             checked: root.everyMeasure
             text: qsTrc("playback", "Add a point on every measure")
             navigation.panel: navPanel
-            navigation.order: 6
+            navigation.order: 7
 
             onClicked: root.everyMeasure = !root.everyMeasure
         }
@@ -265,7 +280,7 @@ StyledPopupView {
                 decimals: 0
                 measureUnitsSymbol: qsTrc("global", "ms")
                 navigation.panel: navPanel
-                navigation.order: 7
+                navigation.order: 8
 
                 onValueEdited: function(newValue) { root.toleranceMs = newValue }
             }
@@ -278,7 +293,7 @@ StyledPopupView {
             FlatButton {
                 text: qsTrc("global", "Cancel")
                 navigation.panel: navPanel
-                navigation.order: 8
+                navigation.order: 9
 
                 onClicked: root.close()
             }
@@ -287,7 +302,7 @@ StyledPopupView {
                 text: qsTrc("playback", "Detect")
                 accentButton: true
                 navigation.panel: navPanel
-                navigation.order: 9
+                navigation.order: 10
 
                 onClicked: {
                     root.detectRequested({
