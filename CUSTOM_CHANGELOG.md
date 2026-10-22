@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-22
+- Audio sync: turning sync on for the first time puts a sync point on every measure start (repeats unrolled) and at the score's end, at their current time, ready to be dragged onto the audio's barlines.
+
 ### 2026-10-21
 - Audio sync: a new "Audio" menu (also in View) opens the Audio sync window, which syncs the score's playback to a reference recording (wav, mp3, flac, ogg…, dropped or loaded, with recent files). The audio is never stretched: the score's tempo follows it. Sync points placed on the audio's waveform (double-click adds or removes one, drag moves it, undoable) are tempo curve points, shown in the Tempo automation lane. With sync on, the score's tempo markings, fermatas and breaths are ignored for playback; off, the score's own tempo is back and the sync points are kept. Detect… finds the beats from the score's start and places a point per measure (points kept by the user are left as they are), uncertain ones shown hollow. With sync off, the reference (where the score starts in the audio) can be moved, all points with it.
 - Audio sync window: measures ruler (numbers, beats, time signatures) above the waveform, time ruler below, overview of the whole audio, zoom and vertical zoom, stereo/mono view, its own transport (clock, metronome, Mute/Solo, go to start / to A, play, stop, A-B loop, follow playback), Pitch and Speed (the score's tempo multiplier, the audio following it without changing pitch) sliders, and a channel strip (Gain, EQ, Pan, fader, Mute/Solo). The reference audio is an "Audio" channel in the Mixer and the Track list, with its own Track delay. The window's view (zoom, scroll, amplitude) is saved in the score. New starts again: no audio, no sync points, pitch, speed and zoom reset.
