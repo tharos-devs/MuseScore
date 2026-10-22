@@ -496,6 +496,21 @@ bool AudioSyncView::dragMovesFollowing() const
     return m_pointDrag && !m_pointDrag->shiftAll && m_moveFollowingPoints != m_pointDrag->altSeen;
 }
 
+std::optional<size_t> AudioSyncView::draggedFollowingEnd() const
+{
+    const std::optional<size_t> dragged = draggedPointIndex();
+    if (!dragged || !dragMovesFollowing()) {
+        return std::nullopt;
+    }
+
+    //! NOTE Up to a locked one, as audiosync::movePoint()
+    size_t end = *dragged + 1;
+    while (end < m_syncPoints.size() && !m_syncPoints[end].locked) {
+        ++end;
+    }
+    return end;
+}
+
 void AudioSyncView::setAudioSyncEnabled(bool enabled)
 {
     if (notation::INotationAutomationPtr automationPtr = automation()) {
@@ -1204,7 +1219,7 @@ void AudioSyncView::ensurePreviewPoints() const
     const Score* sc = score();
     const RepeatList* repeatList = sc && !isPlayRepeatsEnabled() ? &sc->expandedRepeatList() : nullptr;
     const std::optional<size_t> dragged = draggedPointIndex();
-    const bool moveFollowing = dragMovesFollowing();
+    const std::optional<size_t> followingEnd = draggedFollowingEnd();
 
     struct Point {
         int tick = 0;
@@ -1226,7 +1241,7 @@ void AudioSyncView::ensurePreviewPoints() const
 
         const bool isDragged = dragged && *dragged == i;
         double secs = isDragged ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs;
-        if (dragged && i > *dragged && moveFollowing && !m_syncPoints[i].locked) {
+        if (dragged && followingEnd && i > *dragged && i < *followingEnd) {
             secs += m_pointDrag->audioSecs - m_pointDrag->originalSecs;
         }
         points.push_back({ tick, secs, isDragged });
@@ -1779,6 +1794,14 @@ void AudioSyncView::keyPressEvent(QKeyEvent* event)
     case Qt::Key_Right:
         nudgeSelectedPoint(event->modifiers() & Qt::ShiftModifier ? LARGE_NUDGE_SECS : NUDGE_SECS, event->modifiers() & Qt::AltModifier);
         break;
+    case Qt::Key_Alt:
+        // While dragging a point: shown at once, not at the next mouse move
+        if (m_pointDrag && !m_pointDrag->altSeen) {
+            m_pointDrag->altSeen = true;
+            m_previewPointsDirty = true;
+            update();
+        }
+        break;
     case Qt::Key_Escape:
         if (m_pointDrag) {
             // Back where it was
@@ -1870,13 +1893,18 @@ bool AudioSyncView::isUncertainPoint(const audiosync::SyncPoint& point)
 std::vector<double> AudioSyncView::displayedPointSecs() const
 {
     const std::optional<size_t> dragged = draggedPointIndex();
+    const std::optional<size_t> followingEnd = draggedFollowingEnd();
     std::vector<double> result;
     result.reserve(m_syncPoints.size());
     for (size_t i = 0; i < m_syncPoints.size(); ++i) {
         if (m_pointDrag && m_pointDrag->shiftAll) {
             result.push_back(m_syncPoints[i].audioSecs + m_pointDrag->audioSecs - m_pointDrag->originalSecs);
+        } else if (dragged && *dragged == i) {
+            result.push_back(m_pointDrag->audioSecs);
+        } else if (dragged && followingEnd && i > *dragged && i < *followingEnd) {
+            result.push_back(m_syncPoints[i].audioSecs + m_pointDrag->audioSecs - m_pointDrag->originalSecs);
         } else {
-            result.push_back(dragged && *dragged == i ? m_pointDrag->audioSecs : m_syncPoints[i].audioSecs);
+            result.push_back(m_syncPoints[i].audioSecs);
         }
     }
     return result;

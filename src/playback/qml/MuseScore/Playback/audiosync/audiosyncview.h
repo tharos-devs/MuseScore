@@ -335,6 +335,8 @@ private:
     void addPointAt(double audioSecs, bool snapToBeat);
     void nudgeSelectedPoint(double deltaSecs, bool altPressed);
     bool dragMovesFollowing() const;
+    //! NOTE The index after the last point moved with the dragged one; nullopt if it moves alone
+    std::optional<size_t> draggedFollowingEnd() const;
     void deleteSelectedPoint();
     void paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const;
     void paintLoop(QPainter* painter, const QRectF& waveRect) const;
