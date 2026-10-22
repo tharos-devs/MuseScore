@@ -64,7 +64,6 @@ Item {
 
         property real flexibility: 0.5
         property int approxBpm: 0
-        property int octave: 0
         property bool everyMeasure: true
         property bool ignoreLeadingSilence: true
         property int toleranceMs: 20
@@ -156,14 +155,12 @@ Item {
                     popupComponent: AudioSyncDetectionPopup {
                         flexibility: detectionSettings.flexibility
                         approxBpm: detectionSettings.approxBpm
-                        octave: detectionSettings.octave
                         everyMeasure: detectionSettings.everyMeasure
                         ignoreLeadingSilence: detectionSettings.ignoreLeadingSilence
                         toleranceMs: detectionSettings.toleranceMs
 
                         onFlexibilityChanged: detectionSettings.flexibility = flexibility
                         onApproxBpmChanged: detectionSettings.approxBpm = approxBpm
-                        onOctaveChanged: detectionSettings.octave = octave
                         onEveryMeasureChanged: detectionSettings.everyMeasure = everyMeasure
                         onIgnoreLeadingSilenceChanged: detectionSettings.ignoreLeadingSilence = ignoreLeadingSilence
                         onToleranceMsChanged: detectionSettings.toleranceMs = toleranceMs

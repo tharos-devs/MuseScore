@@ -70,22 +70,11 @@ struct DetectedBeatTime {
 };
 
 struct DetectionOptions {
-    enum class Octave {
-        Auto,   // the audio's beats taken twice as fast/slow as detected if out of [minBpm; maxBpm]
-        None,
-        Double, // two score beats per detected beat
-        Half,   // one score beat every two detected beats
-    };
-
     //! NOTE The score position (normally a measure's start) at a known audio time, where the matching starts
     int anchorUtick = 0;
     double anchorSecs = 0.0;
     //! NOTE Where it ends (< 0: the score's end)
     int toUtick = -1;
-    Octave octave = Octave::Auto;
-    //! NOTE The expected tempo of the score's beats (Octave::Auto)
-    double minBpm = 50.0;
-    double maxBpm = 200.0;
     //! NOTE In [0; 1]: how readily a measure gets a beat more or less, and the tempo jumps between measures (see
     //! BeatDetectionParams::flexibility)
     double flexibility = 0.5;
@@ -109,8 +98,6 @@ struct MatchedPoint {
 //! NOTE What the matching found, to tell the user
 struct MatchInfo {
     double detectedBpm = 0.0; // the beats as detected
-    DetectionOptions::Octave octave = DetectionOptions::Octave::None; // as applied (never Auto)
-    double appliedBpm = 0.0; // the beats the score's beats were matched to
     //! NOTE The anchor's audio time, moved onto the nearest detected beat (within half a beat) unless placed by hand
     //! (DetectionOptions::keepAnchor): found from the music's start, it's rarely exactly on it, and the beats after
     //! it would be off by one beat

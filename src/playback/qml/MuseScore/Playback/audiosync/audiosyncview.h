@@ -234,8 +234,8 @@ public:
     Q_INVOKABLE void setAudioFile(const QString& path);
 
     //! NOTE Automatic sync points, from the score's start (the first sync point, or the music's start).
-    //! params: flexibility [0; 1] (tempo steady to flexible), approxBpm (0: unknown), octave (0 auto, 1 none, 2 double,
-    //! 3 half), everyMeasure, toleranceMs, ignoreLeadingSilence
+    //! params: flexibility [0; 1] (tempo constant to variable), approxBpm (0: unknown),
+    //! everyMeasure, toleranceMs, ignoreLeadingSilence
     Q_INVOKABLE void detectPoints(const QVariantMap& params);
     Q_INVOKABLE void cancelDetection();
     //! NOTE All the sync points but the score's start (and the locked ones)

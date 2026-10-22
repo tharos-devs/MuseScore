@@ -25,7 +25,6 @@
 #include <atomic>
 #include <functional>
 #include <optional>
-#include <utility>
 #include <vector>
 
 namespace mu::playback {
@@ -81,9 +80,6 @@ std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetecti
 //! NOTE The tempo of the beats (BPM): the period that repeats the most in the envelope, the ones near the approximate
 //! tempo preferred, else near 120 BPM (the octave a listener most likely taps); 0 if none
 double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params);
-
-//! NOTE The tempi estimateTempo() looks within
-std::pair<double, double> tempoRange(double approxBpm);
 
 //! NOTE Beats every 60/bpm s or so, on the strongest attacks
 std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm, double flexibility);

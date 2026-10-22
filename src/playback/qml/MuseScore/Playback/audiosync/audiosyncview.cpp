@@ -704,10 +704,8 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     auto job = std::make_shared<DetectionJob>();
     job->options.anchorUtick = first.utick;
     job->options.anchorSecs = first.audioSecs;
-    job->options.octave = static_cast<audiosync::DetectionOptions::Octave>(std::clamp(params.value("octave", 0).toInt(), 0, 3));
     job->options.everyMeasure = params.value("everyMeasure", true).toBool();
     job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
-    std::tie(job->options.minBpm, job->options.maxBpm) = audiosync::tempoRange(detectionParams.approxBpm);
     //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
     const int firstNoteUtick = audiosync::firstNoteUtick(score());
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
@@ -815,7 +813,7 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
     //! NOTE Detect is asked for knowingly, and undone in one step: it replaces the points (the locked ones excepted)
     const audiosync::AppliedDetection applied = audiosync::applyDetectedPoints(*automationPtr, sc, points, scoreStartSecs);
 
-    LOGI() << "audio sync detection: pulse " << info.detectedBpm << " BPM, applied " << info.appliedBpm << " BPM, music start "
+    LOGI() << "audio sync detection: pulse " << info.detectedBpm << " BPM, music start "
            << (musicStartSecs ? *musicStartSecs : -1.0) << " s, " << applied.added << " points, " << applied.replacedManual
            << " manual points replaced";
 
@@ -824,19 +822,9 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
         //: Where the score was found to start in the audio (min:sec)
         parts << muse::qtrc("playback", "Score start: %1").arg(formatTime(*scoreStartSecs, true));
     }
-    if (info.octave == audiosync::DetectionOptions::Octave::Half) {
-        //: %1: tempo detected in the audio, %2: half of it, the tempo used
-        parts << muse::qtrc("playback", "Pulse found: %1 BPM, taken at half: %2 BPM")
-            .arg(info.detectedBpm, 0, 'f', 1).arg(info.appliedBpm, 0, 'f', 1);
-    } else if (info.octave == audiosync::DetectionOptions::Octave::Double) {
-        //: %1: tempo detected in the audio, %2: twice it, the tempo used
-        parts << muse::qtrc("playback", "Pulse found: %1 BPM, taken at double: %2 BPM")
-            .arg(info.detectedBpm, 0, 'f', 1).arg(info.appliedBpm, 0, 'f', 1);
-    } else {
-        parts << muse::qtrc("playback", "Pulse found: %1 BPM").arg(info.detectedBpm, 0, 'f', 1);
-    }
+    parts << muse::qtrc("playback", "Pulse found: %1 BPM").arg(info.detectedBpm, 0, 'f', 1);
     if (!job->approxTempoGiven) {
-        parts << muse::qtrc("playback", "Wrong tempo? Give the approximate one in Detect");
+        parts << muse::qtrc("playback", "Wrong tempo? Give it in Detect");
     }
     parts << muse::qtrc("playback", "%n point(s)", nullptr, applied.added);
     if (applied.replacedManual > 0) {

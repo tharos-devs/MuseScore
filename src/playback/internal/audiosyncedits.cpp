@@ -410,39 +410,9 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
         }
     }
 
-    // Octave errors: detected beats twice too fast or too slow. Judged by the expected tempo the user gave,
-    // not by the score's tempo markings: they're only approximate here
-    const double detectedBpm = 60.0 / medianInterval;
-    DetectionOptions::Octave octave = options.octave;
-    if (octave == DetectionOptions::Octave::Auto) {
-        octave = detectedBpm > options.maxBpm ? DetectionOptions::Octave::Half
-                 : detectedBpm < options.minBpm ? DetectionOptions::Octave::Double
-                 : DetectionOptions::Octave::None;
-    }
-
     if (info) {
         info->anchorSecs = anchorSecs;
-        info->detectedBpm = detectedBpm;
-        info->octave = octave;
-        info->appliedBpm = octave == DetectionOptions::Octave::Half ? detectedBpm / 2.0
-                           : octave == DetectionOptions::Octave::Double ? detectedBpm * 2.0 : detectedBpm;
-    }
-
-    if (octave == DetectionOptions::Octave::Half) {
-        std::vector<DetectedBeatTime> halved;
-        for (size_t i = 0; i < audioBeats.size(); i += 2) {
-            halved.push_back(audioBeats[i]);
-        }
-        audioBeats = std::move(halved);
-    } else if (octave == DetectionOptions::Octave::Double) {
-        std::vector<DetectedBeatTime> doubled;
-        for (size_t i = 0; i < audioBeats.size(); ++i) {
-            doubled.push_back(audioBeats[i]);
-            if (i + 1 < audioBeats.size()) {
-                doubled.push_back({ (audioBeats[i].secs + audioBeats[i + 1].secs) / 2.0, 0.3f });
-            }
-        }
-        audioBeats = std::move(doubled);
+        info->detectedBpm = 60.0 / medianInterval;
     }
 
     // The measures' first beats on the strongest ones: the audio's first beats until there are then before the

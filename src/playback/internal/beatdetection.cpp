@@ -85,6 +85,17 @@ std::vector<double> beatSalience(const OnsetEnvelope& envelope)
     }
     return result;
 }
+
+//! NOTE The tempi estimateTempo() looks within
+std::pair<double, double> tempoRange(double approxBpm)
+{
+    if (approxBpm > 0.0) {
+        const double minBpm = approxBpm / APPROX_BPM_RATIO;
+        const double maxBpm = approxBpm * APPROX_BPM_RATIO;
+        return { minBpm, maxBpm };
+    }
+    return { 50.0, 200.0 };
+}
 }
 
 OnsetEnvelope onsetEnvelope(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,
@@ -203,16 +214,6 @@ std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetecti
     }
 
     return onsets;
-}
-
-std::pair<double, double> tempoRange(double approxBpm)
-{
-    if (approxBpm > 0.0) {
-        const double minBpm = approxBpm / APPROX_BPM_RATIO;
-        const double maxBpm = approxBpm * APPROX_BPM_RATIO;
-        return { minBpm, maxBpm };
-    }
-    return { 50.0, 200.0 };
 }
 
 double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params)

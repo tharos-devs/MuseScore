@@ -40,7 +40,6 @@ StyledPopupView {
     property real flexibility: 0.5
     //! NOTE 0: automatic
     property int approxBpm: 0
-    property int octave: 0
     property bool everyMeasure: true
     property bool ignoreLeadingSilence: true
     property int toleranceMs: 20
@@ -112,11 +111,11 @@ StyledPopupView {
         }
 
         StyledTextLabel {
-            text: qsTrc("playback", "Tempo")
+            text: qsTrc("playback", "Tempo changes")
             horizontalAlignment: Text.AlignLeft
         }
 
-        //! NOTE Steady: music played to a click (pop, rock); flexible: rubato (orchestral music)
+        //! NOTE Constant: music played to a click (pop, rock); flexible: rubato (orchestral music)
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
@@ -131,7 +130,7 @@ StyledPopupView {
                 fillBackground: false
                 navigation.panel: navPanel
                 navigation.order: 1
-                navigation.accessible.name: qsTrc("playback", "Tempo: steady or flexible")
+                navigation.accessible.name: qsTrc("playback", "Tempo changes: constant or variable")
 
                 onMoved: root.flexibility = value
             }
@@ -141,13 +140,13 @@ StyledPopupView {
 
                 StyledTextLabel {
                     Layout.fillWidth: true
-                    text: qsTrc("playback", "Steady", "tempo")
+                    text: qsTrc("playback", "Constant", "tempo")
                     horizontalAlignment: Text.AlignLeft
                 }
 
                 StyledTextLabel {
                     Layout.fillWidth: true
-                    text: qsTrc("playback", "Flexible", "tempo")
+                    text: qsTrc("playback", "Variable", "tempo")
                     horizontalAlignment: Text.AlignRight
                 }
             }
@@ -159,9 +158,17 @@ StyledPopupView {
 
             StyledTextLabel {
                 Layout.fillWidth: true
-                text: qsTrc("playback", "Approximate tempo")
+                text: qsTrc("playback", "Tempo")
                 horizontalAlignment: Text.AlignLeft
                 wrapMode: Text.WordWrap
+
+                ToolTip.visible: tempoHover.hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTrc("playback", "Approximate is enough: type it or tap it. Empty: automatic")
+
+                HoverHandler {
+                    id: tempoHover
+                }
             }
 
             //! NOTE "--": automatic
@@ -217,36 +224,11 @@ StyledPopupView {
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            StyledTextLabel {
-                text: qsTrc("playback", "Beats")
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            StyledDropdown {
-                Layout.fillWidth: true
-                model: [
-                    { text: qsTrc("playback", "Automatic"), value: 0 },
-                    { text: qsTrc("playback", "As detected"), value: 1 },
-                    { text: qsTrc("playback", "Twice as many (×2)"), value: 2 },
-                    { text: qsTrc("playback", "Half as many (÷2)"), value: 3 }
-                ]
-                currentIndex: indexOfValue(root.octave)
-                navigation.panel: navPanel
-                navigation.order: 6
-
-                onActivated: function(index, value) { root.octave = value }
-            }
-        }
-
         CheckBox {
             checked: root.everyMeasure
             text: qsTrc("playback", "Add a point on every measure")
             navigation.panel: navPanel
-            navigation.order: 7
+            navigation.order: 6
 
             onClicked: root.everyMeasure = !root.everyMeasure
         }
@@ -280,7 +262,7 @@ StyledPopupView {
                 decimals: 0
                 measureUnitsSymbol: qsTrc("global", "ms")
                 navigation.panel: navPanel
-                navigation.order: 8
+                navigation.order: 7
 
                 onValueEdited: function(newValue) { root.toleranceMs = newValue }
             }
@@ -293,7 +275,7 @@ StyledPopupView {
             FlatButton {
                 text: qsTrc("global", "Cancel")
                 navigation.panel: navPanel
-                navigation.order: 9
+                navigation.order: 8
 
                 onClicked: root.close()
             }
@@ -302,13 +284,12 @@ StyledPopupView {
                 text: qsTrc("playback", "Detect")
                 accentButton: true
                 navigation.panel: navPanel
-                navigation.order: 10
+                navigation.order: 9
 
                 onClicked: {
                     root.detectRequested({
                         flexibility: root.flexibility,
                         approxBpm: root.approxBpm,
-                        octave: root.octave,
                         everyMeasure: root.everyMeasure,
                         ignoreLeadingSilence: root.ignoreLeadingSilence,
                         toleranceMs: root.toleranceMs
