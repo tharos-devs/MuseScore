@@ -62,13 +62,10 @@ Item {
     QtObject {
         id: detectionSettings
 
-        property real sensitivity: 0.5
-        property int minBpm: 50
-        property int maxBpm: 200
-        property int octave: 0
-        property bool everyMeasure: false
+        property real flexibility: 0.0
+        property int approxBpm: 0
+        property bool everyMeasure: true
         property bool ignoreLeadingSilence: true
-        property int toleranceMs: 20
     }
 
     ColumnLayout {
@@ -137,7 +134,7 @@ Item {
                     text: qsTrc("playback", "Sync", "Use audio sync: the score's tempo follows the audio sync points")
                     accentButton: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Use audio sync")
-                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click: add a point on the nearest beat (Shift: anywhere), or delete a point. Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
+                    toolTipDescription: qsTrc("playback", "Play the score at the tempo given by the audio sync points. Double-click on the points row: add a point on the nearest beat (Shift: anywhere); on a point: delete it. Drag a point to sync it to the audio. Delete: remove the selected point. Left/Right arrows: move it by 1 ms (Shift: 10 ms).")
                     navigation.panel: navigationPanel
                     navigation.order: 6
 
@@ -155,25 +152,22 @@ Item {
                     navigation.order: 7
 
                     popupComponent: AudioSyncDetectionPopup {
-                        sensitivity: detectionSettings.sensitivity
-                        minBpm: detectionSettings.minBpm
-                        maxBpm: detectionSettings.maxBpm
-                        octave: detectionSettings.octave
+                        flexibility: detectionSettings.flexibility
+                        approxBpm: detectionSettings.approxBpm
                         everyMeasure: detectionSettings.everyMeasure
                         ignoreLeadingSilence: detectionSettings.ignoreLeadingSilence
-                        toleranceMs: detectionSettings.toleranceMs
 
-                        onSensitivityChanged: detectionSettings.sensitivity = sensitivity
-                        onMinBpmChanged: detectionSettings.minBpm = minBpm
-                        onMaxBpmChanged: detectionSettings.maxBpm = maxBpm
-                        onOctaveChanged: detectionSettings.octave = octave
+                        onFlexibilityChanged: detectionSettings.flexibility = flexibility
+                        onApproxBpmChanged: detectionSettings.approxBpm = approxBpm
                         onEveryMeasureChanged: detectionSettings.everyMeasure = everyMeasure
                         onIgnoreLeadingSilenceChanged: detectionSettings.ignoreLeadingSilence = ignoreLeadingSilence
-                        onToleranceMsChanged: detectionSettings.toleranceMs = toleranceMs
+
+                        isPlaying: syncView.isPlaying
 
                         onDetectRequested: function(params) {
                             syncView.detectPoints(params)
                         }
+                        onTogglePlayRequested: syncView.togglePlay()
                     }
                 }
 
@@ -192,6 +186,27 @@ Item {
                     onClicked: syncView.clearSyncPoints()
                 }
 
+                FlatButton {
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    icon: IconCode.LINK
+                    buttonType: FlatButton.IconOnly
+                    transparent: !syncView.moveFollowingPoints
+                    accentButton: syncView.moveFollowingPoints
+                    enabled: syncView.audioSyncEnabled
+                    toolTipTitle: qsTrc("playback", "Move the following points too")
+                    toolTipDescription: (syncView.moveFollowingPoints
+                                         //: %1: the Cmd key (macOS) or the Ctrl key
+                                         ? qsTrc("playback", "Hold %1 while dragging to move one point only")
+                                         //: %1: the Cmd key (macOS) or the Ctrl key
+                                         : qsTrc("playback", "Hold %1 while dragging to move the following points too"))
+                                        .arg(Qt.platform.os === "osx" ? "Cmd" : "Ctrl")
+                    navigation.panel: navigationPanel
+                    navigation.order: 9
+
+                    onClicked: syncView.moveFollowingPoints = !syncView.moveFollowingPoints
+                }
+
                 ProgressBar {
                     Layout.preferredWidth: 120
                     Layout.preferredHeight: 14
@@ -208,7 +223,7 @@ Item {
                     transparent: true
                     toolTipTitle: qsTrc("playback", "Cancel detection")
                     navigation.panel: navigationPanel
-                    navigation.order: 9
+                    navigation.order: 10
 
                     onClicked: syncView.cancelDetection()
                 }

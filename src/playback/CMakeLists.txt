@@ -73,12 +73,6 @@ target_sources(playback PRIVATE
     internal/trackpresets.h
 )
 
-#! NOTE BeatRoot (GPL), from the MIDI import: beat detection for the Audio sync window
-if (TARGET beatroot)
-    target_link_libraries(playback PRIVATE beatroot)
-    target_compile_definitions(playback PRIVATE MUE_PLAYBACK_HAS_BEATROOT)
-endif()
-
 if (TARGET Qt6::Multimedia)
     target_link_libraries(playback PRIVATE Qt6::Multimedia)
     target_compile_definitions(playback PRIVATE MUE_PLAYBACK_HAS_QT_MULTIMEDIA)

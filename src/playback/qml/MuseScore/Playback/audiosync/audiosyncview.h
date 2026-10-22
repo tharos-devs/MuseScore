@@ -75,6 +75,8 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
     Q_PROPERTY(bool showStereo READ showStereo WRITE setShowStereo NOTIFY audioChanged)
     Q_PROPERTY(bool isStereoAudio READ isStereoAudio NOTIFY decodeStateChanged)
     Q_PROPERTY(bool audioSyncEnabled READ audioSyncEnabled WRITE setAudioSyncEnabled NOTIFY syncChanged)
+    //! NOTE Moving a sync point moves the ones after it too (Cmd/Ctrl: the other way round, for one move)
+    Q_PROPERTY(bool moveFollowingPoints READ moveFollowingPoints WRITE setMoveFollowingPoints NOTIFY moveFollowingPointsChanged)
     //! NOTE The reference audio played transposed (see ReferenceAudioSettings::pitchSemitones)
     Q_PROPERTY(int pitchSemitones READ pitchSemitones WRITE setPitchSemitones NOTIFY audioChanged)
     Q_PROPERTY(bool pitchShifting READ pitchShifting NOTIFY decodeStateChanged)
@@ -152,6 +154,8 @@ public:
     void setShowStereo(bool showStereo);
     bool isStereoAudio() const;
     bool audioSyncEnabled() const;
+    bool moveFollowingPoints() const;
+    void setMoveFollowingPoints(bool move);
     int pitchSemitones() const;
     void setPitchSemitones(int semitones);
     bool pitchShifting() const;
@@ -230,8 +234,8 @@ public:
     Q_INVOKABLE void setAudioFile(const QString& path);
 
     //! NOTE Automatic sync points, from the score's start (the first sync point, or the music's start).
-    //! params: sensitivity [0; 1], minBpm, maxBpm, octave (0 auto, 1 none, 2 double, 3 half), everyMeasure, toleranceMs,
-    //! ignoreLeadingSilence
+    //! params: flexibility [0; 1] (tempo constant to variable), approxBpm (0: unknown),
+    //! everyMeasure, ignoreLeadingSilence
     Q_INVOKABLE void detectPoints(const QVariantMap& params);
     Q_INVOKABLE void cancelDetection();
     //! NOTE All the sync points but the score's start (and the locked ones)
@@ -249,6 +253,7 @@ signals:
     void viewChanged();
     void positionTextChanged();
     void syncChanged();
+    void moveFollowingPointsChanged();
     void playingChanged();
     void metronomeChanged();
     void speedChanged();
@@ -262,6 +267,8 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseUngrabEvent() override;
+    void hoverMoveEvent(QHoverEvent* event) override;
+    void hoverLeaveEvent(QHoverEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -290,11 +297,14 @@ private:
         double grabOffsetSecs = 0.0;
         double originalSecs = 0.0;
         double audioSecs = 0.0;
+        double wantedSecs = 0.0; // where the mouse puts it, before the limits
         bool moved = false;
         //! NOTE Audio sync off: the reference (where the score starts in the audio) moves all the points with it
         bool shiftAll = false;
         //! NOTE Stopped by a neighboring segment's tempo limit (MIN/MAX_SYNC_BPM): shown, so the user knows why
         bool atLimit = false;
+        //! NOTE The points after it move with it (see moveFollowingPoints()); Cmd/Ctrl seen during the drag inverts it
+        bool modifierSeen = false;
     };
 
     project::IProjectAudioSyncSettingsPtr audioSyncSettings() const;
@@ -304,6 +314,8 @@ private:
 
     void onProjectChanged();
     void onNotationChanged();
+    //! NOTE Another reference audio: nothing of the previous one's view applies
+    void onAudioReplaced();
     void onDecodeStateChanged();
     void listenPlaybackState();
 
@@ -324,9 +336,16 @@ private:
     std::vector<double> displayedPointSecs() const;
     static bool isUncertainPoint(const audiosync::SyncPoint& point);
     std::optional<size_t> pointAt(const QPointF& pos) const;
+    //! NOTE Can be dragged: not locked, and audio sync on (off, the reference only)
+    bool isMovablePoint(size_t index) const;
+    //! NOTE The dragged point where it's wanted, within the limits of the move (alone or with the following points)
+    void updatePointDrag();
     std::optional<size_t> selectedPointIndex() const;
     void addPointAt(double audioSecs, bool snapToBeat);
-    void nudgeSelectedPoint(double deltaSecs);
+    void nudgeSelectedPoint(double deltaSecs, bool modifierPressed);
+    bool dragMovesFollowing() const;
+    //! NOTE The index after the last point moved with the dragged one; nullopt if it moves alone
+    std::optional<size_t> draggedFollowingEnd() const;
     void deleteSelectedPoint();
     void paintSyncPoints(QPainter* painter, const QRectF& railRect, const QRectF& waveRect) const;
     void paintLoop(QPainter* painter, const QRectF& waveRect) const;
@@ -387,6 +406,8 @@ private:
     mutable GridTime m_scoreEnd;
     mutable std::vector<audiosync::SyncPoint> m_syncPoints;
     mutable bool m_audioSyncEnabled = false;
+    bool m_moveFollowingPoints = false;
+    muse::io::path_t m_audioPath; // the reference audio's, to tell when it's replaced
     mutable double m_audioOffsetSecs = 0.0;
     bool m_gridRefreshPending = false;
 
@@ -428,6 +449,9 @@ private:
         LoopBoth,
     };
 
+    //! NOTE The A-B loop drag a press there starts (its handles, or inside it), before the points
+    std::optional<DragMode> loopDragModeAt(const QPointF& pos) const;
+
     //! NOTE The A-B loop being dragged, written when released
     struct LoopDrag {
         double fromSecs = -1.0;
@@ -438,6 +462,7 @@ private:
         bool enableOnRelease = false; // a new loop, marked by dragging the playback position
     };
     double m_seekPressX = 0.0;
+    bool m_seekPressOnWaveform = false;
     std::optional<LoopDrag> m_loopDrag;
 
     DragMode m_dragMode = DragMode::None;

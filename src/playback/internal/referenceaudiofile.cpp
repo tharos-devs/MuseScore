@@ -22,8 +22,14 @@
 
 #include "referenceaudiofile.h"
 
+#include <cmath>
+
 #include <QFileInfo>
 #include <QStringList>
+
+#include "notation/imasternotation.h"
+#include "notation/inotationautomation.h"
+#include "project/iprojectundostack.h"
 
 #include "translation.h"
 
@@ -41,8 +47,9 @@ bool mu::playback::audiosync::isSupportedAudioFile(const muse::io::path_t& path)
 }
 
 bool mu::playback::audiosync::chooseReferenceAudio(IInteractive* interactive, IPlaybackConfiguration* configuration,
-                                                   const project::IProjectAudioSyncSettingsPtr& settings)
+                                                   IPlaybackController* controller, const project::INotationProjectPtr& project)
 {
+    const project::IProjectAudioSyncSettingsPtr settings = project ? project->audioSyncSettings() : nullptr;
     if (!interactive || !settings) {
         return false;
     }
@@ -65,13 +72,14 @@ bool mu::playback::audiosync::chooseReferenceAudio(IInteractive* interactive, IP
         return false;
     }
 
-    setReferenceAudioPath(configuration, settings, path);
+    setReferenceAudioPath(configuration, controller, project, path);
     return true;
 }
 
-void mu::playback::audiosync::setReferenceAudioPath(IPlaybackConfiguration* configuration,
-                                                    const project::IProjectAudioSyncSettingsPtr& settings, const muse::io::path_t& path)
+void mu::playback::audiosync::setReferenceAudioPath(IPlaybackConfiguration* configuration, IPlaybackController* controller,
+                                                    const project::INotationProjectPtr& project, const muse::io::path_t& path)
 {
+    const project::IProjectAudioSyncSettingsPtr settings = project ? project->audioSyncSettings() : nullptr;
     if (!settings || path.empty()) {
         return;
     }
@@ -80,7 +88,61 @@ void mu::playback::audiosync::setReferenceAudioPath(IPlaybackConfiguration* conf
         configuration->addRecentReferenceAudioFile(path.toQString());
     }
 
-    project::ReferenceAudioSettings updated = settings->referenceAudio();
-    updated.path = path;
-    settings->setReferenceAudio(updated);
+    const project::ReferenceAudioSettings& current = settings->referenceAudio();
+    if (current.path == path) {
+        return;
+    }
+
+    //! NOTE The same recording located again (moved or renamed): its sync points and settings still apply
+    if (!current.path.empty() && !QFileInfo::exists(current.path.toQString())) {
+        project::ReferenceAudioSettings located = current;
+        located.path = path;
+        settings->setReferenceAudio(located);
+        return;
+    }
+
+    startOver(controller, project, path);
+}
+
+void mu::playback::audiosync::startOver(IPlaybackController* controller, const project::INotationProjectPtr& project,
+                                        const muse::io::path_t& newPath)
+{
+    const project::IProjectAudioSyncSettingsPtr settings = project ? project->audioSyncSettings() : nullptr;
+    if (!settings) {
+        return;
+    }
+
+    if (const notation::INotationAutomationPtr automation = project->masterNotation() ? project->masterNotation()->automation() : nullptr) {
+        //! NOTE On, it stays on: its points made again from the score's tempo, from 00:00 (a point on every measure)
+        automation->clearAudioSync(/*keepEnabled*/ automation->isAudioSyncEnabled() && !newPath.empty());
+    }
+
+    //! NOTE The pitch, delay and loop are the reference audio's settings; the next audio is fitted in the view
+    project::ReferenceAudioSettings fresh;
+    fresh.path = newPath;
+    const project::ReferenceAudioSettings previous = settings->referenceAudio();
+    const project::AudioSyncViewState previousViewState = settings->viewState();
+    settings->setViewState(project::AudioSyncViewState());
+    settings->setReferenceAudio(fresh);
+
+    //! NOTE Undone after the sync points (cleared just before, on the score's stack): the previous audio back, then
+    //! its points
+    if (const project::IProjectUndoStackPtr undoStack = project->undoStack()) {
+        const std::weak_ptr<project::IProjectAudioSyncSettings> weakSettings = settings;
+        undoStack->push(muse::TranslatableString("undoableAction", "Change reference audio"), [weakSettings, fresh]() {
+            if (const auto settings = weakSettings.lock()) {
+                settings->setViewState(project::AudioSyncViewState());
+                settings->setReferenceAudio(fresh);
+            }
+        }, [weakSettings, previous, previousViewState]() {
+            if (const auto settings = weakSettings.lock()) {
+                settings->setViewState(previousViewState);
+                settings->setReferenceAudio(previous);
+            }
+        });
+    }
+
+    if (controller && std::abs(controller->tempoMultiplier() - 1.0) > 1e-6) {
+        controller->setTempoMultiplier(1.0);
+    }
 }

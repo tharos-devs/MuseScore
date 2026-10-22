@@ -901,7 +901,7 @@ void TrackListModel::chooseVideoFile()
 void TrackListModel::chooseReferenceAudioFile()
 {
     if (const INotationProjectPtr project = context()->currentProject()) {
-        audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), project->audioSyncSettings());
+        audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), controller().get(), project);
     }
 }
 

@@ -32,14 +32,43 @@ StyledPopupView {
     id: root
 
     signal detectRequested(var params)
+    signal togglePlayRequested()
 
-    property real sensitivity: 0.5
-    property int minBpm: 50
-    property int maxBpm: 200
-    property int octave: 0
-    property bool everyMeasure: false
+    //! NOTE Played from here, to tap the tempo: the popup closes when clicking outside it
+    property bool isPlaying: false
+
+    property real flexibility: 0.0
+    //! NOTE 0: automatic
+    property int approxBpm: 0
+    readonly property int minApproxBpm: 30
+    readonly property int maxApproxBpm: 300
+
+    function clampedBpm(bpm) {
+        return Math.min(maxApproxBpm, Math.max(minApproxBpm, Math.round(bpm)))
+    }
+    property bool everyMeasure: true
     property bool ignoreLeadingSilence: true
-    property int toleranceMs: 20
+
+    //! NOTE Tap tempo: the median interval of the last taps; a pause starts over
+    property var tapTimes: []
+
+    function tap() {
+        const now = Date.now()
+        let times = tapTimes.length > 0 && now - tapTimes[tapTimes.length - 1] > 2000 ? [] : tapTimes.slice(-7)
+        times.push(now)
+        tapTimes = times
+
+        if (times.length < 3) {
+            return
+        }
+
+        let intervals = []
+        for (let i = 1; i < times.length; ++i) {
+            intervals.push(times[i] - times[i - 1])
+        }
+        intervals.sort(function(a, b) { return a - b })
+        approxBpm = clampedBpm(60000 / intervals[Math.floor(intervals.length / 2)])
+    }
 
     //! NOTE Fixed: the rows wrap or shrink to it (their implicit widths side by side would make it very wide)
     //! NOTE Takes the keyboard focus: Escape closes it (opened with the mouse, the score kept it)
@@ -71,6 +100,13 @@ StyledPopupView {
         focus: true
         Keys.onEscapePressed: root.close()
 
+        //! NOTE Space taps the tempo here, instead of playing or pausing; not while a control is reached with the
+        //! keyboard: it presses that control then (the Tap button too)
+        Keys.onShortcutOverride: function(event) {
+            event.accepted = event.key === Qt.Key_Space && !navPanel.highlight
+        }
+        Keys.onSpacePressed: root.tap()
+
         CheckBox {
             checked: root.ignoreLeadingSilence
             text: qsTrc("playback", "Ignore silence at the beginning")
@@ -81,91 +117,122 @@ StyledPopupView {
         }
 
         StyledTextLabel {
-            text: qsTrc("playback", "Sensitivity")
+            text: qsTrc("playback", "Tempo changes")
             horizontalAlignment: Text.AlignLeft
         }
 
-        StyledSlider {
+        //! NOTE Constant: music played to a click (pop, rock); flexible: rubato (orchestral music)
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            from: 0
-            to: 1
-            stepSize: 0.05
-            value: root.sensitivity
-            fillBackground: false
-            navigation.panel: navPanel
-            navigation.order: 1
-            navigation.accessible.name: qsTrc("playback", "Sensitivity")
+            spacing: 0
 
-            onMoved: root.sensitivity = value
+            StyledSlider {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                from: 0
+                to: 1
+                stepSize: 0.05
+                value: root.flexibility
+                fillBackground: false
+                navigation.panel: navPanel
+                navigation.order: 1
+                navigation.accessible.name: qsTrc("playback", "Tempo changes: constant or variable")
+
+                onMoved: root.flexibility = value
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                StyledTextLabel {
+                    Layout.fillWidth: true
+                    text: qsTrc("playback", "Constant", "tempo")
+                    horizontalAlignment: Text.AlignLeft
+                }
+
+                StyledTextLabel {
+                    Layout.fillWidth: true
+                    text: qsTrc("playback", "Variable", "tempo")
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
         }
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 4
 
             StyledTextLabel {
                 Layout.fillWidth: true
-                text: qsTrc("playback", "Expected tempo")
+                text: qsTrc("playback", "Tempo")
                 horizontalAlignment: Text.AlignLeft
                 wrapMode: Text.WordWrap
+
+                ToolTip.visible: tempoHover.hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTrc("playback", "Approximate is enough: type it or tap it. Empty: automatic")
+
+                HoverHandler {
+                    id: tempoHover
+                }
             }
 
+            //! NOTE "--": automatic
             IncrementalPropertyControl {
                 Layout.preferredWidth: 84
-                currentValue: root.minBpm
-                minValue: 20
-                maxValue: root.maxBpm - 10
-                step: 5
+                isIndeterminate: root.approxBpm <= 0
+                currentValue: root.approxBpm > 0 ? root.approxBpm : 120
+                minValue: root.minApproxBpm
+                maxValue: root.maxApproxBpm
+                step: 1
                 decimals: 0
                 measureUnitsSymbol: qsTrc("playback", "BPM")
                 navigation.panel: navPanel
                 navigation.order: 2
 
-                onValueEdited: function(newValue) { root.minBpm = newValue }
+                onValueEdited: function(newValue) { root.approxBpm = newValue }
+                //! NOTE Typed or stepped from "--" (from 0): within the range once done
+                onValueEditingFinished: function(newValue) {
+                    if (newValue > 0) {
+                        root.approxBpm = root.clampedBpm(newValue)
+                    }
+                }
             }
 
-            StyledTextLabel {
-                text: "–"
-            }
-
-            IncrementalPropertyControl {
-                Layout.preferredWidth: 84
-                currentValue: root.maxBpm
-                minValue: root.minBpm + 10
-                maxValue: 400
-                step: 5
-                decimals: 0
-                measureUnitsSymbol: qsTrc("playback", "BPM")
+            FlatButton {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                icon: IconCode.UNDO
+                transparent: true
+                enabled: root.approxBpm > 0
+                toolTipTitle: qsTrc("playback", "Automatic tempo")
                 navigation.panel: navPanel
                 navigation.order: 3
 
-                onValueEdited: function(newValue) { root.maxBpm = newValue }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            StyledTextLabel {
-                text: qsTrc("playback", "Beats")
-                horizontalAlignment: Text.AlignLeft
+                onClicked: root.approxBpm = 0
             }
 
-            StyledDropdown {
-                Layout.fillWidth: true
-                model: [
-                    { text: qsTrc("playback", "Automatic"), value: 0 },
-                    { text: qsTrc("playback", "As detected"), value: 1 },
-                    { text: qsTrc("playback", "Twice as many (×2)"), value: 2 },
-                    { text: qsTrc("playback", "Half as many (÷2)"), value: 3 }
-                ]
-                currentIndex: indexOfValue(root.octave)
+            FlatButton {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                icon: root.isPlaying ? IconCode.PAUSE_FILL : IconCode.PLAY_FILL
+                toolTipTitle: root.isPlaying ? qsTrc("playback", "Pause") : qsTrc("playback", "Play")
                 navigation.panel: navPanel
                 navigation.order: 4
 
-                onActivated: function(index, value) { root.octave = value }
+                onClicked: root.togglePlayRequested()
+            }
+
+            FlatButton {
+                minWidth: 40
+                Layout.preferredHeight: 26
+                text: qsTrc("playback", "Tap", "tap tempo")
+                toolTipTitle: qsTrc("playback", "Tap tempo")
+                toolTipDescription: qsTrc("playback", "Click on the beats, or press Space, while the music plays")
+                navigation.panel: navPanel
+                navigation.order: 5
+
+                onClicked: root.tap()
             }
         }
 
@@ -173,44 +240,9 @@ StyledPopupView {
             checked: root.everyMeasure
             text: qsTrc("playback", "Add a point on every measure")
             navigation.panel: navPanel
-            navigation.order: 5
+            navigation.order: 6
 
             onClicked: root.everyMeasure = !root.everyMeasure
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            enabled: !root.everyMeasure
-
-            //! NOTE Without a point on every measure: the largest gap a measure can have from the audio before it gets one
-            StyledTextLabel {
-                text: qsTrc("playback", "Precision")
-                horizontalAlignment: Text.AlignLeft
-                Layout.fillWidth: true
-
-                ToolTip.visible: precisionHover.hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTrc("playback", "Maximum gap between the score and the audio: smaller adds more points")
-
-                HoverHandler {
-                    id: precisionHover
-                }
-            }
-
-            IncrementalPropertyControl {
-                Layout.preferredWidth: 80
-                currentValue: root.toleranceMs
-                minValue: 2
-                maxValue: 200
-                step: 5
-                decimals: 0
-                measureUnitsSymbol: qsTrc("global", "ms")
-                navigation.panel: navPanel
-                navigation.order: 6
-
-                onValueEdited: function(newValue) { root.toleranceMs = newValue }
-            }
         }
 
         RowLayout {
@@ -233,13 +265,10 @@ StyledPopupView {
 
                 onClicked: {
                     root.detectRequested({
-                        sensitivity: root.sensitivity,
-                        minBpm: root.minBpm,
-                        maxBpm: root.maxBpm,
-                        octave: root.octave,
+                        flexibility: root.flexibility,
+                        approxBpm: root.approxBpm,
                         everyMeasure: root.everyMeasure,
-                        ignoreLeadingSilence: root.ignoreLeadingSilence,
-                        toleranceMs: root.toleranceMs
+                        ignoreLeadingSilence: root.ignoreLeadingSilence
                     })
                     root.close()
                 }

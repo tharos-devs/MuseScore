@@ -23,6 +23,7 @@
 #include "audiosyncedits.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <map>
@@ -203,7 +204,53 @@ bool addPoint(INotationAutomation& automation, const Score* score, int utick, do
                      muse::TranslatableString("undoableAction", "Add audio sync point"));
 }
 
-bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
+std::optional<std::pair<double, double> > allowedMoveRange(const std::vector<SyncPoint>& points, int utick, bool moveFollowing)
+{
+    if (!moveFollowing) {
+        return allowedAudioRange(points, utick);
+    }
+
+    // The ones after it move with it up to a locked one: only the segment before it and the one ending at that locked
+    // point change
+    std::vector<SyncPoint> before;
+    const SyncPoint* self = nullptr;
+    const SyncPoint* lastMoved = nullptr;
+    const SyncPoint* lockedAfter = nullptr;
+    for (const SyncPoint& point : points) {
+        if (point.utick <= utick) {
+            before.push_back(point);
+            if (point.utick == utick) {
+                self = &point;
+                lastMoved = &point;
+            }
+        } else if (!lockedAfter) {
+            if (point.locked) {
+                lockedAfter = &point;
+            } else {
+                lastMoved = &point;
+            }
+        }
+    }
+
+    std::optional<std::pair<double, double> > range = allowedAudioRange(before, utick);
+    if (!range || !self || !lastMoved || !lockedAfter) {
+        return range;
+    }
+
+    const std::optional<std::pair<double, double> > lastRange = allowedAudioRange({ *lockedAfter }, lastMoved->utick);
+    if (!lastRange) {
+        return std::nullopt;
+    }
+
+    range->first = std::max(range->first, self->audioSecs + lastRange->first - lastMoved->audioSecs);
+    range->second = std::min(range->second, self->audioSecs + lastRange->second - lastMoved->audioSecs);
+    if (range->first > range->second) {
+        return std::nullopt;
+    }
+    return range;
+}
+
+bool movePoint(INotationAutomation& automation, int utick, double audioSecs, bool moveFollowing)
 {
     const AutomationDataConstPtr data = automation.automationData();
     if (!data || !data->isAudioSyncEnabled()) {
@@ -216,7 +263,7 @@ bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
         return false;
     }
 
-    const std::optional<std::pair<double, double> > range = allowedAudioRange(syncPoints(automation), utick);
+    const std::optional<std::pair<double, double> > range = allowedMoveRange(syncPoints(automation), utick, moveFollowing);
     if (!range) {
         return false;
     }
@@ -228,8 +275,28 @@ bool movePoint(INotationAutomation& automation, int utick, double audioSecs)
         return false;
     }
 
-    return editPoint(automation, utick, AutomationPointEdit::SetPoint { point },
-                     muse::TranslatableString("undoableAction", "Move audio sync point"));
+    AutomationPointEdits edits { { utick, AutomationPointEdit::SetPoint { point } } };
+    if (moveFollowing) {
+        const double deltaSecs = point.audioSync->audioSecs - it->second.audioSync->audioSecs;
+        for (auto next = std::next(it); next != curve.end(); ++next) {
+            if (!next->second.audioSync) {
+                continue;
+            }
+            if (next->second.audioSync->locked) {
+                break;
+            }
+            AutomationPoint moved = next->second;
+            moved.audioSync->audioSecs += deltaSecs;
+            //! NOTE Placed by the user too: a later Detect counts it as a manual point
+            moved.audioSync->origin = AudioSyncInfo::Origin::Manual;
+            edits.push_back({ next->first, AutomationPointEdit::SetPoint { moved } });
+        }
+    }
+
+    std::vector<std::pair<AutomationCurveKey, AutomationPointEdits> > editsByCurve { { TEMPO_KEY, edits } };
+    automation.editPoints(editsByCurve, moveFollowing ? muse::TranslatableString("undoableAction", "Move audio sync points")
+                          : muse::TranslatableString("undoableAction", "Move audio sync point"));
+    return true;
 }
 
 bool removePoint(INotationAutomation& automation, int utick)
@@ -358,59 +425,186 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
     const auto nearest = std::min_element(beats.begin(), beats.end(), [&options](const DetectedBeatTime& a, const DetectedBeatTime& b) {
         return std::abs(a.secs - options.anchorSecs) < std::abs(b.secs - options.anchorSecs);
     });
+    float anchorStrength = 0.f;
     if (nearest != beats.end() && std::abs(nearest->secs - options.anchorSecs) < medianInterval * 0.5) {
-        anchorSecs = nearest->secs;
+        anchorStrength = nearest->strength;
+        if (!options.keepAnchor) {
+            anchorSecs = nearest->secs;
+        }
     }
 
-    audioBeats.push_back({ anchorSecs, 1.f });
+    audioBeats.push_back({ anchorSecs, 1.f, anchorStrength });
     for (const DetectedBeatTime& beat : beats) {
         if (beat.secs > anchorSecs + medianInterval * 0.5) {
             audioBeats.push_back(beat);
         }
     }
 
-    // Octave errors: detected beats twice too fast or too slow. Judged by the expected tempo the user gave,
-    // not by the score's tempo markings: they're only approximate here
-    const double detectedBpm = 60.0 / medianInterval;
-    DetectionOptions::Octave octave = options.octave;
-    if (octave == DetectionOptions::Octave::Auto) {
-        octave = detectedBpm > options.maxBpm ? DetectionOptions::Octave::Half
-                 : detectedBpm < options.minBpm ? DetectionOptions::Octave::Double
-                 : DetectionOptions::Octave::None;
-    }
-
     if (info) {
         info->anchorSecs = anchorSecs;
-        info->detectedBpm = detectedBpm;
-        info->octave = octave;
-        info->appliedBpm = octave == DetectionOptions::Octave::Half ? detectedBpm / 2.0
-                           : octave == DetectionOptions::Octave::Double ? detectedBpm * 2.0 : detectedBpm;
+        info->detectedBpm = 60.0 / medianInterval;
     }
 
-    if (octave == DetectionOptions::Octave::Half) {
-        std::vector<DetectedBeatTime> halved;
-        for (size_t i = 0; i < audioBeats.size(); i += 2) {
-            halved.push_back(audioBeats[i]);
-        }
-        audioBeats = std::move(halved);
-    } else if (octave == DetectionOptions::Octave::Double) {
-        std::vector<DetectedBeatTime> doubled;
-        for (size_t i = 0; i < audioBeats.size(); ++i) {
-            doubled.push_back(audioBeats[i]);
-            if (i + 1 < audioBeats.size()) {
-                doubled.push_back({ (audioBeats[i].secs + audioBeats[i + 1].secs) / 2.0, 0.3f });
+    // The measures' first beats on the strongest ones: the audio's first beats until there are then before the
+    // score's start (a pickup, a count-in)
+    if (options.findDownbeats) {
+        const auto secondMeasure = std::find_if(std::next(positions.begin()), positions.end(), [](const auto& position) {
+            return position.second;
+        });
+        const size_t beatsPerMeasure = static_cast<size_t>(std::distance(positions.begin(), secondMeasure));
+        //! NOTE Judged on the first measures: the time signature may change later
+        static constexpr size_t MEASURES_JUDGED = 16;
+
+        size_t bestShift = 0;
+        double bestStrength = -1.0;
+        for (size_t shift = 0; shift < beatsPerMeasure && secondMeasure != positions.end(); ++shift) {
+            double strength = 0.0;
+            size_t measures = 0;
+            for (size_t i = 0; i < positions.size() && i + shift < audioBeats.size() && measures < MEASURES_JUDGED; ++i) {
+                if (positions[i].second) {
+                    strength += audioBeats[i + shift].strength;
+                    ++measures;
+                }
+            }
+            if (measures > 0 && strength / static_cast<double>(measures) > bestStrength) {
+                bestStrength = strength / static_cast<double>(measures);
+                bestShift = shift;
             }
         }
-        audioBeats = std::move(doubled);
+
+        if (bestShift > 0) {
+            audioBeats.erase(audioBeats.begin(), audioBeats.begin() + static_cast<std::ptrdiff_t>(bestShift));
+            if (info) {
+                info->anchorSecs = audioBeats.front().secs;
+            }
+        }
     }
 
-    // Beat after beat: the measure starts
-    const size_t count = std::min(positions.size(), audioBeats.size());
-    for (size_t i = 0; i < count; ++i) {
-        if (!positions[i].second) {
-            continue;
+    // Measure after measure, on the audio's beats: a measure may get one beat more or less than the score says (a
+    // beat the tracking missed or added: the tempo drifting from the tracked one), at a cost, made up for by
+    // the strong attack its first beat gets. Counted beat after beat, one such beat would shift every measure after.
+    // A tempo jumping from a measure to the next costs too: the strong attacks of music not in the score's time
+    // signatures would otherwise be reached by squeezing or stretching measures
+    //! NOTE Boundaries: the anchor, then the measure starts
+    std::vector<size_t> boundaries { 0 };
+    for (size_t i = 1; i < positions.size(); ++i) {
+        if (positions[i].second) {
+            boundaries.push_back(i);
         }
-        result.push_back({ positions[i].first, audioBeats[i].secs, audioBeats[i].confidence });
+    }
+
+    //! NOTE Only for a variable tempo (flexibility above the middle): the beats then miss or add some,
+    //! that the strong attacks put right. With a constant tempo the beats are right, and a slightly stronger beat
+    //! (a backbeat's snare drum), measure after measure, would shift all the measures by one beat for good
+    const bool slipsAllowed = options.flexibility > 0.5;
+    const double variable = std::clamp((options.flexibility - 0.5) * 2.0, 0.0, 1.0);
+    const double slipCost = 0.8 * std::pow(0.11 / 0.8, variable); // in strengths (the strongest beat's is 1)
+    const double tempoChangeCost = 3.2 * std::pow(1.0 / 3.2, variable); // per tempo ratio (natural log)
+    //! NOTE The first measure's tempo is compared to the beats'
+    const double beatsBps = 1.0 / medianInterval;
+    static constexpr double UNREACHED = -std::numeric_limits<double>::infinity();
+    const int beatCount = static_cast<int>(audioBeats.size());
+    auto beatsOf = [&boundaries](size_t k) { return static_cast<int>(boundaries[k + 1] - boundaries[k]); };
+
+    //! NOTE The audio's beats the k-th boundary can be on: a slip at most per measure (none for a constant tempo)
+    const size_t boundaryCount = boundaries.size();
+    std::vector<int> bandFirst(boundaryCount, 0);
+    std::vector<int> bandLast(boundaryCount, -1);
+    for (size_t k = 0; k < boundaryCount; ++k) {
+        const int reach = slipsAllowed ? static_cast<int>(k) : 0;
+        bandFirst[k] = std::max(0, static_cast<int>(boundaries[k]) - reach);
+        bandLast[k] = std::min(beatCount - 1, static_cast<int>(boundaries[k]) + reach);
+    }
+
+    //! NOTE The scores of a boundary's states (its beats, with a slip -1, 0, +1: index slip + 1), a boundary at a time;
+    //! the slip each state was reached from, kept for the way back
+    using Scores = std::vector<std::array<double, 3> >;
+    auto unreachedScores = [&](size_t k) {
+        return Scores(static_cast<size_t>(std::max(0, bandLast[k] - bandFirst[k] + 1)), { UNREACHED, UNREACHED, UNREACHED });
+    };
+    std::vector<std::vector<std::array<int8_t, 3> > > previousSlips(boundaryCount);
+
+    Scores scores = unreachedScores(0);
+    scores[0][1] = audioBeats[0].strength;
+
+    //! NOTE Back from the best end: the score's end, or where the audio ends (the next measure, kept to the score's
+    //! beats, past its last beat). Ending at the furthest boundary the audio can reach instead squeezes measures,
+    //! one beat short each, to fit a score longer than the audio
+    double bestEndScore = UNREACHED;
+    size_t lastReached = 0;
+    int beatIdx = 0;
+    int endSlip = 0;
+
+    for (size_t k = 0; k < boundaryCount; ++k) {
+        const bool lastBoundary = k + 1 == boundaryCount;
+        const int beats = lastBoundary ? 0 : beatsOf(k);
+        Scores nextScores = lastBoundary ? Scores() : unreachedScores(k + 1);
+        if (!lastBoundary) {
+            previousSlips[k + 1].assign(nextScores.size(), { 0, 0, 0 });
+        }
+
+        for (int i = bandFirst[k]; i <= bandLast[k]; ++i) {
+            for (int slip = -1; slip <= 1; ++slip) {
+                const double score = scores[i - bandFirst[k]][slip + 1];
+                if (score == UNREACHED) {
+                    continue;
+                }
+
+                if ((lastBoundary || i + beats >= beatCount) && score > bestEndScore) {
+                    bestEndScore = score;
+                    lastReached = k;
+                    beatIdx = i;
+                    endSlip = slip;
+                }
+                if (lastBoundary) {
+                    continue;
+                }
+
+                double previousBps = beatsBps;
+                if (k > 0) {
+                    const int previousIdx = i - beatsOf(k - 1) - slip;
+                    previousBps = beatsOf(k - 1) / (audioBeats[i].secs - audioBeats[previousIdx].secs);
+                }
+
+                for (int nextSlip = slipsAllowed ? -1 : 0; nextSlip <= (slipsAllowed ? 1 : 0); ++nextSlip) {
+                    const int next = i + beats + nextSlip;
+                    if (next <= i || next < bandFirst[k + 1] || next > bandLast[k + 1]
+                        || audioBeats[next].secs <= audioBeats[i].secs) {
+                        continue;
+                    }
+
+                    const double bps = beats / (audioBeats[next].secs - audioBeats[i].secs);
+                    const double tempoChange = std::abs(std::log(bps / previousBps));
+                    const double nextScore = score + audioBeats[next].strength - slipCost * std::abs(nextSlip)
+                                             - tempoChangeCost * tempoChange;
+                    const size_t nextIdx = static_cast<size_t>(next - bandFirst[k + 1]);
+                    if (nextScore > nextScores[nextIdx][nextSlip + 1]) {
+                        nextScores[nextIdx][nextSlip + 1] = nextScore;
+                        previousSlips[k + 1][nextIdx][nextSlip + 1] = static_cast<int8_t>(slip);
+                    }
+                }
+            }
+        }
+
+        scores = std::move(nextScores);
+    }
+
+    std::vector<int> beatIdxs(lastReached + 1, 0);
+    for (size_t k = lastReached + 1; k-- > 0;) {
+        beatIdxs[k] = beatIdx;
+        if (k > 0) {
+            const int previousSlip = previousSlips[k][static_cast<size_t>(beatIdx - bandFirst[k])][endSlip + 1];
+            beatIdx -= beatsOf(k - 1) + endSlip;
+            endSlip = previousSlip;
+        }
+    }
+
+    for (size_t k = 0; k <= lastReached; ++k) {
+        const std::pair<int, bool>& position = positions[boundaries[k]];
+        if (position.second) {
+            const DetectedBeatTime& beat = audioBeats[beatIdxs[k]];
+            result.push_back({ position.first, beat.secs, beat.confidence });
+        }
     }
 
     return options.everyMeasure ? result : simplifyPoints(result, options.toleranceSecs);
@@ -467,7 +661,7 @@ std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points
 int firstNoteUtick(const Score* score)
 {
     if (!score) {
-        return 0;
+        return -1;
     }
 
     for (const Measure* measure = score->firstMeasure(); measure; measure = measure->nextMeasure()) {
@@ -481,7 +675,7 @@ int firstNoteUtick(const Score* score)
         }
     }
 
-    return 0;
+    return -1;
 }
 
 double scoreStartSecsForFirstNote(const Score* score, const std::vector<MatchedPoint>& points, int firstNoteUtick, double firstNoteSecs)
