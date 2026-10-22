@@ -551,6 +551,9 @@ void AudioSyncView::stopPlayback()
 void AudioSyncView::rewindToStart()
 {
     playbackController()->rewind(0);
+
+    //! NOTE The waveform's start in view too, wherever it was scrolled to
+    setScrollSecs(0.0);
 }
 
 void AudioSyncView::goToLoopStart()
