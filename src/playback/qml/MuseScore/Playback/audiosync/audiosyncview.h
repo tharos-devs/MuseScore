@@ -297,6 +297,7 @@ private:
         double grabOffsetSecs = 0.0;
         double originalSecs = 0.0;
         double audioSecs = 0.0;
+        double wantedSecs = 0.0; // where the mouse puts it, before the limits
         bool moved = false;
         //! NOTE Audio sync off: the reference (where the score starts in the audio) moves all the points with it
         bool shiftAll = false;
@@ -337,6 +338,8 @@ private:
     std::optional<size_t> pointAt(const QPointF& pos) const;
     //! NOTE Can be dragged: not locked, and audio sync on (off, the reference only)
     bool isMovablePoint(size_t index) const;
+    //! NOTE The dragged point where it's wanted, within the limits of the move (alone or with the following points)
+    void updatePointDrag();
     std::optional<size_t> selectedPointIndex() const;
     void addPointAt(double audioSecs, bool snapToBeat);
     void nudgeSelectedPoint(double deltaSecs, bool modifierPressed);

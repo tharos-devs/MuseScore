@@ -195,13 +195,14 @@ Item {
                     accentButton: syncView.moveFollowingPoints
                     enabled: syncView.audioSyncEnabled
                     toolTipTitle: qsTrc("playback", "Move the following points too")
-                    //: %1: the Cmd key (macOS) or the Ctrl key
                     toolTipDescription: (syncView.moveFollowingPoints
+                                         //: %1: the Cmd key (macOS) or the Ctrl key
                                          ? qsTrc("playback", "Hold %1 while dragging to move one point only")
+                                         //: %1: the Cmd key (macOS) or the Ctrl key
                                          : qsTrc("playback", "Hold %1 while dragging to move the following points too"))
                                         .arg(Qt.platform.os === "osx" ? "Cmd" : "Ctrl")
                     navigation.panel: navigationPanel
-                    navigation.order: 10
+                    navigation.order: 9
 
                     onClicked: syncView.moveFollowingPoints = !syncView.moveFollowingPoints
                 }
@@ -222,7 +223,7 @@ Item {
                     transparent: true
                     toolTipTitle: qsTrc("playback", "Cancel detection")
                     navigation.panel: navigationPanel
-                    navigation.order: 9
+                    navigation.order: 10
 
                     onClicked: syncView.cancelDetection()
                 }

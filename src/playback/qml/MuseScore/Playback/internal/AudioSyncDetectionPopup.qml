@@ -40,6 +40,12 @@ StyledPopupView {
     property real flexibility: 0.0
     //! NOTE 0: automatic
     property int approxBpm: 0
+    readonly property int minApproxBpm: 30
+    readonly property int maxApproxBpm: 300
+
+    function clampedBpm(bpm) {
+        return Math.min(maxApproxBpm, Math.max(minApproxBpm, Math.round(bpm)))
+    }
     property bool everyMeasure: true
     property bool ignoreLeadingSilence: true
 
@@ -61,7 +67,7 @@ StyledPopupView {
             intervals.push(times[i] - times[i - 1])
         }
         intervals.sort(function(a, b) { return a - b })
-        approxBpm = Math.round(60000 / intervals[Math.floor(intervals.length / 2)])
+        approxBpm = clampedBpm(60000 / intervals[Math.floor(intervals.length / 2)])
     }
 
     //! NOTE Fixed: the rows wrap or shrink to it (their implicit widths side by side would make it very wide)
@@ -94,9 +100,10 @@ StyledPopupView {
         focus: true
         Keys.onEscapePressed: root.close()
 
-        //! NOTE Space taps the tempo here, instead of playing or pausing
+        //! NOTE Space taps the tempo here, instead of playing or pausing; not while a control is reached with the
+        //! keyboard: it presses that control then (the Tap button too)
         Keys.onShortcutOverride: function(event) {
-            event.accepted = event.key === Qt.Key_Space
+            event.accepted = event.key === Qt.Key_Space && !navPanel.highlight
         }
         Keys.onSpacePressed: root.tap()
 
@@ -175,8 +182,8 @@ StyledPopupView {
                 Layout.preferredWidth: 84
                 isIndeterminate: root.approxBpm <= 0
                 currentValue: root.approxBpm > 0 ? root.approxBpm : 120
-                minValue: 30
-                maxValue: 300
+                minValue: root.minApproxBpm
+                maxValue: root.maxApproxBpm
                 step: 1
                 decimals: 0
                 measureUnitsSymbol: qsTrc("playback", "BPM")
@@ -184,6 +191,12 @@ StyledPopupView {
                 navigation.order: 2
 
                 onValueEdited: function(newValue) { root.approxBpm = newValue }
+                //! NOTE Typed or stepped from "--" (from 0): within the range once done
+                onValueEditingFinished: function(newValue) {
+                    if (newValue > 0) {
+                        root.approxBpm = root.clampedBpm(newValue)
+                    }
+                }
             }
 
             FlatButton {

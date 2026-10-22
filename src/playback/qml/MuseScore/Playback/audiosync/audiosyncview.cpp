@@ -231,8 +231,12 @@ void AudioSyncView::onProjectChanged()
             //! NOTE Another audio (from here or elsewhere, see audiosync::startOver()): the view starts over too
             const project::IProjectAudioSyncSettingsPtr current = audioSyncSettings();
             if (current && current->referenceAudio().path != m_audioPath) {
+                //! NOTE A file that couldn't be found, located again: the same recording, its view kept
+                const bool located = !m_audioPath.empty() && !QFileInfo::exists(m_audioPath.toQString());
                 m_audioPath = current->referenceAudio().path;
-                onAudioReplaced();
+                if (!located) {
+                    onAudioReplaced();
+                }
             }
             emit audioChanged();
             //! NOTE The reference is shown with an audio only (see rebuildGrid())
@@ -268,6 +272,9 @@ void AudioSyncView::onAudioReplaced()
     m_pointDrag.reset();
     m_loopDrag.reset();
     m_dragMode = DragMode::None;
+
+    //! NOTE The previous waveform isn't fitted in the view meanwhile (e.g. resized while the new one is decoded)
+    m_peaks->load(QString());
 
     m_viewStateTimer.stop();
     m_pendingViewState.reset();
@@ -728,7 +735,9 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
 
     audiosync::BeatDetectionParams detectionParams;
     detectionParams.flexibility = params.value("flexibility", 0.0).toDouble();
-    detectionParams.approxBpm = params.value("approxBpm", 0.0).toDouble();
+    //! NOTE Within the Detect window's range (0: automatic)
+    const double approxBpm = params.value("approxBpm", 0.0).toDouble();
+    detectionParams.approxBpm = approxBpm > 0.0 ? std::clamp(approxBpm, 30.0, 300.0) : 0.0;
     detectionParams.fromSecs = std::max(0.0, first.audioSecs - 1.0);
 
     auto job = std::make_shared<DetectionJob>();
@@ -1563,6 +1572,7 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
             drag.shiftAll = !m_audioSyncEnabled;
             drag.originalSecs = point.audioSecs;
             drag.audioSecs = point.audioSecs;
+            drag.wantedSecs = point.audioSecs;
             drag.grabOffsetSecs = audioSecsAtX(pos.x()) - point.audioSecs;
             drag.modifierSeen = event->modifiers() & Qt::ControlModifier;
             m_pointDrag = drag;
@@ -1625,21 +1635,8 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
         }
 
         m_pointDrag->modifierSeen = m_pointDrag->modifierSeen || (event->modifiers() & Qt::ControlModifier);
-
-        // Kept where both neighboring segments (the one before it only, the ones after moved with it) stay within the
-        // allowed tempos
-        const double wantedSecs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
-        double secs = wantedSecs;
-        if (m_pointDrag->shiftAll) {
-            // All moved together: no segment changes
-        } else if (const auto range = audiosync::allowedMoveRange(m_syncPoints, m_pointDrag->utick, dragMovesFollowing())) {
-            secs = std::clamp(secs, range->first, range->second);
-        }
-        m_pointDrag->audioSecs = secs;
-        m_previewPointsDirty = true;
-        m_pointDrag->atLimit = std::abs(wantedSecs - secs) > 1e-6;
-        m_pointDrag->moved = m_pointDrag->moved || std::abs(secs - m_pointDrag->originalSecs) > 1e-6;
-        update();
+        m_pointDrag->wantedSecs = audioSecsAtX(event->position().x()) - m_pointDrag->grabOffsetSecs;
+        updatePointDrag();
         return;
     }
 
@@ -1662,6 +1659,25 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
     }
 
     seekToAudioSecs(audioSecsAtX(x));
+}
+
+void AudioSyncView::updatePointDrag()
+{
+    ensureGrid();
+
+    // Kept where both neighboring segments (the one before it only, the ones after moved with it) stay within the
+    // allowed tempos
+    double secs = m_pointDrag->wantedSecs;
+    if (m_pointDrag->shiftAll) {
+        // All moved together: no segment changes
+    } else if (const auto range = audiosync::allowedMoveRange(m_syncPoints, m_pointDrag->utick, dragMovesFollowing())) {
+        secs = std::clamp(secs, range->first, range->second);
+    }
+    m_pointDrag->audioSecs = secs;
+    m_previewPointsDirty = true;
+    m_pointDrag->atLimit = std::abs(m_pointDrag->wantedSecs - secs) > 1e-6;
+    m_pointDrag->moved = m_pointDrag->moved || std::abs(secs - m_pointDrag->originalSecs) > 1e-6;
+    update();
 }
 
 void AudioSyncView::hoverMoveEvent(QHoverEvent* event)
@@ -1819,11 +1835,10 @@ void AudioSyncView::keyPressEvent(QKeyEvent* event)
                            event->modifiers() & Qt::ControlModifier);
         break;
     case Qt::Key_Control:
-        // While dragging a point: shown at once, not at the next mouse move
+        // While dragging a point: shown at once, not at the next mouse move (within the limits of the move it now is)
         if (m_pointDrag && !m_pointDrag->modifierSeen) {
             m_pointDrag->modifierSeen = true;
-            m_previewPointsDirty = true;
-            update();
+            updatePointDrag();
         }
         break;
     case Qt::Key_Escape:

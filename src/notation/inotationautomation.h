@@ -66,8 +66,9 @@ public:
     //! NOTE: undoable, while audio sync is off: its sync points all moved in the audio, i.e. where the score starts in it
     //! (the score's own tempo is played)
     virtual void moveAudioSyncPoints(double deltaSecs) = 0;
-    //! NOTE: undoable: audio sync off and its sync points removed (the score's own tempo back)
-    virtual void clearAudioSync() = 0;
+    //! NOTE: undoable (one step): audio sync off and its sync points removed (the score's own tempo back); keepEnabled:
+    //! turned on again, its points made again from the score's tempo
+    virtual void clearAudioSync(bool keepEnabled) = 0;
     //! NOTE: the reference audio's time at the score's start (audio time = playback time + offset)
     virtual double audioSyncOffsetSecs() const = 0;
     //! NOTE: the audio time of a utick by the current tempo

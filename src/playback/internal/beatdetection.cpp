@@ -102,9 +102,9 @@ OnsetEnvelope onsetEnvelope(const MappedWav& wav, const BeatDetectionParams& par
                             const ProgressFn& progress)
 {
     OnsetEnvelope envelope;
-    envelope.hopSecs = HOP_SECS;
-
     const int64_t hop = std::max<int64_t>(1, std::llround(wav.sampleRate * HOP_SECS));
+    //! NOTE The real one: HOP_SECS isn't a whole number of frames at every sample rate (e.g. 22050 Hz)
+    envelope.hopSecs = static_cast<double>(hop) / wav.sampleRate;
     const int64_t frameFrom = std::clamp<int64_t>(std::llround(params.fromSecs * wav.sampleRate), 0, wav.frames);
     const int64_t frameTo = params.toSecs < 0 ? wav.frames
                             : std::clamp<int64_t>(std::llround(params.toSecs * wav.sampleRate), frameFrom, wav.frames);

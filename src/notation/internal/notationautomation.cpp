@@ -132,7 +132,7 @@ void NotationAutomation::moveAudioSyncPoints(double deltaSecs)
     });
 }
 
-void NotationAutomation::clearAudioSync()
+void NotationAutomation::clearAudioSync(bool keepEnabled)
 {
     IF_ASSERT_FAILED(m_masterScore && m_undoStack) {
         return;
@@ -144,6 +144,9 @@ void NotationAutomation::clearAudioSync()
 
     m_undoStack->transaction(muse::TranslatableString("undoableAction", "Clear audio sync"), [&](engraving::Transaction&) {
         m_masterScore->clearAudioSync();
+        if (keepEnabled) {
+            m_masterScore->setAudioSyncEnabled(true);
+        }
     });
 }
 

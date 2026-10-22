@@ -210,14 +210,44 @@ std::optional<std::pair<double, double> > allowedMoveRange(const std::vector<Syn
         return allowedAudioRange(points, utick);
     }
 
-    // The ones after it move with it: only the segment before it changes
+    // The ones after it move with it up to a locked one: only the segment before it and the one ending at that locked
+    // point change
     std::vector<SyncPoint> before;
+    const SyncPoint* self = nullptr;
+    const SyncPoint* lastMoved = nullptr;
+    const SyncPoint* lockedAfter = nullptr;
     for (const SyncPoint& point : points) {
         if (point.utick <= utick) {
             before.push_back(point);
+            if (point.utick == utick) {
+                self = &point;
+                lastMoved = &point;
+            }
+        } else if (!lockedAfter) {
+            if (point.locked) {
+                lockedAfter = &point;
+            } else {
+                lastMoved = &point;
+            }
         }
     }
-    return allowedAudioRange(before, utick);
+
+    std::optional<std::pair<double, double> > range = allowedAudioRange(before, utick);
+    if (!range || !self || !lastMoved || !lockedAfter) {
+        return range;
+    }
+
+    const std::optional<std::pair<double, double> > lastRange = allowedAudioRange({ *lockedAfter }, lastMoved->utick);
+    if (!lastRange) {
+        return std::nullopt;
+    }
+
+    range->first = std::max(range->first, self->audioSecs + lastRange->first - lastMoved->audioSecs);
+    range->second = std::min(range->second, self->audioSecs + lastRange->second - lastMoved->audioSecs);
+    if (range->first > range->second) {
+        return std::nullopt;
+    }
+    return range;
 }
 
 bool movePoint(INotationAutomation& automation, int utick, double audioSecs, bool moveFollowing)
@@ -257,6 +287,8 @@ bool movePoint(INotationAutomation& automation, int utick, double audioSecs, boo
             }
             AutomationPoint moved = next->second;
             moved.audioSync->audioSecs += deltaSecs;
+            //! NOTE Placed by the user too: a later Detect counts it as a manual point
+            moved.audioSync->origin = AudioSyncInfo::Origin::Manual;
             edits.push_back({ next->first, AutomationPointEdit::SetPoint { moved } });
         }
     }
@@ -474,20 +506,57 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
     const int beatCount = static_cast<int>(audioBeats.size());
     auto beatsOf = [&boundaries](size_t k) { return static_cast<int>(boundaries[k + 1] - boundaries[k]); };
 
-    //! NOTE State: the k-th boundary on the audio's i-th beat, reached with a slip (-1, 0, +1: index slip + 1)
-    struct State {
-        double score = UNREACHED;
-        int previousSlip = 0;
-    };
-    std::vector<std::vector<std::array<State, 3> > > states(boundaries.size(), std::vector<std::array<State, 3> >(beatCount));
-    states[0][0][1].score = audioBeats[0].strength;
+    //! NOTE The audio's beats the k-th boundary can be on: a slip at most per measure (none for a constant tempo)
+    const size_t boundaryCount = boundaries.size();
+    std::vector<int> bandFirst(boundaryCount, 0);
+    std::vector<int> bandLast(boundaryCount, -1);
+    for (size_t k = 0; k < boundaryCount; ++k) {
+        const int reach = slipsAllowed ? static_cast<int>(k) : 0;
+        bandFirst[k] = std::max(0, static_cast<int>(boundaries[k]) - reach);
+        bandLast[k] = std::min(beatCount - 1, static_cast<int>(boundaries[k]) + reach);
+    }
 
-    for (size_t k = 0; k + 1 < boundaries.size(); ++k) {
-        const int beats = beatsOf(k);
-        for (int i = 0; i < beatCount; ++i) {
+    //! NOTE The scores of a boundary's states (its beats, with a slip -1, 0, +1: index slip + 1), a boundary at a time;
+    //! the slip each state was reached from, kept for the way back
+    using Scores = std::vector<std::array<double, 3> >;
+    auto unreachedScores = [&](size_t k) {
+        return Scores(static_cast<size_t>(std::max(0, bandLast[k] - bandFirst[k] + 1)), { UNREACHED, UNREACHED, UNREACHED });
+    };
+    std::vector<std::vector<std::array<int8_t, 3> > > previousSlips(boundaryCount);
+
+    Scores scores = unreachedScores(0);
+    scores[0][1] = audioBeats[0].strength;
+
+    //! NOTE Back from the best end: the score's end, or where the audio ends (the next measure, kept to the score's
+    //! beats, past its last beat). Ending at the furthest boundary the audio can reach instead squeezes measures,
+    //! one beat short each, to fit a score longer than the audio
+    double bestEndScore = UNREACHED;
+    size_t lastReached = 0;
+    int beatIdx = 0;
+    int endSlip = 0;
+
+    for (size_t k = 0; k < boundaryCount; ++k) {
+        const bool lastBoundary = k + 1 == boundaryCount;
+        const int beats = lastBoundary ? 0 : beatsOf(k);
+        Scores nextScores = lastBoundary ? Scores() : unreachedScores(k + 1);
+        if (!lastBoundary) {
+            previousSlips[k + 1].assign(nextScores.size(), { 0, 0, 0 });
+        }
+
+        for (int i = bandFirst[k]; i <= bandLast[k]; ++i) {
             for (int slip = -1; slip <= 1; ++slip) {
-                const double score = states[k][i][slip + 1].score;
+                const double score = scores[i - bandFirst[k]][slip + 1];
                 if (score == UNREACHED) {
+                    continue;
+                }
+
+                if ((lastBoundary || i + beats >= beatCount) && score > bestEndScore) {
+                    bestEndScore = score;
+                    lastReached = k;
+                    beatIdx = i;
+                    endSlip = slip;
+                }
+                if (lastBoundary) {
                     continue;
                 }
 
@@ -499,7 +568,8 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
 
                 for (int nextSlip = slipsAllowed ? -1 : 0; nextSlip <= (slipsAllowed ? 1 : 0); ++nextSlip) {
                     const int next = i + beats + nextSlip;
-                    if (next <= i || next >= beatCount || audioBeats[next].secs <= audioBeats[i].secs) {
+                    if (next <= i || next < bandFirst[k + 1] || next > bandLast[k + 1]
+                        || audioBeats[next].secs <= audioBeats[i].secs) {
                         continue;
                     }
 
@@ -507,43 +577,23 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
                     const double tempoChange = std::abs(std::log(bps / previousBps));
                     const double nextScore = score + audioBeats[next].strength - slipCost * std::abs(nextSlip)
                                              - tempoChangeCost * tempoChange;
-                    State& nextState = states[k + 1][next][nextSlip + 1];
-                    if (nextScore > nextState.score) {
-                        nextState.score = nextScore;
-                        nextState.previousSlip = slip;
+                    const size_t nextIdx = static_cast<size_t>(next - bandFirst[k + 1]);
+                    if (nextScore > nextScores[nextIdx][nextSlip + 1]) {
+                        nextScores[nextIdx][nextSlip + 1] = nextScore;
+                        previousSlips[k + 1][nextIdx][nextSlip + 1] = static_cast<int8_t>(slip);
                     }
                 }
             }
         }
-    }
 
-    //! NOTE Back from the best end: the score's end, or where the audio ends (the next measure, kept to the score's
-    //! beats, past its last beat). Ending at the furthest boundary the audio can reach instead squeezes measures,
-    //! one beat short each, to fit a score longer than the audio
-    double bestEndScore = UNREACHED;
-    size_t lastReached = 0;
-    int beatIdx = 0;
-    int endSlip = 0;
-    for (size_t k = 0; k < boundaries.size(); ++k) {
-        const int nextBeats = k + 1 < boundaries.size() ? beatsOf(k) : 0;
-        for (int i = 0; i < beatCount; ++i) {
-            const bool canEnd = k + 1 == boundaries.size() || i + nextBeats >= beatCount;
-            for (int slip = -1; slip <= 1 && canEnd; ++slip) {
-                if (states[k][i][slip + 1].score > bestEndScore) {
-                    bestEndScore = states[k][i][slip + 1].score;
-                    lastReached = k;
-                    beatIdx = i;
-                    endSlip = slip;
-                }
-            }
-        }
+        scores = std::move(nextScores);
     }
 
     std::vector<int> beatIdxs(lastReached + 1, 0);
     for (size_t k = lastReached + 1; k-- > 0;) {
         beatIdxs[k] = beatIdx;
         if (k > 0) {
-            const int previousSlip = states[k][beatIdx][endSlip + 1].previousSlip;
+            const int previousSlip = previousSlips[k][static_cast<size_t>(beatIdx - bandFirst[k])][endSlip + 1];
             beatIdx -= beatsOf(k - 1) + endSlip;
             endSlip = previousSlip;
         }

@@ -29,6 +29,7 @@
 
 #include "notation/imasternotation.h"
 #include "notation/inotationautomation.h"
+#include "project/iprojectundostack.h"
 
 #include "translation.h"
 
@@ -87,9 +88,20 @@ void mu::playback::audiosync::setReferenceAudioPath(IPlaybackConfiguration* conf
         configuration->addRecentReferenceAudioFile(path.toQString());
     }
 
-    if (settings->referenceAudio().path != path) {
-        startOver(controller, project, path);
+    const project::ReferenceAudioSettings& current = settings->referenceAudio();
+    if (current.path == path) {
+        return;
     }
+
+    //! NOTE The same recording located again (moved or renamed): its sync points and settings still apply
+    if (!current.path.empty() && !QFileInfo::exists(current.path.toQString())) {
+        project::ReferenceAudioSettings located = current;
+        located.path = path;
+        settings->setReferenceAudio(located);
+        return;
+    }
+
+    startOver(controller, project, path);
 }
 
 void mu::playback::audiosync::startOver(IPlaybackController* controller, const project::INotationProjectPtr& project,
@@ -102,18 +114,33 @@ void mu::playback::audiosync::startOver(IPlaybackController* controller, const p
 
     if (const notation::INotationAutomationPtr automation = project->masterNotation() ? project->masterNotation()->automation() : nullptr) {
         //! NOTE On, it stays on: its points made again from the score's tempo, from 00:00 (a point on every measure)
-        const bool wasEnabled = automation->isAudioSyncEnabled();
-        automation->clearAudioSync();
-        if (wasEnabled && !newPath.empty()) {
-            automation->setAudioSyncEnabled(true);
-        }
+        automation->clearAudioSync(/*keepEnabled*/ automation->isAudioSyncEnabled() && !newPath.empty());
     }
 
     //! NOTE The pitch, delay and loop are the reference audio's settings; the next audio is fitted in the view
     project::ReferenceAudioSettings fresh;
     fresh.path = newPath;
+    const project::ReferenceAudioSettings previous = settings->referenceAudio();
+    const project::AudioSyncViewState previousViewState = settings->viewState();
     settings->setViewState(project::AudioSyncViewState());
     settings->setReferenceAudio(fresh);
+
+    //! NOTE Undone after the sync points (cleared just before, on the score's stack): the previous audio back, then
+    //! its points
+    if (const project::IProjectUndoStackPtr undoStack = project->undoStack()) {
+        const std::weak_ptr<project::IProjectAudioSyncSettings> weakSettings = settings;
+        undoStack->push(muse::TranslatableString("undoableAction", "Change reference audio"), [weakSettings, fresh]() {
+            if (const auto settings = weakSettings.lock()) {
+                settings->setViewState(project::AudioSyncViewState());
+                settings->setReferenceAudio(fresh);
+            }
+        }, [weakSettings, previous, previousViewState]() {
+            if (const auto settings = weakSettings.lock()) {
+                settings->setViewState(previousViewState);
+                settings->setReferenceAudio(previous);
+            }
+        });
+    }
 
     if (controller && std::abs(controller->tempoMultiplier() - 1.0) > 1e-6) {
         controller->setTempoMultiplier(1.0);
