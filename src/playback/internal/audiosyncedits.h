@@ -75,8 +75,8 @@ struct DetectionOptions {
     double anchorSecs = 0.0;
     //! NOTE Where it ends (< 0: the score's end)
     int toUtick = -1;
-    //! NOTE In [0; 1]: how readily a measure gets a beat more or less, and the tempo jumps between measures (see
-    //! BeatDetectionParams::flexibility)
+    //! NOTE In [0; 1]: above 0.5, how readily a measure gets a beat more or less, and the tempo jumps between
+    //! measures; none up to 0.5 (see BeatDetectionParams::flexibility)
     double flexibility = 0.5;
     //! NOTE The anchor placed by hand: kept where it is, not moved onto the nearest detected beat
     bool keepAnchor = false;

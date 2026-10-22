@@ -40,8 +40,6 @@
 
 #include "translation.h"
 
-#include "beatdetection.h"
-
 using namespace mu::engraving;
 using namespace mu::notation;
 
@@ -463,9 +461,15 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
         }
     }
 
-    //! NOTE In strengths (the strongest beat's is 1), the default ones (flexibility 0.5) and the steady ones (0)
-    const double slipCost = flexibilityCost(options.flexibility, 1.5, 0.3);
-    const double tempoChangeCost = flexibilityCost(options.flexibility, 6.0, 2.0); // per tempo ratio (natural log)
+    //! NOTE Only for a variable tempo (flexibility above the middle, the default): the beats then miss or add some,
+    //! that the strong attacks put right. With a constant tempo the beats are right, and a slightly stronger beat
+    //! (a backbeat's snare drum), measure after measure, would shift all the measures by one beat for good
+    const bool slipsAllowed = options.flexibility > 0.5;
+    const double variable = std::clamp((options.flexibility - 0.5) * 2.0, 0.0, 1.0);
+    const double slipCost = 0.8 * std::pow(0.11 / 0.8, variable); // in strengths (the strongest beat's is 1)
+    const double tempoChangeCost = 3.2 * std::pow(1.0 / 3.2, variable); // per tempo ratio (natural log)
+    //! NOTE The first measure's tempo is compared to the beats'
+    const double beatsBps = 1.0 / medianInterval;
     static constexpr double UNREACHED = -std::numeric_limits<double>::infinity();
     const int beatCount = static_cast<int>(audioBeats.size());
     auto beatsOf = [&boundaries](size_t k) { return static_cast<int>(boundaries[k + 1] - boundaries[k]); };
@@ -487,20 +491,20 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
                     continue;
                 }
 
-                double previousBps = 0.0;
+                double previousBps = beatsBps;
                 if (k > 0) {
                     const int previousIdx = i - beatsOf(k - 1) - slip;
                     previousBps = beatsOf(k - 1) / (audioBeats[i].secs - audioBeats[previousIdx].secs);
                 }
 
-                for (int nextSlip = -1; nextSlip <= 1; ++nextSlip) {
+                for (int nextSlip = slipsAllowed ? -1 : 0; nextSlip <= (slipsAllowed ? 1 : 0); ++nextSlip) {
                     const int next = i + beats + nextSlip;
                     if (next <= i || next >= beatCount || audioBeats[next].secs <= audioBeats[i].secs) {
                         continue;
                     }
 
                     const double bps = beats / (audioBeats[next].secs - audioBeats[i].secs);
-                    const double tempoChange = previousBps > 0.0 ? std::abs(std::log(bps / previousBps)) : 0.0;
+                    const double tempoChange = std::abs(std::log(bps / previousBps));
                     const double nextScore = score + audioBeats[next].strength - slipCost * std::abs(nextSlip)
                                              - tempoChangeCost * tempoChange;
                     State& nextState = states[k + 1][next][nextSlip + 1];
