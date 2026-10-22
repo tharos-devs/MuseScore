@@ -666,7 +666,10 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
     job->options.minBpm = detectionParams.minBpm;
     job->options.maxBpm = detectionParams.maxBpm;
-    job->firstNoteUtick = ignoreLeadingSilence ? audiosync::firstNoteUtick(score()) : -1;
+    //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
+    const int firstNoteUtick = audiosync::firstNoteUtick(score());
+    job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
+    job->options.findDownbeats = first.origin != engraving::AudioSyncInfo::Origin::Manual && firstNoteUtick < 0;
     m_detectionJob = job;
     m_detectionProgress = 0.0;
     m_detectionSummary.clear();
@@ -699,7 +702,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
                 }, Qt::QueuedConnection);
             });
             for (const audiosync::DetectedBeat& beat : detected) {
-                beats.push_back({ beat.secs, beat.confidence });
+                beats.push_back({ beat.secs, beat.confidence, beat.strength });
             }
         }
 

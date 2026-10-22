@@ -63,6 +63,7 @@ std::optional<int> nearestBeatUtick(const engraving::Score* score, int utick);
 struct DetectedBeatTime {
     double secs = 0.0;
     float confidence = 1.f;
+    float strength = 0.f;
 };
 
 struct DetectionOptions {
@@ -82,6 +83,9 @@ struct DetectionOptions {
     //! NOTE The expected tempo of the score's beats (Octave::Auto)
     double minBpm = 50.0;
     double maxBpm = 200.0;
+    //! NOTE The anchor only guessed (an empty score, its start not placed by hand): the measures' first beats are
+    //! put on the beats with the strongest attacks
+    bool findDownbeats = false;
     //! NOTE A point on every measure; otherwise only where the tempo changes (see simplifyPoints())
     bool everyMeasure = false;
     double toleranceSecs = 0.02;
@@ -112,7 +116,7 @@ std::vector<MatchedPoint> matchMeasures(const engraving::Score* score, const std
 //! (the first and last ones kept)
 std::vector<MatchedPoint> simplifyPoints(const std::vector<MatchedPoint>& points, double toleranceSecs);
 
-//! NOTE The first note of the unrolled score (its first chord, rests before it skipped); 0 if none
+//! NOTE The first note of the unrolled score (its first chord, rests before it skipped); -1 if none (an empty score)
 int firstNoteUtick(const engraving::Score* score);
 
 //! NOTE Where the score's start falls when its first note is at firstNoteSecs, its first beats being as long as the

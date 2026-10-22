@@ -25,17 +25,10 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <limits>
 #include <numeric>
 
 #include "fft.h"
 #include "mappedwav.h"
-
-#ifdef MUE_PLAYBACK_HAS_BEATROOT
-#include "importexport/midi/thirdparty/beatroot/Agent.h"
-#include "importexport/midi/thirdparty/beatroot/BeatTracker.h"
-#include "importexport/midi/thirdparty/beatroot/Induction.h"
-#endif
 
 #include "log.h"
 
@@ -47,19 +40,59 @@ constexpr double MIN_ONSET_INTERVAL_SECS = 0.05;
 constexpr int PEAK_HALF_WIDTH = 3;       // local maximum over ±3 hops
 constexpr int THRESHOLD_HALF_WIDTH = 8;  // adaptive threshold over ±80 ms
 constexpr double BEAT_ONSET_TOLERANCE_SECS = 0.04;
+
+constexpr double LOCAL_MEAN_SECS = 0.5;  // what an attack stands out from, for the beat tracking
+constexpr double PREFERRED_BPM = 120.0;
+constexpr double PREFERRED_BPM_OCTAVES = 1.0; // how far from it the tempo can be (a log-normal weight's deviation)
+//! NOTE How much the beats keep to the tempo: low enough for the tempo to drift, as in orchestral music
+constexpr double TIGHTNESS = 30.0;
+
+//! NOTE The envelope's attacks only: what stands out from its surroundings, normalized
+std::vector<double> beatSalience(const OnsetEnvelope& envelope)
+{
+    const std::vector<double>& values = envelope.values;
+    const int64_t n = static_cast<int64_t>(values.size());
+    const int64_t halfWidth = std::max<int64_t>(1, std::llround(LOCAL_MEAN_SECS / envelope.hopSecs));
+
+    // Running sum for the local means
+    std::vector<double> sums(static_cast<size_t>(n) + 1, 0.0);
+    for (int64_t i = 0; i < n; ++i) {
+        sums[i + 1] = sums[i] + values[i];
+    }
+
+    std::vector<double> result(static_cast<size_t>(n), 0.0);
+    double squares = 0.0;
+    for (int64_t i = 0; i < n; ++i) {
+        const int64_t from = std::max<int64_t>(0, i - halfWidth);
+        const int64_t to = std::min(n, i + halfWidth + 1);
+        const double localMean = (sums[to] - sums[from]) / static_cast<double>(to - from);
+        result[i] = std::max(0.0, values[i] - localMean);
+        squares += result[i] * result[i];
+    }
+
+    const double deviation = n > 0 ? std::sqrt(squares / static_cast<double>(n)) : 0.0;
+    if (deviation > 0.0) {
+        for (double& value : result) {
+            value /= deviation;
+        }
+    }
+    return result;
+}
 }
 
-std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,
-                                const ProgressFn& progress)
+OnsetEnvelope onsetEnvelope(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,
+                            const ProgressFn& progress)
 {
-    std::vector<Onset> onsets;
+    OnsetEnvelope envelope;
+    envelope.hopSecs = HOP_SECS;
 
     const int64_t hop = std::max<int64_t>(1, std::llround(wav.sampleRate * HOP_SECS));
     const int64_t frameFrom = std::clamp<int64_t>(std::llround(params.fromSecs * wav.sampleRate), 0, wav.frames);
     const int64_t frameTo = params.toSecs < 0 ? wav.frames
                             : std::clamp<int64_t>(std::llround(params.toSecs * wav.sampleRate), frameFrom, wav.frames);
+    envelope.fromSecs = static_cast<double>(frameFrom) / wav.sampleRate;
     if (frameTo - frameFrom < FFT_SIZE) {
-        return onsets;
+        return envelope;
     }
 
     std::vector<float> window(FFT_SIZE);
@@ -70,7 +103,7 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
     // Spectral flux: the sum of the increases of the log-compressed magnitudes, frame after frame (each frame
     // centered on its time)
     const int64_t hops = (frameTo - frameFrom) / hop;
-    std::vector<double> flux(static_cast<size_t>(hops), 0.0);
+    envelope.values.assign(static_cast<size_t>(hops), 0.0);
     std::vector<float> previous(FFT_SIZE / 2, 0.f);
     std::vector<std::complex<float> > buffer(FFT_SIZE);
 
@@ -99,14 +132,21 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
             sum += std::max(0.f, magnitude - previous[k]);
             previous[k] = magnitude;
         }
-        flux[static_cast<size_t>(h)] = sum;
+        envelope.values[static_cast<size_t>(h)] = sum;
     }
 
-    if (flux.empty()) {
+    return envelope;
+}
+
+std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetectionParams& params)
+{
+    std::vector<Onset> onsets;
+    if (envelope.values.empty()) {
         return onsets;
     }
 
     // Normalized, then peaks above an adaptive threshold (local mean + a margin set by the sensitivity)
+    std::vector<double> flux = envelope.values;
     const double mean = std::accumulate(flux.begin(), flux.end(), 0.0) / static_cast<double>(flux.size());
     double variance = 0.0;
     for (double f : flux) {
@@ -146,13 +186,11 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
             continue;
         }
 
-        const double secs = static_cast<double>(frameFrom + i * hop) / wav.sampleRate;
+        const double secs = envelope.fromSecs + static_cast<double>(i) * envelope.hopSecs;
         if (secs - lastOnsetSecs < MIN_ONSET_INTERVAL_SECS) {
             continue;
         }
 
-        //! NOTE How far it stands out from its surroundings: always > 0, BeatRoot takes a negative score for an
-        //! agent to delete (the normalized flux itself is negative in quiet passages, and every agent died there)
         onsets.push_back({ secs, flux[i] - localMean });
         lastOnsetSecs = secs;
     }
@@ -160,68 +198,130 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
     return onsets;
 }
 
-std::vector<DetectedBeat> trackBeats(const std::vector<Onset>& onsets, const BeatDetectionParams& params)
+double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params)
+{
+    const std::vector<double> salience = beatSalience(envelope);
+    const int64_t n = static_cast<int64_t>(salience.size());
+    const double minBpm = std::max(1.0, std::min(params.minBpm, params.maxBpm));
+    const double maxBpm = std::max(params.minBpm, params.maxBpm);
+    const int64_t minLag = std::max<int64_t>(2, std::llround(60.0 / maxBpm / envelope.hopSecs));
+    const int64_t maxLag = std::llround(60.0 / minBpm / envelope.hopSecs);
+    if (n <= 2 * maxLag + 1) {
+        return 0.0;
+    }
+
+    // Autocorrelation, up to twice the longest beat (a beat's double counts in its favor)
+    std::vector<double> autocorrelation(static_cast<size_t>(2 * maxLag + 2), 0.0);
+    for (int64_t lag = 1; lag <= 2 * maxLag + 1; ++lag) {
+        double sum = 0.0;
+        for (int64_t i = lag; i < n; ++i) {
+            sum += salience[i] * salience[i - lag];
+        }
+        autocorrelation[lag] = sum / static_cast<double>(n - lag);
+    }
+
+    // The best peak, with its half and double: a beat's metrical level is supported by the others
+    double best = 0.0;
+    int64_t bestLag = 0;
+    for (int64_t lag = minLag; lag <= maxLag; ++lag) {
+        if (autocorrelation[lag] < autocorrelation[lag - 1] || autocorrelation[lag] < autocorrelation[lag + 1]) {
+            continue;
+        }
+
+        const double bpm = 60.0 / (static_cast<double>(lag) * envelope.hopSecs);
+        const double octaves = std::log2(bpm / PREFERRED_BPM) / PREFERRED_BPM_OCTAVES;
+        const double weight = std::exp(-0.5 * octaves * octaves);
+        const double score = (autocorrelation[lag] + 0.5 * autocorrelation[2 * lag] + 0.5 * autocorrelation[lag / 2]) * weight;
+        if (score > best) {
+            best = score;
+            bestLag = lag;
+        }
+    }
+
+    return bestLag > 0 ? 60.0 / (static_cast<double>(bestLag) * envelope.hopSecs) : 0.0;
+}
+
+std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm)
 {
     std::vector<DetectedBeat> beats;
 
-#ifdef MUE_PLAYBACK_HAS_BEATROOT
-    if (onsets.size() < 4) {
+    const std::vector<double> salience = beatSalience(envelope);
+    const int64_t n = static_cast<int64_t>(salience.size());
+    const int64_t period = bpm > 0.0 ? std::llround(60.0 / bpm / envelope.hopSecs) : 0;
+    if (period < 2 || n < 2 * period) {
         return beats;
     }
 
-    //! NOTE Times from the first onset: BeatRoot tries other phases over its first 5 s only
-    const double origin = onsets.front().secs;
-    EventList events;
-    double maxSalience = 0.0;
-    for (const Onset& onset : onsets) {
-        events.push_back(Event(onset.secs - origin, onset.salience));
-        maxSalience = std::max(maxSalience, onset.salience);
+    // Each hop's best score as a beat: its attack plus the best previous beat's, minus how far their interval is
+    // from the tempo's (in octaves, squared)
+    std::vector<double> penalties(static_cast<size_t>(2 * period + 1), 0.0);
+    for (int64_t interval = period / 2; interval <= 2 * period; ++interval) {
+        const double ratio = std::log(static_cast<double>(interval) / static_cast<double>(period));
+        penalties[interval] = TIGHTNESS * ratio * ratio;
     }
 
-    //! NOTE The beats go on through the quiet passages (a held chord, a pause): by default, every agent without an
-    //! attack for 10 s is dropped, and none is created after the first 5 s, so none was left after a long one
-    AgentParameters agentParams;
-    agentParams.expiryTime = std::numeric_limits<double>::max();
-
-    //! NOTE The tempo range BeatRoot looks for (its defaults: 60-200 BPM); static: the beat trackers don't run concurrently
-    const double savedMinIBI = Induction::minIBI;
-    const double savedMaxIBI = Induction::maxIBI;
-    Induction::minIBI = 60.0 / std::max(params.maxBpm, params.minBpm + 1.0);
-    Induction::maxIBI = 60.0 / std::max(1.0, params.minBpm);
-
-    std::vector<double> beatTimes = BeatTracker::beatTrack(agentParams, events);
-    for (double& secs : beatTimes) {
-        secs += origin;
+    std::vector<double> scores(static_cast<size_t>(n), 0.0);
+    std::vector<int64_t> previous(static_cast<size_t>(n), -1);
+    for (int64_t t = 0; t < n; ++t) {
+        double best = 0.0;
+        int64_t bestPrevious = -1;
+        for (int64_t interval = period / 2; interval <= 2 * period && interval <= t; ++interval) {
+            const double score = scores[t - interval] - penalties[interval];
+            if (score > best) {
+                best = score;
+                bestPrevious = t - interval;
+            }
+        }
+        scores[t] = salience[t] + best;
+        previous[t] = bestPrevious;
     }
 
-    Induction::minIBI = savedMinIBI;
-    Induction::maxIBI = savedMaxIBI;
+    // Back from the best last beat
+    int64_t t = n - 1;
+    for (int64_t i = std::max<int64_t>(0, n - period); i < n; ++i) {
+        if (scores[i] > scores[t]) {
+            t = i;
+        }
+    }
+
+    std::vector<int64_t> hops;
+    for (; t >= 0; t = previous[t]) {
+        hops.push_back(t);
+    }
+    std::reverse(hops.begin(), hops.end());
 
     // Confidence: the attack (if any) the beat falls on
+    double maxSalience = 0.0;
+    for (const Onset& onset : onsets) {
+        maxSalience = std::max(maxSalience, onset.salience);
+    }
+    double maxStrength = 0.0;
+    for (int64_t hop : hops) {
+        maxStrength = std::max(maxStrength, salience[hop]);
+    }
+
     size_t onsetIdx = 0;
-    for (double secs : beatTimes) {
+    for (int64_t hop : hops) {
+        const double secs = envelope.fromSecs + static_cast<double>(hop) * envelope.hopSecs;
         while (onsetIdx + 1 < onsets.size() && onsets[onsetIdx + 1].secs <= secs) {
             ++onsetIdx;
         }
 
-        double salience = 0.0;
-        for (size_t i = onsetIdx; i <= std::min(onsetIdx + 1, onsets.size() - 1); ++i) {
+        double onsetSalience = 0.0;
+        for (size_t i = onsetIdx; i < std::min(onsetIdx + 2, onsets.size()); ++i) {
             if (std::abs(onsets[i].secs - secs) <= BEAT_ONSET_TOLERANCE_SECS) {
-                salience = std::max(salience, onsets[i].salience);
+                onsetSalience = std::max(onsetSalience, onsets[i].salience);
             }
         }
 
         DetectedBeat beat;
         beat.secs = secs;
-        beat.confidence = salience > 0.0 ? static_cast<float>(std::clamp(0.5 + 0.5 * salience / std::max(1.0, maxSalience * 0.5), 0.5, 1.0))
+        beat.confidence = onsetSalience > 0.0
+                          ? static_cast<float>(std::clamp(0.5 + 0.5 * onsetSalience / std::max(1.0, maxSalience * 0.5), 0.5, 1.0))
                           : 0.3f;
+        beat.strength = maxStrength > 0.0 ? static_cast<float>(salience[hop] / maxStrength) : 0.f;
         beats.push_back(beat);
     }
-#else
-    UNUSED(onsets);
-    UNUSED(params);
-    LOGW() << "beat tracking isn't available in this build";
-#endif
 
     return beats;
 }
@@ -273,17 +373,19 @@ std::optional<double> findMusicStart(const MappedWav& wav, const CancelFlag& can
 std::vector<DetectedBeat> detectBeats(const MappedWav& wav, const BeatDetectionParams& params, const CancelFlag& canceled,
                                       const ProgressFn& progress)
 {
-    const std::vector<Onset> onsets = detectOnsets(wav, params, canceled, progress);
+    const OnsetEnvelope envelope = onsetEnvelope(wav, params, canceled, progress);
     if (canceled) {
         return {};
     }
 
-    std::vector<DetectedBeat> beats = trackBeats(onsets, params);
+    const std::vector<Onset> onsets = detectOnsets(envelope, params);
+    const double bpm = estimateTempo(envelope, params);
+    std::vector<DetectedBeat> beats = trackBeats(envelope, onsets, bpm);
     if (progress) {
         progress(1.0);
     }
 
-    LOGI() << "beat detection: " << onsets.size() << " onsets, " << beats.size() << " beats";
+    LOGI() << "beat detection: " << onsets.size() << " onsets, tempo " << bpm << " BPM, " << beats.size() << " beats";
     return beats;
 }
 }
