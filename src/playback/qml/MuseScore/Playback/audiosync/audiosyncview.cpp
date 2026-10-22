@@ -67,6 +67,7 @@ constexpr double RAIL_HEIGHT = 20.0; // audio sync points
 constexpr double RULER_HEIGHT = 2 * RULER_ROW_HEIGHT + RAIL_HEIGHT; // above the waveform: measures, time signatures, points
 constexpr double POINT_HIT_DISTANCE = 6.0;
 const QColor LIMIT_COLOR(0xE5, 0x48, 0x4D); // a point stopped by a tempo limit
+const QColor REFERENCE_COLOR(0x3F, 0xB9, 0x50); // the score's start (the first point): where everything starts from
 constexpr double LOOP_BAND_HEIGHT = 10.0; // the A-B loop, at the top of the waveform
 constexpr double LOOP_HANDLE_SIZE = 8.0;
 constexpr double SEEK_DRAG_LOOP_DISTANCE = 4.0; // px: a click moving less only moves the playback position
@@ -2057,8 +2058,9 @@ void AudioSyncView::paintSyncPoints(QPainter* painter, const QRectF& railRect, c
             continue;
         }
 
-        //! NOTE All the points look the same, whatever placed them; only an uncertain detected one has a hollow handle
-        QColor color = m_accentColor;
+        //! NOTE All the points look the same, whatever placed them, but the score's start; only an uncertain detected
+        //! one has a hollow handle
+        QColor color = i == 0 ? REFERENCE_COLOR : m_accentColor;
         //! NOTE Off, the reference still applies (where the score starts in the audio)
         color.setAlphaF(i == 0 ? 1.0 : opacity);
         const bool uncertain = isUncertainPoint(point);
