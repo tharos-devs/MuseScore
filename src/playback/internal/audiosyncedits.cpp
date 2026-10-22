@@ -518,15 +518,16 @@ AppliedDetection applyDetectedPoints(INotationAutomation& automation, const Scor
     }
 
     const int fromUtick = points.front().utick;
-    const int toUtick = points.back().utick;
 
-    // What stays: the points outside the range, and the fixed ones inside
+    //! NOTE What stays: the points before the detection's start, and the locked ones. Those after its last point
+    //! go too: left at their former times (e.g. the measures' at the written tempo), they'd keep the detected
+    //! ones out (order and tempo range)
     const std::vector<SyncPoint> existing = syncPoints(automation);
     std::map<int, SyncPoint> kept;
     AutomationPointEdits edits;
     for (size_t i = 0; i < existing.size(); ++i) {
         SyncPoint point = existing[i];
-        const bool inRange = point.utick > fromUtick && point.utick <= toUtick;
+        const bool inRange = point.utick > fromUtick;
         if (i == 0 && scoreStartSecs && !point.locked) {
             point.audioSecs = *scoreStartSecs;
         }

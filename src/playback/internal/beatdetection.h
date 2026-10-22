@@ -46,7 +46,7 @@ struct BeatDetectionParams {
 
 struct Onset {
     double secs = 0.0;
-    double salience = 0.0; // normalized, around 1 for a typical attack
+    double salience = 0.0; // > 0: how far above its surroundings, around 1 for a typical attack
 };
 
 struct DetectedBeat {

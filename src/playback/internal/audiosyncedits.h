@@ -125,8 +125,8 @@ struct AppliedDetection {
     int replacedManual = 0;
 };
 
-//! NOTE Writes detected points (undoable, one step): the existing points in their range are replaced, the locked ones
-//! never; points that would break the order or the tempo range are dropped. scoreStartSecs: the first sync point
+//! NOTE Writes detected points (undoable, one step): the existing points from their start on are replaced, the locked
+//! ones never; points that would break the order or the tempo range are dropped. scoreStartSecs: the first sync point
 //! (the score's start) moved there too
 AppliedDetection applyDetectedPoints(notation::INotationAutomation& automation, const engraving::Score* score,
                                      const std::vector<MatchedPoint>& points, std::optional<double> scoreStartSecs);

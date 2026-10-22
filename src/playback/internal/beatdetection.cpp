@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <numeric>
 
 #include "fft.h"
@@ -150,7 +151,9 @@ std::vector<Onset> detectOnsets(const MappedWav& wav, const BeatDetectionParams&
             continue;
         }
 
-        onsets.push_back({ secs, flux[i] });
+        //! NOTE How far it stands out from its surroundings: always > 0, BeatRoot takes a negative score for an
+        //! agent to delete (the normalized flux itself is negative in quiet passages, and every agent died there)
+        onsets.push_back({ secs, flux[i] - localMean });
         lastOnsetSecs = secs;
     }
 
@@ -166,12 +169,19 @@ std::vector<DetectedBeat> trackBeats(const std::vector<Onset>& onsets, const Bea
         return beats;
     }
 
+    //! NOTE Times from the first onset: BeatRoot tries other phases over its first 5 s only
+    const double origin = onsets.front().secs;
     EventList events;
     double maxSalience = 0.0;
     for (const Onset& onset : onsets) {
-        events.push_back(Event(onset.secs, onset.salience));
+        events.push_back(Event(onset.secs - origin, onset.salience));
         maxSalience = std::max(maxSalience, onset.salience);
     }
+
+    //! NOTE The beats go on through the quiet passages (a held chord, a pause): by default, every agent without an
+    //! attack for 10 s is dropped, and none is created after the first 5 s, so none was left after a long one
+    AgentParameters agentParams;
+    agentParams.expiryTime = std::numeric_limits<double>::max();
 
     //! NOTE The tempo range BeatRoot looks for (its defaults: 60-200 BPM); static: the beat trackers don't run concurrently
     const double savedMinIBI = Induction::minIBI;
@@ -179,7 +189,10 @@ std::vector<DetectedBeat> trackBeats(const std::vector<Onset>& onsets, const Bea
     Induction::minIBI = 60.0 / std::max(params.maxBpm, params.minBpm + 1.0);
     Induction::maxIBI = 60.0 / std::max(1.0, params.minBpm);
 
-    const std::vector<double> beatTimes = BeatTracker::beatTrack(AgentParameters(), events);
+    std::vector<double> beatTimes = BeatTracker::beatTrack(agentParams, events);
+    for (double& secs : beatTimes) {
+        secs += origin;
+    }
 
     Induction::minIBI = savedMinIBI;
     Induction::maxIBI = savedMaxIBI;
