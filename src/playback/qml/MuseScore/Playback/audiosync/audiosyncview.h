@@ -267,6 +267,8 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseUngrabEvent() override;
+    void hoverMoveEvent(QHoverEvent* event) override;
+    void hoverLeaveEvent(QHoverEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -333,6 +335,8 @@ private:
     std::vector<double> displayedPointSecs() const;
     static bool isUncertainPoint(const audiosync::SyncPoint& point);
     std::optional<size_t> pointAt(const QPointF& pos) const;
+    //! NOTE Can be dragged: not locked, and audio sync on (off, the reference only)
+    bool isMovablePoint(size_t index) const;
     std::optional<size_t> selectedPointIndex() const;
     void addPointAt(double audioSecs, bool snapToBeat);
     void nudgeSelectedPoint(double deltaSecs, bool modifierPressed);
@@ -441,6 +445,9 @@ private:
         LoopTo,
         LoopBoth,
     };
+
+    //! NOTE The A-B loop drag a press there starts (its handles, or inside it), before the points
+    std::optional<DragMode> loopDragModeAt(const QPointF& pos) const;
 
     //! NOTE The A-B loop being dragged, written when released
     struct LoopDrag {

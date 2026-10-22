@@ -113,6 +113,7 @@ AudioSyncView::AudioSyncView(QQuickItem* parent)
     : QQuickPaintedItem(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
     setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptHoverEvents(true);
     setAntialiasing(true);
     setFlag(QQuickItem::ItemIsFocusScope);
     setActiveFocusOnTab(true);
@@ -1545,35 +1546,18 @@ void AudioSyncView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    if (loopBandRect().contains(pos)) {
+    if (const std::optional<DragMode> mode = loopDragModeAt(pos)) {
         const auto [fromSecs, toSecs] = displayedLoop();
-        const double secs = audioSecsAtX(pos.x());
-        const auto nearHandle = [&](double handleSecs) {
-            return handleSecs >= 0.0 && std::abs(xForAudioSecs(handleSecs) - pos.x()) <= LOOP_HANDLE_SIZE;
-        };
-
-        std::optional<DragMode> mode;
-        if (nearHandle(toSecs)) {
-            mode = DragMode::LoopTo;
-        } else if (nearHandle(fromSecs)) {
-            mode = DragMode::LoopFrom;
-        } else if (fromSecs >= 0.0 && toSecs > fromSecs && secs > fromSecs && secs < toSecs) {
-            mode = DragMode::LoopBoth;
-        }
-
-        if (mode) {
-            m_loopDrag = LoopDrag { fromSecs, toSecs, secs, fromSecs, toSecs };
-            m_dragMode = *mode;
-            event->accept();
-            return;
-        }
+        m_loopDrag = LoopDrag { fromSecs, toSecs, audioSecsAtX(pos.x()), fromSecs, toSecs };
+        m_dragMode = *mode;
+        event->accept();
+        return;
     }
 
     if (const std::optional<size_t> index = pointAt(pos)) {
         const audiosync::SyncPoint& point = m_syncPoints[*index];
         m_selectedPointUtick = point.utick;
-        //! NOTE Off, only the reference moves (the other points don't drive the tempo then)
-        if (!point.locked && (m_audioSyncEnabled || *index == 0)) {
+        if (isMovablePoint(*index)) {
             PointDrag drag;
             drag.utick = point.utick;
             drag.shiftAll = !m_audioSyncEnabled;
@@ -1678,6 +1662,23 @@ void AudioSyncView::mouseMoveEvent(QMouseEvent* event)
     }
 
     seekToAudioSecs(audioSecsAtX(x));
+}
+
+void AudioSyncView::hoverMoveEvent(QHoverEvent* event)
+{
+    //! NOTE Over a point that can be dragged (its handle or its line): it moves horizontally only
+    const QPointF pos = event->position();
+    const std::optional<size_t> index = loopDragModeAt(pos) ? std::nullopt : pointAt(pos);
+    if (index && isMovablePoint(*index)) {
+        setCursor(Qt::SizeHorCursor);
+    } else {
+        unsetCursor();
+    }
+}
+
+void AudioSyncView::hoverLeaveEvent(QHoverEvent*)
+{
+    unsetCursor();
 }
 
 void AudioSyncView::mouseReleaseEvent(QMouseEvent*)
@@ -1858,6 +1859,30 @@ std::pair<double, double> AudioSyncView::displayedLoop() const
     return { settings->referenceAudio().loopFromSecs, settings->referenceAudio().loopToSecs };
 }
 
+std::optional<AudioSyncView::DragMode> AudioSyncView::loopDragModeAt(const QPointF& pos) const
+{
+    if (!loopBandRect().contains(pos)) {
+        return std::nullopt;
+    }
+
+    const auto [fromSecs, toSecs] = displayedLoop();
+    const double secs = audioSecsAtX(pos.x());
+    const auto nearHandle = [&](double handleSecs) {
+        return handleSecs >= 0.0 && std::abs(xForAudioSecs(handleSecs) - pos.x()) <= LOOP_HANDLE_SIZE;
+    };
+
+    if (nearHandle(toSecs)) {
+        return DragMode::LoopTo;
+    }
+    if (nearHandle(fromSecs)) {
+        return DragMode::LoopFrom;
+    }
+    if (fromSecs >= 0.0 && toSecs > fromSecs && secs > fromSecs && secs < toSecs) {
+        return DragMode::LoopBoth;
+    }
+    return std::nullopt;
+}
+
 QRectF AudioSyncView::loopBandRect() const
 {
     const QRectF waveRect = waveformRect();
@@ -1961,6 +1986,12 @@ std::optional<size_t> AudioSyncView::pointAt(const QPointF& pos) const
     }
 
     return nearest;
+}
+
+bool AudioSyncView::isMovablePoint(size_t index) const
+{
+    //! NOTE Off, only the reference moves (the other points don't drive the tempo then)
+    return index < m_syncPoints.size() && !m_syncPoints[index].locked && (m_audioSyncEnabled || index == 0);
 }
 
 std::optional<size_t> AudioSyncView::selectedPointIndex() const
