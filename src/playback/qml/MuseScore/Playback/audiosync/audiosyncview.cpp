@@ -697,7 +697,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     const bool ignoreLeadingSilence = !startKept;
 
     audiosync::BeatDetectionParams detectionParams;
-    detectionParams.flexibility = params.value("flexibility", 0.5).toDouble();
+    detectionParams.flexibility = params.value("flexibility", 0.0).toDouble();
     detectionParams.approxBpm = params.value("approxBpm", 0.0).toDouble();
     detectionParams.fromSecs = std::max(0.0, first.audioSecs - 1.0);
 

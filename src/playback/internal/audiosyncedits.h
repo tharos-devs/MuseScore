@@ -77,7 +77,7 @@ struct DetectionOptions {
     int toUtick = -1;
     //! NOTE In [0; 1]: above 0.5, how readily a measure gets a beat more or less, and the tempo jumps between
     //! measures; none up to 0.5 (see BeatDetectionParams::flexibility)
-    double flexibility = 0.5;
+    double flexibility = 0.0;
     //! NOTE The anchor placed by hand: kept where it is, not moved onto the nearest detected beat
     bool keepAnchor = false;
     //! NOTE The anchor only guessed (an empty score, its start not placed by hand): the measures' first beats are

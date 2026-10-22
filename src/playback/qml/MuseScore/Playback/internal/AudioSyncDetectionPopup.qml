@@ -37,7 +37,7 @@ StyledPopupView {
     //! NOTE Played from here, to tap the tempo: the popup closes when clicking outside it
     property bool isPlaying: false
 
-    property real flexibility: 0.5
+    property real flexibility: 0.0
     //! NOTE 0: automatic
     property int approxBpm: 0
     property bool everyMeasure: true

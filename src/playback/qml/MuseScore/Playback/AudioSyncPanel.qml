@@ -62,7 +62,7 @@ Item {
     QtObject {
         id: detectionSettings
 
-        property real flexibility: 0.5
+        property real flexibility: 0.0
         property int approxBpm: 0
         property bool everyMeasure: true
         property bool ignoreLeadingSilence: true

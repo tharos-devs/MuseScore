@@ -40,7 +40,7 @@ struct BeatDetectionParams {
     double sensitivity = 0.5;
     //! NOTE In [0; 1]: how much the beats may stray from the tempo to follow the attacks (0: steady, as music played
     //! to a click; 1: flexible, as rubato)
-    double flexibility = 0.5;
+    double flexibility = 0.0;
     //! NOTE The tempo of the beats as the user knows it (typed or tapped), roughly; 0: unknown
     double approxBpm = 0.0;
     //! NOTE The part of the audio to analyze (to < 0: until the end)
@@ -84,7 +84,7 @@ double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& p
 //! NOTE Beats every 60/bpm s or so, on the strongest attacks
 std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm, double flexibility);
 
-//! NOTE A cost from a flexibility in [0; 1]: steadyCost at 0, middleCost at 0.5 (the default), in between and beyond
+//! NOTE A cost from a flexibility in [0; 1]: steadyCost at 0 (the default), middleCost at 0.5, in between and beyond
 //! on a log scale
 double flexibilityCost(double flexibility, double steadyCost, double middleCost);
 

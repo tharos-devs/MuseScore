@@ -461,7 +461,7 @@ std::vector<MatchedPoint> matchMeasures(const Score* score, const std::vector<De
         }
     }
 
-    //! NOTE Only for a variable tempo (flexibility above the middle, the default): the beats then miss or add some,
+    //! NOTE Only for a variable tempo (flexibility above the middle): the beats then miss or add some,
     //! that the strong attacks put right. With a constant tempo the beats are right, and a slightly stronger beat
     //! (a backbeat's snare drum), measure after measure, would shift all the measures by one beat for good
     const bool slipsAllowed = options.flexibility > 0.5;
