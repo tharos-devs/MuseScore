@@ -42,7 +42,6 @@ StyledPopupView {
     property int approxBpm: 0
     property bool everyMeasure: true
     property bool ignoreLeadingSilence: true
-    property int toleranceMs: 20
 
     //! NOTE Tap tempo: the median interval of the last taps; a pause starts over
     property var tapTimes: []
@@ -234,48 +233,13 @@ StyledPopupView {
         }
 
         RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            enabled: !root.everyMeasure
-
-            //! NOTE Without a point on every measure: the largest gap a measure can have from the audio before it gets one
-            StyledTextLabel {
-                text: qsTrc("playback", "Precision")
-                horizontalAlignment: Text.AlignLeft
-                Layout.fillWidth: true
-
-                ToolTip.visible: precisionHover.hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTrc("playback", "Maximum gap between the score and the audio: smaller adds more points")
-
-                HoverHandler {
-                    id: precisionHover
-                }
-            }
-
-            IncrementalPropertyControl {
-                Layout.preferredWidth: 80
-                currentValue: root.toleranceMs
-                minValue: 2
-                maxValue: 200
-                step: 5
-                decimals: 0
-                measureUnitsSymbol: qsTrc("global", "ms")
-                navigation.panel: navPanel
-                navigation.order: 7
-
-                onValueEdited: function(newValue) { root.toleranceMs = newValue }
-            }
-        }
-
-        RowLayout {
             Layout.alignment: Qt.AlignRight
             spacing: 8
 
             FlatButton {
                 text: qsTrc("global", "Cancel")
                 navigation.panel: navPanel
-                navigation.order: 8
+                navigation.order: 7
 
                 onClicked: root.close()
             }
@@ -284,15 +248,14 @@ StyledPopupView {
                 text: qsTrc("playback", "Detect")
                 accentButton: true
                 navigation.panel: navPanel
-                navigation.order: 9
+                navigation.order: 8
 
                 onClicked: {
                     root.detectRequested({
                         flexibility: root.flexibility,
                         approxBpm: root.approxBpm,
                         everyMeasure: root.everyMeasure,
-                        ignoreLeadingSilence: root.ignoreLeadingSilence,
-                        toleranceMs: root.toleranceMs
+                        ignoreLeadingSilence: root.ignoreLeadingSilence
                     })
                     root.close()
                 }

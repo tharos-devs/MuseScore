@@ -83,7 +83,8 @@ struct DetectionOptions {
     //! NOTE The anchor only guessed (an empty score, its start not placed by hand): the measures' first beats are
     //! put on the beats with the strongest attacks
     bool findDownbeats = false;
-    //! NOTE A point on every measure; otherwise only where the tempo changes (see simplifyPoints())
+    //! NOTE A point on every measure; otherwise only where the tempo changes (see simplifyPoints()): the measures then
+    //! no further than this from the audio, about where an offset starts to be heard
     bool everyMeasure = false;
     double toleranceSecs = 0.02;
 };

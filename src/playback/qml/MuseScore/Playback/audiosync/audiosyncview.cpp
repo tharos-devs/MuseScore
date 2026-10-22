@@ -734,7 +734,6 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->options.anchorUtick = first.utick;
     job->options.anchorSecs = first.audioSecs;
     job->options.everyMeasure = params.value("everyMeasure", true).toBool();
-    job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
     //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
     const int firstNoteUtick = audiosync::firstNoteUtick(score());
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;

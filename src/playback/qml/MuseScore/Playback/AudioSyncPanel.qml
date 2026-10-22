@@ -66,7 +66,6 @@ Item {
         property int approxBpm: 0
         property bool everyMeasure: true
         property bool ignoreLeadingSilence: true
-        property int toleranceMs: 20
     }
 
     ColumnLayout {
@@ -157,13 +156,11 @@ Item {
                         approxBpm: detectionSettings.approxBpm
                         everyMeasure: detectionSettings.everyMeasure
                         ignoreLeadingSilence: detectionSettings.ignoreLeadingSilence
-                        toleranceMs: detectionSettings.toleranceMs
 
                         onFlexibilityChanged: detectionSettings.flexibility = flexibility
                         onApproxBpmChanged: detectionSettings.approxBpm = approxBpm
                         onEveryMeasureChanged: detectionSettings.everyMeasure = everyMeasure
                         onIgnoreLeadingSilenceChanged: detectionSettings.ignoreLeadingSilence = ignoreLeadingSilence
-                        onToleranceMsChanged: detectionSettings.toleranceMs = toleranceMs
 
                         isPlaying: syncView.isPlaying
 
