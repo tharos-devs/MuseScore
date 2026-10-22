@@ -830,7 +830,8 @@ AutomationPointEdits ScoreAutomationController::audioSyncConversionEdits() const
         return edits;
     }
 
-    // At the score's start, then wherever the current tempo changes, at their current time: nothing moves
+    // At every measure start of the unrolled score and at its end, then wherever the current tempo changes, at
+    // their current time: nothing moves
     const AutomationCurve& curve = m_automationData->curve(TEMPO_KEY);
     //! NOTE Where the reference (see inactiveSyncCurveShiftedBy()) puts the score's start, if it was set
     const double offset = audioSyncOffsetSecs();
@@ -847,12 +848,29 @@ AutomationPointEdits ScoreAutomationController::audioSyncConversionEdits() const
         return point;
     };
 
-    if (curve.find(0) == curve.end()) {
-        edits.push_back({ 0, AutomationPointEdit::SetPoint { makePoint(0, normalizeTempo(m_tempoTimeline.tempo(0))) } });
+    std::map<utick_t, real_t> values;
+    auto addMeasureStart = [&](utick_t utick) {
+        values.emplace(utick, normalizeTempo(m_tempoTimeline.tempo(utick)));
+    };
+
+    addMeasureStart(0);
+    const RepeatList& repeatList = m_score->expandedRepeatList();
+    for (const RepeatSegment* seg : repeatList) {
+        const int tickOffset = seg->utick - seg->tick;
+        for (const Measure* measure : seg->measureList()) {
+            addMeasureStart(measure->tick().ticks() + tickOffset);
+        }
+    }
+    if (!repeatList.empty()) {
+        addMeasureStart(repeatList.back()->utick + repeatList.back()->len());
     }
 
     for (const auto& [utick, point] : curve) {
-        edits.push_back({ utick, AutomationPointEdit::SetPoint { makePoint(utick, point.value.outValue) } });
+        values.insert_or_assign(utick, point.value.outValue);
+    }
+
+    for (const auto& [utick, value] : values) {
+        edits.push_back({ utick, AutomationPointEdit::SetPoint { makePoint(utick, value) } });
     }
 
     return edits;

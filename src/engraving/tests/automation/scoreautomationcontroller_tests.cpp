@@ -20,6 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <set>
+
 #include <gtest/gtest.h>
 
 #include "global/async/asyncable.h"
@@ -27,10 +29,13 @@
 #include "engraving/automation/internal/scoreautomationcontroller.h"
 #include "engraving/automation/tempovalues.h"
 #include "engraving/dom/masterscore.h"
+#include "engraving/dom/measure.h"
 #include "engraving/dom/repeatlist.h"
 #include "engraving/dom/staff.h"
 #include "engraving/types/fraction.h"
 #include "engraving/types/types.h"
+
+#include "global/containers.h"
 
 #include "utils/scorerw.h"
 #include "automation/utils/automationtestutils.h"
@@ -894,6 +899,36 @@ TEST_F(ScoreAutomationController_Tests, AudioSyncOff_MovedReference_KeptByFirstC
     ASSERT_TRUE(first && first->point.audioSync);
     EXPECT_EQ(conversion.front().tick, 0);
     EXPECT_DOUBLE_EQ(first->point.audioSync->audioSecs, 2.0);
+}
+
+TEST_F(ScoreAutomationController_Tests, AudioSyncConversion_PointOnEveryMeasureStart)
+{
+    // [GIVEN] A score without sync points
+    ScoreAutomationController controller;
+    controller.init(s_dynamicsScore);
+
+    // [WHEN] Converted
+    const AutomationPointEdits conversion = controller.audioSyncConversionEdits();
+
+    // [THEN] A sync point on every measure start of the unrolled score and at its end, in order, at its current time
+    std::set<int> ticks;
+    for (const AutomationPointEdit& edit : conversion) {
+        EXPECT_TRUE(ticks.empty() || edit.tick > *ticks.rbegin());
+        ticks.insert(edit.tick);
+
+        const auto* setPoint = std::get_if<AutomationPointEdit::SetPoint>(&edit.change);
+        ASSERT_TRUE(setPoint && setPoint->point.audioSync);
+        EXPECT_NEAR(setPoint->point.audioSync->audioSecs, controller.audioSecsAtUtick(edit.tick), TIME_ERROR);
+    }
+
+    const RepeatList& repeatList = s_dynamicsScore->expandedRepeatList();
+    ASSERT_FALSE(repeatList.empty());
+    for (const RepeatSegment* seg : repeatList) {
+        for (const Measure* measure : seg->measureList()) {
+            EXPECT_TRUE(muse::contains(ticks, measure->tick().ticks() + seg->utick - seg->tick));
+        }
+    }
+    EXPECT_TRUE(muse::contains(ticks, repeatList.back()->utick + repeatList.back()->len()));
 }
 
 TEST_F(ScoreAutomationController_Tests, PrepareAudioSyncEdits_VerticalMove_ChainsWithinNextSyncPoint)
