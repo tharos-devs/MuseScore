@@ -43,7 +43,12 @@ constexpr double BEAT_ONSET_TOLERANCE_SECS = 0.04;
 
 constexpr double LOCAL_MEAN_SECS = 0.5;  // what an attack stands out from, for the beat tracking
 constexpr double PREFERRED_BPM = 120.0;
-constexpr double PREFERRED_BPM_OCTAVES = 1.0; // how far from it the tempo can be (a log-normal weight's deviation)
+//! NOTE How far from the preferred tempo the tempo can be (a log-normal weight's deviation, in octaves): unknown, and
+//! known roughly
+constexpr double PREFERRED_BPM_OCTAVES = 1.0;
+constexpr double APPROX_BPM_OCTAVES = 0.3;
+//! NOTE An approximate tempo can be this much off
+constexpr double APPROX_BPM_RATIO = 1.5;
 //! NOTE How much the beats keep to the tempo, steady and by default: low enough for the tempo to drift, as in
 //! orchestral music
 constexpr double STEADY_TIGHTNESS = 120.0;
@@ -200,12 +205,23 @@ std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetecti
     return onsets;
 }
 
+std::pair<double, double> tempoRange(double approxBpm)
+{
+    if (approxBpm > 0.0) {
+        const double minBpm = approxBpm / APPROX_BPM_RATIO;
+        const double maxBpm = approxBpm * APPROX_BPM_RATIO;
+        return { minBpm, maxBpm };
+    }
+    return { 50.0, 200.0 };
+}
+
 double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params)
 {
     const std::vector<double> salience = beatSalience(envelope);
     const int64_t n = static_cast<int64_t>(salience.size());
-    const double minBpm = std::max(1.0, std::min(params.minBpm, params.maxBpm));
-    const double maxBpm = std::max(params.minBpm, params.maxBpm);
+    const auto [minBpm, maxBpm] = tempoRange(params.approxBpm);
+    const double preferredBpm = params.approxBpm > 0.0 ? params.approxBpm : PREFERRED_BPM;
+    const double preferredOctaves = params.approxBpm > 0.0 ? APPROX_BPM_OCTAVES : PREFERRED_BPM_OCTAVES;
     const int64_t minLag = std::max<int64_t>(2, std::llround(60.0 / maxBpm / envelope.hopSecs));
     const int64_t maxLag = std::llround(60.0 / minBpm / envelope.hopSecs);
     if (n <= 2 * maxLag + 1) {
@@ -231,7 +247,7 @@ double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& p
         }
 
         const double bpm = 60.0 / (static_cast<double>(lag) * envelope.hopSecs);
-        const double octaves = std::log2(bpm / PREFERRED_BPM) / PREFERRED_BPM_OCTAVES;
+        const double octaves = std::log2(bpm / preferredBpm) / preferredOctaves;
         const double weight = std::exp(-0.5 * octaves * octaves);
         const double score = (autocorrelation[lag] + 0.5 * autocorrelation[2 * lag] + 0.5 * autocorrelation[lag / 2]) * weight;
         if (score > best) {

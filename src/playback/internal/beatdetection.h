@@ -25,6 +25,7 @@
 #include <atomic>
 #include <functional>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace mu::playback {
@@ -41,8 +42,8 @@ struct BeatDetectionParams {
     //! NOTE In [0; 1]: how much the beats may stray from the tempo to follow the attacks (0: steady, as music played
     //! to a click; 1: flexible, as rubato)
     double flexibility = 0.5;
-    double minBpm = 50.0;
-    double maxBpm = 200.0;
+    //! NOTE The tempo of the beats as the user knows it (typed or tapped), roughly; 0: unknown
+    double approxBpm = 0.0;
     //! NOTE The part of the audio to analyze (to < 0: until the end)
     double fromSecs = 0.0;
     double toSecs = -1.0;
@@ -77,9 +78,12 @@ OnsetEnvelope onsetEnvelope(const MappedWav& wav, const BeatDetectionParams& par
 
 std::vector<Onset> detectOnsets(const OnsetEnvelope& envelope, const BeatDetectionParams& params);
 
-//! NOTE The tempo of the beats (BPM), within [minBpm; maxBpm]: the period that repeats the most in the envelope,
-//! the ones near 120 BPM preferred (the octave a listener most likely taps); 0 if none
+//! NOTE The tempo of the beats (BPM): the period that repeats the most in the envelope, the ones near the approximate
+//! tempo preferred, else near 120 BPM (the octave a listener most likely taps); 0 if none
 double estimateTempo(const OnsetEnvelope& envelope, const BeatDetectionParams& params);
+
+//! NOTE The tempi estimateTempo() looks within
+std::pair<double, double> tempoRange(double approxBpm);
 
 //! NOTE Beats every 60/bpm s or so, on the strongest attacks
 std::vector<DetectedBeat> trackBeats(const OnsetEnvelope& envelope, const std::vector<Onset>& onsets, double bpm, double flexibility);

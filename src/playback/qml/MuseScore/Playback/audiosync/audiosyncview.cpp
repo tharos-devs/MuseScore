@@ -141,6 +141,7 @@ struct AudioSyncView::DetectionJob {
     std::atomic<bool> canceled { false };
     audiosync::DetectionOptions options;
     int firstNoteUtick = -1; // >= 0: put on the music's start (the silence at the beginning ignored)
+    bool approxTempoGiven = false;
 };
 
 AudioSyncView::~AudioSyncView()
@@ -654,8 +655,7 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
 
     audiosync::BeatDetectionParams detectionParams;
     detectionParams.flexibility = params.value("flexibility", 0.5).toDouble();
-    detectionParams.minBpm = params.value("minBpm", 50.0).toDouble();
-    detectionParams.maxBpm = params.value("maxBpm", 200.0).toDouble();
+    detectionParams.approxBpm = params.value("approxBpm", 0.0).toDouble();
     detectionParams.fromSecs = std::max(0.0, first.audioSecs - 1.0);
 
     auto job = std::make_shared<DetectionJob>();
@@ -664,12 +664,12 @@ void AudioSyncView::detectPoints(const QVariantMap& params)
     job->options.octave = static_cast<audiosync::DetectionOptions::Octave>(std::clamp(params.value("octave", 0).toInt(), 0, 3));
     job->options.everyMeasure = params.value("everyMeasure", false).toBool();
     job->options.toleranceSecs = params.value("toleranceMs", 20.0).toDouble() / 1000.0;
-    job->options.minBpm = detectionParams.minBpm;
-    job->options.maxBpm = detectionParams.maxBpm;
+    std::tie(job->options.minBpm, job->options.maxBpm) = audiosync::tempoRange(detectionParams.approxBpm);
     //! NOTE An empty score: its start on the music's start, a guess, then the measures on the strongest beats
     const int firstNoteUtick = audiosync::firstNoteUtick(score());
     job->firstNoteUtick = ignoreLeadingSilence ? std::max(0, firstNoteUtick) : -1;
     job->options.flexibility = detectionParams.flexibility;
+    job->approxTempoGiven = detectionParams.approxBpm > 0.0;
     job->options.findDownbeats = first.origin != engraving::AudioSyncInfo::Origin::Manual && firstNoteUtick < 0;
     m_detectionJob = job;
     m_detectionProgress = 0.0;
@@ -755,7 +755,8 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
     const std::vector<audiosync::MatchedPoint> points = audiosync::matchMeasures(sc, beats, options, &info);
     if (points.size() < 2) {
         interactive()->warning(muse::trc("playback", "No beats could be detected"),
-                               muse::trc("playback", "Try another expected tempo or a more flexible tempo, or place the points by hand."));
+                               muse::trc("playback",
+                                         "Try giving the approximate tempo (type or tap it), or a more flexible tempo, or place the points by hand."));
         return;
     }
 
@@ -789,6 +790,9 @@ void AudioSyncView::onDetectionFinished(const std::shared_ptr<DetectionJob>& job
             .arg(info.detectedBpm, 0, 'f', 1).arg(info.appliedBpm, 0, 'f', 1);
     } else {
         parts << muse::qtrc("playback", "Pulse found: %1 BPM").arg(info.detectedBpm, 0, 'f', 1);
+    }
+    if (!job->approxTempoGiven) {
+        parts << muse::qtrc("playback", "Wrong tempo? Give the approximate one in Detect");
     }
     parts << muse::qtrc("playback", "%n point(s)", nullptr, applied.added);
     if (applied.replacedManual > 0) {
