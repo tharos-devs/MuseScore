@@ -311,6 +311,8 @@ private:
 
     void onProjectChanged();
     void onNotationChanged();
+    //! NOTE Another reference audio: nothing of the previous one's view applies
+    void onAudioReplaced();
     void onDecodeStateChanged();
     void listenPlaybackState();
 
@@ -398,6 +400,7 @@ private:
     mutable std::vector<audiosync::SyncPoint> m_syncPoints;
     mutable bool m_audioSyncEnabled = false;
     bool m_moveFollowingPoints = false;
+    muse::io::path_t m_audioPath; // the reference audio's, to tell when it's replaced
     mutable double m_audioOffsetSecs = 0.0;
     bool m_gridRefreshPending = false;
 

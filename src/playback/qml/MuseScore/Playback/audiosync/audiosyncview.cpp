@@ -225,7 +225,14 @@ void AudioSyncView::onProjectChanged()
     flushViewState();
 
     if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
+        m_audioPath = settings->referenceAudio().path;
         settings->settingsChanged().onNotify(this, [this]() {
+            //! NOTE Another audio (from here or elsewhere, see audiosync::startOver()): the view starts over too
+            const project::IProjectAudioSyncSettingsPtr current = audioSyncSettings();
+            if (current && current->referenceAudio().path != m_audioPath) {
+                m_audioPath = current->referenceAudio().path;
+                onAudioReplaced();
+            }
             emit audioChanged();
             //! NOTE The reference is shown with an audio only (see rebuildGrid())
             invalidateGrid();
@@ -247,6 +254,27 @@ void AudioSyncView::onProjectChanged()
     m_viewShown = false;
     invalidateGrid();
     emit audioChanged();
+}
+
+void AudioSyncView::onAudioReplaced()
+{
+    cancelDetection();
+    if (!m_detectionSummary.isEmpty()) {
+        m_detectionSummary.clear();
+        emit detectionChanged();
+    }
+    m_selectedPointUtick = -1;
+    m_pointDrag.reset();
+    m_loopDrag.reset();
+    m_dragMode = DragMode::None;
+
+    m_viewStateTimer.stop();
+    m_pendingViewState.reset();
+    m_viewShown = false;
+    m_scrollSecs = 0.0;
+    m_amplitudeZoom = 1.0;
+    invalidateGrid();
+    emit viewChanged();
 }
 
 void AudioSyncView::onNotationChanged()
@@ -586,7 +614,7 @@ void AudioSyncView::clearRecentAudioFiles()
 
 void AudioSyncView::setAudioFile(const QString& path)
 {
-    audiosync::setReferenceAudioPath(playbackConfiguration().get(), audioSyncSettings(), path);
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), globalContext()->currentProject(), path);
 }
 
 bool AudioSyncView::loopEnabled() const
@@ -866,7 +894,8 @@ void AudioSyncView::updateSpeed()
 
 void AudioSyncView::chooseAudioFile()
 {
-    audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), audioSyncSettings());
+    audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), playbackController().get(),
+                                    globalContext()->currentProject());
 }
 
 bool AudioSyncView::canDropUrls(const QList<QUrl>& urls) const
@@ -881,7 +910,8 @@ void AudioSyncView::dropUrls(const QList<QUrl>& urls)
         return;
     }
 
-    audiosync::setReferenceAudioPath(playbackConfiguration().get(), audioSyncSettings(), urls.first().toLocalFile());
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), globalContext()->currentProject(),
+                                     urls.first().toLocalFile());
 }
 
 void AudioSyncView::startNew()
@@ -892,29 +922,10 @@ void AudioSyncView::startNew()
     m_loopDrag.reset();
     m_dragMode = DragMode::None;
 
-    if (notation::INotationAutomationPtr automationPtr = automation()) {
-        automationPtr->clearAudioSync();
-    }
-
-    if (project::IProjectAudioSyncSettingsPtr settings = audioSyncSettings()) {
-        //! NOTE The pitch, delay and loop are the reference audio's settings
-        settings->clearReferenceAudio();
-
-        //! NOTE The next audio is fitted
-        m_viewStateTimer.stop();
-        m_pendingViewState.reset();
-        settings->setViewState(project::AudioSyncViewState());
-    }
-
-    m_viewShown = false;
-    m_scrollSecs = 0.0;
-    m_amplitudeZoom = 1.0;
-    if (std::abs(playbackController()->tempoMultiplier() - 1.0) > 1e-6) {
-        playbackController()->setTempoMultiplier(1.0);
-    }
-
-    invalidateGrid();
-    emit viewChanged();
+    //! NOTE The next audio is fitted
+    m_viewStateTimer.stop();
+    m_pendingViewState.reset();
+    audiosync::startOver(playbackController().get(), globalContext()->currentProject(), muse::io::path_t());
 }
 
 // ---- view ----
