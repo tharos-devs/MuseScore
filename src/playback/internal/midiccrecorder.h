@@ -82,6 +82,7 @@ private:
     engraving::AutomationCurve curveWithTake(const engraving::AutomationCurve& existing, const std::vector<TakeSegment>& segments,
                                              bool isFinal, std::vector<std::pair<int, int> >* ranges) const;
 
+    void onTrackRemoved();
     void commitTake();
     void publishPreviews();
     void clearPreviews();

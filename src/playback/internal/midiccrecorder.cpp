@@ -195,6 +195,10 @@ void MidiCcRecorder::init()
         onPlaybackPositionChanged(position);
     });
 
+    playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
+        onTrackRemoved();
+    });
+
     projectSession()->masterNotationChanged().onNotify(this, [this]() {
         // The previous score is gone: its take can't be written anymore
         clearPreviews();
@@ -226,6 +230,29 @@ void MidiCcRecorder::subscribeToSelection()
 
 //! NOTE: while armed, the target is the selected staff, except during a take (it's fixed from the playback start
 //! to its end). A selection that isn't a VST instrument staff (e.g. a click in an empty area) keeps the target
+//! NOTE: the target's part removed: its take is dropped (a part added later can get the same id and must not receive
+//! it), and the recording follows the selection, or stops when nothing else can be recorded
+void MidiCcRecorder::onTrackRemoved()
+{
+    if (!m_target) {
+        return;
+    }
+
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    if (masterNotation && masterNotation->masterScore()->partById(m_target->trackId.partId)) {
+        return;
+    }
+
+    clearPreviews();
+    clearTake();
+
+    if (std::optional<Target> target = resolveTarget()) {
+        m_target = target;
+    } else {
+        setArmed(false);
+    }
+}
+
 void MidiCcRecorder::followSelection()
 {
     if (!playbackController()->isPlaying()) {
