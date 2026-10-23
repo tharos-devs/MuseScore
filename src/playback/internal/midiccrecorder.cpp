@@ -228,10 +228,10 @@ void MidiCcRecorder::subscribeToSelection()
     }, Asyncable::Mode::SetReplace);
 }
 
-//! NOTE: while armed, the target is the selected staff, except during a take (it's fixed from the playback start
-//! to its end). A selection that isn't a VST instrument staff (e.g. a click in an empty area) keeps the target
-//! NOTE: the target's part removed: its take is dropped (a part added later can get the same id and must not receive
-//! it), and the recording follows the selection, or stops when nothing else can be recorded
+//! NOTE: the target's part removed: its take is dropped, as the part's curves were (written to a removed part, it
+//! would stay in the file, and could apply to a part added after the file is reopened). During playback the recording
+//! stops (the target is fixed during a take); otherwise it follows the selection, or stops when nothing else can be
+//! recorded
 void MidiCcRecorder::onTrackRemoved()
 {
     if (!m_target) {
@@ -246,13 +246,20 @@ void MidiCcRecorder::onTrackRemoved()
     clearPreviews();
     clearTake();
 
-    if (std::optional<Target> target = resolveTarget()) {
+    std::optional<Target> target;
+    if (!playbackController()->isPlaying()) {
+        target = resolveTarget();
+    }
+
+    if (target) {
         m_target = target;
     } else {
         setArmed(false);
     }
 }
 
+//! NOTE: while armed, the target is the selected staff, except during a take (it's fixed from the playback start
+//! to its end). A selection that isn't a VST instrument staff (e.g. a click in an empty area) keeps the target
 void MidiCcRecorder::followSelection()
 {
     if (!playbackController()->isPlaying()) {
