@@ -34,6 +34,7 @@
 #include "notation/imasternotation.h"
 #include "notation/inotationplayback.h"
 #include "notation/inotationarticulationmaps.h"
+#include "notation/inotationparts.h"
 #include "project/inotationproject.h"
 #include "project/iprojectaudiosettings.h"
 #include "global/io/fileinfo.h"
@@ -957,6 +958,9 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
             updateInstrumentEditorState();
         });
         playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
+            if (closeIfTargetPartRemoved()) {
+                return;
+            }
             updateInstrumentEditorState();
         });
         if (const project::INotationProjectPtr project = projectSession()->project()) {
@@ -1045,6 +1049,23 @@ void ArticulationMapEditorModel::openInstrumentEditor()
 void ArticulationMapEditorModel::apply()
 {
     applyToTrack();
+}
+
+//! NOTE: the edited track's part removed: closed without anything saved or applied, the map would otherwise be applied
+//! to a part added later with the same id
+bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
+{
+    if (!m_targetTrack) {
+        return false;
+    }
+
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    if (masterNotation && masterNotation->parts()->part(m_targetTrack->partId)) {
+        return false;
+    }
+
+    emit closeAccepted();
+    return true;
 }
 
 void ArticulationMapEditorModel::applyAndClose()

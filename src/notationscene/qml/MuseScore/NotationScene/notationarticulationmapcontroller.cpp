@@ -148,6 +148,12 @@ void NotationArticulationMapController::onCurrentNotationChanged()
             if (thisScore != score()) {
                 return;
             }
+
+            //! NOTE: a removed part's articulations go: a part added later can get the same id
+            std::erase_if(m_placedEntryIdsByTrack, [thisScore](const auto& pair) {
+                return !thisScore->masterScore()->partById(pair.first.partId);
+            });
+
             scheduleRebuild();
         }, Asyncable::Mode::SetReplace);
     }

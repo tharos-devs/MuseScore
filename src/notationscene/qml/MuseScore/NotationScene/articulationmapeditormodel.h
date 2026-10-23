@@ -288,6 +288,7 @@ private:
 
     std::optional<instrumenteditor::Target> instrumentEditorTarget() const;
     void updateInstrumentEditorState();
+    bool closeIfTargetPartRemoved();
 
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
