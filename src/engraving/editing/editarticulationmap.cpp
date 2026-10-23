@@ -67,7 +67,8 @@ void EditArticulationMap::flip()
         previous.maps.emplace(trackId, current ? std::optional<ExpressionMap>(*current) : std::nullopt);
         m_data->setMap(trackId, map);
 
-        if (const Part* part = m_score->partById(trackId.partId)) {
+        //! NOTE: a part without any staff (e.g. being removed) has no range
+        if (const Part* part = m_score->partById(trackId.partId); part && part->nstaves() > 0) {
             const TrackRange trackRange = part->trackRange();
             includeStaves(trackRange.startTrack / VOICES, trackRange.endTrack / VOICES - 1);
         }

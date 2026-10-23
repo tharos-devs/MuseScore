@@ -2201,15 +2201,9 @@ void Score::cmdRemovePart(Part* part)
     Transaction& tx = transactionManager()->currentOrDummyTransaction();
     EditStaveSharing::handleRemovePart(tx, part);
 
-    staff_idx_t sidx = staffIdx(part);
-    size_t n = part->nstaves();
-
-    for (staff_idx_t i = 0; i < n; ++i) {
-        cmdRemoveStaff(sidx);
-    }
-
     //! NOTE The part's articulation maps and automation curves go with it (undone with it): a part added later can
-    //! get the same id (see newPartId()) and must not inherit them. Its staves' curves go in cmdRemoveStaff()
+    //! get the same id (see newPartId()) and must not inherit them. Its staves' curves go in cmdRemoveStaff().
+    //! Before its staves are removed: the changed range of these edits is the part's staves
     if (isMaster()) {
         if (const ArticulationMapDataConstPtr data = articulationMapData()) {
             EditArticulationMapChanges changes;
@@ -2226,6 +2220,13 @@ void Score::cmdRemovePart(Part* part)
             const std::optional<InstrumentTrackId> trackId = key.trackId();
             return trackId && trackId->partId == partId;
         });
+    }
+
+    staff_idx_t sidx = staffIdx(part);
+    size_t n = part->nstaves();
+
+    for (staff_idx_t i = 0; i < n; ++i) {
+        cmdRemoveStaff(sidx);
     }
 
     undoRemovePart(part, muse::indexOf(m_parts, part));
