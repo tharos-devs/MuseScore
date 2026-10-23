@@ -2201,9 +2201,9 @@ void Score::cmdRemovePart(Part* part)
     Transaction& tx = transactionManager()->currentOrDummyTransaction();
     EditStaveSharing::handleRemovePart(tx, part);
 
-    //! NOTE The part's articulation maps and automation curves go with it (undone with it): a part added later can
-    //! get the same id (see newPartId()) and must not inherit them. Its staves' curves go in cmdRemoveStaff().
-    //! Before its staves are removed: the changed range of these edits is the part's staves
+    //! NOTE The part's articulation maps and automation curves go with it (undone with it): kept, they would be saved,
+    //! and a part added after the file is reopened can get the same id (see newPartId()). Its staves' curves go in
+    //! cmdRemoveStaff(). Before its staves are removed: the changed range of these edits is the part's staves
     if (isMaster()) {
         if (const ArticulationMapDataConstPtr data = articulationMapData()) {
             EditArticulationMapChanges changes;
@@ -2592,8 +2592,8 @@ void Score::cmdRemoveStaff(staff_idx_t staffIdx)
     Staff* s = staff(staffIdx);
     EditStaffBrackets::adjustBracketsDel(this, staffIdx, staffIdx + 1);
 
-    //! NOTE The staff's automation curves go with it (undone with it): a staff added later can get the same id
-    //! (see newStaffId()) and must not inherit them
+    //! NOTE The staff's automation curves go with it (undone with it): kept, they would be saved, and a staff added
+    //! after the file is reopened can get the same id (see newStaffId())
     if (isMaster() && s) {
         const ID staffId = s->id();
         masterScore()->removeAutomationCurves([staffId](const AutomationCurveKey& key) {
