@@ -1051,8 +1051,8 @@ void ArticulationMapEditorModel::apply()
     applyToTrack();
 }
 
-//! NOTE: the edited track's part removed: closed without anything saved or applied, the map would otherwise be applied
-//! to a part added later with the same id
+//! NOTE: the edited track's part removed: nothing can be applied to it any more. Closed, unless the map has unsaved
+//! changes: then it stays open without a track, to be saved to a file (or its changes discarded on close)
 bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
 {
     if (!m_targetTrack) {
@@ -1062,6 +1062,14 @@ bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
     const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (masterNotation && masterNotation->parts()->part(m_targetTrack->partId)) {
         return false;
+    }
+
+    if (m_isDirty) {
+        m_targetTrack.reset();
+        m_editsTargetTrackMap = false;
+        emit targetTrackChanged();
+        updateInstrumentEditorState();
+        return true;
     }
 
     emit closeAccepted();
