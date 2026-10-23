@@ -87,6 +87,12 @@ void NotationPlayback::init()
         updateTotalPlayTime();
     });
 
+    //! NOTE Measures of rests only (e.g. appended to a new score) or a tempo change alone change no track's events:
+    //! the end of the playback is updated all the same
+    score()->changesChannel().onReceive(this, [this](const mu::engraving::ScoreChanges&) {
+        updateTotalPlayTime();
+    });
+
     configuration()->isPlayRepeatsChanged().onNotify(this, [this]() {
         bool expandRepeats = configuration()->isPlayRepeatsEnabled();
         if (expandRepeats != m_playbackModel.isPlayRepeatsEnabled()) {
