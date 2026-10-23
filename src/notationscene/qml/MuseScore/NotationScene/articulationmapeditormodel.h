@@ -40,8 +40,8 @@
 #include "global/io/ifilesystem.h"
 #include "ui/iuiconfiguration.h"
 #include "interactive/iinteractive.h"
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
+#include "rcommand/icommanddispatcher.h"
+#include "project/iprojectsession.h"
 #include "playback/iplaybackcontroller.h"
 
 #include "instrumenteditor.h"
@@ -112,9 +112,9 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QVariantList colorGradientPreviews READ colorGradientPreviews CONSTANT)
 
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 #ifdef MUSE_MODULE_VST
     muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
 #endif

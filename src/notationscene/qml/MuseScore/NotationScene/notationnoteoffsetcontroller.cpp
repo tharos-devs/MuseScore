@@ -108,7 +108,7 @@ void NotationNoteOffsetController::init()
         }
     }, Asyncable::Mode::SetReplace);
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onCurrentNotationChanged();
     }, Asyncable::Mode::SetReplace);
 }
@@ -762,13 +762,13 @@ void NotationNoteOffsetController::onEdgeDragged(const SysStaffKey& key, int rec
 
 INotationNoteOffsetsPtr NotationNoteOffsetController::noteOffsets() const
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->noteOffsets() : nullptr;
 }
 
 INotationPtr NotationNoteOffsetController::currentNotation() const
 {
-    return globalContext()->currentNotation();
+    return projectSession()->currentNotation();
 }
 
 mu::engraving::Score* NotationNoteOffsetController::score() const

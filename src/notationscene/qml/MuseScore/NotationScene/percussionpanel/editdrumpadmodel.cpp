@@ -111,7 +111,7 @@ EditDrumPadModel::~EditDrumPadModel()
 
 void EditDrumPadModel::init(int padPitch, int newPadRow, int newPadColumn, bool staffContext)
 {
-    m_notation = globalContext()->currentNotation();
+    m_notation = projectSession()->currentNotation();
     if (!m_notation || padPitch >= DRUM_INSTRUMENTS || !initDrumsetAndKey(staffContext)) {
         emit closeRequested();
         return;
@@ -170,8 +170,8 @@ void EditDrumPadModel::init(int padPitch, int newPadRow, int newPadColumn, bool 
     const ExpressionMap* map = articulationMap();
     m_articulationMapText = map ? map->sourceText.toQString() : QString();
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
-        if (globalContext()->currentNotation() != m_notation) {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
+        if (projectSession()->currentNotation() != m_notation) {
             m_notation = nullptr;
             emit closeRequested();
         }
@@ -543,16 +543,16 @@ void EditDrumPadModel::onMidiNoteLearnt(int pitch)
 bool EditDrumPadModel::hasInstrumentEditor() const
 {
     const engraving::InstrumentTrackId trackId { m_instrumentKey.partId, m_instrumentKey.instrumentId };
-    return instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), trackId).has_value();
+    return instrumenteditor::target(projectSession()->project(), playbackController().get(), trackId).has_value();
 }
 
 void EditDrumPadModel::openInstrumentEditor()
 {
     const engraving::InstrumentTrackId trackId { m_instrumentKey.partId, m_instrumentKey.instrumentId };
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const project::INotationProjectPtr project = projectSession()->project();
     const std::optional<instrumenteditor::Target> target = instrumenteditor::target(project, playbackController().get(), trackId);
     if (target) {
-        instrumenteditor::dispatch(dispatcher().get(), project, *target, "open");
+        instrumenteditor::dispatch(commandDispatcher().get(), project, *target, "open");
     }
 }
 
@@ -588,7 +588,7 @@ void EditDrumPadModel::syncWithArticulationMap()
 
 const ExpressionMap* EditDrumPadModel::articulationMap() const
 {
-    return drumkit::articulationMap(globalContext()->currentMasterNotation(), { m_instrumentKey.partId, m_instrumentKey.instrumentId });
+    return drumkit::articulationMap(projectSession()->masterNotation(), { m_instrumentKey.partId, m_instrumentKey.instrumentId });
 }
 
 bool EditDrumPadModel::hasArticulationMap() const

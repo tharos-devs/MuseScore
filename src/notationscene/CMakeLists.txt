@@ -39,8 +39,6 @@ target_sources(notationscene PRIVATE
     internal/notationactioncontroller.h
     internal/notationundoredocoordinator.cpp
     internal/notationundoredocoordinator.h
-    internal/notationuiactions.cpp
-    internal/notationuiactions.h
     internal/notationcommandsregister.cpp
     internal/notationcommandsregister.h
     internal/notationcommandsstate.cpp
@@ -50,12 +48,6 @@ target_sources(notationscene PRIVATE
     utilities/engravingitempreviewpainter.h
     utilities/percussionutilities.cpp
     utilities/percussionutilities.h
-)
-
-set_source_files_properties(
-    internal/notationuiactions.cpp
-    PROPERTIES
-        SKIP_UNITY_BUILD_INCLUSION ON
 )
 
 add_subdirectory(widgets)

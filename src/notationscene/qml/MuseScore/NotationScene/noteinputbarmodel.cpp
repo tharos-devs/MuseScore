@@ -24,29 +24,23 @@
 #include "rcommand/commandtypes.h"
 #include "types/translatablestring.h"
 
-#include "context/shortcutcontext.h"
-
 #include "notation/inotationelements.h" // IWYU pragma: keep
 #include "notation/inotationinteraction.h"
 #include "notation/inotationnoteinput.h"
 #include "notation/inotationselection.h"
 #include "notation/inotationundostack.h"
 
-#include "internal/notationuiactions.h"
 #include "notationcommands.h"
 #include "playback/playbackcommands.h"
-#include "shortcuts/shortcutstypes.h"
+#include "shortcuts_v2/shortcutstypes.h"
 
 using namespace mu;
 using namespace mu::notation;
 using namespace muse;
-using namespace muse::actions;
 using namespace muse::ui;
 using namespace muse::uicomponents;
 
 static const QString TOOLBAR_NAME("noteInput");
-
-static const ActionCode ADD_ACTION_CODE("add");
 
 const std::string NoteInputBarModel::CROSS_STAFF_BEAMING_SUBITEMS("cross-staff-beaming-subitems");
 const std::string NoteInputBarModel::TUPLET_SUBITEMS("tuplets-subitems");
@@ -141,11 +135,9 @@ void NoteInputBarModel::init()
         emit midiStartNoteInputChanged();
     });
 
-#ifndef MUSE_MODULE_SHORTCUTS_V2
-    noteInputShortcutsRegister()->shortcutsChanged().onNotify(this, [this]() {
+    commandShortcutsRegister()->shortcutsChanged().onNotify(this, [this]() {
         emit midiStartNoteInputShortcutChanged();
     });
-#endif
 
     load();
 }
@@ -365,11 +357,7 @@ bool NoteInputBarModel::midiStartNoteInput() const
 
 QString NoteInputBarModel::midiStartNoteInputShortcut() const
 {
-#ifndef MUSE_MODULE_SHORTCUTS_V2
-    return shortcuts::sequencesToNativeText(noteInputShortcutsRegister()->shortcut(playback::MIDI_START_NOTE_INPUT_ACTION_CODE).sequences);
-#else
-    return QString();
-#endif
+    return shortcuts::sequencesToNativeText(commandShortcutsRegister()->shortcut(playback::MIDI_START_NOTE_INPUT_TOGGLE_COMMAND).sequences);
 }
 
 void NoteInputBarModel::toggleMidiStartNoteInput()

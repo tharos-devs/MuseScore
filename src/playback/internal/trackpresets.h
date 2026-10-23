@@ -34,7 +34,7 @@
 #include "modularity/ioc.h"
 #include "global/iglobalconfiguration.h"
 #include "global/io/ifilesystem.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "audio/main/iplayback.h"
 #include "audioplugins/iknownaudiopluginsregister.h"
 #include "project/iprojectaudiosettings.h"
@@ -96,7 +96,7 @@ class TrackPresets : public muse::Contextable, public muse::async::Asyncable
 #ifdef MUSE_MODULE_VST
     muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
 #endif
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
 

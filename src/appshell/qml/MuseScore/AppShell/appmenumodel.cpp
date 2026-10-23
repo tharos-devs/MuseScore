@@ -57,7 +57,6 @@ using namespace muse::ui;
 using namespace muse::uicomponents;
 using namespace mu::project;
 using namespace muse::workspace;
-using namespace muse::actions;
 using namespace muse::extensions;
 using namespace mu::notation;
 using namespace mu::playback;
@@ -70,10 +69,6 @@ using namespace muse::vst;
 using namespace muse::audio;
 using namespace muse::mi;
 using namespace muse::testflow;
-
-static const ActionCode APP_MENU_VIDEO_TIMECODE_OFF_CODE = "video-timecode-off";
-static const ActionCode APP_MENU_VIDEO_TIMECODE_ABOVE_CODE = "video-timecode-above-bars";
-static const ActionCode APP_MENU_VIDEO_TIMECODE_BELOW_CODE = "video-timecode-below-bars";
 
 AppMenuModel::AppMenuModel(QObject* parent)
     : AbstractMenuModel(parent)
@@ -129,7 +124,7 @@ bool AppMenuModel::isGlobalMenuAvailable()
 
 void AppMenuModel::setupConnections()
 {
-    recentFilesController()->recentFilesListChanged().onNotify(this, [this]() {
+    recentFilesController()->recentFilesListChanged().onReceive(this, [this](const RecentFilesChange&) {
         MenuItem& recentMenuItem = findMenu("menu-file-open");
         MenuItemList recentSubMenuItems = makeRecentSubMenuItems();
         recentMenuItem.setSubitems(recentSubMenuItems);
@@ -153,7 +148,7 @@ void AppMenuModel::setupConnections()
         pluginsItem.setSubitems(makeExtensionsSubitems());
     });
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         auto stack = undoStack();
         if (stack) {
             stack->stackChanged().onNotify(this, [this]() {
@@ -164,10 +159,10 @@ void AppMenuModel::setupConnections()
         updateUndoRedoItems();
     });
 
-    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+    projectSession()->projectChanged().onNotify(this, [this]() {
         updateTimecodeItems();
 
-        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::INotationProjectPtr project = projectSession()->project();
         project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
         if (!settings) {
             return;
@@ -273,7 +268,7 @@ MenuItem* AppMenuModel::makeEditMenu()
 
 mu::notation::INotationUndoStackPtr AppMenuModel::undoStack() const
 {
-    mu::notation::INotationPtr notation = globalContext()->currentNotation();
+    mu::notation::INotationPtr notation = projectSession()->currentNotation();
     return notation ? notation->undoStack() : nullptr;
 }
 
@@ -338,7 +333,7 @@ MenuItem* AppMenuModel::makeViewMenu()
             makeMenuItem(SHOW_PAGEBORDERS_COMMAND),
             makeMenuItem(SHOW_IRREGULAR_COMMAND),
             makeMenuItem(SHOW_SOUNDFLAGS_COMMAND),
-            makeMenuItem("show-video-hitpoints"),
+            makeMenuItem(SHOW_VIDEO_HITPOINTS_COMMAND),
         }, "menu-show"),
         makeSeparator(),
         makeMenuItem(DOCK_RESTORE_DEFAULT_LAYOUT_COMMAND),
@@ -781,23 +776,23 @@ MenuItemList AppMenuModel::makeLinesItems()
 
 MenuItemList AppMenuModel::makeTimecodeItems()
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
     const VideoTimecodeDisplayMode mode = settings
                                           ? settings->attachment().timecodeDisplayMode
                                           : VideoTimecodeDisplayMode::Off;
 
-    auto makeTimecodeItem = [this, mode](const ActionCode& actionCode, VideoTimecodeDisplayMode itemMode) {
-        MenuItem* item = makeMenuItem(actionCode);
+    auto makeTimecodeItem = [this, mode](const rcommand::Command& command, VideoTimecodeDisplayMode itemMode) {
+        MenuItem* item = makeMenuItem(command);
         item->setSelectable(true);
         item->setSelected(mode == itemMode);
         return item;
     };
 
     return {
-        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_OFF_CODE, VideoTimecodeDisplayMode::Off),
-        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_ABOVE_CODE, VideoTimecodeDisplayMode::AboveBars),
-        makeTimecodeItem(APP_MENU_VIDEO_TIMECODE_BELOW_CODE, VideoTimecodeDisplayMode::BelowBars)
+        makeTimecodeItem(VIDEO_TIMECODE_OFF_COMMAND, VideoTimecodeDisplayMode::Off),
+        makeTimecodeItem(VIDEO_TIMECODE_ABOVE_BARS_COMMAND, VideoTimecodeDisplayMode::AboveBars),
+        makeTimecodeItem(VIDEO_TIMECODE_BELOW_BARS_COMMAND, VideoTimecodeDisplayMode::BelowBars)
     };
 }
 

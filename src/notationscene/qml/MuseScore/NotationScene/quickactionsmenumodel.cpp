@@ -58,9 +58,9 @@ void QuickActionsMenuModel::handleMenuItem(const QString& itemId)
     }
 
     const std::optional<instrumenteditor::Target> target
-        = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
+        = instrumenteditor::target(projectSession()->project(), playbackController().get(), *trackId);
     if (target) {
-        instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target,
+        instrumenteditor::dispatch(commandDispatcher().get(), projectSession()->project(), *target,
                                    isInstrumentEditorOpened() ? "close" : "open");
     }
 }
@@ -85,7 +85,7 @@ void QuickActionsMenuModel::setLastMidiCc(int controller)
 //! score's first own controller
 void QuickActionsMenuModel::updateLastMidiCc()
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     const int current = notationConfiguration()->currentAutomationMidiCc();
 
@@ -123,7 +123,7 @@ MenuItem* QuickActionsMenuModel::makeAutomationItem(const QString& id, const std
         return nullptr;
     }
 
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const bool isAutomationShown = masterNotation && masterNotation->automation()->isAutomationModeEnabled();
     const AutomationType currentType = notationConfiguration()->currentAutomationType();
 
@@ -173,9 +173,9 @@ MenuItem* QuickActionsMenuModel::makeLastMidiCcItem(bool enabled)
 MenuItem* QuickActionsMenuModel::makeArticulationMapEditorItem(bool* hasMapOut)
 {
     const std::optional<InstrumentTrackId> trackId = actionsTrackId();
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
-    const bool isVst = trackId && midicc::isVstTrack(globalContext()->currentProject(), *trackId);
+    const bool isVst = trackId && midicc::isVstTrack(projectSession()->project(), *trackId);
     const bool hasMap = isVst && maps && maps->data() && maps->data()->map(*trackId);
 
     if (hasMapOut) {
@@ -206,7 +206,7 @@ MenuItem* QuickActionsMenuModel::makeInstrumentEditorItem()
 {
     const std::optional<InstrumentTrackId> trackId = actionsTrackId();
     const bool hasEditor = trackId
-                           && instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
+                           && instrumenteditor::target(projectSession()->project(), playbackController().get(), *trackId);
 
     MenuItem* item = new MenuItem(this);
     item->setId(INSTRUMENT_EDITOR_ID);
@@ -261,7 +261,7 @@ bool QuickActionsMenuModel::isInstrumentEditorOpened() const
     }
 
     const std::optional<instrumenteditor::Target> target
-        = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *trackId);
+        = instrumenteditor::target(projectSession()->project(), playbackController().get(), *trackId);
     return target && vstPluginStateProvider()->isInstrumentEditorOpened(target->resourceId, target->trackId);
 #else
     return false;

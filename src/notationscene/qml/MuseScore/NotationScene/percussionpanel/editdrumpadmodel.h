@@ -29,8 +29,7 @@
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
 
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "midi/imidiinport.h"
 #include "rcommand/icommanddispatcher.h"
@@ -93,9 +92,8 @@ class EditDrumPadModel : public QObject, public muse::Contextable, public muse::
     muse::GlobalInject<muse::IGlobalConfiguration> globalConfiguration;
     muse::GlobalInject<muse::io::IFileSystem> fileSystem;
     muse::GlobalInject<engraving::IEngravingFontsProvider> engravingFonts;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
 

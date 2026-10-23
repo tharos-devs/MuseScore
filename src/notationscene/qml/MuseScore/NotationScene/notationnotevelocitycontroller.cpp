@@ -98,7 +98,7 @@ void NotationNoteVelocityController::init()
         }
     }, Asyncable::Mode::SetReplace);
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onCurrentNotationChanged();
     }, Asyncable::Mode::SetReplace);
 }
@@ -942,7 +942,7 @@ void NotationNoteVelocityController::showVelocityEditor(const NoteRef& noteRef, 
 
 int NotationNoteVelocityController::contextVelocity(const Note* note) const
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationPlaybackPtr playback = masterNotation ? masterNotation->playback() : nullptr;
     if (!playback) {
         return 64;
@@ -977,13 +977,13 @@ int NotationNoteVelocityController::displayedVelocity(const Note* note) const
 
 INotationNoteVelocityPtr NotationNoteVelocityController::noteVelocity() const
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->noteVelocity() : nullptr;
 }
 
 INotationPtr NotationNoteVelocityController::currentNotation() const
 {
-    return globalContext()->currentNotation();
+    return projectSession()->currentNotation();
 }
 
 mu::engraving::Score* NotationNoteVelocityController::score() const

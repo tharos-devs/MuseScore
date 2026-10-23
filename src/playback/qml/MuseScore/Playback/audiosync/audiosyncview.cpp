@@ -159,11 +159,11 @@ void AudioSyncView::componentComplete()
 {
     QQuickPaintedItem::componentComplete();
 
-    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+    projectSession()->projectChanged().onNotify(this, [this]() {
         onProjectChanged();
     });
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onNotationChanged();
     });
 
@@ -195,19 +195,19 @@ void AudioSyncView::componentComplete()
 
 mu::project::IProjectAudioSyncSettingsPtr AudioSyncView::audioSyncSettings() const
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     return project ? project->audioSyncSettings() : nullptr;
 }
 
 mu::notation::INotationAutomationPtr AudioSyncView::automation() const
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     return project && project->masterNotation() ? project->masterNotation()->automation() : nullptr;
 }
 
 const Score* AudioSyncView::score() const
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     if (!project || !project->masterNotation()) {
         return nullptr;
     }
@@ -289,8 +289,8 @@ void AudioSyncView::onNotationChanged()
 {
     invalidateGrid();
 
-    project::INotationProjectPtr project = globalContext()->currentProject();
-    notation::INotationPtr notation = globalContext()->currentNotation();
+    project::INotationProjectPtr project = projectSession()->project();
+    notation::INotationPtr notation = projectSession()->currentNotation();
     if (!project || !notation) {
         return;
     }
@@ -347,7 +347,7 @@ void AudioSyncView::onDecodeStateChanged()
 
 void AudioSyncView::listenPlaybackState()
 {
-    context::IPlaybackStatePtr playbackState = globalContext()->playbackState();
+    auto playbackState = playbackController();
     if (!playbackState) {
         return;
     }
@@ -364,8 +364,8 @@ void AudioSyncView::listenPlaybackState()
         }
     });
 
-    playbackState->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
-        context::IPlaybackStatePtr state = globalContext()->playbackState();
+    playbackState->isPlayingChanged().onReceive(this, [this](bool) {
+        auto state = playbackController();
         m_isPlaying = state && state->isPlaying();
         emit playingChanged();
         if (m_isPlaying) {
@@ -622,7 +622,7 @@ void AudioSyncView::clearRecentAudioFiles()
 
 void AudioSyncView::setAudioFile(const QString& path)
 {
-    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), globalContext()->currentProject(), path);
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), projectSession()->project(), path);
 }
 
 bool AudioSyncView::loopEnabled() const
@@ -904,7 +904,7 @@ void AudioSyncView::updateSpeed()
 void AudioSyncView::chooseAudioFile()
 {
     audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), playbackController().get(),
-                                    globalContext()->currentProject());
+                                    projectSession()->project());
 }
 
 bool AudioSyncView::canDropUrls(const QList<QUrl>& urls) const
@@ -919,7 +919,7 @@ void AudioSyncView::dropUrls(const QList<QUrl>& urls)
         return;
     }
 
-    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), globalContext()->currentProject(),
+    audiosync::setReferenceAudioPath(playbackConfiguration().get(), playbackController().get(), projectSession()->project(),
                                      urls.first().toLocalFile());
 }
 
@@ -934,7 +934,7 @@ void AudioSyncView::startNew()
     //! NOTE The next audio is fitted
     m_viewStateTimer.stop();
     m_pendingViewState.reset();
-    audiosync::startOver(playbackController().get(), globalContext()->currentProject(), muse::io::path_t());
+    audiosync::startOver(playbackController().get(), projectSession()->project(), muse::io::path_t());
 }
 
 // ---- view ----

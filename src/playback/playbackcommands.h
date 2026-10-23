@@ -39,8 +39,6 @@ inline static const muse::rcommand::Command METRONOME_TOGGLE_COMMAND("command://
 inline static const muse::rcommand::Command OPEN_PLAYBACK_SETUP_COMMAND("command://playback/open-playback-setup");
 inline static const muse::rcommand::Command MIDI_TOGGLE_COMMAND("command://playback/midi-toggle");
 inline static const muse::rcommand::Command MIDI_START_NOTE_INPUT_TOGGLE_COMMAND("command://playback/midi-start-note-input-toggle");
-//! NOTE: its action (e.g. for its shortcut)
-inline static const char MIDI_START_NOTE_INPUT_ACTION_CODE[] = "midi-start-note-input";
 inline static const muse::rcommand::Command MIDI_INPUT_WRITTEN_PITCH_COMMAND("command://playback/midi-input-written-pitch");
 inline static const muse::rcommand::Command MIDI_INPUT_SOUNDING_PITCH_COMMAND("command://playback/midi-input-sounding-pitch");
 inline static const muse::rcommand::Command REPEATS_TOGGLE_COMMAND("command://playback/repeats-toggle");

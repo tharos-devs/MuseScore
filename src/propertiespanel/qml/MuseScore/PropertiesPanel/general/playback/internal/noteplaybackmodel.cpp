@@ -171,7 +171,7 @@ int NotePlaybackModel::contextVelocity(const mu::engraving::Note* note) const
     // What the dynamics-marking/hairpin context alone would produce at this note's tick, with no
     // per-note override - falls back to a flat constant only when there's no playback available
     // to ask (mirrors NotationNoteVelocityController::contextVelocity()).
-    const notation::IMasterNotationPtr masterNotation = context()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = context()->masterNotation();
     const notation::INotationPlaybackPtr playback = masterNotation ? masterNotation->playback() : nullptr;
     if (!playback) {
         return 64;

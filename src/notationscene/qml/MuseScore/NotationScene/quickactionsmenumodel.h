@@ -28,8 +28,7 @@
 
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "notation/inotationconfiguration.h"
 #include "playback/iplaybackcontroller.h"
 
@@ -53,9 +52,8 @@ public:
 
 protected:
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
 #ifdef MUSE_MODULE_VST
     muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
 #endif

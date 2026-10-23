@@ -28,6 +28,8 @@
 #include "dockwindow/idockwindow.h"
 
 #include "../appshellcommands.h"
+#include "project/inotationproject.h"
+#include "project/iprojectvideosettings.h"
 #include <vector>
 
 using namespace muse;
@@ -57,6 +59,13 @@ static const std::vector<Command> PROJECT_PAGE_COMMANDS = {
     DOCK_TOGGLE_PERCUSSION_COMMAND,
     DOCK_TOGGLE_STATUSBAR_COMMAND,
     DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND,
+};
+
+static const std::vector<Command> VIDEO_COMMANDS = {
+    VIDEO_TIMECODE_OFF_COMMAND,
+    VIDEO_TIMECODE_ABOVE_BARS_COMMAND,
+    VIDEO_TIMECODE_BELOW_BARS_COMMAND,
+    SHOW_VIDEO_HITPOINTS_COMMAND,
 };
 
 std::string AppshellCommandsState::moduleName() const
@@ -111,6 +120,12 @@ void AppshellCommandsState::init()
         updateCommandStates(PROJECT_PAGE_COMMANDS);
     });
 
+    projectSession()->projectChanged().onNotify(this, [this]() {
+        listenProjectVideoSettings();
+        updateCommandStates(VIDEO_COMMANDS);
+    });
+
+    listenProjectVideoSettings();
     updateCommandStates();
 }
 
@@ -156,6 +171,10 @@ CommandState AppshellCommandsState::commandState(const Command& command) const
         return CommandState(true, brailleConfiguration()->braillePanelEnabled());
     }
 
+    if (muse::contains(VIDEO_COMMANDS, command)) {
+        return videoCommandState(command);
+    }
+
     if (command == DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND) {
         const IDockWindow* window = dockWindowProvider()->window();
         return CommandState(true, window && window->isSecondaryWindowOpen());
@@ -183,4 +202,41 @@ bool AppshellCommandsState::isProjectPage() const
     }
 
     return interactive()->isOpened(PROJECT_PAGE_URI).val;
+}
+
+void AppshellCommandsState::listenProjectVideoSettings()
+{
+    mu::project::INotationProjectPtr project = projectSession()->project();
+    mu::project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
+    if (!settings) {
+        return;
+    }
+
+    settings->settingsChanged().onNotify(this, [this]() {
+        updateCommandStates(VIDEO_COMMANDS);
+    }, Asyncable::Mode::SetReplace);
+}
+
+CommandState AppshellCommandsState::videoCommandState(const Command& command) const
+{
+    mu::project::INotationProjectPtr project = projectSession()->project();
+    mu::project::IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
+    if (!settings) {
+        return CommandState(false, command == VIDEO_TIMECODE_OFF_COMMAND || command == SHOW_VIDEO_HITPOINTS_COMMAND);
+    }
+
+    if (command == SHOW_VIDEO_HITPOINTS_COMMAND) {
+        return CommandState(true, settings->attachment().showHitPoints);
+    }
+
+    const mu::project::VideoTimecodeDisplayMode mode = settings->attachment().timecodeDisplayMode;
+    if (command == VIDEO_TIMECODE_ABOVE_BARS_COMMAND) {
+        return CommandState(true, mode == mu::project::VideoTimecodeDisplayMode::AboveBars);
+    }
+
+    if (command == VIDEO_TIMECODE_BELOW_BARS_COMMAND) {
+        return CommandState(true, mode == mu::project::VideoTimecodeDisplayMode::BelowBars);
+    }
+
+    return CommandState(true, mode == mu::project::VideoTimecodeDisplayMode::Off);
 }

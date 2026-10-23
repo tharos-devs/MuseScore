@@ -38,7 +38,7 @@
 #include "media/ivideodecoderfactory.h"
 #include "../ivideoexportconfiguration.h"
 #include "importexport/audioexport/iaudioexportconfiguration.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 
 #include "project/inotationwriter.h"
 #include "project/inotationwritersregister.h"
@@ -59,7 +59,7 @@ class VideoWriter : public project::INotationWriter, public muse::Contextable, p
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncodeResolver;
     muse::GlobalInject<muse::media::IVideoDecoderFactory> videoDecoderFactory;
     muse::GlobalInject<project::INotationWritersRegister> writers;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
 
 public:
     VideoWriter(const muse::modularity::ContextPtr& iocCtx)

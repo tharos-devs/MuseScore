@@ -61,7 +61,7 @@ TrackPresets::TrackPresets(const modularity::ContextPtr& iocCtx)
 
 mu::project::IProjectAudioSettingsPtr TrackPresets::audioSettings() const
 {
-    const mu::project::INotationProjectPtr project = globalContext()->currentProject();
+    const mu::project::INotationProjectPtr project = projectSession()->project();
     return project ? project->audioSettings() : nullptr;
 }
 
@@ -415,7 +415,7 @@ bool TrackPresets::isAvailable(const TrackPresetInfo& preset) const
 std::optional<TrackPreset> TrackPresets::capture(const InstrumentTrackId& trackId) const
 {
     const mu::project::IProjectAudioSettingsPtr settings = audioSettings();
-    const mu::notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const mu::notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (!settings || !masterNotation) {
         return std::nullopt;
     }
@@ -522,7 +522,7 @@ void TrackPresets::applySound(const AudioResourceMeta& sound, const InstrumentTr
 void TrackPresets::apply(const TrackPreset& preset, const InstrumentTrackId& trackId)
 {
     const mu::project::IProjectAudioSettingsPtr settings = audioSettings();
-    const mu::notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const mu::notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (!settings || !masterNotation || !isAvailable(preset)) {
         return;
     }

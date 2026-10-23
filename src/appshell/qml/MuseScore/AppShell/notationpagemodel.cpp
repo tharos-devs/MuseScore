@@ -35,19 +35,16 @@
 #include "notation/inotationnoteinput.h"
 #include "notation/inotationselection.h"
 
-#include "internal/applicationuiactions.h"
 #include "dockwindow/idockwindow.h"
+#include "dockwindow_v2/dockcommands.h"
 
+#include "appshell/appshellcommands.h"
+
+using namespace muse;
 using namespace mu::appshell;
 using namespace mu::notation;
 using namespace mu::project;
 using namespace mu::engraving;
-using namespace muse::actions;
-
-static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_OFF_CODE("video-timecode-off");
-static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_ABOVE_CODE("video-timecode-above-bars");
-static const ActionCode NOTATION_PAGE_VIDEO_TIMECODE_BELOW_CODE("video-timecode-below-bars");
-static const ActionCode NOTATION_PAGE_SHOW_VIDEO_HITPOINTS_CODE("show-video-hitpoints");
 
 NotationPageModel::NotationPageModel(QObject* parent)
     : QObject(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
@@ -76,20 +73,24 @@ void NotationPageModel::init()
         toggleDock(dockName);
     });
 
-    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_OFF_CODE, [this]() {
+    commandDispatcher()->onRequest(this, VIDEO_TIMECODE_OFF_COMMAND, [this]() {
         setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::Off);
+        return muse::make_ok();
     });
-    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_ABOVE_CODE, [this]() {
+    commandDispatcher()->onRequest(this, VIDEO_TIMECODE_ABOVE_BARS_COMMAND, [this]() {
         setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::AboveBars);
+        return muse::make_ok();
     });
-    dispatcher()->reg(this, NOTATION_PAGE_VIDEO_TIMECODE_BELOW_CODE, [this]() {
+    commandDispatcher()->onRequest(this, VIDEO_TIMECODE_BELOW_BARS_COMMAND, [this]() {
         setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode::BelowBars);
+        return muse::make_ok();
     });
-    dispatcher()->reg(this, NOTATION_PAGE_SHOW_VIDEO_HITPOINTS_CODE, [this]() {
+    commandDispatcher()->onRequest(this, SHOW_VIDEO_HITPOINTS_COMMAND, [this]() {
         toggleShowVideoHitPoints();
+        return muse::make_ok();
     });
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onNotationChanged();
         scheduleUpdatePercussionPanelVisibility();
     });
@@ -215,7 +216,7 @@ QString NotationPageModel::statusBarName() const
 
 void NotationPageModel::onNotationChanged()
 {
-    INotationPtr notation = globalContext()->currentNotation();
+    INotationPtr notation = projectSession()->currentNotation();
     if (!notation) {
         return;
     }
@@ -245,12 +246,12 @@ void NotationPageModel::toggleDock(const QString& name)
         return;
     }
 
-    dispatcher()->dispatch("dock-toggle", ActionData::make_arg1<QString>(name));
+    commandDispatcher()->dispatch(dock::DOCK_TOGGLE_COMMAND, { { "dock_name", muse::Val(name) } });
 }
 
 void NotationPageModel::setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode mode)
 {
-    INotationProjectPtr project = globalContext()->currentProject();
+    INotationProjectPtr project = projectSession()->project();
     updateVideoAttachment(project ? project->videoSettings() : nullptr, [mode](VideoAttachmentSettings& updated) {
         updated.timecodeDisplayMode = mode;
     });
@@ -258,7 +259,7 @@ void NotationPageModel::setVideoTimecodeDisplayMode(VideoTimecodeDisplayMode mod
 
 void NotationPageModel::toggleShowVideoHitPoints()
 {
-    INotationProjectPtr project = globalContext()->currentProject();
+    INotationProjectPtr project = projectSession()->project();
     updateVideoAttachment(project ? project->videoSettings() : nullptr, [](VideoAttachmentSettings& updated) {
         updated.showHitPoints = !updated.showHitPoints;
     });
@@ -295,11 +296,12 @@ void NotationPageModel::doUpdatePercussionPanelVisibility()
             return;
         }
 
-        dispatcher()->dispatch("dock-set-open", ActionData::make_arg2<QString, bool>(PERCUSSION_PANEL_NAME, open));
+        commandDispatcher()->dispatch(dock::DOCK_SET_OPEN_COMMAND,
+                                      { { "dock_name", muse::Val(PERCUSSION_PANEL_NAME) }, { "open", muse::Val(open) } });
     };
 
     const PercussionPanelAutoShowMode autoShowMode = notationSceneConfiguration()->percussionPanelAutoShowMode();
-    const INotationPtr notation = globalContext()->currentNotation();
+    const INotationPtr notation = projectSession()->currentNotation();
     if (!notation || !notation->elements() || autoShowMode == PercussionPanelAutoShowMode::NEVER) {
         return;
     }
@@ -391,7 +393,8 @@ void NotationPageModel::doUpdateExtensionsToolBarVisibility()
             return;
         }
 
-        dispatcher()->dispatch("dock-set-open", ActionData::make_arg2<QString, bool>(EXTENSIONS_TOOLBAR_NAME, open));
+        commandDispatcher()->dispatch(dock::DOCK_SET_OPEN_COMMAND,
+                                      { { "dock_name", muse::Val(EXTENSIONS_TOOLBAR_NAME) }, { "open", muse::Val(open) } });
     };
 
     muse::extensions::ManifestList enabledExtensions = extensionsProvider()->manifestList(muse::extensions::Filter::Enabled);

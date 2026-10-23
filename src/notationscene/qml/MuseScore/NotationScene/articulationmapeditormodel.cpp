@@ -630,7 +630,7 @@ void ArticulationMapEditorModel::newMap()
 //! attached by Apply or OK
 void ArticulationMapEditorModel::removeTargetTrackMap()
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!m_targetTrack || !maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
         return;
@@ -863,7 +863,7 @@ std::optional<InstrumentTrackId> ArticulationMapEditorModel::targetTrackToUpdate
         return std::nullopt;
     }
 
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
         return std::nullopt;
@@ -945,7 +945,7 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
     // a track without a map yet (New…) gets the edited one only through Apply or OK
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);
 
@@ -959,7 +959,7 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
         playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
             updateInstrumentEditorState();
         });
-        if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
+        if (const project::INotationProjectPtr project = projectSession()->project()) {
             project->audioSettings()->trackInputParamsChanged().onReceive(this, [this](const engraving::InstrumentTrackId&) {
                 updateInstrumentEditorState();
             });
@@ -982,7 +982,7 @@ std::optional<instrumenteditor::Target> ArticulationMapEditorModel::instrumentEd
         return std::nullopt;
     }
 
-    return instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *m_targetTrack);
+    return instrumenteditor::target(projectSession()->project(), playbackController().get(), *m_targetTrack);
 }
 
 void ArticulationMapEditorModel::updateInstrumentEditorState()
@@ -1020,7 +1020,7 @@ void ArticulationMapEditorModel::sendArticulation(int row)
         return;
     }
 
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const project::INotationProjectPtr project = projectSession()->project();
     if (!project || !project->masterNotation() || playbackController()->isPlaying()) {
         return;
     }
@@ -1039,7 +1039,7 @@ void ArticulationMapEditorModel::openInstrumentEditor()
         return;
     }
 
-    instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target);
+    instrumenteditor::dispatch(commandDispatcher().get(), projectSession()->project(), *target);
 }
 
 void ArticulationMapEditorModel::apply()
@@ -1090,7 +1090,7 @@ bool ArticulationMapEditorModel::applyToTrack()
 //! a map yet, opened from its "New…" menu item, gets it attached)
 void ArticulationMapEditorModel::reloadTracksUsingFile(const io::path_t& path, const std::optional<InstrumentTrackId>& alsoTrack)
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!maps || !maps->data()) {
         return;

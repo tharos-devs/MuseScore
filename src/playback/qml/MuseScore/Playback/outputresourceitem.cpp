@@ -194,7 +194,7 @@ void OutputResourceItem::updateCurrentFxParams(const AudioResourceMeta& newMeta,
     if (byUser) {
         requestToCloseNativeEditorView();
     } else {
-        setEditorAction(muse::actions::ActionQuery());
+        setEditorCommand({});
     }
 
     audio::AudioFxParams newParams = m_currentFxParams;

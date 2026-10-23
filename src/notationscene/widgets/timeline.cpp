@@ -65,10 +65,13 @@
 #include "notation/inotationundostack.h" // IWYU pragma: keep
 #include "notation/utilities/partutilities.h"
 
+#include "instrumentsscene/instrumentscommands.h"
+
 #include "log.h"
 
 using namespace mu::notation;
 using namespace mu::engraving;
+using namespace mu::instrumentsscene;
 
 using namespace Qt::StringLiterals;
 
@@ -3780,9 +3783,9 @@ void Timeline::initPlaybackCursor()
         updatePlaybackCursor();
     });
 
-    m_lastPlaybackPosition = globalContext()->playbackState()->playbackPosition();
+    m_lastPlaybackPosition = playbackState()->playbackPosition();
 
-    globalContext()->playbackState()->playbackPositionChanged().onReceive(this, [this](muse::audio::secs_t secs) {
+    playbackState()->playbackPositionChanged().onReceive(this, [this](muse::audio::secs_t secs) {
         m_lastPlaybackPosition = secs;
         m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
 
@@ -3791,17 +3794,17 @@ void Timeline::initPlaybackCursor()
         }
     });
 
-    globalContext()->playbackState()->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
+    playbackState()->isPlayingChanged().onReceive(this, [this](bool) {
         onPlaybackStatusChanged();
     });
 }
 
 void Timeline::onPlaybackStatusChanged()
 {
-    m_lastPlaybackPosition = globalContext()->playbackState()->playbackPosition();
+    m_lastPlaybackPosition = playbackState()->playbackPosition();
     m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
 
-    if (globalContext()->playbackState()->isPlaying()) {
+    if (playbackState()->isPlaying()) {
         m_playbackCursorTimer.start();
     } else {
         m_playbackCursorTimer.stop();
@@ -4513,7 +4516,7 @@ void Timeline::updateTimelineTheme()
 
 void Timeline::requestInstrumentDialog()
 {
-    dispatcher()->dispatch("instruments");
+    commandDispatcher()->dispatch(INSTRUMENTS_SELECT_COMMAND);
 }
 
 INotationInteractionPtr Timeline::interaction() const

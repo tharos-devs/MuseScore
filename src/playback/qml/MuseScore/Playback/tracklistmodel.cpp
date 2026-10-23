@@ -384,7 +384,7 @@ void TrackListModel::rebuildMetronomeChannelItem()
     MixerChannelItem* oldItem = m_metronomeChannelItem;
     m_metronomeChannelItem = nullptr;
 
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     const INotationPlaybackPtr notationPlayback = project ? project->masterNotation()->playback() : nullptr;
     if (notationPlayback && controller()->isPlaybackInited()) {
         const InstrumentTrackId& metronomeTrackId = notationPlayback->metronomeTrackId();
@@ -870,7 +870,7 @@ void TrackListModel::applyMetronomeColor(const QColor& color, const Translatable
 
 void TrackListModel::chooseVideoFile()
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     const IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
     if (!settings) {
         return;
@@ -900,7 +900,7 @@ void TrackListModel::chooseVideoFile()
 
 void TrackListModel::chooseReferenceAudioFile()
 {
-    if (const INotationProjectPtr project = context()->currentProject()) {
+    if (const INotationProjectPtr project = context()->project()) {
         audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), controller().get(), project);
     }
 }
@@ -1887,12 +1887,12 @@ INotationPtr TrackListModel::currentNotation() const
 
 IProjectAudioSettingsPtr TrackListModel::audioSettings() const
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     return project ? project->audioSettings() : nullptr;
 }
 
 IProjectUndoStackPtr TrackListModel::projectUndoStack() const
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     return project ? project->undoStack() : nullptr;
 }

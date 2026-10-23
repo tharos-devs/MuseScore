@@ -45,10 +45,10 @@ std::string PlaybackCommandsState::moduleName() const
 
 void PlaybackCommandsState::init()
 {
-    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+    projectSession()->projectChanged().onNotify(this, [this]() {
         updateCommandStates();
 
-        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::INotationProjectPtr project = projectSession()->project();
         if (project && project->audioSyncSettings()) {
             project->audioSyncSettings()->settingsChanged().onNotify(this, [this]() {
                 updateCommandStates({ REMOVE_REFERENCE_AUDIO_COMMAND, AUDIO_SYNC_ADD_POINT_COMMAND });
@@ -65,8 +65,8 @@ void PlaybackCommandsState::init()
         }
     });
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
-        const INotationPtr currNotation = globalContext()->currentNotation();
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
+        const INotationPtr currNotation = projectSession()->currentNotation();
         if (!currNotation) {
             return;
         }
@@ -159,8 +159,8 @@ void PlaybackCommandsState::init()
 
 void PlaybackCommandsState::deinit()
 {
-    globalContext()->currentProjectChanged().disconnect(this);
-    globalContext()->currentNotationChanged().disconnect(this);
+    projectSession()->projectChanged().disconnect(this);
+    projectSession()->currentNotationChanged().disconnect(this);
     if (interactive()) {
         interactive()->opened().disconnect(this);
     }
@@ -205,18 +205,18 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
     if (command == LOAD_REFERENCE_AUDIO_COMMAND) {
         return CommandState(true, false);
     } else if (command == AUDIO_SYNC_TOGGLE_COMMAND) {
-        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::INotationProjectPtr project = projectSession()->project();
         notation::INotationAutomationPtr automation = project && project->masterNotation()
                                                       ? project->masterNotation()->automation() : nullptr;
         return CommandState(automation != nullptr, automation && automation->isAudioSyncEnabled());
     } else if (command == AUDIO_SYNC_ADD_POINT_COMMAND) {
-        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::INotationProjectPtr project = projectSession()->project();
         notation::INotationAutomationPtr automation = project && project->masterNotation()
                                                       ? project->masterNotation()->automation() : nullptr;
         const bool hasAudio = project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid();
         return CommandState(hasAudio && automation && automation->isAudioSyncEnabled(), false);
     } else if (command == REMOVE_REFERENCE_AUDIO_COMMAND) {
-        project::INotationProjectPtr project = globalContext()->currentProject();
+        project::INotationProjectPtr project = projectSession()->project();
         return CommandState(project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid(), false);
     }
 
@@ -227,7 +227,7 @@ CommandState PlaybackCommandsState::commandState(const Command& command) const
     if (command == PLAY_COMMAND) {
         return CommandState(true, playbackController()->isPlaying());
     } else if (command == PLAY_SELECTION_COMMAND) {
-        const INotationPtr currNotation = globalContext()->currentNotation();
+        const INotationPtr currNotation = projectSession()->currentNotation();
         const INotationInteractionPtr interaction = currNotation ? currNotation->interaction() : nullptr;
         bool enabled = interaction && !interaction->isEditingElement();
         return CommandState(enabled, false);
@@ -274,7 +274,7 @@ async::Channel<Command, CommandState> PlaybackCommandsState::commandStateChanged
 
 bool PlaybackCommandsState::isProjectOpened() const
 {
-    if (!globalContext()->currentProject()) {
+    if (!projectSession()->project()) {
         return false;
     }
 

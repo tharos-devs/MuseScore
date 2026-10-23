@@ -53,7 +53,6 @@ using namespace mu::palette;
 using namespace mu::instrumentsscene;
 using namespace muse;
 using namespace muse::uicomponents;
-using namespace muse::actions;
 
 void NotationContextMenuModel::loadItems(int elementType)
 {
@@ -225,7 +224,7 @@ MenuItemList NotationContextMenuModel::makeMeasureItems()
     items << makeMenuItem(OPEN_STAFF_PROPERTIES_COMMAND);
     items << makeSeparator();
     items << makeMenu(TranslatableString("notation", "Insert measures"), makeInsertMeasuresItems());
-    if (globalContext()->currentNotation()->viewMode() == mu::notation::ViewMode::PAGE) {
+    if (projectSession()->currentNotation()->viewMode() == mu::notation::ViewMode::PAGE) {
         items << makeMenu(TranslatableString("notation", "Move measures"), makeMoveMeasureItems());
     }
     items << makeMenuItem(MAKE_INTO_SYSTEM_COMMAND);
@@ -555,7 +554,7 @@ bool NotationContextMenuModel::canSelectSimilarInRange() const
 bool NotationContextMenuModel::isVstInstrumentStaff() const
 {
     const INotationInteraction::HitElementContext& ctx = hitElementContext();
-    return ctx.staff && midicc::isVstInstrument(globalContext()->currentProject(), ctx.staff->part());
+    return ctx.staff && midicc::isVstInstrument(projectSession()->project(), ctx.staff->part());
 }
 
 MenuItemList NotationContextMenuModel::makeMidiCcItems()
@@ -571,13 +570,13 @@ MenuItemList NotationContextMenuModel::makeMidiCcItems()
 MenuItem* NotationContextMenuModel::makeArticulationMapMenu()
 {
     const INotationInteraction::HitElementContext& ctx = hitElementContext();
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (!ctx.staff || !ctx.staff->part() || !masterNotation) {
         return nullptr;
     }
 
     const mu::engraving::InstrumentTrackId trackId = *actionsTrackId();
-    if (!midicc::isVstTrack(globalContext()->currentProject(), trackId)) {
+    if (!midicc::isVstTrack(projectSession()->project(), trackId)) {
         return nullptr;
     }
 
@@ -671,7 +670,7 @@ MenuItem* NotationContextMenuModel::makeMidiCcMenu()
     },
         [this](const rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
-        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(),
+        notationConfiguration().get(), projectSession()->masterNotation(), projectSession()->project(),
         "automation-midi-cc");
 }
 
@@ -694,31 +693,31 @@ MenuItem* NotationContextMenuModel::makeAutomationTypeItem(AutomationType type, 
 
 INotationInteractionPtr NotationContextMenuModel::interaction() const
 {
-    INotationPtr notation = globalContext()->currentNotation();
+    INotationPtr notation = projectSession()->currentNotation();
     return notation ? notation->interaction() : nullptr;
 }
 
 INotationSelectionPtr NotationContextMenuModel::selection() const
 {
-    INotationPtr notation = globalContext()->currentNotation();
+    INotationPtr notation = projectSession()->currentNotation();
     return notation ? notation->interaction()->selection() : nullptr;
 }
 
 INotationAutomationPtr NotationContextMenuModel::automation() const
 {
-    IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->automation() : nullptr;
 }
 
 INotationNoteOffsetsPtr NotationContextMenuModel::noteOffsets() const
 {
-    IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->noteOffsets() : nullptr;
 }
 
 INotationNoteVelocityPtr NotationContextMenuModel::noteVelocity() const
 {
-    IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->noteVelocity() : nullptr;
 }
 

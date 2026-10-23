@@ -445,7 +445,7 @@ void NotationAutomationController::init()
         rebuildAllPolylines();
     }, Asyncable::Mode::SetReplace /* FIXME */);
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onCurrentNotationChanged();
     }, Asyncable::Mode::SetReplace /* FIXME */);
 
@@ -502,7 +502,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     }
 
     const AutomationCurveKey curveKey = currentCurveKeyFor(staff);
-    if (curveKey.type == AutomationType::MidiCC && !midicc::isVstInstrument(globalContext()->currentProject(), staff->part())) {
+    if (curveKey.type == AutomationType::MidiCC && !midicc::isVstInstrument(projectSession()->project(), staff->part())) {
         // MIDI CCs only reach VST instruments
         return nullptr;
     }
@@ -1095,7 +1095,7 @@ void NotationAutomationController::onCurrentNotationChanged()
     }
 
     // MIDI CC curves are only drawn on VST instruments, so switching an instrument's sound source changes which staves get one
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const project::INotationProjectPtr project = projectSession()->project();
     if (project && project->audioSettings()) {
         project->audioSettings()->trackInputParamsChanged().onReceive(this, [this](const InstrumentTrackId&) {
             if (currentAutomationType() == AutomationType::MidiCC) {
@@ -2096,13 +2096,13 @@ AutomationCurveKey NotationAutomationController::currentCurveKeyFor(const Staff*
 
 INotationAutomationPtr NotationAutomationController::automation() const
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->automation() : nullptr;
 }
 
 INotationPtr NotationAutomationController::currentNotation() const
 {
-    return globalContext()->currentNotation();
+    return projectSession()->currentNotation();
 }
 
 //! NOTE: while a MIDI CC take is being recorded, its curves show a preview, not the stored points: not editable

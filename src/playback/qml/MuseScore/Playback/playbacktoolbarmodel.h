@@ -29,7 +29,6 @@
 #include "iplaybackcontroller.h"
 #include "iplaybackconfiguration.h"
 #include "notation/inotationconfiguration.h"
-#include "context/iglobalcontext.h"
 
 namespace mu::playback {
 class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
@@ -57,7 +56,6 @@ class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
     muse::ContextInject<IPlaybackController> playbackController = { this };
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
 
 public:
     explicit PlaybackToolBarModel(QObject* parent = nullptr);

@@ -22,6 +22,8 @@
 
 #include "projectloadingmodel.h"
 
+#include "project/projectcommands.h"
+
 #include <algorithm>
 
 #include "async/async.h"
@@ -80,8 +82,8 @@ void ProjectLoadingModel::cancel()
     //! project isn't closed (e.g. no project yet), this window closes once nothing is left to load (see
     //! checkFinished()). Later: not from the window's button click
     muse::async::Async::call(this, [this]() {
-        if (context()->currentProject()) {
-            dispatcher()->dispatch("file-close");
+        if (context()->project()) {
+            commandDispatcher()->dispatch(mu::project::PROJECT_CLOSE_COMMAND);
         }
     });
 }
@@ -95,7 +97,7 @@ QString ProjectLoadingModel::message() const
 //! and master: each one is loaded and its saved state restored on the main thread, the long part of a project's loading
 size_t ProjectLoadingModel::projectPluginCount() const
 {
-    const project::INotationProjectPtr project = context()->currentProject();
+    const project::INotationProjectPtr project = context()->project();
     if (!project) {
         return 0;
     }
@@ -136,7 +138,7 @@ size_t ProjectLoadingModel::projectPluginCount() const
 
 void ProjectLoadingModel::updateMessage()
 {
-    if (!m_pluginCount && context()->currentProject()) {
+    if (!m_pluginCount && context()->project()) {
         m_pluginCount = projectPluginCount();
     }
 
@@ -154,7 +156,7 @@ void ProjectLoadingModel::updateMessage()
 
 bool ProjectLoadingModel::isLoading() const
 {
-    if (!context()->currentProject()) {
+    if (!context()->project()) {
         return true;
     }
 

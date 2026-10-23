@@ -30,7 +30,6 @@
 using namespace muse;
 using namespace mu::notation;
 using namespace muse::uicomponents;
-using namespace muse::actions;
 
 // a SplitButton grouping the note offset, note velocity and articulation editors
 static constexpr int EXPRESSION_ITEM_TYPE = ToolBarItemType::USER_TYPE + 1;
@@ -79,7 +78,7 @@ void NotationToolBarModel::load()
 
     setItems(items);
 
-    context()->currentMasterNotationChanged().onNotify(this, [this]() {
+    context()->masterNotationChanged().onNotify(this, [this]() {
         load();
     });
 

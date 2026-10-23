@@ -35,7 +35,7 @@
 #include <qqmlintegration.h>
 
 #include "async/asyncable.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "modularity/ioc.h"
 #include "notation/inotationconfiguration.h"
@@ -128,7 +128,7 @@ class AudioSyncView : public QQuickPaintedItem, public muse::Contextable, public
 
     QML_ELEMENT
 
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;

@@ -37,7 +37,7 @@
 #include "interactive/iinteractive.h"
 #include "media/ivideoencoderresolver.h"
 #include "media/ivideodecoderfactory.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "importexport/imagesexport/iimagesexportconfiguration.h"
 #include "importexport/musicxml/imusicxmlconfiguration.h"
 #include "importexport/midi/imidiconfiguration.h"
@@ -140,7 +140,7 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     muse::GlobalInject<INotationWritersRegister> writers;
     muse::GlobalInject<muse::media::IVideoEncoderResolver> videoEncoderResolver;
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
     muse::ContextInject<IExportProjectScenario> exportProjectScenario = { this };
 
 public:

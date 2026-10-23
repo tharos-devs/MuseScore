@@ -32,9 +32,8 @@
 #include "async/asyncable.h"
 
 #include "modularity/ioc.h"
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
 #include "rcommand/icommanddispatcher.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "iplaybackconfiguration.h"
 #include "iplaybackcontroller.h"
@@ -124,10 +123,9 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     muse::GlobalInject<IPlaybackConfiguration> configuration;
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
-    muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
+    muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
 
 public:
@@ -509,7 +507,7 @@ protected:
     //! bus is reassigned via the dropdown
     int resolveNewBlankAuxSendItemOrder(const QMap<int, AuxSendItem*>& items) const;
 
-    void openEditor(AbstractAudioResourceItem* item, const muse::actions::ActionQuery& action);
+    void openEditor(AbstractAudioResourceItem* item, const muse::rcommand::CommandQuery& command);
     void closeEditor(AbstractAudioResourceItem* item);
 
     bool askAboutChangingSound();

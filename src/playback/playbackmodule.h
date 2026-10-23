@@ -31,7 +31,6 @@ class PlaybackConfiguration;
 class PlaybackController;
 class MidiCcRecorder;
 class SoundProfilesRepository;
-class PlaybackUiActions;
 class PlaybackCommandsController;
 class PlaybackModule : public muse::modularity::IModuleSetup
 {
@@ -64,6 +63,5 @@ private:
     std::shared_ptr<PlaybackController> m_playbackController;
     std::shared_ptr<MidiCcRecorder> m_midiCcRecorder;
     std::shared_ptr<SoundProfilesRepository> m_soundProfileRepo;
-    std::shared_ptr<PlaybackUiActions> m_playbackUiActions;
 };
 }

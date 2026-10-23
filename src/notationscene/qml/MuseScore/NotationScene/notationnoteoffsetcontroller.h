@@ -26,7 +26,7 @@
 #include <optional>
 #include <QQuickItem>
 
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "async/asyncable.h"
 #include "notation/notationtypes.h"
 
@@ -41,7 +41,7 @@ class NoteOffsetOverlay;
 
 class NotationNoteOffsetController : public muse::Contextable, public muse::async::Asyncable
 {
-    muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<mu::project::IProjectSession> projectSession = { this };
 
 public:
     NotationNoteOffsetController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx);

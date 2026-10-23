@@ -27,7 +27,7 @@
 
 #include "async/asyncable.h"
 #include "audio/main/iplayback.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "modularity/ioc.h"
 
 #include "iplaybackcontroller.h"
@@ -43,7 +43,7 @@ class AudioSyncChannelModel : public QObject, public muse::Contextable, public m
     Q_PROPERTY(MixerChannelItem * channelItem READ channelItem NOTIFY channelItemChanged)
     QML_ELEMENT
 
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
 

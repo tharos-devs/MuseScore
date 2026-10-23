@@ -58,4 +58,10 @@ inline static const muse::rcommand::Command DOCK_TOGGLE_VIDEO_PANEL_COMMAND("com
 inline static const muse::rcommand::Command DOCK_TOGGLE_TRACK_LIST_COMMAND("command://app/dock/toggle-track-list");
 inline static const muse::rcommand::Command DOCK_TOGGLE_AUDIO_SYNC_PANEL_COMMAND("command://app/dock/toggle-audio-sync-panel");
 inline static const muse::rcommand::Command DOCK_TOGGLE_SECONDARY_WINDOW_COMMAND("command://app/dock/toggle-secondary-window");
+
+// video commands
+inline static const muse::rcommand::Command VIDEO_TIMECODE_OFF_COMMAND("command://app/video/timecode-off");
+inline static const muse::rcommand::Command VIDEO_TIMECODE_ABOVE_BARS_COMMAND("command://app/video/timecode-above-bars");
+inline static const muse::rcommand::Command VIDEO_TIMECODE_BELOW_BARS_COMMAND("command://app/video/timecode-below-bars");
+inline static const muse::rcommand::Command SHOW_VIDEO_HITPOINTS_COMMAND("command://app/video/show-hitpoints");
 }

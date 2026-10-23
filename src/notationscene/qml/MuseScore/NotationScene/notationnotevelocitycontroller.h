@@ -28,7 +28,7 @@
 #include <QPointer>
 #include <QQuickItem>
 
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
 #include "notation/inotationconfiguration.h"
@@ -47,7 +47,7 @@ class NoteVelocityOverlay;
 
 class NotationNoteVelocityController : public muse::Contextable, public muse::async::Asyncable
 {
-    muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<mu::project::IProjectSession> projectSession = { this };
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
 

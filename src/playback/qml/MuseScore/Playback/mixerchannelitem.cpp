@@ -40,9 +40,12 @@
 #include "auxbuseditor.h"
 #include "soundtrackchannel.h"
 
+#include "vst/vstcommands.h"
+
 using namespace mu::playback;
 using namespace muse;
 using namespace muse::audio;
+using namespace muse::vst;
 using namespace mu::project;
 
 static constexpr volume_dbfs_t MAX_DISPLAYED_DBFS = volume_dbfs_t::make(0.f);   // 100%
@@ -52,9 +55,6 @@ static constexpr float BALANCE_SCALING_FACTOR = 100.f;
 
 static constexpr int OUTPUT_RESOURCE_COUNT_LIMIT = 5;
 static constexpr int AUX_SEND_SLOT_LIMIT = 5;
-
-static const std::string VSTFX_EDITOR_ACTION("action://vst/fx_editor");
-static const std::string VSTI_EDITOR_ACTION("action://vst/instrument_editor");
 
 static const std::string TRACK_ID_KEY("trackId");
 static const std::string RESOURCE_ID_KEY("resourceId");
@@ -541,7 +541,7 @@ void MixerChannelItem::applyAuxSendsOrder(const std::vector<aux_channel_idx_t>& 
 
 void MixerChannelItem::persistAuxSendsOrder(const std::vector<aux_channel_idx_t>& order)
 {
-    const project::INotationProjectPtr project = context()->currentProject();
+    const project::INotationProjectPtr project = context()->project();
     if (!project) {
         return;
     }
@@ -732,7 +732,7 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
 
     playback()->params(m_trackId)
     .onResolve(this, [this, instrumentTrackId](const TrackParams& params) {
-        const project::INotationProjectPtr project = context()->currentProject();
+        const project::INotationProjectPtr project = context()->project();
         if (!project) {
             return;
         }
@@ -785,7 +785,7 @@ void MixerChannelItem::bindInstrumentTrack(const engraving::InstrumentTrackId& i
 
         //! NOTE Only persist volume/balance/gain here; solo/mute/forceMute are owned by
         //! INotationSoloMuteState and must not be echoed back into the saved output params.
-        const project::INotationProjectPtr project = context()->currentProject();
+        const project::INotationProjectPtr project = context()->project();
         if (!project) {
             return;
         }
@@ -875,7 +875,7 @@ void MixerChannelItem::bindAuxBus(aux_channel_idx_t index)
 {
     setAuxBusIndex(index);
 
-    const project::INotationProjectPtr project = context()->currentProject();
+    const project::INotationProjectPtr project = context()->project();
     if (!project) {
         return;
     }
@@ -1649,7 +1649,7 @@ void MixerChannelItem::setSelected(bool selected)
 
 QString MixerChannelItem::articulationMapName() const
 {
-    const project::INotationProjectPtr project = context()->currentProject();
+    const project::INotationProjectPtr project = context()->project();
     const notation::INotationArticulationMapsPtr maps = project && project->masterNotation()
                                                         ? project->masterNotation()->articulationMaps() : nullptr;
     const notation::ExpressionMap* map = maps && maps->data() ? maps->data()->map(m_instrumentTrackId) : nullptr;
@@ -1743,7 +1743,7 @@ bool MixerChannelItem::handleTrackPresetMenuItem(const QString& itemId) const
 
 mu::notation::INotationPlaybackPtr MixerChannelItem::notationPlayback() const
 {
-    project::INotationProjectPtr project = context()->currentProject();
+    project::INotationProjectPtr project = context()->project();
     return project ? project->masterNotation()->playback() : nullptr;
 }
 
@@ -1752,7 +1752,7 @@ void MixerChannelItem::updateHasAutomationFlags()
     bool hasVolumeAutomation = false;
     bool hasBalanceAutomation = false;
 
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     const notation::AutomationDataConstPtr automationData
         = (project && m_instrumentTrackId.isValid()) ? project->masterNotation()->automation()->automationData() : nullptr;
 
@@ -1788,7 +1788,7 @@ void MixerChannelItem::subscribeOnAutomationChanges()
         return;
     }
 
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     const notation::AutomationDataConstPtr automationData = project ? project->masterNotation()->automation()->automationData() : nullptr;
     if (!automationData) {
         return;
@@ -1815,7 +1815,7 @@ void MixerChannelItem::subscribeOnAutomationChanges()
     });
 
     //! NOTE: the curves move the fader and the knob as the playback position goes (playing, seeking, stopping)
-    context()->playbackState()->playbackPositionChanged().onReceive(this, [this](secs_t) {
+    playbackController()->playbackPositionChanged().onReceive(this, [this](secs_t) {
         updateAutomatedControlParams();
     });
 }
@@ -1827,7 +1827,7 @@ void MixerChannelItem::updateAutomatedControlParams()
     }
 
     const AutomatedControlParams params
-        = playbackController()->automatedControlParamsAt(m_instrumentTrackId, context()->playbackState()->playbackPosition());
+        = playbackController()->automatedControlParamsAt(m_instrumentTrackId, playbackController()->playbackPosition());
 
     if (m_hasVolumeAutomation) {
         setDisplayedVolumeLevel(params.volume.raw());
@@ -1958,7 +1958,7 @@ InputResourceItem* MixerChannelItem::buildInputResourceItem()
             return;
         }
 
-        actions::ActionQuery aq(VSTI_EDITOR_ACTION);
+        rcommand::CommandQuery aq(VST_OPEN_INSTRUMENT_EDITOR_COMMAND);
         aq.addParam(TRACK_ID_KEY, Val(m_trackId));
         aq.addParam(RESOURCE_ID_KEY, Val(newItem->params().resourceMeta.id));
 
@@ -1997,7 +1997,7 @@ OutputResourceItem* MixerChannelItem::buildOutputResourceItem(const audio::Audio
             return;
         }
 
-        actions::ActionQuery aq(VSTFX_EDITOR_ACTION);
+        rcommand::CommandQuery aq(VST_OPEN_FX_EDITOR_COMMAND);
 
         aq.addParam(TRACK_ID_KEY, Val(m_trackId));
         aq.addParam(RESOURCE_ID_KEY, Val(newItem->params().resourceMeta.id));
@@ -2369,26 +2369,26 @@ int MixerChannelItem::resolveNewBlankAuxSendItemOrder(const QMap<int, AuxSendIte
     return AUX_SEND_SLOT_LIMIT - 1;
 }
 
-void MixerChannelItem::openEditor(AbstractAudioResourceItem* item, const actions::ActionQuery& action)
+void MixerChannelItem::openEditor(AbstractAudioResourceItem* item, const rcommand::CommandQuery& command)
 {
-    if (item->editorAction() != action) {
-        if (item->editorAction().isValid()) {
+    if (item->editorCommand() != command) {
+        if (item->editorCommand().isValid()) {
             // make and send close
-            actions::ActionQuery closeAction = item->editorAction();
-            closeAction.addParam("operation", Val("close"));
-            closeAction.addParam("sync", Val(true));
-            dispatcher()->dispatch(closeAction);
+            rcommand::CommandQuery closeCommand = item->editorCommand();
+            closeCommand.addParam("operation", Val("close"));
+            closeCommand.addParam("sync", Val(true));
+            commandDispatcher()->dispatch(closeCommand);
         }
         // set new action
-        item->setEditorAction(action);
+        item->setEditorCommand(command);
     }
 
-    dispatcher()->dispatch(action);
+    commandDispatcher()->dispatch(command);
 
     //! NOTE: some plugins change their state without reporting it (e.g. Kontakt's solo/mute): once its window is
     //! open, the project may have changed - and saving reads the plugins' current state (see refreshAudioPluginStates).
     //! Through the audio settings, so that an undo back to a clean stack doesn't make the project look unchanged
-    if (project::INotationProjectPtr project = context()->currentProject()) {
+    if (project::INotationProjectPtr project = context()->project()) {
         if (project::IProjectAudioSettingsPtr settings = project->audioSettings()) {
             settings->markAsChanged();
         }
@@ -2403,24 +2403,24 @@ void MixerChannelItem::closeInstrumentEditor()
         return;
     }
 
-    actions::ActionQuery closeAction(VSTI_EDITOR_ACTION);
-    closeAction.addParam(TRACK_ID_KEY, Val(m_trackId));
-    closeAction.addParam(RESOURCE_ID_KEY, Val(m_inputResourceItem->params().resourceMeta.id));
-    closeAction.addParam("operation", Val("close"));
-    dispatcher()->dispatch(closeAction);
+    rcommand::CommandQuery closeCommand(VST_OPEN_INSTRUMENT_EDITOR_COMMAND);
+    closeCommand.addParam(TRACK_ID_KEY, Val(m_trackId));
+    closeCommand.addParam(RESOURCE_ID_KEY, Val(m_inputResourceItem->params().resourceMeta.id));
+    closeCommand.addParam("operation", Val("close"));
+    commandDispatcher()->dispatch(closeCommand);
 
-    m_inputResourceItem->setEditorAction(UriQuery());
+    m_inputResourceItem->setEditorCommand({});
 }
 
 void MixerChannelItem::closeEditor(AbstractAudioResourceItem* item)
 {
     // make and send close
-    actions::ActionQuery closeAction = item->editorAction();
-    closeAction.addParam("operation", Val("close"));
-    closeAction.addParam("sync", Val(true));
-    dispatcher()->dispatch(closeAction);
+    rcommand::CommandQuery closeCommand = item->editorCommand();
+    closeCommand.addParam("operation", Val("close"));
+    closeCommand.addParam("sync", Val(true));
+    commandDispatcher()->dispatch(closeCommand);
 
-    item->setEditorAction(UriQuery());
+    item->setEditorCommand({});
 }
 
 bool MixerChannelItem::askAboutChangingSound()
@@ -2518,7 +2518,7 @@ const QMap<int, AuxSendItem*>& MixerChannelItem::auxSendItems() const
 
 QString MixerChannelItem::auxBusDisplayName(aux_channel_idx_t index) const
 {
-    project::INotationProjectPtr project = context()->currentProject();
+    project::INotationProjectPtr project = context()->project();
     if (project) {
         muse::String customName = project->audioSettings()->auxName(index);
         if (!customName.empty()) {

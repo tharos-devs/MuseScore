@@ -570,7 +570,7 @@ Ret NotationProject::save(const muse::io::path_t& path, SaveMode saveMode, bool 
                 }
             }
             if (timestampsUpdated) {
-                globalContext()->currentNotation()->notationChanged().send(muse::RectF());
+                projectSession()->currentNotation()->notationChanged().send(muse::RectF());
             }
         }
     } break;
@@ -875,7 +875,7 @@ Ret NotationProject::doSave(const muse::io::path_t& path, engraving::MscIoMode i
 //! (e.g. Kontakt's solo/mute). Only the current project's plugins are loaded
 void NotationProject::refreshAudioPluginStates()
 {
-    if (globalContext() && globalContext()->currentProject().get() == this && playbackController()) {
+    if (projectSession() && projectSession()->project().get() == this && playbackController()) {
         playbackController()->refreshAudioPluginStates();
     }
 }

@@ -191,11 +191,11 @@ void MidiCcRecorder::init()
         }
     });
 
-    globalContext()->playbackState()->playbackPositionChanged().onReceive(this, [this](secs_t position) {
+    playbackController()->playbackPositionChanged().onReceive(this, [this](secs_t position) {
         onPlaybackPositionChanged(position);
     });
 
-    globalContext()->currentMasterNotationChanged().onNotify(this, [this]() {
+    projectSession()->masterNotationChanged().onNotify(this, [this]() {
         // The previous score is gone: its take can't be written anymore
         clearPreviews();
         clearTake();
@@ -203,14 +203,14 @@ void MidiCcRecorder::init()
     });
 
     subscribeToSelection();
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         subscribeToSelection();
     });
 }
 
 void MidiCcRecorder::subscribeToSelection()
 {
-    const notation::INotationPtr notation = globalContext()->currentNotation();
+    const notation::INotationPtr notation = projectSession()->currentNotation();
     if (!notation || !notation->interaction()) {
         return;
     }
@@ -218,7 +218,7 @@ void MidiCcRecorder::subscribeToSelection()
     // Guarded: the subscriptions to the previous notations stay alive
     const notation::INotation* thisNotation = notation.get();
     notation->interaction()->selectionChanged().onNotify(this, [this, thisNotation]() {
-        if (thisNotation == globalContext()->currentNotation().get()) {
+        if (thisNotation == projectSession()->currentNotation().get()) {
             followSelection();
         }
     }, Asyncable::Mode::SetReplace);
@@ -288,9 +288,9 @@ void MidiCcRecorder::setArmed(bool armed)
 
 std::optional<MidiCcRecorder::Target> MidiCcRecorder::resolveTarget() const
 {
-    const notation::INotationPtr notation = globalContext()->currentNotation();
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const notation::INotationPtr notation = projectSession()->currentNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    const project::INotationProjectPtr project = projectSession()->project();
     if (!notation || !masterNotation || !project || !project->audioSettings()) {
         return std::nullopt;
     }
@@ -347,7 +347,7 @@ void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
         return;
     }
 
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (!masterNotation) {
         return;
     }
@@ -401,7 +401,7 @@ void MidiCcRecorder::onMidiEventReceived(const midi::Event& event)
 
 std::optional<int> MidiCcRecorder::currentUtick() const
 {
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const MasterScore* score = masterNotation ? masterNotation->masterScore() : nullptr;
     if (!score || !m_lastReportedPosition) {
         return std::nullopt;
@@ -479,7 +479,7 @@ AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, c
 
 void MidiCcRecorder::publishPreviews()
 {
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     const notation::AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
     if (!data || !m_target) {
@@ -506,7 +506,7 @@ void MidiCcRecorder::clearPreviews()
     m_previewTimer.stop();
     m_previewChangedRanges.clear();
 
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (const notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr) {
         automation->clearRecordingPreviews();
     }
@@ -520,7 +520,7 @@ void MidiCcRecorder::clearTake()
 
 void MidiCcRecorder::commitTake()
 {
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
     const notation::AutomationDataConstPtr data = automation ? automation->automationData() : nullptr;
     if (m_take.empty() || !m_target || !data) {

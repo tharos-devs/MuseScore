@@ -34,7 +34,7 @@
 #include "modularity/ioc.h"
 #include "async/asyncable.h"
 #include "audio/main/iplayback.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackconfiguration.h"
 #include "project/iprojectaudiosettings.h"
@@ -69,7 +69,7 @@ class MixerPanelModel : public QAbstractListModel, public QQmlParserStatus, publ
     muse::GlobalInject<IPlaybackConfiguration> configuration;
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
     muse::ContextInject<IPlaybackController> controller = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
 
 public:

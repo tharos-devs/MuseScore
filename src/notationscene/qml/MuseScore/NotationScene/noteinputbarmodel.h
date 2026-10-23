@@ -29,8 +29,9 @@
 
 #include "modularity/ioc.h"
 #include "rcommand/icommandsregister.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "ui/iuistate.h"
+#include "shortcuts_v2/icommandshortcutsregister.h"
 #include "notationscene/inotationcommandscontroller.h"
 #include "notation/inotationconfiguration.h"
 
@@ -51,12 +52,10 @@ class NoteInputBarModel : public muse::uicomponents::AbstractMenuModel, public Q
 
     muse::GlobalInject<muse::rcommand::ICommandsRegister> commandsRegister;
     muse::ContextInject<muse::ui::IUiState> uiState = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
     muse::ContextInject<INotationCommandsController> commandsController = { this };
     muse::GlobalInject<INotationConfiguration> configuration;
-#ifndef MUSE_MODULE_SHORTCUTS_V2
-    muse::ContextInject<muse::shortcuts::IShortcutsRegister> noteInputShortcutsRegister = { this };
-#endif
+    muse::GlobalInject<muse::shortcuts::ICommandShortcutsRegister> commandShortcutsRegister;
 
 public:
     explicit NoteInputBarModel(QObject* parent = nullptr);

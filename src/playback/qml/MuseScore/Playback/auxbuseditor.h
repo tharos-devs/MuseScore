@@ -31,7 +31,7 @@
 #include "async/asyncable.h"
 #include "async/channel.h"
 #include "modularity/ioc.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
 
@@ -46,7 +46,7 @@ class AuxBusEditor : public QObject, public muse::async::Asyncable, public muse:
     Q_OBJECT
 
     muse::ContextInject<IPlaybackController> controller = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
 
 public:
     //! NOTE: alive while a panel holds it

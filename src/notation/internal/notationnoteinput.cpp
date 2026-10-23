@@ -325,6 +325,9 @@ EngravingItem* NotationNoteInput::resolveNoteInputStartPosition() const
 
 bool NotationNoteInput::shouldSetupInputNote() const
 {
+    if (!score()->inputState().isValid()) {
+        return false;
+    }
     return usingNoteInputMethod(NoteInputMethod::BY_DURATION)
            || usingNoteInputMethod(NoteInputMethod::RHYTHM);
 }
@@ -339,8 +342,12 @@ void NotationNoteInput::setupInputNote()
         return;
     }
 
-    const Fraction tick = is.tick();
     Staff* staff = is.staff();
+    IF_ASSERT_FAILED(staff) {
+        return;
+    }
+
+    const Fraction tick = is.tick();
     NoteVal nval;
 
     if (staff->isTabStaff(tick)) {

@@ -30,7 +30,7 @@
 
 #include "modularity/ioc.h"
 #include "async/asyncable.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "midi/imidiinport.h"
 #include "engraving/types/types.h"
@@ -43,7 +43,7 @@ namespace mu::playback {
 class MidiCcRecorder : public IMidiCcRecorder, public muse::async::Asyncable, public muse::Contextable
 {
     muse::GlobalInject<muse::midi::IMidiInPort> midiInPort;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
 
