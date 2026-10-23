@@ -2392,26 +2392,34 @@ void Score::updateStavesNumberForSystems()
     }
 }
 
+//! NOTE: never an id given before (during this session), even to a staff removed since: a staff added in place of
+//! a removed one must not get its id, so nothing kept for the removed staff (e.g. in the undo history, or not
+//! cleaned up yet) can apply to it
 ID Score::newStaffId() const
 {
-    ID maxId = 0;
+    ID maxId = m_lastNewStaffId;
 
     for (const Staff* staff : score()->staves()) {
         maxId = std::max(maxId, staff->id());
     }
 
-    return maxId + 1;
+    m_lastNewStaffId = maxId + 1;
+    return m_lastNewStaffId;
 }
 
+//! NOTE: never an id given before (during this session), like newStaffId(): what is kept for a removed part (e.g.
+//! its sound, color or Track list folder, until playback finds it removed, or in the undo history) must not apply
+//! to a part added in its place (e.g. a replaced instrument)
 ID Score::newPartId() const
 {
-    ID maxId = 0;
+    ID maxId = m_lastNewPartId;
 
     for (const Part* part : score()->parts()) {
         maxId = std::max(maxId, part->id());
     }
 
-    return maxId + 1;
+    m_lastNewPartId = maxId + 1;
+    return m_lastNewPartId;
 }
 
 //---------------------------------------------------------
