@@ -56,18 +56,43 @@ static void setTargetColor(const IProjectAudioSettingsPtr& settings, const Chann
     settings->setTrackOutputParams(target.instrumentTrackId, params);
 }
 
+static std::optional<muse::audio::TrackId> engineTrackId(const IPlaybackController* playbackController,
+                                                         const ChannelColorChange::Target& target)
+{
+    if (!playbackController) {
+        return std::nullopt;
+    }
+
+    if (target.auxIndex) {
+        const IPlaybackController::AuxTrackIdMap& auxTrackIds = playbackController->auxTrackIdMap();
+        const auto it = auxTrackIds.find(*target.auxIndex);
+        return it != auxTrackIds.end() ? std::optional(it->second) : std::nullopt;
+    }
+
+    const IPlaybackController::InstrumentTrackIdMap& trackIds = playbackController->instrumentTrackIdMap();
+    const auto it = trackIds.find(target.instrumentTrackId);
+    return it != trackIds.end() ? std::optional(it->second) : std::nullopt;
+}
+
 void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const IProjectUndoStackPtr& undoStack,
-                               const std::vector<Target>& targets, const QColor& color, const muse::TranslatableString& actionName)
+                               const std::shared_ptr<IPlaybackController>& playbackController, const std::vector<Target>& targets,
+                               const QColor& color, const muse::TranslatableString& actionName)
 {
     if (!settings) {
         return;
     }
 
-    std::vector<std::pair<Target, QColor> > oldColors;
+    struct OldColor {
+        Target target;
+        std::optional<muse::audio::TrackId> engineTrackId;
+        QColor color;
+    };
+
+    std::vector<OldColor> oldColors;
     for (const Target& target : targets) {
         const std::optional<QColor> oldColor = targetColor(settings, target);
         if (oldColor && *oldColor != color) {
-            oldColors.push_back({ target, *oldColor });
+            oldColors.push_back({ target, engineTrackId(playbackController.get(), target), *oldColor });
             setTargetColor(settings, target, color);
         }
     }
@@ -76,13 +101,22 @@ void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const I
         return;
     }
 
-    undoStack->push(actionName, [settings, oldColors, color]() {
-        for (const auto& [target, oldColor] : oldColors) {
-            setTargetColor(settings, target, color);
+    //! NOTE: not the same track any more (removed, then maybe another one in its place): left as is
+    const auto isSameTrack = [playbackController](const OldColor& oldColor) {
+        return !oldColor.engineTrackId || engineTrackId(playbackController.get(), oldColor.target) == oldColor.engineTrackId;
+    };
+
+    undoStack->push(actionName, [settings, oldColors, color, isSameTrack]() {
+        for (const OldColor& oldColor : oldColors) {
+            if (isSameTrack(oldColor)) {
+                setTargetColor(settings, oldColor.target, color);
+            }
         }
-    }, [settings, oldColors]() {
-        for (const auto& [target, oldColor] : oldColors) {
-            setTargetColor(settings, target, oldColor);
+    }, [settings, oldColors, isSameTrack]() {
+        for (const OldColor& oldColor : oldColors) {
+            if (isSameTrack(oldColor)) {
+                setTargetColor(settings, oldColor.target, oldColor.color);
+            }
         }
     });
 }

@@ -864,8 +864,8 @@ void TrackListModel::applyMetronomeColor(const QColor& color, const Translatable
         return;
     }
 
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), { { m_metronomeChannelItem->instrumentTrackId(), std::nullopt } },
-                              color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(),
+                              { { m_metronomeChannelItem->instrumentTrackId(), std::nullopt } }, color, actionName);
 }
 
 void TrackListModel::chooseVideoFile()
@@ -950,7 +950,7 @@ void TrackListModel::applyTrackColor(int displayRow, const QColor& color, const 
         }
     }
 
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), targets, color, actionName);
 }
 
 void TrackListModel::selectRow(int displayRow, bool toggle, bool range)

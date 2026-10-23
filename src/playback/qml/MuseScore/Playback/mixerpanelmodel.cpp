@@ -222,7 +222,7 @@ void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const mu
     }
 
     //! NOTE: the items pick the new colors up from the audio settings (see setupConnections())
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), targets, color, actionName);
 }
 
 bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerChannelItem* target, int insertIndex, bool duplicate)
