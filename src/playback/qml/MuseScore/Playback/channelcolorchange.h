@@ -47,8 +47,8 @@ public:
         std::optional<muse::audio::aux_channel_idx_t> auxIndex; //! NOTE: set for an aux bus
     };
 
-    //! NOTE: an undo/redo only changes a target that is still the same track (its engine track): a track added later in
-    //! place of a removed one can have the same id (or aux index)
+    //! NOTE: an undo/redo changes the same bus even when it was removed then brought back (another index), never another
+    //! bus that got its index since
     static void apply(const project::IProjectAudioSettingsPtr& settings, const project::IProjectUndoStackPtr& undoStack,
                       const std::shared_ptr<IPlaybackController>& playbackController, const std::vector<Target>& targets,
                       const QColor& color, const muse::TranslatableString& actionName);

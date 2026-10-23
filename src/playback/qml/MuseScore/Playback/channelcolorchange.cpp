@@ -56,22 +56,24 @@ static void setTargetColor(const IProjectAudioSettingsPtr& settings, const Chann
     settings->setTrackOutputParams(target.instrumentTrackId, params);
 }
 
-static std::optional<muse::audio::TrackId> engineTrackId(const IPlaybackController* playbackController,
-                                                         const ChannelColorChange::Target& target)
+//! NOTE: where the bus with this type and display number is now: a bus removed then brought back by an undo gets
+//! another index, and another bus can get its old index; a display number is never given to another bus of the same
+//! type (see auxDisplayNumber())
+static std::optional<muse::audio::aux_channel_idx_t> auxIndexOf(const IProjectAudioSettingsPtr& settings,
+                                                                const IPlaybackController* playbackController,
+                                                                bool isGroupBus, muse::audio::aux_channel_idx_t displayNumber)
 {
     if (!playbackController) {
         return std::nullopt;
     }
 
-    if (target.auxIndex) {
-        const IPlaybackController::AuxTrackIdMap& auxTrackIds = playbackController->auxTrackIdMap();
-        const auto it = auxTrackIds.find(*target.auxIndex);
-        return it != auxTrackIds.end() ? std::optional(it->second) : std::nullopt;
+    for (const auto& [index, trackId] : playbackController->auxTrackIdMap()) {
+        if (settings->isAuxBusGroup(index) == isGroupBus && settings->auxDisplayNumber(index) == displayNumber) {
+            return index;
+        }
     }
 
-    const IPlaybackController::InstrumentTrackIdMap& trackIds = playbackController->instrumentTrackIdMap();
-    const auto it = trackIds.find(target.instrumentTrackId);
-    return it != trackIds.end() ? std::optional(it->second) : std::nullopt;
+    return std::nullopt;
 }
 
 void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const IProjectUndoStackPtr& undoStack,
@@ -84,7 +86,8 @@ void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const I
 
     struct OldColor {
         Target target;
-        std::optional<muse::audio::TrackId> engineTrackId;
+        bool isGroupBus = false; //! NOTE: for an aux bus
+        muse::audio::aux_channel_idx_t auxDisplayNumber = 0;
         QColor color;
     };
 
@@ -92,7 +95,9 @@ void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const I
     for (const Target& target : targets) {
         const std::optional<QColor> oldColor = targetColor(settings, target);
         if (oldColor && *oldColor != color) {
-            oldColors.push_back({ target, engineTrackId(playbackController.get(), target), *oldColor });
+            const bool isGroupBus = target.auxIndex && settings->isAuxBusGroup(*target.auxIndex);
+            const muse::audio::aux_channel_idx_t displayNumber = target.auxIndex ? settings->auxDisplayNumber(*target.auxIndex) : 0;
+            oldColors.push_back({ target, isGroupBus, displayNumber, *oldColor });
             setTargetColor(settings, target, color);
         }
     }
@@ -101,22 +106,25 @@ void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const I
         return;
     }
 
-    //! NOTE: not the same track any more (removed, then maybe another one in its place): left as is
-    const auto isSameTrack = [playbackController](const OldColor& oldColor) {
-        return !oldColor.engineTrackId || engineTrackId(playbackController.get(), oldColor.target) == oldColor.engineTrackId;
+    //! NOTE: an aux bus is followed by its type and display number; a track by its id, never given to another one
+    const auto setColors = [settings, playbackController, oldColors](bool undo, const QColor& newColor) {
+        for (const OldColor& oldColor : oldColors) {
+            Target target = oldColor.target;
+            //! NOTE: 0: no display number (a bus from an older version), followed by its index
+            if (target.auxIndex && oldColor.auxDisplayNumber != 0) {
+                target.auxIndex = auxIndexOf(settings, playbackController.get(), oldColor.isGroupBus, oldColor.auxDisplayNumber);
+                if (!target.auxIndex) {
+                    continue;
+                }
+            }
+
+            setTargetColor(settings, target, undo ? oldColor.color : newColor);
+        }
     };
 
-    undoStack->push(actionName, [settings, oldColors, color, isSameTrack]() {
-        for (const OldColor& oldColor : oldColors) {
-            if (isSameTrack(oldColor)) {
-                setTargetColor(settings, oldColor.target, color);
-            }
-        }
-    }, [settings, oldColors, isSameTrack]() {
-        for (const OldColor& oldColor : oldColors) {
-            if (isSameTrack(oldColor)) {
-                setTargetColor(settings, oldColor.target, oldColor.color);
-            }
-        }
+    undoStack->push(actionName, [setColors, color]() {
+        setColors(false, color);
+    }, [setColors, color]() {
+        setColors(true, color);
     });
 }
