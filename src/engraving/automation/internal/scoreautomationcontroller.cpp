@@ -477,16 +477,13 @@ void ScoreAutomationController::setCurves(const AutomationCurveStates& curves)
         return;
     }
 
-    AutomationCurveMap newCurves = m_automationData->curves();
+    //! NOTE: an empty curve is removed (see AutomationData::replaceCurves())
+    AutomationCurveMap changed;
     for (const auto& [key, curve] : curves) {
-        if (curve) {
-            newCurves[key] = *curve;
-        } else {
-            newCurves.erase(key);
-        }
+        changed[key] = curve ? *curve : AutomationCurve();
     }
 
-    m_automationData->setCurves(newCurves);
+    m_automationData->replaceCurves(changed);
 }
 
 void ScoreAutomationController::editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits)

@@ -70,12 +70,15 @@ public:
     UNDO_NAME("EditAutomationCurves")
     UNDO_CHANGED_OBJECTS({ m_score })
 
+    std::optional<ChangedRange> changedRange() const override;
+
 private:
     void flip() override;
 
     Score* m_score = nullptr;
     ScoreAutomationController* m_controller = nullptr;
     AutomationCurveStates m_curves;
+    std::optional<ChangedRange> m_changedRange;
 };
 
 //! NOTE: turns audio sync on/off (see AutomationData::isAudioSyncEnabled): the whole tempo changes
