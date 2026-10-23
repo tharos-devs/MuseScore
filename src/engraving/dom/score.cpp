@@ -2398,14 +2398,18 @@ void Score::updateStavesNumberForSystems()
 //! cleaned up yet) can apply to it
 ID Score::newStaffId() const
 {
-    ID maxId = m_lastNewStaffId;
+    //! NOTE: one counter for the master score and its excerpts
+    ID& lastNewStaffId = static_cast<const Score*>(masterScore())->m_lastNewStaffId;
+    ID maxId = lastNewStaffId;
 
-    for (const Staff* staff : score()->staves()) {
-        maxId = std::max(maxId, staff->id());
+    for (const Score* s : { static_cast<const Score*>(this), static_cast<const Score*>(masterScore()) }) {
+        for (const Staff* staff : s->staves()) {
+            maxId = std::max(maxId, staff->id());
+        }
     }
 
-    m_lastNewStaffId = maxId + 1;
-    return m_lastNewStaffId;
+    lastNewStaffId = maxId + 1;
+    return lastNewStaffId;
 }
 
 //! NOTE: never an id given before (during this session), like newStaffId(): what is kept for a removed part (e.g.
@@ -2413,14 +2417,18 @@ ID Score::newStaffId() const
 //! to a part added in its place (e.g. a replaced instrument)
 ID Score::newPartId() const
 {
-    ID maxId = m_lastNewPartId;
+    //! NOTE: one counter for the master score and its excerpts
+    ID& lastNewPartId = static_cast<const Score*>(masterScore())->m_lastNewPartId;
+    ID maxId = lastNewPartId;
 
-    for (const Part* part : score()->parts()) {
-        maxId = std::max(maxId, part->id());
+    for (const Score* s : { static_cast<const Score*>(this), static_cast<const Score*>(masterScore()) }) {
+        for (const Part* part : s->parts()) {
+            maxId = std::max(maxId, part->id());
+        }
     }
 
-    m_lastNewPartId = maxId + 1;
-    return m_lastNewPartId;
+    lastNewPartId = maxId + 1;
+    return lastNewPartId;
 }
 
 //---------------------------------------------------------
