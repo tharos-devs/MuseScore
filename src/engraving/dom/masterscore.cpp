@@ -233,6 +233,25 @@ void MasterScore::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
     undo(new EditCustomMidiCcs(this, m_automationController, controllers));
 }
 
+void MasterScore::removeAutomationCurves(const std::function<bool(const AutomationCurveKey&)>& matches)
+{
+    const AutomationDataConstPtr data = m_automationController->automationData();
+    if (!data) {
+        return;
+    }
+
+    AutomationCurveStates curves;
+    for (const auto& [key, curve] : data->curves()) {
+        if (matches(key)) {
+            curves[key] = std::nullopt;
+        }
+    }
+
+    if (!curves.empty()) {
+        undo(new EditAutomationCurves(this, m_automationController, std::move(curves)));
+    }
+}
+
 ArticulationMapDataConstPtr MasterScore::articulationMapData() const
 {
     return m_articulationMapData;

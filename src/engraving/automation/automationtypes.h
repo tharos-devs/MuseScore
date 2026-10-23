@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -228,6 +229,8 @@ struct AutomationCurveKey {
 };
 
 using AutomationCurveMap = muse::SharedMap<AutomationCurveKey, AutomationCurve>;
+//! NOTE: whole curves to write, or to remove (std::nullopt)
+using AutomationCurveStates = std::map<AutomationCurveKey, std::optional<AutomationCurve> >;
 
 inline const AutomationCurveKey TEMPO_KEY = AutomationCurveKey::global(AutomationType::Tempo);
 

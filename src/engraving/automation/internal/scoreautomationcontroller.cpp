@@ -471,6 +471,24 @@ void ScoreAutomationController::setCustomMidiCcs(const std::vector<uint8_t>& con
     m_automationData->setCustomMidiCcs(controllers);
 }
 
+void ScoreAutomationController::setCurves(const AutomationCurveStates& curves)
+{
+    IF_ASSERT_FAILED(m_automationData) {
+        return;
+    }
+
+    AutomationCurveMap newCurves = m_automationData->curves();
+    for (const auto& [key, curve] : curves) {
+        if (curve) {
+            newCurves[key] = *curve;
+        } else {
+            newCurves.erase(key);
+        }
+    }
+
+    m_automationData->setCurves(newCurves);
+}
+
 void ScoreAutomationController::editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits)
 {
     IF_ASSERT_FAILED(m_automationData && m_score) {

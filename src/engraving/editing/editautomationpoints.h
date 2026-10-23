@@ -58,6 +58,26 @@ private:
     std::optional<ChangedRange> m_changedRange;
 };
 
+//! NOTE: writes or removes whole curves (e.g. the curves of a removed part)
+class EditAutomationCurves : public UndoableCommand
+{
+    OBJECT_ALLOCATOR(engraving, EditAutomationCurves)
+
+public:
+    EditAutomationCurves(Score* score, ScoreAutomationController* controller, AutomationCurveStates curves);
+
+    UNDO_TYPE(CommandType::EditAutomationCurves)
+    UNDO_NAME("EditAutomationCurves")
+    UNDO_CHANGED_OBJECTS({ m_score })
+
+private:
+    void flip() override;
+
+    Score* m_score = nullptr;
+    ScoreAutomationController* m_controller = nullptr;
+    AutomationCurveStates m_curves;
+};
+
 //! NOTE: turns audio sync on/off (see AutomationData::isAudioSyncEnabled): the whole tempo changes
 class EditAudioSyncEnabled : public UndoableCommand
 {

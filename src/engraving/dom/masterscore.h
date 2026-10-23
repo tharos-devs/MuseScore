@@ -23,6 +23,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <memory>
 
 #include "../infrastructure/ifileinfoprovider.h"
@@ -109,6 +110,8 @@ public:
     void setAutomationData(AutomationDataPtr data);
     void editAutomationPoints(const AutomationCurveKey& key, AutomationPointEdits& edits, bool undoable = true) override;
     void setCustomMidiCcs(const std::vector<uint8_t>& controllers) override;
+    //! NOTE: undoable; the curves whose key matches go
+    void removeAutomationCurves(const std::function<bool(const AutomationCurveKey&)>& matches);
 
     // Audio sync (see AudioSyncInfo)
     bool isAudioSyncEnabled() const;

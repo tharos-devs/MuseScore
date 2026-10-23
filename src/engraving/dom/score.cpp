@@ -2208,8 +2208,8 @@ void Score::cmdRemovePart(Part* part)
         cmdRemoveStaff(sidx);
     }
 
-    //! NOTE The part's articulation maps go with it (undone with it): a part added later can get the same id
-    //! (see newPartId()) and must not inherit them
+    //! NOTE The part's articulation maps and automation curves go with it (undone with it): a part added later can
+    //! get the same id (see newPartId()) and must not inherit them. Its staves' curves go in cmdRemoveStaff()
     if (isMaster()) {
         if (const ArticulationMapDataConstPtr data = articulationMapData()) {
             EditArticulationMapChanges changes;
@@ -2220,6 +2220,12 @@ void Score::cmdRemovePart(Part* part)
             }
             masterScore()->editArticulationMap(changes);
         }
+
+        const ID partId = part->id();
+        masterScore()->removeAutomationCurves([partId](const AutomationCurveKey& key) {
+            const std::optional<InstrumentTrackId> trackId = key.trackId();
+            return trackId && trackId->partId == partId;
+        });
     }
 
     undoRemovePart(part, muse::indexOf(m_parts, part));
@@ -2568,6 +2574,16 @@ void Score::cmdRemoveStaff(staff_idx_t staffIdx)
 {
     Staff* s = staff(staffIdx);
     EditStaffBrackets::adjustBracketsDel(this, staffIdx, staffIdx + 1);
+
+    //! NOTE The staff's automation curves go with it (undone with it): a staff added later can get the same id
+    //! (see newStaffId()) and must not inherit them
+    if (isMaster() && s) {
+        const ID staffId = s->id();
+        masterScore()->removeAutomationCurves([staffId](const AutomationCurveKey& key) {
+            const std::optional<ID> keyStaffId = key.staffId();
+            return keyStaffId && *keyStaffId == staffId;
+        });
+    }
 
     undoRemoveStaff(s);
 }

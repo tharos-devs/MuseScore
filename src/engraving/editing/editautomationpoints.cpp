@@ -158,6 +158,29 @@ void EditAutomationPoints::flip()
     m_pointStates = std::move(previousStates);
 }
 
+EditAutomationCurves::EditAutomationCurves(Score* score, ScoreAutomationController* controller, AutomationCurveStates curves)
+    : m_score(score), m_controller(controller), m_curves(std::move(curves))
+{
+    assert(score && controller);
+}
+
+void EditAutomationCurves::flip()
+{
+    IF_ASSERT_FAILED(m_controller && m_controller->automationData()) {
+        return;
+    }
+
+    const AutomationCurveMap& current = m_controller->automationData()->curves();
+    AutomationCurveStates previous;
+    for (const auto& [key, curve] : m_curves) {
+        const auto it = current.find(key);
+        previous[key] = it != current.cend() ? std::optional(it->second) : std::nullopt;
+    }
+
+    m_controller->setCurves(m_curves);
+    m_curves = std::move(previous);
+}
+
 EditCustomMidiCcs::EditCustomMidiCcs(Score* score, ScoreAutomationController* controller, std::vector<uint8_t> controllers)
     : m_score(score), m_controller(controller), m_controllers(std::move(controllers))
 {
