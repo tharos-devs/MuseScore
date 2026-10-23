@@ -94,6 +94,14 @@ static std::optional<size_t> findSegmentIndex(const std::vector<RepeatSegmentInf
 
 ScoreAutomationController::StaffRange::StaffRange(const Score* score, staff_idx_t staffIdxFrom, staff_idx_t staffIdxTo)
 {
+    //! NOTE No staff left (e.g. every instrument removed): an empty range (from > to), not nstaves() - 1 wrapping around
+    //! to the largest index, which made the loops over the range never end
+    if (score->nstaves() == 0) {
+        from = 1;
+        to = 0;
+        return;
+    }
+
     const staff_idx_t lastStaffIdx = score->nstaves() - 1;
 
     if (staffIdxFrom == muse::nidx) {
