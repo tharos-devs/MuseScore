@@ -472,8 +472,14 @@ void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
     }
 }
 
-void ProjectAudioSettings::removeMissingPartsFromTrackListFolders(const std::vector<muse::ID>& partIds)
+void ProjectAudioSettings::removeMissingParts(const std::vector<muse::ID>& partIds)
 {
+    const auto isMissingTrack = [&partIds](const auto& pair) {
+        return !muse::contains(partIds, pair.first.partId);
+    };
+    std::erase_if(m_trackInputParamsMap, isMissingTrack);
+    std::erase_if(m_trackOutputParamsMap, isMissingTrack);
+
     std::set<String> partKeys;
     for (const muse::ID& partId : partIds) {
         partKeys.insert(trackListPartKey(partId));

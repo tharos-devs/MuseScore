@@ -125,6 +125,17 @@ void NotationProject::setupProject()
     m_projectUndoStack = std::make_shared<ProjectUndoStack>();
 }
 
+//! NOTE: what is kept for a removed part (its sound, solo/mute state...) goes when the project is opened, see
+//! IProjectAudioSettings::removeMissingParts()
+static std::vector<muse::ID> scorePartIds(const MasterScore* masterScore)
+{
+    std::vector<muse::ID> partIds;
+    for (const Part* part : masterScore->parts()) {
+        partIds.push_back(part->id());
+    }
+    return partIds;
+}
+
 Ret NotationProject::load(const muse::io::path_t& path, const OpenParams& openParams, const std::string& format_)
 {
     TRACEFUNC;
@@ -248,11 +259,7 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
             tryCompatAudio = true;
         }
 
-        std::vector<muse::ID> partIds;
-        for (const Part* part : masterScore->parts()) {
-            partIds.push_back(part->id());
-        }
-        m_projectAudioSettings->removeMissingPartsFromTrackListFolders(partIds);
+        m_projectAudioSettings->removeMissingParts(scorePartIds(masterScore));
     }
 
     // Load video settings
@@ -295,6 +302,12 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
         muse::io::path_t ePath = u"Excerpts/" + excerpt->fileName() + u"/";
         excerptNotation->viewState()->read(reader, ePath);
         excerptNotation->soloMuteState()->read(reader, ePath);
+    }
+
+    const std::vector<muse::ID> partIds = scorePartIds(masterScore);
+    m_masterNotation->notation()->soloMuteState()->removeMissingParts(partIds);
+    for (const IExcerptNotationPtr& excerpt : m_masterNotation->excerpts()) {
+        excerpt->notation()->soloMuteState()->removeMissingParts(partIds);
     }
 
     // Apply compat audio settings (needs to be done after notations are created)

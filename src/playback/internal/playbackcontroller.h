@@ -314,6 +314,7 @@ private:
                                                   const project::AudioOutputParams& outParams, bool rebuildVolume = true,
                                                   bool rebuildPan = true);
     void removeTrack(const engraving::InstrumentTrackId& instrumentTrackId);
+    void refreshTrackAudioPluginStates(const engraving::InstrumentTrackId& instrumentTrackId, muse::audio::TrackId trackId);
 
     void onAutomationDataChanged(const notation::AutomationChanges& changes);
     void resendAutomatedControlParams(std::optional<engraving::InstrumentTrackIdSet> volumeTrackIds = std::nullopt,

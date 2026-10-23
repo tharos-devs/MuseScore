@@ -23,6 +23,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "containers.h"
 #include "engraving/infrastructure/mscreader.h"
 
 #include "notationsolomutestate.h"
@@ -121,6 +122,13 @@ void NotationSoloMuteState::removeTrackSoloMuteState(const engraving::Instrument
     if (soloMuteSearch != m_trackSoloMuteStatesMap.end()) {
         m_trackSoloMuteStatesMap.erase(soloMuteSearch);
     }
+}
+
+void NotationSoloMuteState::removeMissingParts(const std::vector<muse::ID>& partIds)
+{
+    std::erase_if(m_trackSoloMuteStatesMap, [&partIds](const auto& pair) {
+        return !muse::contains(partIds, pair.first.partId);
+    });
 }
 
 muse::async::Channel<InstrumentTrackId, INotationSoloMuteState::SoloMuteState> NotationSoloMuteState::trackSoloMuteStateChanged() const

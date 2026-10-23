@@ -37,6 +37,7 @@ public:
     const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
     void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) override;
     void removeTrackSoloMuteState(const engraving::InstrumentTrackId& trackId) override;
+    void removeMissingParts(const std::vector<muse::ID>& partIds) override;
     muse::async::Channel<engraving::InstrumentTrackId, SoloMuteState> trackSoloMuteStateChanged() const override;
 
 private:

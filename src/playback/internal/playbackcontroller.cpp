@@ -2321,15 +2321,14 @@ void PlaybackController::removeTrack(const InstrumentTrackId& instrumentTrackId)
         return;
     }
 
-    playback()->removeTrack(search->second);
-    audioSettings()->removeTrackParams(instrumentTrackId);
+    //! NOTE: its plugins' current state, for an undo to bring them back as they were (see below)
+    refreshTrackAudioPluginStates(instrumentTrackId, search->second);
 
-    m_masterNotation->notation()->soloMuteState()->removeTrackSoloMuteState(instrumentTrackId);
-    for (const IExcerptNotationPtr& excerpt : m_masterNotation->excerpts()) {
-        if (const INotationPtr& notation = excerpt->notation()) {
-            notation->soloMuteState()->removeTrackSoloMuteState(instrumentTrackId);
-        }
-    }
+    playback()->removeTrack(search->second);
+
+    //! NOTE: the track's sound, effects, color and solo/mute state are kept, for an undo of the part's removal to bring
+    //! it back as it was; they go when the project is opened (see IProjectAudioSettings::removeMissingParts()). A part
+    //! added in the meantime never gets this id (see Score::newPartId())
 
     m_onlineSoundsController->removeOnlineTrack(search->second);
 
@@ -3046,6 +3045,63 @@ void PlaybackController::setMasterNotation(notation::IMasterNotationPtr masterNo
     }
 }
 
+#ifdef MUSE_MODULE_VST
+using PluginStateReader = std::function<std::optional<AudioUnitConfig>(const AudioFxParams&, AudioFxChainOrder)>;
+
+static bool refreshFxChainStates(AudioFxChain& chain, const PluginStateReader& readState)
+{
+    bool changed = false;
+    for (auto& [chainOrder, fxParams] : chain) {
+        if (!isResourceType(fxParams.resourceMeta, AudioResourceType::VstPlugin)) {
+            continue;
+        }
+        const std::optional<AudioUnitConfig> state = readState(fxParams, chainOrder);
+        if (state && *state != fxParams.configuration) {
+            fxParams.configuration = *state;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+static PluginStateReader trackFxStateReader(const std::shared_ptr<muse::vst::IVstPluginStateProvider>& provider, TrackId trackId)
+{
+    return [provider, trackId](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
+        return provider->fxPluginState(fxParams.resourceMeta.id, trackId, chainOrder);
+    };
+}
+
+#endif
+
+//! NOTE: no settings-changed notification: these are saved right after (or kept for an undo, see removeTrack()), and a
+//! plugin's state may differ byte-wise on every read even when nothing changed (e.g. Kontakt)
+void PlaybackController::refreshTrackAudioPluginStates(const InstrumentTrackId& instrumentTrackId, TrackId trackId)
+{
+#ifdef MUSE_MODULE_VST
+    project::IProjectAudioSettingsPtr settings = audioSettings();
+    if (!settings || !vstPluginStateProvider()) {
+        return;
+    }
+
+    AudioInputParams inParams = settings->trackInputParams(instrumentTrackId);
+    if (inParams.type() == AudioSourceType::Vsti) {
+        const std::optional<AudioUnitConfig> state = vstPluginStateProvider()->instrumentPluginState(inParams.resourceMeta.id, trackId);
+        if (state && *state != inParams.configuration) {
+            inParams.configuration = *state;
+            settings->setTrackInputParams(instrumentTrackId, inParams, false /*notifySettingsChanged*/);
+        }
+    }
+
+    AudioOutputParams outParams = settings->trackOutputParams(instrumentTrackId);
+    if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), trackId))) {
+        settings->setTrackOutputParams(instrumentTrackId, outParams, false /*notifySettingsChanged*/);
+    }
+#else
+    UNUSED(instrumentTrackId);
+    UNUSED(trackId);
+#endif
+}
+
 void PlaybackController::refreshAudioPluginStates()
 {
 #ifdef MUSE_MODULE_VST
@@ -3054,72 +3110,36 @@ void PlaybackController::refreshAudioPluginStates()
         return;
     }
 
-    //! NOTE: no settings-changed notification: these are saved right after, and a plugin's state may differ
-    //! byte-wise on every read even when nothing changed (e.g. Kontakt)
-    using StateReader = std::function<std::optional<AudioUnitConfig>(const AudioFxParams&, AudioFxChainOrder)>;
-    const auto refreshFxChain = [](AudioFxChain& chain, const StateReader& readState) {
-        bool changed = false;
-        for (auto& [chainOrder, fxParams] : chain) {
-            if (!isResourceType(fxParams.resourceMeta, AudioResourceType::VstPlugin)) {
-                continue;
-            }
-            const std::optional<AudioUnitConfig> state = readState(fxParams, chainOrder);
-            if (state && *state != fxParams.configuration) {
-                fxParams.configuration = *state;
-                changed = true;
-            }
-        }
-        return changed;
-    };
-
-    const auto trackFxState = [this](TrackId trackId) -> StateReader {
-        return [this, trackId](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
-            return vstPluginStateProvider()->fxPluginState(fxParams.resourceMeta.id, trackId, chainOrder);
-        };
-    };
-
     for (const auto& [instrumentTrackId, trackId] : m_instrumentTrackIdMap) {
-        AudioInputParams inParams = settings->trackInputParams(instrumentTrackId);
-        if (inParams.type() == AudioSourceType::Vsti) {
-            const std::optional<AudioUnitConfig> state = vstPluginStateProvider()->instrumentPluginState(inParams.resourceMeta.id, trackId);
-            if (state && *state != inParams.configuration) {
-                inParams.configuration = *state;
-                settings->setTrackInputParams(instrumentTrackId, inParams, false /*notifySettingsChanged*/);
-            }
-        }
-
-        AudioOutputParams outParams = settings->trackOutputParams(instrumentTrackId);
-        if (refreshFxChain(outParams.fxChain, trackFxState(trackId))) {
-            settings->setTrackOutputParams(instrumentTrackId, outParams, false /*notifySettingsChanged*/);
-        }
+        refreshTrackAudioPluginStates(instrumentTrackId, trackId);
     }
 
     for (const auto& [auxIdx, trackId] : m_auxTrackIdMap) {
         AudioOutputParams outParams = settings->auxOutputParams(auxIdx);
-        if (refreshFxChain(outParams.fxChain, trackFxState(trackId))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), trackId))) {
             settings->setAuxOutputParams(auxIdx, outParams, false /*notifySettingsChanged*/);
         }
     }
 
     if (videoTrackId() != INVALID_TRACK_ID) {
         AudioOutputParams outParams = settings->videoOutputParams();
-        if (refreshFxChain(outParams.fxChain, trackFxState(videoTrackId()))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), videoTrackId()))) {
             settings->setVideoOutputParams(outParams, false /*notifySettingsChanged*/);
         }
     }
 
     if (referenceAudioTrackId() != INVALID_TRACK_ID) {
         AudioOutputParams outParams = settings->referenceAudioOutputParams();
-        if (refreshFxChain(outParams.fxChain, trackFxState(referenceAudioTrackId()))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), referenceAudioTrackId()))) {
             settings->setReferenceAudioOutputParams(outParams, false /*notifySettingsChanged*/);
         }
     }
 
     AudioOutputParams masterParams = settings->masterAudioOutputParams();
-    const StateReader masterFxState = [this](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
+    const PluginStateReader masterFxState = [this](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
         return vstPluginStateProvider()->masterFxPluginState(fxParams.resourceMeta.id, chainOrder);
     };
-    if (refreshFxChain(masterParams.fxChain, masterFxState)) {
+    if (refreshFxChainStates(masterParams.fxChain, masterFxState)) {
         settings->setMasterAudioOutputParams(masterParams, false /*notifySettingsChanged*/);
     }
 #endif
