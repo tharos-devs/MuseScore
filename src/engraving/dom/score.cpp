@@ -37,6 +37,7 @@
 #include "iengravingcontextconfiguration.h" // IWYU pragma: keep
 #include "ipalettescoreprovider.h"
 
+#include "articulationmap/articulationmapdata.h"
 #include "editing/addremoveelement.h"
 #include "editing/editclef.h"
 #include "editing/editkeysig.h"
@@ -2205,6 +2206,20 @@ void Score::cmdRemovePart(Part* part)
 
     for (staff_idx_t i = 0; i < n; ++i) {
         cmdRemoveStaff(sidx);
+    }
+
+    //! NOTE The part's articulation maps go with it (undone with it): a part added later can get the same id
+    //! (see newPartId()) and must not inherit them
+    if (isMaster()) {
+        if (const ArticulationMapDataConstPtr data = articulationMapData()) {
+            EditArticulationMapChanges changes;
+            for (const auto& [trackId, map] : data->maps()) {
+                if (trackId.partId == part->id()) {
+                    changes.maps[trackId] = std::nullopt;
+                }
+            }
+            masterScore()->editArticulationMap(changes);
+        }
     }
 
     undoRemovePart(part, muse::indexOf(m_parts, part));
