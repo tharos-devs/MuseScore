@@ -38,6 +38,7 @@
 #include "engraving/dom/excerpt.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/measure.h"
+#include "engraving/dom/part.h"
 #include "engraving/dom/measurebase.h"
 #include "engraving/dom/page.h"
 #include "engraving/dom/repeatlist.h"
@@ -246,6 +247,12 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
             m_projectAudioSettings->makeDefault();
             tryCompatAudio = true;
         }
+
+        std::vector<muse::ID> partIds;
+        for (const Part* part : masterScore->parts()) {
+            partIds.push_back(part->id());
+        }
+        m_projectAudioSettings->removeMissingPartsFromTrackListFolders(partIds);
     }
 
     // Load video settings

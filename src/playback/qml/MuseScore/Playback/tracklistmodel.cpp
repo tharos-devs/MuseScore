@@ -1280,10 +1280,10 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
 String TrackListModel::channelKey(const PartTracks& tracks)
 {
     if (tracks.auxIndex) {
-        return u"aux:" + String::number(static_cast<int>(*tracks.auxIndex));
+        return project::trackListAuxKey(*tracks.auxIndex);
     }
 
-    return u"part:" + String::fromStdString(std::to_string(tracks.instrumentTrackId.partId.toUint64()));
+    return project::trackListPartKey(tracks.instrumentTrackId.partId);
 }
 
 //! NOTE: the rows outside folders in the score's order (then the buses), each folder before the row it's anchored to

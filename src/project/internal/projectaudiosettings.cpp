@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -194,7 +195,7 @@ void ProjectAudioSettings::removeAuxOutputParams(aux_channel_idx_t index)
     m_auxSortOrderMap.erase(index);
 
     //! NOTE: out of its Track list folder: a new bus later created at this index isn't in it
-    const String busKey = u"aux:" + String::number(static_cast<int>(index));
+    const String busKey = trackListAuxKey(index);
     for (TrackListFolder& folder : m_trackListFolders) {
         muse::remove(folder.members, busKey);
         if (folder.before == busKey) {
@@ -469,28 +470,23 @@ void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
         m_trackOutputParamsMap.erase(outSearch);
         m_settingsChanged.notify();
     }
+}
 
-    //! NOTE: the part out of its Track list folder once none of its tracks is left (like a removed bus, see
-    //! removeAuxOutputParams()): a part added later can get the same id and must not appear in that folder
-    const auto partHasTracks = [&partId](const auto& map) {
-        return std::any_of(map.cbegin(), map.cend(), [&partId](const auto& pair) {
-            return pair.first.partId == partId.partId;
-        });
+void ProjectAudioSettings::removeMissingPartsFromTrackListFolders(const std::vector<muse::ID>& partIds)
+{
+    std::set<String> partKeys;
+    for (const muse::ID& partId : partIds) {
+        partKeys.insert(trackListPartKey(partId));
+    }
+
+    const auto isMissingPart = [&partKeys](const String& key) {
+        return key.startsWith(u"part:") && !muse::contains(partKeys, key);
     };
 
-    if (!partHasTracks(m_trackInputParamsMap) && !partHasTracks(m_trackOutputParamsMap)) {
-        const String partKey = u"part:" + String::fromStdString(std::to_string(partId.partId.toUint64()));
-        bool foldersChanged = false;
-        for (TrackListFolder& folder : m_trackListFolders) {
-            foldersChanged |= muse::remove(folder.members, partKey);
-            if (folder.before == partKey) {
-                folder.before = String();
-                foldersChanged = true;
-            }
-        }
-
-        if (foldersChanged) {
-            m_settingsChanged.notify();
+    for (TrackListFolder& folder : m_trackListFolders) {
+        muse::remove_if(folder.members, isMissingPart);
+        if (isMissingPart(folder.before)) {
+            folder.before = String();
         }
     }
 }

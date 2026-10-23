@@ -111,6 +111,17 @@ struct TrackListFolder {
 };
 using TrackListFolders = std::vector<TrackListFolder>;
 
+//! NOTE: the keys of TrackListFolder's members
+inline muse::String trackListPartKey(const muse::ID& partId)
+{
+    return u"part:" + muse::String::fromStdString(std::to_string(partId.toUint64()));
+}
+
+inline muse::String trackListAuxKey(muse::audio::aux_channel_idx_t index)
+{
+    return u"aux:" + muse::String::number(static_cast<int>(index));
+}
+
 class IProjectAudioSettings
 {
 public:
@@ -204,6 +215,9 @@ public:
 
     virtual const TrackListFolders& trackListFolders() const = 0;
     virtual void setTrackListFolders(const TrackListFolders& folders) = 0;
+    //! NOTE: when the project is opened, the parts that aren't in the score any more leave the folders (a removed
+    //! part stays in its folder during the session, for an undo to bring it back there)
+    virtual void removeMissingPartsFromTrackListFolders(const std::vector<muse::ID>& partIds) = 0;
 
     virtual const playback::SoundProfileName& activeSoundProfile() const = 0;
     virtual void setActiveSoundProfile(const playback::SoundProfileName& profileName) = 0;
