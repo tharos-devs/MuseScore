@@ -289,6 +289,7 @@ private:
     std::optional<instrumenteditor::Target> instrumentEditorTarget() const;
     void updateInstrumentEditorState();
     bool closeIfTargetPartRemoved();
+    void reattachTargetTrack();
 
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
@@ -347,6 +348,9 @@ private:
     const Node* m_selectionAnchor = nullptr; // the start of a Shift+click range
 
     std::optional<engraving::InstrumentTrackId> m_targetTrack;
+    //! NOTE: the track the editor was detached from when its part was removed (see closeIfTargetPartRemoved())
+    std::optional<engraving::InstrumentTrackId> m_detachedTargetTrack;
+    bool m_trackChangesSubscribed = false;
     //! NOTE The edited map is the target track's own (opened from it, not replaced by New/Open since): saved, it
     //! updates that track, even when saved to another file (e.g. its original file is no longer there)
     bool m_editsTargetTrackMap = false;

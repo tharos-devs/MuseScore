@@ -942,7 +942,6 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
         return;
     }
 
-    const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
     // a track without a map yet (New…) gets the edited one only through Apply or OK
@@ -952,9 +951,11 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
 
     emit targetTrackChanged();
 
-    if (!subscribed) {
+    if (!m_trackChangesSubscribed) {
+        m_trackChangesSubscribed = true;
         //! NOTE: the track's sound changed, or its window was opened/closed (from here or elsewhere)
         playbackController()->trackAdded().onReceive(this, [this](muse::audio::TrackId) {
+            reattachTargetTrack();
             updateInstrumentEditorState();
         });
         playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
@@ -1065,6 +1066,7 @@ bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
     }
 
     if (m_isDirty) {
+        m_detachedTargetTrack = m_targetTrack;
         m_targetTrack.reset();
         m_editsTargetTrackMap = false;
         emit targetTrackChanged();
@@ -1074,6 +1076,24 @@ bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
 
     emit closeAccepted();
     return true;
+}
+
+//! NOTE: the part of a track this editor was detached from (see closeIfTargetPartRemoved()) brought back, e.g. by an
+//! undo: the editor is its again
+void ArticulationMapEditorModel::reattachTargetTrack()
+{
+    if (!m_detachedTargetTrack || m_targetTrack) {
+        return;
+    }
+
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    if (!masterNotation || !masterNotation->parts()->part(m_detachedTargetTrack->partId)) {
+        return;
+    }
+
+    const engraving::InstrumentTrackId trackId = *m_detachedTargetTrack;
+    m_detachedTargetTrack.reset();
+    setTargetTrack(QString::number(trackId.partId.toUint64()), trackId.instrumentId.toQString());
 }
 
 void ArticulationMapEditorModel::applyAndClose()
