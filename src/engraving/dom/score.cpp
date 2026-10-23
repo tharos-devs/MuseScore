@@ -2203,7 +2203,7 @@ void Score::cmdRemovePart(Part* part)
 
     //! NOTE The part's articulation maps and automation curves go with it (undone with it): kept, they would be saved,
     //! and a part added after the file is reopened can get the same id (see newPartId()). Its staves' curves go in
-    //! cmdRemoveStaff(). Before its staves are removed: the changed range of these edits is the part's staves
+    //! undoRemoveStaff(). Before its staves are removed: the changed range of these edits is the part's staves
     if (isMaster()) {
         if (const ArticulationMapDataConstPtr data = articulationMapData()) {
             EditArticulationMapChanges changes;
@@ -2291,6 +2291,10 @@ void Score::removePart(Part* part)
 
     m_parts.erase(m_parts.begin() + index);
     markInstrumentsAsPrimary(m_parts);
+
+    //! NOTE: its id stays given (see newPartId()), also when it was read from the file
+    ID& lastNewPartId = static_cast<const Score*>(masterScore())->m_lastNewPartId;
+    lastNewPartId = std::max(lastNewPartId, part->id());
 
     if (m_excerpt) {
         for (Part* excerptPart : m_excerpt->parts()) {
@@ -2402,8 +2406,11 @@ ID Score::newStaffId() const
     ID& lastNewStaffId = static_cast<const Score*>(masterScore())->m_lastNewStaffId;
     ID maxId = lastNewStaffId;
 
-    for (const Score* s : { static_cast<const Score*>(this), static_cast<const Score*>(masterScore()) }) {
-        for (const Staff* staff : s->staves()) {
+    for (const Staff* staff : staves()) {
+        maxId = std::max(maxId, staff->id());
+    }
+    if (!isMaster()) {
+        for (const Staff* staff : masterScore()->staves()) {
             maxId = std::max(maxId, staff->id());
         }
     }
@@ -2421,8 +2428,11 @@ ID Score::newPartId() const
     ID& lastNewPartId = static_cast<const Score*>(masterScore())->m_lastNewPartId;
     ID maxId = lastNewPartId;
 
-    for (const Score* s : { static_cast<const Score*>(this), static_cast<const Score*>(masterScore()) }) {
-        for (const Part* part : s->parts()) {
+    for (const Part* part : parts()) {
+        maxId = std::max(maxId, part->id());
+    }
+    if (!isMaster()) {
+        for (const Part* part : masterScore()->parts()) {
             maxId = std::max(maxId, part->id());
         }
     }
@@ -2437,6 +2447,10 @@ ID Score::newPartId() const
 
 void Score::removeStaff(Staff* staff)
 {
+    //! NOTE: its id stays given (see newStaffId()), also when it was read from the file
+    ID& lastNewStaffId = static_cast<const Score*>(masterScore())->m_lastNewStaffId;
+    lastNewStaffId = std::max(lastNewStaffId, staff->id());
+
     staff_idx_t idx = staff->idx();
     for (auto i = staff->score()->spanner().cbegin(); i != staff->score()->spanner().cend(); ++i) {
         Spanner* s = i->second;
@@ -2591,16 +2605,6 @@ void Score::cmdRemoveStaff(staff_idx_t staffIdx)
 {
     Staff* s = staff(staffIdx);
     EditStaffBrackets::adjustBracketsDel(this, staffIdx, staffIdx + 1);
-
-    //! NOTE The staff's automation curves go with it (undone with it): kept, they would be saved, and a staff added
-    //! after the file is reopened can get the same id (see newStaffId())
-    if (isMaster() && s) {
-        const ID staffId = s->id();
-        masterScore()->removeAutomationCurves([staffId](const AutomationCurveKey& key) {
-            const std::optional<ID> keyStaffId = key.staffId();
-            return keyStaffId && *keyStaffId == staffId;
-        });
-    }
 
     undoRemoveStaff(s);
 }
