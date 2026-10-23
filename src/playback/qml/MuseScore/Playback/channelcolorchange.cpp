@@ -61,15 +61,23 @@ static void setTargetColor(const IProjectAudioSettingsPtr& settings, const Chann
 //! type (see auxDisplayNumber())
 static std::optional<muse::audio::aux_channel_idx_t> auxIndexOf(const IProjectAudioSettingsPtr& settings,
                                                                 const IPlaybackController* playbackController,
-                                                                bool isGroupBus, muse::audio::aux_channel_idx_t displayNumber)
+                                                                muse::audio::aux_channel_idx_t lastIndex, bool isGroupBus,
+                                                                muse::audio::aux_channel_idx_t displayNumber)
 {
-    if (!playbackController) {
-        return std::nullopt;
+    const auto isTheBus = [&](muse::audio::aux_channel_idx_t index) {
+        return settings->isAuxBusGroup(index) == isGroupBus && settings->auxDisplayNumber(index) == displayNumber;
+    };
+
+    //! NOTE: most often still there (also when playback isn't set up, e.g. no audio engine)
+    if (isTheBus(lastIndex)) {
+        return lastIndex;
     }
 
-    for (const auto& [index, trackId] : playbackController->auxTrackIdMap()) {
-        if (settings->isAuxBusGroup(index) == isGroupBus && settings->auxDisplayNumber(index) == displayNumber) {
-            return index;
+    if (playbackController) {
+        for (const auto& [index, trackId] : playbackController->auxTrackIdMap()) {
+            if (isTheBus(index)) {
+                return index;
+            }
         }
     }
 
@@ -112,7 +120,8 @@ void ChannelColorChange::apply(const IProjectAudioSettingsPtr& settings, const I
             Target target = oldColor.target;
             //! NOTE: 0: no display number (a bus from an older version), followed by its index
             if (target.auxIndex && oldColor.auxDisplayNumber != 0) {
-                target.auxIndex = auxIndexOf(settings, playbackController.get(), oldColor.isGroupBus, oldColor.auxDisplayNumber);
+                target.auxIndex = auxIndexOf(settings, playbackController.get(), *target.auxIndex, oldColor.isGroupBus,
+                                             oldColor.auxDisplayNumber);
                 if (!target.auxIndex) {
                     continue;
                 }
