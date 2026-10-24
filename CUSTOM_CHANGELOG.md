@@ -255,6 +255,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed playback that often never started again after a stop on macOS since the new direct audio output (no sound, Play doing nothing, "wait end of quick operation" in the log), e.g. with a VSL Synchron Player VST3: the plugin, activated when playback resumed, waited for CoreAudio while CoreAudio waited for it (2026-10-24).
 - Fixed undoing a track's removal: the track came back with MuseScore's default sound (e.g. MuseSounds instead of its VST3 instrument), without its effects, color and solo/mute. It now comes back as it was, the plugins with their state at the time of the removal (2026-10-23).
 - Fixed a new instrument added after removing others inheriting what belonged to a removed one (e.g. its volume or pan curves, its sound when an instrument was replaced): a removed instrument's curves go with it (back with an undo), and a new instrument or staff never gets the id of one removed before (2026-10-23).
 - Fixed MuseScore freezing when every instrument of a score was removed (2026-10-23).
