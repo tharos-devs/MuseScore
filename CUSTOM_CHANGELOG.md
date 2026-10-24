@@ -289,6 +289,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Fixed playback that could hang for good on macOS when MIDI CCs (or notes) were received a while after stopping, e.g. with MIDI CC recording on and a VSL Synchron Player VST3: a VST3 instrument is no longer deactivated a second after stopping, only no longer processed until something plays (2026-10-24).
 - Fixed the playback stopping at the former end of the score after measures of rests were added (e.g. to a new score, to reach the end of the Audio sync window's audio), and the Audio sync window's measures ruler not seeking past it: the end of the playback was only updated when notes changed. Same for a tempo change alone (2026-10-23).
 - Fixed audio sync Detect finding no beats at all after a quiet passage of 10 s or more (a held chord, common in film music), and dropping its points when the score had other sync points after the detected part (e.g. the ones on every measure): it now replaces them.
 - Fixed the panels docked at the bottom (Mixer, Timeline, Piano keyboard, Audio sync…) cut off on their right side when the window was narrowed to its minimum: with fixed-width side panels open, the layout could need more than the window's fixed minimum width (1050 px) and ran past its right edge. The window can no longer get smaller than its docked layout (never more than the screen); opening a side panel while the window is at its minimum widens it. Same for the secondary window and the panels docked in it (2026-10-20, 2026-10-21).
