@@ -106,6 +106,14 @@ void MixerPanelModel::init()
         reload();
     });
 
+    //! NOTE: solo/mute states are per notation (score/part): show the new current one's. Queued, once the playback
+    //! controller (which the channels read them from) has switched to it too
+    context()->currentNotationChanged().onNotify(this, [this]() {
+        QTimer::singleShot(0, this, [this]() {
+            reload();
+        });
+    });
+
     m_auxBusEditor = AuxBusEditor::shared(iocContext());
 
     controller()->trackAdded().onReceive(this, [this](const TrackId trackId) {
