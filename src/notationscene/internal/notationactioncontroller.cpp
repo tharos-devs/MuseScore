@@ -1727,7 +1727,7 @@ muse::Ret NotationActionController::moveWithRet(MoveDirection direction, bool qu
             if (quickly) {
                 interaction->movePitch(direction, PitchMode::OCTAVE);
             }
-            interaction->moveSelectionDeprecated(direction, MoveSelectionType::String);
+            noteInput->moveInputString(direction == MoveDirection::Up);
             return muse::make_ok();
         } else if (interaction->selection()->isNone() && !state.beyondScore()) {
             interaction->select(SelectionTarget::FirstItem);
@@ -1780,6 +1780,8 @@ muse::Ret NotationActionController::moveWithRet(MoveDirection direction, bool qu
         } else if (selectedElement && selectedElement->hasGrips() && interaction->isGripEditStarted()) {
             interaction->nudgeAnchors(direction);
         } else if (!quickly && noteInput->isNoteInputMode() && noteInput->usingNoteInputMethod(NoteInputMethod::CARET)
+                   // on a TAB, the arrows move from chord to chord in every input method
+                   && state.staffGroup() != mu::engraving::StaffGroup::TAB
                    && noteInput->moveInputPosOnGrid(direction == MoveDirection::Right)) {
             return muse::make_ok();
         } else {

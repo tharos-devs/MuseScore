@@ -691,6 +691,42 @@ bool NotationNoteInput::moveInputPosOnGrid(bool forward)
     return true;
 }
 
+void NotationNoteInput::moveInputString(bool up)
+{
+    TRACEFUNC;
+
+    InputState& is = score()->inputState();
+    const Staff* staff = score()->staff(track2staff(is.track()));
+    if (!staff || !staff->isTabStaff(is.tick())) {
+        return;
+    }
+
+    const int instrStrgs = static_cast<int>(staff->part()->stringData(is.tick(), staff->idx())->strings());
+    int delta = (staff->staffType(is.tick())->upsideDown() ? -1 : 1);
+    if (up) {
+        delta = -delta;
+    }
+
+    const int strg = is.string() + delta;
+    if (strg < 0 || strg >= instrStrgs) {
+        return;
+    }
+
+    is.setString(strg);
+
+    const ChordRest* chordRest = is.cr();
+    if (chordRest && chordRest->isChord()) {
+        for (Note* note : toChord(chordRest)->notes()) {
+            if (note->string() == strg) {
+                m_interaction->select({ note }, SelectType::SINGLE);
+            }
+        }
+    }
+
+    //! NOTE: the cursor shows the input string: redraw it, also when no note gets selected
+    notifyAboutStateChanged();
+}
+
 void NotationNoteInput::setRestMode(bool rest)
 {
     InputState& is = score()->inputState();
