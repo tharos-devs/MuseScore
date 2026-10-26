@@ -1037,42 +1037,34 @@
   <SC>
     <key>pad-note-1-TAB</key>
     <seq>7</seq> <!-- AZERTY for Shift+7 -->
-    <seq>Num+7</seq>
     </SC>
   <SC>
     <key>pad-note-2-TAB</key>
     <seq>6</seq> <!-- AZERTY for Shift+6 -->
-    <seq>Num+6</seq>
     </SC>
   <SC>
     <key>pad-note-4-TAB</key>
     <seq>5</seq> <!-- AZERTY for Shift+5 -->
-    <seq>Num+5</seq>
     </SC>
   <SC>
     <key>pad-note-8-TAB</key>
     <seq>4</seq> <!-- AZERTY for Shift+4 -->
-    <seq>Num+4</seq>
     </SC>
   <SC>
     <key>pad-note-16-TAB</key>
     <seq>3</seq> <!-- AZERTY for Shift+3 -->
-    <seq>Num+3</seq>
     </SC>
   <SC>
     <key>pad-note-32-TAB</key>
     <seq>2</seq> <!-- AZERTY for Shift+2 -->
-    <seq>Num+2</seq>
     </SC>
   <SC>
     <key>pad-note-64-TAB</key>
     <seq>1</seq> <!-- AZERTY for Shift+1 -->
-    <seq>Num+1</seq>
     </SC>
   <SC>
     <key>pad-note-128-TAB</key>
     <seq>0</seq> <!-- AZERTY for Shift+0 -->
-    <seq>Num+0</seq>
     </SC>
   <SC>
     <key>rest-TAB</key>
@@ -1089,51 +1081,61 @@
   <SC>
     <key>fret-0</key>
     <seq>A</seq>
+    <seq>Num+0</seq>
     <seq>À</seq> <!-- AZERTY for 0 -->
     </SC>
   <SC>
     <key>fret-1</key>
     <seq>B</seq>
+    <seq>Num+1</seq>
     <seq>&amp;</seq> <!-- AZERTY for 1 -->
     </SC>
   <SC>
     <key>fret-2</key>
     <seq>C</seq>
+    <seq>Num+2</seq>
     <seq>É</seq> <!-- AZERTY for 2 -->
     </SC>
   <SC>
     <key>fret-3</key>
     <seq>D</seq>
+    <seq>Num+3</seq>
     <seq>&quot;</seq> <!-- AZERTY for 3 -->
     </SC>
   <SC>
     <key>fret-4</key>
     <seq>E</seq>
+    <seq>Num+4</seq>
     <seq>'</seq> <!-- AZERTY for 4 -->
     </SC>
   <SC>
     <key>fret-5</key>
     <seq>F</seq>
+    <seq>Num+5</seq>
     <seq>(</seq> <!-- AZERTY for 5 -->
     </SC>
   <SC>
     <key>fret-6</key>
     <seq>G</seq>
+    <seq>Num+6</seq>
     <seq>-</seq> <!-- AZERTY for 6 -->
     </SC>
   <SC>
     <key>fret-7</key>
     <seq>H</seq>
+    <seq>Num+7</seq>
     <seq>È</seq> <!-- AZERTY for 7 -->
     </SC>
   <SC>
     <key>fret-8</key>
     <seq>J</seq>
+    <seq>Num+8</seq>
     <seq>_</seq> <!-- AZERTY for 8 -->
     </SC>
   <SC>
     <key>fret-9</key>
     <seq>K</seq>
+    <seq>Num+9</seq>
     <seq>Ç</seq> <!-- AZERTY for 9 -->
     </SC>
   <SC>

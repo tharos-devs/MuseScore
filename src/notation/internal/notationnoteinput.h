@@ -83,6 +83,8 @@ public:
     void setInputNotes(const NoteValList& notes) override;
     void moveInputNotes(bool up, PitchMode mode) override;
     bool moveInputPosOnGrid(bool forward) override;
+    void moveInputString(bool up) override;
+    void selectInputStringNote() override;
 
     void setRestMode(bool rest) override;
     void setAccidental(AccidentalType accidentalType) override;

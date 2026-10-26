@@ -21,6 +21,8 @@
  */
 #include "notationnoteinput.h"
 
+#include <algorithm>
+
 #include "engraving/dom/articulation.h"
 #include "engraving/dom/chord.h"
 #include "engraving/dom/drumset.h"
@@ -689,6 +691,56 @@ bool NotationNoteInput::moveInputPosOnGrid(bool forward)
     }
 
     return true;
+}
+
+void NotationNoteInput::moveInputString(bool up)
+{
+    TRACEFUNC;
+
+    InputState& is = score()->inputState();
+    const Staff* staff = score()->staff(track2staff(is.track()));
+    if (!staff || !staff->isTabStaff(is.tick())) {
+        return;
+    }
+
+    const int instrStrgs = static_cast<int>(staff->part()->stringData(is.tick(), staff->idx())->strings());
+    if (instrStrgs <= 0) {
+        return;
+    }
+
+    int delta = (staff->staffType(is.tick())->upsideDown() ? -1 : 1);
+    if (up) {
+        delta = -delta;
+    }
+
+    //! NOTE: the input string is kept when the input moves to another staff, which may have fewer strings:
+    //! bring it back within this instrument's strings
+    const int strg = std::clamp(is.string() + delta, 0, instrStrgs - 1);
+    if (strg == is.string()) {
+        return;
+    }
+
+    is.setString(strg);
+    selectInputStringNote();
+
+    //! NOTE: the cursor shows the input string: redraw it, also when no note gets selected
+    notifyAboutStateChanged();
+}
+
+void NotationNoteInput::selectInputStringNote()
+{
+    const InputState& is = score()->inputState();
+    const ChordRest* chordRest = is.cr();
+    if (!chordRest || !chordRest->isChord()) {
+        return;
+    }
+
+    for (Note* note : toChord(chordRest)->notes()) {
+        if (note->string() == is.string()) {
+            m_interaction->select({ note }, SelectType::SINGLE);
+            return;
+        }
+    }
 }
 
 void NotationNoteInput::setRestMode(bool rest)
