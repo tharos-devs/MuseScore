@@ -51,6 +51,8 @@ public:
                 (const TrackName& name, const mpe::PlaybackData& data, const TrackParams& params), (override));
     MOCK_METHOD((async::Promise<TrackId, TrackParams>), addAuxTrack,
                 (const TrackName& trackName, const TrackParams& params), (override));
+    MOCK_METHOD((async::Promise<TrackId, TrackParams>), addGroupTrack,
+                (const TrackName& trackName, const TrackParams& params), (override));
     MOCK_METHOD((async::Promise<TrackId, TrackParams>), addSoundTrack,
                 (const TrackName& trackName, const TrackParams& params), (override));
 
@@ -67,6 +69,7 @@ public:
     MOCK_METHOD(void, setControlParams, (const TrackId trackId, const ControlParams& params), (override));
     MOCK_METHOD(void, setFxChainParams, (const TrackId trackId, const AudioFxChain& params), (override));
     MOCK_METHOD(void, setAuxSendsParams, (const TrackId trackId, const AuxSendsParams& params), (override));
+    MOCK_METHOD(void, setTrackOutput, (const TrackId trackId, const TrackId groupTrackId), (override));
 
     MOCK_METHOD((async::Channel<TrackId, AudioSourceParams>), sourceParamsChanged, (), (const, override));
     MOCK_METHOD((async::Channel<TrackId, ControlParams>), controlParamsChanged, (), (const, override));

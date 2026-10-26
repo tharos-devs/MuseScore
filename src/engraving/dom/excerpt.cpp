@@ -567,6 +567,8 @@ void MasterScore::initExcerpt(Excerpt* excerpt)
     Score* score = new Score(masterScore());
     excerpt->setExcerptScore(score);
     score->style().set(Sid::createMultiMeasureRests, true);
+    //! NOTE: a part gets no shared staves from the score (see MasterNotation::updatePotentialExcerpts()): it starts with stave sharing off
+    score->style().set(Sid::enableStaveSharing, false);
     initParts(excerpt);
 
     Excerpt::createExcerpt(excerpt);

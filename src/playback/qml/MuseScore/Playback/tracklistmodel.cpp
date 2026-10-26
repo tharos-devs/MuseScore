@@ -532,16 +532,20 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
         return item;
     }
 
-    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, false /*outputOnly*/, tracks.trackId);
+    //! NOTE: a shared part's track (stave sharing) is a group, without a sound of its own
+    const bool outputOnly = controller()->isSharedGroupTrack(tracks.instrumentTrackId);
+    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, outputOnly, tracks.trackId);
     item->bindInstrumentTrack(tracks.instrumentTrackId);
 
     connectGlobalMuteSolo(item);
     connectMixerControls(item, tracks);
     //! NOTE: the sound changed: whether it's a VST instrument (articulation map button) and has a window
-    connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
-        updateRowStates();
-        updateColumns();
-    });
+    if (InputResourceItem* sound = item->inputResourceItem()) {
+        connect(sound, &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
+            updateRowStates();
+            updateColumns();
+        });
+    }
 
     //! NOTE: the row is the whole part: its other instruments' tracks follow its mute and solo
     const std::vector<InstrumentTrackId> otherTrackIds = tracks.otherInstrumentTrackIds;

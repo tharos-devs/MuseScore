@@ -344,6 +344,15 @@ void PlaybackControllerStub::setGroupBusSourcesSolo(muse::audio::aux_channel_idx
 {
 }
 
+bool PlaybackControllerStub::isSharedGroupTrack(const engraving::InstrumentTrackId&) const
+{
+    return false;
+}
+
+void PlaybackControllerStub::setSharedGroupSourcesSolo(const engraving::InstrumentTrackId&, bool)
+{
+}
+
 muse::async::Channel<engraving::InstrumentTrackId, bool, bool> PlaybackControllerStub::trackMuteStateChanged() const
 {
     return {};

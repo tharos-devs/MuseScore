@@ -806,6 +806,12 @@ void MasterNotation::initNotationSoloMuteState(const INotationPtr notation)
     // Iterate over all parts (not just the excerpt parts) - tracks that do exist in the master notation but
     // not in the excerpt should be muted in the excerpt...
     for (const Part* masterPart : parts()->partList()) {
+        //! NOTE: a shared part (stave sharing) is never in a part, but its track is the group its origin parts are routed
+        //! to: left unmuted, it plays whichever of them the part has (the others are muted here)
+        if (masterPart->isSharedPart()) {
+            continue;
+        }
+
         const Part* excerptPart = notation->parts()->part(masterPart->id());
         const bool shouldMute = !excerptPart || !excerptPart->isVisible();
         const INotationSoloMuteState::SoloMuteState state = { shouldMute, /*solo*/ false };

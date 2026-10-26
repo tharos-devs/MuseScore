@@ -22,12 +22,14 @@
 
 #include "playbackmodel.h"
 
+#include "dom/chord.h"
 #include "dom/fret.h"
 #include "dom/harmony.h"
 #include "dom/instrument.h"
 #include "dom/masterscore.h"
 #include "dom/measure.h"
 #include "dom/measurerepeat.h"
+#include "dom/note.h"
 #include "dom/part.h"
 #include "dom/staff.h"
 #include "dom/repeatlist.h"
@@ -279,6 +281,35 @@ PlaybackData& PlaybackModel::resolveTrackPlaybackData(const ID& partId, const St
 void PlaybackModel::triggerEventsForItems(const std::vector<const EngravingItem*>& items, muse::mpe::duration_t duration, bool flushSound)
 {
     if (items.empty()) {
+        return;
+    }
+
+    //! NOTE: an item of a shared stave (stave sharing) sounds as its origin items, on their parts' tracks
+    if (items.front()->part() && items.front()->part()->isSharedPart()) {
+        std::map<const Part*, std::vector<const EngravingItem*> > originItemsByPart;
+
+        auto addOriginItems = [&originItemsByPart](const EngravingItem* item) {
+            for (const EngravingItem* originItem : item->originItems()) {
+                if (originItem->part()) {
+                    originItemsByPart[originItem->part()].push_back(originItem);
+                }
+            }
+        };
+
+        for (const EngravingItem* item : items) {
+            if (item->isChord()) {
+                for (const Note* note : toChord(item)->notes()) {
+                    addOriginItems(note);
+                }
+            } else {
+                addOriginItems(item);
+            }
+        }
+
+        for (const auto& [part, originItems] : originItemsByPart) {
+            triggerEventsForItems(originItems, duration, flushSound);
+        }
+
         return;
     }
 
@@ -682,8 +713,9 @@ void PlaybackModel::updateEvents(const int tickFrom, const int tickTo, const tra
 {
     TRACEFUNC;
 
+    //! NOTE: shared staves (stave sharing) only show the notes of their origin staves, which play them
     std::set<staff_idx_t> staffToProcessIdxSet = m_score->staffIdxSetFromRange(trackFrom, trackTo, [](const Staff& staff) {
-        return staff.isPrimaryStaff(); // skip linked staves
+        return staff.isPrimaryStaff() && !(staff.part() && staff.part()->isSharedPart()); // skip linked and shared staves
     });
 
     const ArticulationsProfilePtr metronomeProfile = defaultActiculationProfile(METRONOME_TRACK_ID);

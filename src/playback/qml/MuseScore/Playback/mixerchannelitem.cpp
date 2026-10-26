@@ -943,6 +943,10 @@ void MixerChannelItem::setUserSolo(bool solo)
     if (isGroupBus() && m_outParams.solo == solo) {
         playbackController()->setGroupBusSourcesSolo(m_auxBusIndex, solo);
     }
+
+    if (m_outParams.solo == solo && playbackController()->isSharedGroupTrack(m_instrumentTrackId)) {
+        playbackController()->setSharedGroupSourcesSolo(m_instrumentTrackId, solo);
+    }
 }
 
 void MixerChannelItem::loadInputParams(const AudioInputParams& newParams)

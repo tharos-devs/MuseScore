@@ -85,7 +85,10 @@ void Part::setId(const ID& id)
 
 Part* Part::clone() const
 {
-    return new Part(*this);
+    Part* part = new Part(*this);
+    //! NOTE: a copy (e.g. added to a part) isn't one of the origin parts of this part's shared part (stave sharing)
+    part->m_sharedPart = nullptr;
+    return part;
 }
 
 //---------------------------------------------------------

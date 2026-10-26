@@ -194,6 +194,11 @@ public:
     //! Group buses feeding it with their own channels): soloing skips a muted one, un-soloing applies to all
     virtual void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) = 0;
 
+    //! NOTE: stave sharing - a shared part's track is a group: no sound of its own, its origin parts' tracks are
+    //! routed to it. A Solo set by the user on it also goes to them (soloing skips a muted one)
+    virtual bool isSharedGroupTrack(const engraving::InstrumentTrackId& trackId) const = 0;
+    virtual void setSharedGroupSourcesSolo(const engraving::InstrumentTrackId& groupTrackId, bool solo) = 0;
+
     //! NOTE: fires whenever updateSoloMuteStates()/updateAuxMuteStates() actually resends new
     //! (muted, forceMute) control params to the engine for a track/bus - including for a
     //! track/bus whose OWN solo/mute button was NOT the one just toggled (e.g. every sibling

@@ -416,6 +416,11 @@ void LayoutPanelTreeModel::load()
     }
 
     for (const Part* part : masterParts) {
+        //! NOTE: a part never gets the score's shared staves (stave sharing), see MasterNotation::updatePotentialExcerpts()
+        if (part->isSharedPart() && !isMasterScore()) {
+            continue;
+        }
+
         if (showSystemObjectLayers) {
             for (Staff* staff : part->staves()) {
                 if (!staff->hasSystemObjectsBelowBottomStaff() && muse::contains(systemObjectStaves, staff)) {

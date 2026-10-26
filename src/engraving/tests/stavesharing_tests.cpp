@@ -230,8 +230,14 @@ TEST_F(Engraving_StaveSharingTests, testChangeDurationAfterUndoingStaveSharing)
         EditStaveSharing::toggleStaveSharing(tx, score, false);
     });
 
-    // [THEN] Rest should stll have a shared item, as the shared parts still exist
-    ASSERT_TRUE(cr1->sharedItem());
+    // [THEN] The shared parts are removed, so the rest has no shared item anymore
+    ASSERT_FALSE(cr1->sharedItem());
+    {
+        SharedPart* sharedPart = nullptr;
+        std::vector<Part*> originParts;
+        collectSharedAndOriginParts(score, &sharedPart, originParts);
+        EXPECT_FALSE(sharedPart);
+    }
 
     // [WHEN] Undo twice
     // Undo "Disable stave sharing"
@@ -300,10 +306,10 @@ TEST_F(Engraving_StaveSharingTests, testChangeChordAfterUndoingStaveSharing)
         EditStaveSharing::toggleStaveSharing(tx, score, false);
     });
 
-    // [THEN] Notes and articulations should still have shared items, as the shared parts still exist
+    // [THEN] The shared parts are removed, so notes and articulations have no shared items anymore
     for (Chord* chord : chords) {
-        ASSERT_TRUE(chord->notes().front()->sharedItem());
-        ASSERT_TRUE(chord->articulations().front()->sharedItem());
+        ASSERT_FALSE(chord->notes().front()->sharedItem());
+        ASSERT_FALSE(chord->articulations().front()->sharedItem());
     }
 
     // [WHEN] Undo twice

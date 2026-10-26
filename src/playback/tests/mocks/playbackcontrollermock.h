@@ -78,6 +78,8 @@ public:
     MOCK_METHOD(bool, isTrackForceMuted, (const engraving::InstrumentTrackId&), (const, override));
     MOCK_METHOD(bool, isAuxForceMuted, (muse::audio::aux_channel_idx_t), (const, override));
     MOCK_METHOD(void, setGroupBusSourcesSolo, (muse::audio::aux_channel_idx_t, bool), (override));
+    MOCK_METHOD(bool, isSharedGroupTrack, (const engraving::InstrumentTrackId&), (const, override));
+    MOCK_METHOD(void, setSharedGroupSourcesSolo, (const engraving::InstrumentTrackId&, bool), (override));
     MOCK_METHOD((muse::async::Channel<engraving::InstrumentTrackId, bool, bool>), trackMuteStateChanged, (), (const, override));
     MOCK_METHOD((muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool>), auxMuteStateChanged, (), (const, override));
 

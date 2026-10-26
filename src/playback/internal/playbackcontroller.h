@@ -146,6 +146,8 @@ public:
     bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
     bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
     void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) override;
+    bool isSharedGroupTrack(const engraving::InstrumentTrackId& trackId) const override;
+    void setSharedGroupSourcesSolo(const engraving::InstrumentTrackId& groupTrackId, bool solo) override;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
@@ -297,8 +299,11 @@ private:
                   const TrackAddFinished& onFinished);
     void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
                     const TrackAddFinished& onFinished);
+    void doAddGroupTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
+                         const TrackAddFinished& onFinished);
     void addAuxTrack(muse::audio::aux_channel_idx_t index, bool projectHadNoAudioSettings, bool isProjectLoad,
                      const TrackAddFinished& onFinished);
+    void updateTrackOutputs();
     muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
     //! NOTE: permanently pins this bus's display number on first call (a no-op if already
     //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
@@ -374,6 +379,11 @@ private:
     //! isTrackForceMuted() does for instrument tracks (see buildAuxChannelItem())
     std::map<muse::audio::aux_channel_idx_t, bool> m_lastAppliedAuxForceMute;
     std::map<muse::audio::TrackId, std::tuple<bool, bool, bool> > m_lastAppliedInstrumentMuteSoloState;
+
+    //! NOTE: the engine group track each track is routed to (see updateTrackOutputs()), as last sent to the engine
+    std::map<muse::audio::TrackId, muse::audio::TrackId> m_trackOutputs;
+    //! NOTE: stave sharing - the group track (the shared part's) of each origin part's track
+    std::map<engraving::InstrumentTrackId, engraving::InstrumentTrackId> m_sharedGroupTrackIds;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> m_trackMuteStateChanged;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> m_auxMuteStateChanged;

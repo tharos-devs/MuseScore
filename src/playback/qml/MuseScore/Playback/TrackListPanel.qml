@@ -906,13 +906,13 @@ Item {
 
                             spacing: 4
 
-                            //! NOTE: the Mixer's Sound menu (a bus has none: its column stays)
+                            //! NOTE: the Mixer's Sound menu (a bus or a shared part's group has none: its column stays)
                             FlatButton {
                                 id: soundButton
 
                                 width: 20
                                 height: 20
-                                visible: !rowItem.isAuxBus
+                                visible: !rowItem.isAuxBus && Boolean(rowItem.soundItem)
 
                                 transparent: !soundMenu.isMenuOpened
                                 icon: IconCode.SMALL_ARROW_DOWN
@@ -937,7 +937,7 @@ Item {
                             Item {
                                 width: 20
                                 height: 20
-                                visible: rowItem.isAuxBus
+                                visible: !soundButton.visible
                             }
 
                             ChannelMuteSoloButtons {
