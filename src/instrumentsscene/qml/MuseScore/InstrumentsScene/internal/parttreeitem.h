@@ -71,6 +71,7 @@ private:
     void createAndAddPart(const muse::ID& masterPartId);
 
     size_t resolveNewPartIndex(const muse::ID& partId) const;
+    bool isHiddenBySharedPart(const notation::Part* part) const;
 
     const notation::Part* m_part = nullptr;
     bool m_ignoreVisibilityChange = true;

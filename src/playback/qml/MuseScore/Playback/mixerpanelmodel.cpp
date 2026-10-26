@@ -1219,7 +1219,9 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         type = MixerChannelItem::Type::Metronome;
     }
 
-    MixerChannelItem* item = new MixerChannelItem(this, type, false /*outputOnly*/, trackId);
+    //! NOTE: a shared part's track (stave sharing) is a group, without a sound of its own
+    const bool outputOnly = controller()->isSharedGroupTrack(instrumentTrackId);
+    MixerChannelItem* item = new MixerChannelItem(this, type, outputOnly, trackId);
     item->setPanelSection(m_navigationSection);
     item->bindInstrumentTrack(instrumentTrackId);
 

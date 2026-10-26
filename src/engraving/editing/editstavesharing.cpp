@@ -98,8 +98,12 @@ void EditStaveSharing::toggleStaveSharing(Transaction& tx, Score* score, bool on
 {
     score->undoChangeStyleVal(Sid::enableStaveSharing, on);
 
+    //! NOTE: turning stave sharing off removes the shared parts (and their group in the Mixer) instead of
+    //! only hiding them; each shared part keeps its own on/off switch to hide it
     if (on && score->sharedParts().empty()) {
         cmdCreateSharedStaves(tx, score);
+    } else if (!on) {
+        cmdRemoveSharedStaves(score);
     }
 
     score->setBracketsAndBarlines();
