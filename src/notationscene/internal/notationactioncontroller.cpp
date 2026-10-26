@@ -1789,6 +1789,10 @@ muse::Ret NotationActionController::moveWithRet(MoveDirection direction, bool qu
                 interaction->select(SelectionTarget::FirstItem);
             }
             interaction->moveSelectionDeprecated(direction, quickly ? MoveSelectionType::Measure : MoveSelectionType::Chord);
+            if (noteInput->isNoteInputMode() && noteInput->state().staffGroup() == mu::engraving::StaffGroup::TAB) {
+                // select the note under the cursor rather than the top note of the chord
+                noteInput->selectInputStringNote();
+            }
             playChord = true;
         }
         break;
