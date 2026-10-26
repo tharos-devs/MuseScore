@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-26
+- Stave sharing: the shared stave (e.g. "Flute 1-2") is now the group of the instruments it shows. Its notes no longer sound a third time: Flute 1 and Flute 2 play them, with their own automation and articulation lanes, routed through the "Flute 1-2" channel instead of straight to the Master (its own routing, not an aux send). Its fader, pan, effects, aux sends, volume/pan curves and meter act on their sum, so the balance is the same as without stave sharing; it has no sound of its own (no Sound menu, no instrument loaded). Muting it mutes Flute 1 and Flute 2 (their buttons too), soloing it solos them, and muting or soloing only Flute 1 still works. Turning "Enable stave sharing" off removes the shared staves (undoable); a shared stave's own switch only changes the notation and keeps its channel. In a part, the shared staves are neither listed in Layout nor muted, and the part starts with stave sharing off.
 - Tablature: the numeric keypad (Num+0…Num+9) enters frets 0 to 9, like the digits above the letters; the tablature durations stay on Shift+digit. On a tablature, the arrows move the same way in every input mode (caret mode included): Left/Right from chord to chord, keeping the string, the note under the cursor selected.
 
 ### 2026-10-22
@@ -258,6 +259,8 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed the Mixer showing the previous tab's Solo/Mute after switching between the score and a part (e.g. a Solo lit in a part that has none, both instruments then heard); it now shows the current one's, like the Track list (2026-10-26).
+- Fixed stave sharing in parts: a score's shared stave was listed in a part's Layout panel, an instrument hidden behind it couldn't be added to the part (its eye greyed out) and, added, was taken as hidden there (2026-10-26).
 - Fixed Up/Down in tablature note input: the cursor stayed on its string when no note was on the next one (the next fret still went to the new string), and could get stuck on a string that the staff doesn't have after moving from a guitar to a bass staff (2026-10-26).
 - Fixed playback that often never started again after a stop on macOS since the new direct audio output (no sound, Play doing nothing, "wait end of quick operation" in the log), e.g. with a VSL Synchron Player VST3: the plugin, activated when playback resumed, waited for CoreAudio while CoreAudio waited for it (2026-10-24).
 - Fixed undoing a track's removal: the track came back with MuseScore's default sound (e.g. MuseSounds instead of its VST3 instrument), without its effects, color and solo/mute. It now comes back as it was, the plugins with their state at the time of the removal (2026-10-23).
