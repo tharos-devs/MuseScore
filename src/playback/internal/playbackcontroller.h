@@ -162,6 +162,8 @@ public:
     project::AudioOutputParams referenceAudioOutputParams() const override;
     void setReferenceAudioOutputParams(const project::AudioOutputParams& params) override;
     bool isReferenceAudioForceMuted() const override;
+    bool isReferenceAudioTrackReady() const override;
+    bool isReferenceAudioIncludedInExport() const override;
     muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const override;
     ReferenceAudioDecodeState referenceAudioDecodeState() const override;
     muse::async::Notification referenceAudioDecodeStateChanged() const override;

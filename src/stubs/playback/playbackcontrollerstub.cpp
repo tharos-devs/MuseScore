@@ -303,6 +303,16 @@ bool PlaybackControllerStub::isReferenceAudioForceMuted() const
     return false;
 }
 
+bool PlaybackControllerStub::isReferenceAudioTrackReady() const
+{
+    return true;
+}
+
+bool PlaybackControllerStub::isReferenceAudioIncludedInExport() const
+{
+    return false;
+}
+
 muse::async::Channel<bool, bool> PlaybackControllerStub::referenceAudioMuteStateChanged() const
 {
     static muse::async::Channel<bool, bool> channel;

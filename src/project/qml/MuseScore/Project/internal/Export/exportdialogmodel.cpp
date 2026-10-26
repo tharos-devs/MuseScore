@@ -31,6 +31,7 @@
 #include "notation/imasternotation.h"
 #include "notation/inotation.h"
 #include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
 #include "project/iprojectvideosettings.h"
 
 #include "translation.h"
@@ -780,6 +781,32 @@ void ExportDialogModel::setIncludeVideoAudio(bool include)
     });
 
     emit includeVideoAudioChanged();
+}
+
+bool ExportDialogModel::hasReferenceAudio() const
+{
+    INotationProjectPtr project = context()->project();
+    return project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid();
+}
+
+bool ExportDialogModel::includeReferenceAudio() const
+{
+    return hasReferenceAudio() && context()->project()->audioSyncSettings()->referenceAudio().includeInExport;
+}
+
+void ExportDialogModel::setIncludeReferenceAudio(bool include)
+{
+    if (!hasReferenceAudio() || includeReferenceAudio() == include) {
+        return;
+    }
+
+    //! NOTE Stored in the project like the video's choice; the reference audio's sound track reads it when
+    //! rendering offline (see PlaybackController::onReferenceAudioChanged())
+    updateReferenceAudio(context()->project()->audioSyncSettings(), [include](ReferenceAudioSettings& referenceAudio) {
+        referenceAudio.includeInExport = include;
+    });
+
+    emit includeReferenceAudioChanged();
 }
 
 QVariantList ExportDialogModel::availableAttachedVideoAudioFormats() const

@@ -112,6 +112,8 @@ public:
     MOCK_METHOD(project::AudioOutputParams, referenceAudioOutputParams, (), (const, override));
     MOCK_METHOD(void, setReferenceAudioOutputParams, (const project::AudioOutputParams&), (override));
     MOCK_METHOD(bool, isReferenceAudioForceMuted, (), (const, override));
+    MOCK_METHOD(bool, isReferenceAudioTrackReady, (), (const, override));
+    MOCK_METHOD(bool, isReferenceAudioIncludedInExport, (), (const, override));
     MOCK_METHOD((muse::async::Channel<bool, bool>), referenceAudioMuteStateChanged, (), (const, override));
     MOCK_METHOD(ReferenceAudioDecodeState, referenceAudioDecodeState, (), (const, override));
     MOCK_METHOD(muse::async::Notification, referenceAudioDecodeStateChanged, (), (const, override));

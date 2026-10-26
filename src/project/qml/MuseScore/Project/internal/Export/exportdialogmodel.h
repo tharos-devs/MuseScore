@@ -115,6 +115,9 @@ class ExportDialogModel : public QAbstractListModel, public QQmlParserStatus, pu
     Q_PROPERTY(bool hasAttachedVideo READ hasAttachedVideo NOTIFY includeVideoAudioChanged)
     Q_PROPERTY(bool isAttachedVideoExportAvailable READ isAttachedVideoExportAvailable CONSTANT)
     Q_PROPERTY(bool includeVideoAudio READ includeVideoAudio WRITE setIncludeVideoAudio NOTIFY includeVideoAudioChanged)
+    Q_PROPERTY(bool hasReferenceAudio READ hasReferenceAudio NOTIFY includeReferenceAudioChanged)
+    Q_PROPERTY(
+        bool includeReferenceAudio READ includeReferenceAudio WRITE setIncludeReferenceAudio NOTIFY includeReferenceAudioChanged)
     Q_PROPERTY(QVariantList availableAttachedVideoAudioFormats READ availableAttachedVideoAudioFormats CONSTANT)
     Q_PROPERTY(
         int attachedVideoAudioFormat READ attachedVideoAudioFormat WRITE setAttachedVideoAudioFormat NOTIFY attachedVideoAudioFormatChanged)
@@ -260,6 +263,10 @@ public:
     bool includeVideoAudio() const;
     void setIncludeVideoAudio(bool include);
 
+    bool hasReferenceAudio() const;
+    bool includeReferenceAudio() const;
+    void setIncludeReferenceAudio(bool include);
+
     QVariantList availableAttachedVideoAudioFormats() const;
     int attachedVideoAudioFormat() const;
     void setAttachedVideoAudioFormat(int format);
@@ -319,6 +326,7 @@ signals:
     void ffmpegDirChanged();
 
     void includeVideoAudioChanged();
+    void includeReferenceAudioChanged();
     void attachedVideoAudioFormatChanged();
 
     void videoShowTitleScreenChanged();

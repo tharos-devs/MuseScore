@@ -289,6 +289,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Fixed the Audio sync window's audio missing from audio and score video (MP4) exports: an "Include the Audio track" checkbox in the export's audio options (shown when a reference audio is loaded, saved in the score) adds it, as heard through the Master; the export waits for it to be decoded or transposed. The attached video MP4 export always includes it (2026-10-26).
 - Fixed playback that could hang for good on macOS when MIDI CCs (or notes) were received a while after stopping, e.g. with MIDI CC recording on and a VSL Synchron Player VST3: a VST3 instrument is no longer deactivated a second after stopping, only no longer processed until something plays (2026-10-24).
 - Fixed the playback stopping at the former end of the score after measures of rests were added (e.g. to a new score, to reach the end of the Audio sync window's audio), and the Audio sync window's measures ruler not seeking past it: the end of the playback was only updated when notes changed. Same for a tempo change alone (2026-10-23).
 - Fixed audio sync Detect finding no beats at all after a quiet passage of 10 s or more (a held chord, common in film music), and dropping its points when the score had other sync points after the detected part (e.g. the ones on every measure): it now replaces them.

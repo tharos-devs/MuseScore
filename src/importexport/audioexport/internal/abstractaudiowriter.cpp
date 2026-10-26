@@ -23,6 +23,7 @@
 #include "abstractaudiowriter.h"
 
 #include <chrono>
+#include <functional>
 
 #include <QCoreApplication>
 #include <QFile>
@@ -116,23 +117,37 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
         return m_writeRet;
     };
 
-    //! NOTE Waiting for the audio system to start if it is not already running
-    while (!startAudioController()->isAudioStarted()) {
-        if (m_abortRequested) {
-            return canceled();
+    enum class WaitResult {
+        Ready,
+        Canceled,
+        TimedOut,
+    };
+
+    //! NOTE Processes events until isReady(), the export is canceled or maxWait (if not zero) has elapsed
+    auto waitUntil = [this](const std::function<bool()>& isReady, std::chrono::seconds maxWait = std::chrono::seconds(0)) {
+        const auto waitStart = std::chrono::steady_clock::now();
+        while (!isReady()) {
+            if (m_abortRequested) {
+                return WaitResult::Canceled;
+            }
+            if (maxWait.count() > 0 && std::chrono::steady_clock::now() - waitStart > maxWait) {
+                return WaitResult::TimedOut;
+            }
+            application()->processEvents();
+            QThread::yieldCurrentThread();
         }
-        application()->processEvents();
-        QThread::yieldCurrentThread();
+        return WaitResult::Ready;
+    };
+
+    //! NOTE Waiting for the audio system to start if it is not already running
+    if (waitUntil([this]() { return startAudioController()->isAudioStarted(); }) == WaitResult::Canceled) {
+        return canceled();
     }
 
     //! NOTE Playback (tracks and duration) loads asynchronously; rendering before it is
     //! ready yields 0 tracks and 0 duration ("No audio to export"). Wait for it first.
-    while (!playbackController()->isPlaybackInited()) {
-        if (m_abortRequested) {
-            return canceled();
-        }
-        application()->processEvents();
-        QThread::yieldCurrentThread();
+    if (waitUntil([&playbackController]() { return playbackController()->isPlaybackInited(); }) == WaitResult::Canceled) {
+        return canceled();
     }
 
     //! NOTE Same for the attached video's track (its audio is decoded and loaded asynchronously too), only when
@@ -141,24 +156,31 @@ Ret AbstractAudioWriter::doWriteAndWait(INotationPtr notation,
     const bool forceSoundTracks = muse::value(options, OptionKey::INCLUDE_SOUND_TRACKS, Val(false)).toBool();
     if (forceSoundTracks || playbackController()->isVideoAudioIncludedInExport()) {
         const auto maxWait = forceSoundTracks ? std::chrono::seconds(300) : std::chrono::seconds(60);
-        const auto videoWaitStart = std::chrono::steady_clock::now();
-        while (!playbackController()->isVideoTrackReady()) {
-            if (m_abortRequested) {
-                return canceled();
+        const WaitResult result = waitUntil([&playbackController]() { return playbackController()->isVideoTrackReady(); }, maxWait);
+        if (result == WaitResult::Canceled) {
+            return canceled();
+        }
+        if (result == WaitResult::TimedOut) {
+            if (forceSoundTracks) {
+                LOGE() << "the attached video's audio isn't ready";
+                m_writeRet = make_ret(Ret::Code::UnknownError, std::string("the attached video's audio isn't ready"));
+                m_isCompleted = true;
+                m_progress.finish(m_writeRet);
+                return m_writeRet;
             }
-            if (std::chrono::steady_clock::now() - videoWaitStart > maxWait) {
-                if (forceSoundTracks) {
-                    LOGE() << "the attached video's audio isn't ready";
-                    m_writeRet = make_ret(Ret::Code::UnknownError, std::string("the attached video's audio isn't ready"));
-                    m_isCompleted = true;
-                    m_progress.finish(m_writeRet);
-                    return m_writeRet;
-                }
-                LOGW() << "the attached video's audio isn't ready, exported without it";
-                break;
-            }
-            application()->processEvents();
-            QThread::yieldCurrentThread();
+            LOGW() << "the attached video's audio isn't ready, exported without it";
+        }
+    }
+
+    //! NOTE Same for the Audio sync window's reference audio (decoded, maybe transposed), never what the export is about
+    if (forceSoundTracks || playbackController()->isReferenceAudioIncludedInExport()) {
+        const WaitResult result = waitUntil([&playbackController]() { return playbackController()->isReferenceAudioTrackReady(); },
+                                            std::chrono::seconds(60));
+        if (result == WaitResult::Canceled) {
+            return canceled();
+        }
+        if (result == WaitResult::TimedOut) {
+            LOGW() << "the reference audio isn't ready, exported without it";
         }
     }
 

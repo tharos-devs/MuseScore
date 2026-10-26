@@ -66,6 +66,8 @@ ExportSettingsPage {
 
         // The video's audio is what this export is about: always included (the Mixer can still mute it)
         showIncludeVideoAudioControl: false
+        // Every sound track is included in this export, the Audio track too
+        showIncludeReferenceAudioControl: false
     }
 
     StyledTextLabel {
