@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-26
+- Tablature: the numeric keypad (Num+0…Num+9) enters frets 0 to 9, like the digits above the letters; the tablature durations stay on Shift+digit. On a tablature, the arrows move the same way in every input mode (caret mode included): Left/Right from chord to chord, keeping the string, the note under the cursor selected.
+
 ### 2026-10-22
 - Audio sync: turning sync on for the first time puts a sync point on every measure start (repeats unrolled) and at the score's end, at their current time, ready to be dragged onto the audio's barlines.
 - Audio sync Detect: a new beat tracker places the measures on the strong beats. The window asks for an approximate tempo (typed, or tapped with the Tap button or Space while the music plays, with Play/Pause right there), a Steady/Flexible tempo slider and whether to ignore the silence at the beginning; a measure gets a beat more or less only for a flexible tempo, and a score start placed by hand is kept.
@@ -255,6 +258,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed Up/Down in tablature note input: the cursor stayed on its string when no note was on the next one (the next fret still went to the new string), and could get stuck on a string that the staff doesn't have after moving from a guitar to a bass staff (2026-10-26).
 - Fixed playback that often never started again after a stop on macOS since the new direct audio output (no sound, Play doing nothing, "wait end of quick operation" in the log), e.g. with a VSL Synchron Player VST3: the plugin, activated when playback resumed, waited for CoreAudio while CoreAudio waited for it (2026-10-24).
 - Fixed undoing a track's removal: the track came back with MuseScore's default sound (e.g. MuseSounds instead of its VST3 instrument), without its effects, color and solo/mute. It now comes back as it was, the plugins with their state at the time of the removal (2026-10-23).
 - Fixed a new instrument added after removing others inheriting what belonged to a removed one (e.g. its volume or pan curves, its sound when an instrument was replaced): a removed instrument's curves go with it (back with an undo), and a new instrument or staff never gets the id of one removed before (2026-10-23).
