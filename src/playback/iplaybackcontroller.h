@@ -163,6 +163,10 @@ public:
     virtual project::AudioOutputParams referenceAudioOutputParams() const = 0;
     virtual void setReferenceAudioOutputParams(const project::AudioOutputParams& params) = 0;
     virtual bool isReferenceAudioForceMuted() const = 0;
+    //! NOTE Same as isVideoTrackReady(), for the reference audio. True if there's no reference audio.
+    virtual bool isReferenceAudioTrackReady() const = 0;
+    //! NOTE Whether the reference audio is mixed into exports ("Include the Audio track")
+    virtual bool isReferenceAudioIncludedInExport() const = 0;
     //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
     virtual muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const = 0;
 

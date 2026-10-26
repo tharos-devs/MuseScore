@@ -32,11 +32,12 @@ Column {
     property ExportDialogModel model
     property NavigationPanel navigationPanel: null
     property int navigationOrderStart: 0
-    property alias navigationOrderEnd: includeVideoAudioCheckBox.navigation.row
+    property alias navigationOrderEnd: includeReferenceAudioCheckBox.navigation.row
 
     property bool showBitRateControl: false
     property bool showSampleRateControl: true
     property bool showIncludeVideoAudioControl: true
+    property bool showIncludeReferenceAudioControl: true
 
     property int dropdownWidth: 126
 
@@ -149,6 +150,24 @@ Column {
 
         onClicked: {
             root.model.includeVideoAudio = !checked
+        }
+    }
+
+    CheckBox {
+        id: includeReferenceAudioCheckBox
+
+        width: parent.width
+        visible: root.showIncludeReferenceAudioControl && (root.model ? root.model.hasReferenceAudio : false)
+        text: qsTrc("project/export", "Include the Audio track")
+
+        navigation.name: "IncludeReferenceAudioCheckbox"
+        navigation.panel: root.navigationPanel
+        navigation.row: root.navigationOrderStart + 5
+
+        checked: root.model ? root.model.includeReferenceAudio : false
+
+        onClicked: {
+            root.model.includeReferenceAudio = !checked
         }
     }
 }

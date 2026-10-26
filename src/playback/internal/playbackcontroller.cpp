@@ -1562,6 +1562,18 @@ bool PlaybackController::isReferenceAudioForceMuted() const
     return m_referenceAudioSlot && m_referenceAudioSlot->isForceMuted();
 }
 
+bool PlaybackController::isReferenceAudioTrackReady() const
+{
+    return !m_referenceAudioSlot || m_referenceAudioSlot->isReady();
+}
+
+bool PlaybackController::isReferenceAudioIncludedInExport() const
+{
+    IProjectAudioSyncSettingsPtr audioSyncSettingsPtr = audioSyncSettings();
+    return audioSyncSettingsPtr && audioSyncSettingsPtr->referenceAudio().isValid()
+           && audioSyncSettingsPtr->referenceAudio().includeInExport;
+}
+
 muse::async::Channel<bool, bool> PlaybackController::referenceAudioMuteStateChanged() const
 {
     return m_referenceAudioMuteStateChanged;
