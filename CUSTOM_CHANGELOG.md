@@ -4,6 +4,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Features
 
+### 2026-10-27
+- Mixer and Track list: with several tracks selected, picking a VST3 instrument in the Sound menu of one of them loads it on every selected track. A track already having this VST3 keeps it, with its settings; one warning covers all the tracks whose sound flags would be reset, and only the clicked track's plugin window opens. Other sounds (MuseSounds, SoundFonts) are still picked track by track.
+
 ### 2026-10-26
 - Stave sharing: the shared stave (e.g. "Flute 1-2") is now the group of the instruments it shows. Its notes no longer sound a third time: Flute 1 and Flute 2 play them, with their own automation and articulation lanes, routed through the "Flute 1-2" channel instead of straight to the Master (its own routing, not an aux send). Its fader, pan, effects, aux sends, volume/pan curves and meter act on their sum, so the balance is the same as without stave sharing; it has no sound of its own (no Sound menu, no instrument loaded). Muting it mutes Flute 1 and Flute 2 (their buttons too), soloing it solos them, and muting or soloing only Flute 1 still works. Turning "Enable stave sharing" off removes the shared staves (undoable); a shared stave's own switch only changes the notation and keeps its channel. In a part, the shared staves are neither listed in Layout nor muted, and the part starts with stave sharing off.
 - Tablature: the numeric keypad (Num+0…Num+9) enters frets 0 to 9, like the digits above the letters; the tablature durations stay on Shift+digit. On a tablature, the arrows move the same way in every input mode (caret mode included): Left/Right from chord to chord, keeping the string, the note under the cursor selected.
