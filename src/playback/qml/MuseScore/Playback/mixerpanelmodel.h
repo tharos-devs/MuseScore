@@ -85,6 +85,9 @@ public:
     //! output params)
     Q_INVOKABLE void setSoundTrackColor(mu::playback::MixerChannelItem* item, const QColor& color);
     Q_INVOKABLE void resetSoundTrackColor(mu::playback::MixerChannelItem* item);
+    //! NOTE: the metronome's channel can't be selected either, see TrackListModel::setMetronomeColor()
+    Q_INVOKABLE void setMetronomeColor(mu::playback::MixerChannelItem* item, const QColor& color);
+    Q_INVOKABLE void resetMetronomeColor(mu::playback::MixerChannelItem* item);
     Q_INVOKABLE void clearSelection();
 
     //! NOTE: same "apply to every currently-selected channel" idiom as
@@ -202,6 +205,7 @@ private:
     //! applies color to every currently-selected channel as a single undo command (see
     //! ChannelColorChange)
     void applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName);
+    void applyMetronomeColor(MixerChannelItem* item, const QColor& color, const muse::TranslatableString& actionName);
     QList<muse::audio::TrackId> selectedInstrumentTrackIds() const;
     int resolveInsertIndex(const engraving::InstrumentTrackId& instrumentTrackId) const;
     int resolveSoundTrackInsertIndex(MixerChannelItem::Type type) const;
