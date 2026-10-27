@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-27
+- Note velocity bars: with a range selection, three handles on the top edge of the blue frame. The middle one moves every selected bar up or down by the same amount; the left (right) one sets the first (last) column and lays the bars in between on a straight line to the other end, one line per staff, the notes of a chord alike. The value is shown while dragging, one undo step per gesture.
 - Tablature note input: hovering a tablature shows where a click puts its note, as a rectangle drawn like the note input cursor (no fret number) on the string and position the click would use; it covers the whole staff in rest input and follows the rhythmic grid in caret input.
 - Mixer and Track list: with several tracks selected, picking a VST3 instrument in the Sound menu of one of them loads it on every selected track. A track already having this VST3 keeps it, with its settings; one warning covers all the tracks whose sound flags would be reset, and only the clicked track's plugin window opens. Other sounds (MuseSounds, SoundFonts) are still picked track by track.
 
