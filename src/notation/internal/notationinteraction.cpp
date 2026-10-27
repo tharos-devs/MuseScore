@@ -465,6 +465,13 @@ void NotationInteraction::showShadowNoteForPosition(const PointF& pos)
         return;
     }
 
+    //! NOTE: No notehead preview on tab staves: the mouse keeps the default cursor
+    const Staff* staff = score()->staff(params.position.staffIdx);
+    if (staff && staff->isTabStaff(params.position.segment->tick())) {
+        hideShadowNote();
+        return;
+    }
+
     params.duration = inputState.duration();
     params.accidentalType = inputState.accidentalType();
     params.articulationIds = inputState.articulationIds();
