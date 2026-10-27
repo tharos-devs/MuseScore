@@ -32,6 +32,7 @@
 
 #include "segmentcanvasinterpolation.h"
 #include "midiccautomation.h"
+#include "selectionframehandle.h"
 #include "valueeditorpopup.h"
 
 #include "uicomponents/qml/Muse/UiComponents/polylineplot.h"
@@ -426,6 +427,7 @@ void NotationAutomationController::init()
         return;
     }
 
+    createSelectionHandles();
     onCurrentNotationChanged();
 
     automation()->automationModeEnabledChanged().onNotify(this, [this]() {
@@ -578,6 +580,11 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         const bool editRestricted = !isPendingPoint && isScoreDrivenPoint(automationPoint);
         const qreal clampedX = editRestricted ? oldPointData.qPointF.x() : std::clamp(x, minX, maxX);
 
+        if (m_groupDragAborted) {
+            m_groupDragAborted = !completed;
+            return;
+        }
+
         // A point of the range selection: the whole selection moves with it, vertically only
         if (m_groupDrag.active || (!isPendingPoint && isGroupSelected(key, oldPointData))) {
             if (!m_groupDrag.active) {
@@ -682,6 +689,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     // Every press ends here: a group drag not committed by then (e.g. a click with a little jitter) is dropped
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::interactionFinished, [this]() {
         cancelGroupDrag();
+        m_groupDragAborted = false;
     });
 
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::pointValueEditRequested,
@@ -1018,6 +1026,8 @@ void NotationAutomationController::updatePolylinesGeometry()
 
         applyPolylineColors(polyline, key);
     }
+
+    updateHandlesGeometry();
 }
 
 void NotationAutomationController::updatePolylinesColors()
@@ -1031,6 +1041,8 @@ void NotationAutomationController::updatePolylinesColors()
         PolylinePlot* polyline = *polylines.begin();
         applyPolylineColors(polyline, key);
     }
+
+    updateHandlesColors();
 }
 
 void NotationAutomationController::setViewMatrix(const muse::draw::Transform& viewMatrix)
@@ -1215,6 +1227,7 @@ void NotationAutomationController::processPendingChanges()
     }
 
     updatePolylinesGeometry();
+    updateSelectionHandles();
 }
 
 void NotationAutomationController::rebuildAllPolylines()
@@ -1235,6 +1248,7 @@ void NotationAutomationController::rebuildAllPolylines()
 
     if (!score()) {
         // Happens on close...
+        updateSelectionHandles();
         return;
     }
 
@@ -1252,6 +1266,7 @@ void NotationAutomationController::rebuildAllPolylines()
     }
 
     updatePolylinesGeometry();
+    updateSelectionHandles();
 }
 
 //! NOTE: a non-structural edit can still re-flow measures across systems, and the layout then deletes the systems
@@ -1397,6 +1412,8 @@ void NotationAutomationController::applyGroupFlags(PolylinePlot* polyline, const
 //! NOTE: only while automation is shown - enabling it refreshes them
 void NotationAutomationController::refreshGroupFlags()
 {
+    updateSelectionHandles();
+
     if (!automation() || !automation()->isAutomationModeEnabled()) {
         return;
     }
@@ -1505,8 +1522,11 @@ void NotationAutomationController::previewGroupDrag(qreal delta)
         }
 
         QVector<QPointF> points = m_groupDrag.origins.at(key);
-        for (const int i : selected) {
-            points[i].setY(std::clamp(points[i].y() + delta, 0.0, 1.0));
+        const auto weightsIt = m_groupDrag.weights.find(key);
+        for (size_t j = 0; j < selected.size(); ++j) {
+            const qreal weight = weightsIt != m_groupDrag.weights.end() ? weightsIt->second.at(j) : 1.0;
+            const int i = selected.at(j);
+            points[i].setY(std::clamp(points[i].y() + delta * weight, 0.0, 1.0));
         }
 
         PolylinePlot* polyline = *linesIt->second.begin();
@@ -1532,7 +1552,10 @@ void NotationAutomationController::commitGroupDrag(qreal delta)
         }
 
         const AutomationCurveKey curveKey = currentCurveKeyFor(staff);
-        for (const int i : selected) {
+        const auto weightsIt = m_groupDrag.weights.find(key);
+        for (size_t j = 0; j < selected.size(); ++j) {
+            const int i = selected.at(j);
+            const qreal weight = weightsIt != m_groupDrag.weights.end() ? weightsIt->second.at(j) : 1.0;
             const PointData& pointData = pointsDataIt->second.at(i);
             const mu::engraving::AutomationPoint* existing = automationPointAt(key, pointData.tick);
             if (!existing) {
@@ -1545,7 +1568,7 @@ void NotationAutomationController::commitGroupDrag(qreal delta)
                                                                                          automationData()->curve(curveKey).find(
                                                                                              utickForTick(pointData.tick)))
                                                          : existing->value.outValue;
-            const double display = 1.0 - std::clamp(origins.at(i).y() + delta, 0.0, 1.0);
+            const double display = 1.0 - std::clamp(origins.at(i).y() + delta * weight, 0.0, 1.0);
             const mu::engraving::real_t value = automationValueFromDisplay(type, display, referenceValue);
             if (muse::RealIsEqual(value, referenceValue)) {
                 continue; // unchanged (e.g. already at the edge): left as it is
@@ -1598,8 +1621,233 @@ void NotationAutomationController::cancelGroupDrag()
     }
 }
 
+qreal NotationAutomationController::clampedGroupDelta(qreal delta) const
+{
+    qreal minDelta = 0.0;
+    qreal maxDelta = 0.0;
+    for (const auto& [key, selected] : m_groupDrag.selected) {
+        const QVector<QPointF>& origins = m_groupDrag.origins.at(key);
+        const auto weightsIt = m_groupDrag.weights.find(key);
+        for (size_t j = 0; j < selected.size(); ++j) {
+            const qreal weight = weightsIt != m_groupDrag.weights.end() ? weightsIt->second.at(j) : 1.0;
+            if (weight <= 0.0) {
+                continue;
+            }
+            const qreal y = origins.at(selected.at(j)).y();
+            minDelta = std::min(minDelta, -y / weight);
+            maxDelta = std::max(maxDelta, (1.0 - y) / weight);
+        }
+    }
+    return std::clamp(delta, minDelta, maxDelta);
+}
+
+void NotationAutomationController::createSelectionHandles()
+{
+    IF_ASSERT_FAILED(m_linesParent) {
+        return;
+    }
+
+    m_handles = std::make_unique<SelectionFrameHandles>(m_linesParent, [this](HandleKind kind, qreal deltaYPx, bool completed) {
+        onHandleDragged(kind, deltaYPx, completed);
+    }, [this]() {
+        onHandleDragCancelled();
+    });
+    updateHandlesColors();
+}
+
+void NotationAutomationController::updateSelectionHandles()
+{
+    if (m_handleDragging || !m_handles) {
+        return;
+    }
+
+    updateHandlesColors(); // e.g. the score's paper color changed since
+
+    // Only for a range selection with points of the curves in it
+    std::vector<muse::RectF> areas;
+    const INotationPtr notation = currentNotation();
+    const INotationSelectionPtr selection = notation && notation->interaction() ? notation->interaction()->selection() : nullptr;
+    if (automation() && automation()->isAutomationModeEnabled() && selection && selection->isRange() && selection->range()
+        && hasHandleTargets()) {
+        areas = selection->range()->boundingArea();
+    }
+    m_handles->setAreas(std::move(areas));
+
+    updateHandlesGeometry();
+}
+
+void NotationAutomationController::updateHandlesGeometry()
+{
+    if (m_handles) {
+        m_handles->updateGeometry(m_viewMatrix, automation() && automation()->isAutomationModeEnabled());
+    }
+}
+
+void NotationAutomationController::updateHandlesColors()
+{
+    if (m_handles) {
+        m_handles->setColors(notationConfiguration() ? notationConfiguration()->selectionColor() : QColor(Qt::blue),
+                             notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
+    }
+}
+
+//! NOTE: not on dynamics: their curve follows the score's markings
+bool NotationAutomationController::hasHandleTargets() const
+{
+    const AutomationType type = currentAutomationType();
+    if (type == AutomationType::Dynamics || type == AutomationType::Unknown) {
+        return false;
+    }
+
+    for (const auto& [key, pointsData] : m_pointsDataByStaff) {
+        for (const PointData& pointData : pointsData) {
+            if (isGroupSelected(key, pointData)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void NotationAutomationController::setGroupDragWeights(HandleKind kind)
+{
+    m_groupDrag.weights.clear();
+    m_groupDrag.movedEnd.reset();
+
+    // Each curve's own selected points: their first and last tick
+    std::map<AutomationCurveKey, std::pair<int, int> > tickRanges;
+    for (const auto& [key, selected] : m_groupDrag.selected) {
+        const AutomationCurveKey curveKey = currentCurveKeyFor(score()->staff(key.staffIdx));
+        const QVector<PointData>& pointsData = m_pointsDataByStaff.at(key);
+        for (const int i : selected) {
+            const int tick = pointsData.at(i).tick;
+            const auto [it, inserted] = tickRanges.try_emplace(curveKey, tick, tick);
+            it->second.first = std::min(it->second.first, tick);
+            it->second.second = std::max(it->second.second, tick);
+        }
+    }
+
+    // The label's point: a moved end, on the first staff that has one; inside the selection (a jump's in value
+    // at the right end, its out value at the left one)
+    staff_idx_t labelStaffIdx = muse::nidx;
+
+    for (const auto& [key, selected] : m_groupDrag.selected) {
+        const QVector<PointData>& pointsData = m_pointsDataByStaff.at(key);
+        const auto [fromTick, toTick] = tickRanges.at(currentCurveKeyFor(score()->staff(key.staffIdx)));
+        const int movedTick = kind == HandleKind::Right ? toTick : fromTick;
+
+        std::vector<qreal> weights;
+        weights.reserve(selected.size());
+        for (const int i : selected) {
+            const int tick = pointsData.at(i).tick;
+            qreal weight = 1.0;
+            if (kind != HandleKind::Middle && toTick > fromTick) {
+                weight = kind == HandleKind::Right ? qreal(tick - fromTick) / (toTick - fromTick)
+                         : qreal(toTick - tick) / (toTick - fromTick);
+            }
+            weights.push_back(weight);
+
+            if (kind == HandleKind::Middle || tick != movedTick) {
+                continue;
+            }
+            const bool isFirstStaff = labelStaffIdx == muse::nidx || key.staffIdx < labelStaffIdx;
+            const bool isSameStaff = m_groupDrag.movedEnd && m_groupDrag.movedEnd->key() == key;
+            if (isFirstStaff || (isSameStaff && kind == HandleKind::Left)) {
+                labelStaffIdx = key.staffIdx;
+                m_groupDrag.movedEnd = GroupDrag::MovedEnd { key.system, key.staffIdx, i };
+            }
+        }
+        m_groupDrag.weights.emplace(key, std::move(weights));
+    }
+}
+
+//! NOTE: a value, in its type's unit: a tilt's moved end, or the highest point after a shift
+QString NotationAutomationController::handleLabel(HandleKind kind, qreal delta) const
+{
+    std::optional<qreal> y;
+    if (kind != HandleKind::Middle) {
+        if (m_groupDrag.movedEnd) {
+            y = m_groupDrag.origins.at(m_groupDrag.movedEnd->key()).at(m_groupDrag.movedEnd->pointIdx).y() + delta;
+        }
+    } else {
+        for (const auto& [key, selected] : m_groupDrag.selected) {
+            for (const int i : selected) {
+                const qreal pointY = m_groupDrag.origins.at(key).at(i).y() + delta;
+                y = y ? std::min(*y, pointY) : pointY; // the highest value is the lowest y
+            }
+        }
+    }
+
+    if (!y) {
+        return QString();
+    }
+    return formattedActivePointValue(currentAutomationType(), std::clamp(*y, 0.0, 1.0), notationConfiguration()->currentAutomationMidiCc());
+}
+
+void NotationAutomationController::onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed)
+{
+    // On press: the selected points, and how much each of them moves
+    if (!m_handleDragging) {
+        m_handleDragging = true;
+        m_handleAborted = false;
+        startGroupDrag();
+        setGroupDragWeights(kind);
+
+        // The offset is a fraction of the lane's height: the moved end's lane, or the first one
+        const SysStaffKey refKey = m_groupDrag.movedEnd ? m_groupDrag.movedEnd->key()
+                                   : (!m_groupDrag.selected.empty() ? m_groupDrag.selected.begin()->first : SysStaffKey());
+        const auto linesIt = refKey.system ? m_stavesToLinesMap.find(refKey) : m_stavesToLinesMap.end();
+        m_groupDrag.referenceHeightPx = linesIt != m_stavesToLinesMap.end() && !linesIt->second.empty()
+                                        ? (*linesIt->second.begin())->height() : 0.0;
+        m_handleAborted = m_groupDrag.selected.empty() || m_groupDrag.referenceHeightPx <= 0.0;
+    } else if (!m_groupDrag.active) {
+        m_handleAborted = true; // the curves changed or were rebuilt meanwhile (e.g. an undo): its points may be gone
+    }
+
+    if (m_handleAborted) {
+        if (completed) {
+            m_handleDragging = false;
+            m_handleAborted = false;
+            cancelGroupDrag();
+            m_handles->setLabel(kind, QString());
+            updateSelectionHandles();
+        }
+        return;
+    }
+
+    const qreal delta = clampedGroupDelta(deltaYPx / m_groupDrag.referenceHeightPx);
+    m_handles->setLabel(kind, handleLabel(kind, delta));
+
+    if (!completed) {
+        previewGroupDrag(delta);
+        return;
+    }
+
+    m_handleDragging = false;
+    // One undo step; unchanged points are skipped there
+    commitGroupDrag(delta);
+    updateSelectionHandles();
+}
+
+void NotationAutomationController::onHandleDragCancelled()
+{
+    m_handleDragging = false;
+    m_handleAborted = false;
+    // Back to the points' real (unchanged) values
+    cancelGroupDrag();
+    updateSelectionHandles();
+}
+
 void NotationAutomationController::mergePendingChanges(const mu::engraving::AutomationChanges& changes)
 {
+    // The curves changed under a group drag (e.g. an undo from the keyboard, a MIDI CC take being recorded): the
+    // points it gathered may be gone. Back to the points as they were (the changed ones follow), the rest of the
+    // gesture is dropped
+    if (m_groupDrag.active) {
+        cancelGroupDrag();
+        m_groupDragAborted = !m_handleDragging; // a handle's drag sees it by itself (see onHandleDragged())
+    }
+
     if (changes.isFullReset) {
         m_pendingChanges.isFullReset = true;
         return;
@@ -1672,6 +1920,7 @@ void NotationAutomationController::applyAutomationChanges(const mu::engraving::A
     }
 
     updatePolylinesGeometry();
+    updateSelectionHandles();
 }
 
 //! NOTE: a point's value as typed by the user, in its type's own unit - the same as the drag tooltip's

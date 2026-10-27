@@ -23,6 +23,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <unordered_set>
 #include <vector>
@@ -37,6 +38,7 @@
 #include "notation/notationtypes.h"
 
 #include "layoutsignature.h"
+#include "selectionframehandle.h"
 #include "notation/inotationconfiguration.h"
 #include "notation/inotationcontextconfiguration.h"
 #include "engraving/automation/automationdata.h"
@@ -161,6 +163,24 @@ private:
     void previewGroupDrag(qreal delta);
     void commitGroupDrag(qreal delta);
     void cancelGroupDrag();
+    //! NOTE: past the offset that puts every selected point at the top/bottom of the lane, nothing moves anymore
+    qreal clampedGroupDelta(qreal delta) const;
+
+    // The handles on the range selection's frame: left corner = tilt from the right end, middle = shift, right corner =
+    // tilt from the left end
+    using HandleKind = SelectionFrameHandles::Kind;
+
+    void createSelectionHandles();
+    void updateSelectionHandles();
+    void updateHandlesGeometry();
+    void updateHandlesColors();
+    bool hasHandleTargets() const;
+    void onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed);
+    void onHandleDragCancelled();
+    //! NOTE: tilting: the offset grows linearly from the fixed end of each curve's selected points (none) to the moved
+    //! one (all of it), so the shape of the curve is kept
+    void setGroupDragWeights(HandleKind kind);
+    QString handleLabel(HandleKind kind, qreal delta) const;
     bool isScoreDrivenPoint(const mu::engraving::AutomationPoint* point) const;
     int utickForTick(int tick) const;
     std::optional<int> firstPassTickForUtick(int utick) const;
@@ -215,7 +235,22 @@ private:
         bool active = false;
         std::map<SysStaffKey, QVector<QPointF> > origins; // the points of every polyline with selected points, at start
         std::map<SysStaffKey, std::vector<int> > selected; // their selected points (indices), at start
+        std::map<SysStaffKey, std::vector<qreal> > weights; // the share of the offset each selected point gets (1 if none)
+        struct MovedEnd {
+            const System* system = nullptr;
+            staff_idx_t staffIdx = muse::nidx;
+            int pointIdx = -1;
+            SysStaffKey key() const { return SysStaffKey { system, staffIdx }; }
+        };
+        std::optional<MovedEnd> movedEnd; // a tilt's moved end: its point shows the handle's label
+        qreal referenceHeightPx = 0.0; // a handle's displacement, in pixels, over this height is the offset
     };
     GroupDrag m_groupDrag;
+
+    std::unique_ptr<SelectionFrameHandles> m_handles;
+    bool m_handleDragging = false;
+    bool m_handleAborted = false; // the curves changed during the handle's drag: the rest of it is dropped
+    // Likewise for a drag of a point of the group (see mergePendingChanges())
+    bool m_groupDragAborted = false;
 };
 }

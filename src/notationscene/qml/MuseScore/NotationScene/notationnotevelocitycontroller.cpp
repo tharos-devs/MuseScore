@@ -22,7 +22,7 @@
 
 #include "notationnotevelocitycontroller.h"
 
-#include "notevelocityhandle.h"
+#include "selectionframehandle.h"
 #include "notevelocityoverlay.h"
 #include "valueeditorpopup.h"
 
@@ -73,18 +73,6 @@ constexpr static qint64 AUDITION_MIN_INTERVAL_MS = 200;
 
 constexpr static double BAR_HALF_WIDTH_SP = 0.45;
 constexpr static double BAND_V_PADDING_SP = 0.3;
-
-// The value label chip needs to stay legible against whatever the score's own background currently is (light/dark/
-// high-contrast paper, or a user-customized color) - picking its colors from that background's luminance, rather than
-// hardcoding per theme, keeps it correct even for a custom paper color that doesn't match either preset.
-static std::pair<QColor, QColor> valueLabelColors(const QColor& background)
-{
-    const double luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue();
-    if (luminance > 128.0) {
-        return { QColor(40, 40, 40, 235), QColor(255, 255, 255) };
-    }
-    return { QColor(235, 235, 235, 235), QColor(20, 20, 20) };
-}
 
 NotationNoteVelocityController::NotationNoteVelocityController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx)
     : muse::Contextable(iocCtx), m_overlaysParent(overlaysParent)
@@ -240,7 +228,9 @@ void NotationNoteVelocityController::rebuildAllOverlays()
             delete data.overlay;
         }
         m_overlaysByStaff.clear();
-        m_selectionAreas.clear();
+        if (m_handles) {
+            m_handles->setAreas({});
+        }
         updateHandlesGeometry();
         return;
     }
@@ -434,7 +424,7 @@ void NotationNoteVelocityController::applyOverlayColors(NoteVelocityOverlay* ove
     overlay->setBorderColor(QColor(50, 130, 100, 255));
 
     const auto [labelBackground, labelText]
-        = valueLabelColors(notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
+        = SelectionFrameHandle::valueLabelColors(notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
     overlay->setValueLabelColors(labelBackground, labelText);
 }
 
@@ -840,70 +830,41 @@ void NotationNoteVelocityController::createSelectionHandles()
         return;
     }
 
-    const QColor color = notationConfiguration() ? notationConfiguration()->selectionColor() : QColor(Qt::blue);
-    const auto [labelBackground, labelText]
-        = valueLabelColors(notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
-
-    for (HandleKind kind : { HandleKind::RampLeft, HandleKind::Shift, HandleKind::RampRight }) {
-        NoteVelocityHandle* handle = new NoteVelocityHandle(m_overlaysParent);
-        handle->setZ(1.0); // above the bars
-        handle->setColor(color);
-        handle->setValueLabelColors(labelBackground, labelText);
-        handle->setVisible(false);
-
-        QObject::connect(handle, &NoteVelocityHandle::dragged, [this, kind](qreal deltaYPx, bool completed) {
-            onHandleDragged(kind, deltaYPx, completed);
-        });
-        QObject::connect(handle, &NoteVelocityHandle::dragCancelled, [this]() {
-            onHandleDragCancelled();
-        });
-
-        m_handles[static_cast<size_t>(kind)] = handle;
-    }
+    m_handles = std::make_unique<SelectionFrameHandles>(m_overlaysParent, [this](HandleKind kind, qreal deltaYPx, bool completed) {
+        onHandleDragged(kind, deltaYPx, completed);
+    }, [this]() {
+        onHandleDragCancelled();
+    });
 }
 
 void NotationNoteVelocityController::updateSelectionHandles()
 {
-    if (m_handleDragging) {
+    if (m_handleDragging || !m_handles) {
         return;
     }
 
-    m_selectionAreas.clear();
+    // Read again each time: the theme or the selection color may have changed since
+    m_handles->setColors(notationConfiguration() ? notationConfiguration()->selectionColor() : QColor(Qt::blue),
+                         notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
 
     // Only for a range selection with bars in it
+    std::vector<muse::RectF> areas;
     const INotationPtr notation = currentNotation();
     const INotationSelectionPtr selection = notation && notation->interaction() ? notation->interaction()->selection() : nullptr;
     if (noteVelocity() && noteVelocity()->isEditModeEnabled() && selection && selection->isRange() && selection->range()
         && !handleTargetNotes().empty()) {
-        m_selectionAreas = selection->range()->boundingArea();
+        areas = selection->range()->boundingArea();
     }
+    m_handles->setAreas(std::move(areas));
 
     updateHandlesGeometry();
 }
 
 void NotationNoteVelocityController::updateHandlesGeometry()
 {
-    const bool visible = noteVelocity() && noteVelocity()->isEditModeEnabled() && !m_selectionAreas.empty();
-
-    for (NoteVelocityHandle* handle : m_handles) {
-        if (handle) {
-            handle->setVisible(visible);
-        }
+    if (m_handles) {
+        m_handles->updateGeometry(m_viewMatrix, noteVelocity() && noteVelocity()->isEditModeEnabled());
     }
-    if (!visible || !m_handles.front()) {
-        return;
-    }
-
-    // On the frame's top edge: the ramp handles at its corners (the right one on the frame's last system, when it
-    // spans several), the middle one in the middle of its first system
-    const muse::RectF first = m_viewMatrix.map(m_selectionAreas.front());
-    const muse::RectF last = m_viewMatrix.map(m_selectionAreas.back());
-    m_handles[static_cast<size_t>(HandleKind::RampLeft)]->setCenter(QPointF(first.left(), first.top()));
-    m_handles[static_cast<size_t>(HandleKind::Shift)]->setCenter(QPointF(first.center().x(), first.top()));
-    m_handles[static_cast<size_t>(HandleKind::RampRight)]->setCenter(QPointF(last.right(), last.top()));
-
-    // On a narrow frame, the middle handle would be under the corner ones
-    m_handles[static_cast<size_t>(HandleKind::Shift)]->setVisible(first.width() >= 3 * NoteVelocityHandle::SIZE_PX);
 }
 
 std::vector<Note*> NotationNoteVelocityController::handleTargetNotes() const
@@ -925,12 +886,7 @@ bool NotationNoteVelocityController::isGestureActive() const
             return true;
         }
     }
-    for (const NoteVelocityHandle* handle : m_handles) {
-        if (handle && handle->isDragging()) {
-            return true;
-        }
-    }
-    return false;
+    return m_handles && m_handles->isDragging();
 }
 
 void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed)
@@ -964,7 +920,7 @@ void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal delt
 
     QString label;
     const std::vector<VelocityChange> changes = withTieChains(handleChanges(kind, deltaCanvasY, label));
-    m_handles[static_cast<size_t>(kind)]->setLabel(label);
+    m_handles->setLabel(kind, label);
 
     if (!completed) {
         for (const VelocityChange& change : changes) {
@@ -1039,7 +995,7 @@ std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocity
     std::vector<VelocityChange> changes;
     label.clear();
 
-    if (kind == HandleKind::Shift) {
+    if (kind == HandleKind::Middle) {
         // Every note moves by the same amount, each clamped on its own - like dragging a selected bar
         double minCanvasY = 0.0;
         double maxCanvasY = 0.0;
@@ -1082,7 +1038,7 @@ std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocity
         ramp.rightTick = std::max(ramp.rightTick, note->tick().ticks());
     }
 
-    const bool movesLeft = kind == HandleKind::RampLeft;
+    const bool movesLeft = kind == HandleKind::Left;
     double minCanvasY = 0.0;
     double maxCanvasY = 0.0;
     for (auto& [staffIdx, ramp] : ramps) {

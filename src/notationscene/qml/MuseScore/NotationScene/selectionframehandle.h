@@ -22,21 +22,32 @@
 
 #pragma once
 
+#include <array>
+#include <functional>
+#include <utility>
+#include <vector>
+
 #include <QColor>
 #include <QQuickPaintedItem>
 #include <QString>
 
+#include "draw/types/geometry.h"
+#include "draw/types/transform.h"
+
 namespace mu::notation {
-// A handle on the top edge of the range selection's frame, while the velocity bars are shown: dragged up or down,
-// it changes the velocities of the selected notes (see NotationNoteVelocityController)
-class NoteVelocityHandle : public QQuickPaintedItem
+// A handle on the top edge of the range selection's frame, while the velocity bars or the automation curves are shown:
+// dragged up or down, it changes the selected values (see NotationNoteVelocityController, NotationAutomationController)
+class SelectionFrameHandle : public QQuickPaintedItem
 {
     Q_OBJECT
 
 public:
-    explicit NoteVelocityHandle(QQuickItem* parent);
+    explicit SelectionFrameHandle(QQuickItem* parent);
 
     static constexpr qreal SIZE_PX = 19.0; // a little larger than the square, easier to grab; also fits the label's height
+
+    // The value label's background and text colors, legible on this score background
+    static std::pair<QColor, QColor> valueLabelColors(const QColor& background);
 
     void setColor(const QColor& color);
     void setValueLabelColors(const QColor& background, const QColor& text);
@@ -64,6 +75,7 @@ protected:
 
 private:
     QRectF squareRect() const;
+    qreal dragWidth() const;
 
     QColor m_color;
     QColor m_valueLabelBgColor;
@@ -72,5 +84,40 @@ private:
 
     bool m_pressed = false;
     qreal m_pressSceneY = 0.0;
+};
+
+// The three handles on the range selection's frame: the corners of its top edge (the right one on the frame's last
+// system, when it spans several) and the middle of its first system. Owned by their parent item
+class SelectionFrameHandles
+{
+public:
+    enum class Kind {
+        Left,
+        Middle,
+        Right,
+    };
+
+    using DraggedCallback = std::function<void (Kind kind, qreal deltaYPx, bool completed)>;
+    using CancelledCallback = std::function<void ()>;
+
+    SelectionFrameHandles(QQuickItem* parent, const DraggedCallback& onDragged, const CancelledCallback& onCancelled);
+
+    // The handles' color, and their label's for this score background
+    void setColors(const QColor& color, const QColor& scoreBackground);
+
+    // The frame's rectangle on each of its systems, in canvas coordinates; none hides the handles
+    void setAreas(std::vector<muse::RectF> areas);
+    void updateGeometry(const muse::draw::Transform& viewMatrix, bool visible);
+
+    void setLabel(Kind kind, const QString& label);
+    bool isDragging() const;
+
+private:
+    SelectionFrameHandle* handle(Kind kind) const { return m_handles.at(static_cast<size_t>(kind)); }
+
+    std::array<SelectionFrameHandle*, 3> m_handles {}; // indexed by Kind
+    std::vector<muse::RectF> m_areas;
+    QColor m_color;
+    QColor m_scoreBackground;
 };
 }
