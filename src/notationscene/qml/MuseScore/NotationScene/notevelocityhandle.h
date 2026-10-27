@@ -36,6 +36,8 @@ class NoteVelocityHandle : public QQuickPaintedItem
 public:
     explicit NoteVelocityHandle(QQuickItem* parent);
 
+    static constexpr qreal SIZE_PX = 19.0; // a little larger than the square, easier to grab; also fits the label's height
+
     void setColor(const QColor& color);
     void setValueLabelColors(const QColor& background, const QColor& text);
 

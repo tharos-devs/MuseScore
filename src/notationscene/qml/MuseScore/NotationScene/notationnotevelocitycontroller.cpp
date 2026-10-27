@@ -895,6 +895,9 @@ void NotationNoteVelocityController::updateHandlesGeometry()
     m_handles[static_cast<size_t>(HandleKind::RampLeft)]->setCenter(QPointF(first.left(), first.top()));
     m_handles[static_cast<size_t>(HandleKind::Shift)]->setCenter(QPointF(first.center().x(), first.top()));
     m_handles[static_cast<size_t>(HandleKind::RampRight)]->setCenter(QPointF(last.right(), last.top()));
+
+    // On a narrow frame, the middle handle would be under the corner ones
+    m_handles[static_cast<size_t>(HandleKind::Shift)]->setVisible(first.width() >= 3 * NoteVelocityHandle::SIZE_PX);
 }
 
 std::vector<Note*> NotationNoteVelocityController::handleTargetNotes() const
@@ -931,6 +934,7 @@ void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal delt
         m_handleAborted = !completed;
         if (completed) {
             rebuildIfDeferredByGesture();
+            updateSelectionHandles();
         }
         return;
     }
@@ -944,24 +948,16 @@ void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal delt
     if (m_handleStartVelocities.empty()) {
         if (completed) {
             rebuildIfDeferredByGesture();
+            updateSelectionHandles();
         }
         return;
     }
 
-    // The mouse's displacement as a velocity, on the scale of the bars (the same for all the bars of a score)
-    const auto locIt = m_noteLocations.find(m_handleStartVelocities.begin()->first);
-    const auto dataIt = locIt != m_noteLocations.end() ? m_overlaysByStaff.find(locIt->second.key) : m_overlaysByStaff.end();
-    IF_ASSERT_FAILED(dataIt != m_overlaysByStaff.end() && static_cast<size_t>(locIt->second.rectIndex) < dataIt->second.notes.size()) {
-        return;
-    }
-    const NoteVelocityYRange& yRange = dataIt->second.notes.at(locIt->second.rectIndex).yRange;
-    const double span = yRange.y127 - yRange.y0;
     const double scale = m_viewMatrix.m22();
-    const int deltaVelocity = std::abs(span) < 1e-9 || std::abs(scale) < 1e-9
-                              ? 0 : static_cast<int>(std::lround(deltaYPx / scale / span * 127.0));
+    const double deltaCanvasY = std::abs(scale) < 1e-9 ? 0.0 : deltaYPx / scale;
 
     QString label;
-    const std::vector<VelocityChange> changes = withTieChains(handleChanges(kind, deltaVelocity, label));
+    const std::vector<VelocityChange> changes = withTieChains(handleChanges(kind, deltaCanvasY, label));
     m_handles[static_cast<size_t>(kind)]->setLabel(label);
 
     if (!completed) {
@@ -976,6 +972,7 @@ void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal delt
 
     m_handleStartVelocities.clear();
     rebuildIfDeferredByGesture();
+    updateSelectionHandles();
 
     // One undo step; unchanged notes are skipped there
     commitVelocities(changes);
@@ -991,33 +988,64 @@ void NotationNoteVelocityController::onHandleDragCancelled()
     m_handleDragging = false;
     m_handleAborted = false;
     rebuildIfDeferredByGesture();
+    updateSelectionHandles();
 
     // Back to the notes' real (unchanged) values, like a cancelled drag
     revertPreviews(notes);
 }
 
-std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::handleChanges(HandleKind kind,
-                                                                                                            int deltaVelocity,
-                                                                                                            QString& label) const
+double NotationNoteVelocityController::velocitySpan(const Note* note) const
 {
+    const auto locIt = m_noteLocations.find(const_cast<Note*>(note));
+    if (locIt == m_noteLocations.end()) {
+        return 0.0;
+    }
+    const auto dataIt = m_overlaysByStaff.find(locIt->second.key);
+    if (dataIt == m_overlaysByStaff.end() || static_cast<size_t>(locIt->second.rectIndex) >= dataIt->second.notes.size()) {
+        return 0.0;
+    }
+    const NoteVelocityYRange& yRange = dataIt->second.notes.at(locIt->second.rectIndex).yRange;
+    return yRange.y127 - yRange.y0;
+}
+
+int NotationNoteVelocityController::velocityDelta(const Note* note, double deltaCanvasY) const
+{
+    const double span = velocitySpan(note);
+    return std::abs(span) < 1e-9 ? 0 : static_cast<int>(std::lround(deltaCanvasY / span * 127.0));
+}
+
+void NotationNoteVelocityController::widenVelocityLimits(const Note* note, int start, double& minCanvasY, double& maxCanvasY) const
+{
+    const double span = velocitySpan(note);
+    const double toMax = (MAX_DRAGGABLE_VELOCITY - start) / 127.0 * span;
+    const double toMin = (MIN_DRAGGABLE_VELOCITY - start) / 127.0 * span;
+    minCanvasY = std::min({ minCanvasY, toMax, toMin });
+    maxCanvasY = std::max({ maxCanvasY, toMax, toMin });
+}
+
+std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::handleChanges(HandleKind kind,
+                                                                                                          double deltaCanvasY,
+                                                                                                          QString& label) const
+{
+    // The mouse's displacement is converted on each note's own bar scale (a small staff has shorter bars). Past the
+    // displacement that puts every moved value at the minimum/maximum, nothing changes anymore: it stops there, so
+    // going back moves the bars again right away
     std::vector<VelocityChange> changes;
     label.clear();
 
     if (kind == HandleKind::Shift) {
-        // Every note moves by the same amount, each clamped on its own - like dragging a selected bar. Past the
-        // amount that puts every note at the minimum/maximum, nothing changes anymore: the amount (and the label)
-        // stops there
-        int minStart = MAX_DRAGGABLE_VELOCITY;
-        int maxStart = MIN_DRAGGABLE_VELOCITY;
+        // Every note moves by the same amount, each clamped on its own - like dragging a selected bar
+        double minCanvasY = 0.0;
+        double maxCanvasY = 0.0;
         for (const auto& [note, start] : m_handleStartVelocities) {
-            minStart = std::min(minStart, start);
-            maxStart = std::max(maxStart, start);
+            widenVelocityLimits(note, start, minCanvasY, maxCanvasY);
         }
-        deltaVelocity = std::clamp(deltaVelocity, MIN_DRAGGABLE_VELOCITY - maxStart, MAX_DRAGGABLE_VELOCITY - minStart);
+        deltaCanvasY = std::clamp(deltaCanvasY, minCanvasY, maxCanvasY);
 
         // The label: the highest velocity, a value like the bars' (an amount could exceed 127)
         int highest = 0;
         for (const auto& [note, start] : m_handleStartVelocities) {
+            const int deltaVelocity = velocityDelta(note, deltaCanvasY);
             const int velocity = deltaVelocity == 0 ? start : std::clamp(start + deltaVelocity, MIN_DRAGGABLE_VELOCITY,
                                                                          MAX_DRAGGABLE_VELOCITY);
             changes.push_back({ note, velocity });
@@ -1029,41 +1057,56 @@ std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocity
 
     // A straight line on each staff, from its first column's velocity to its last one's, the moved end following the
     // mouse; the notes in between take the line's value at their time, all the notes of a chord alike
-    std::map<staff_idx_t, std::vector<std::pair<Note*, int> > > notesByStaff;
+    struct StaffRamp {
+        std::vector<std::pair<Note*, int> > notes;
+        int leftTick = std::numeric_limits<int>::max();
+        int rightTick = std::numeric_limits<int>::min();
+        // A column's velocity: its tallest bar's
+        const Note* leftNote = nullptr;
+        int leftStart = 0;
+        const Note* rightNote = nullptr;
+        int rightStart = 0;
+    };
+
+    std::map<staff_idx_t, StaffRamp> ramps;
     for (const auto& [note, start] : m_handleStartVelocities) {
-        notesByStaff[note->staffIdx()].push_back({ note, start });
+        StaffRamp& ramp = ramps[note->staffIdx()];
+        ramp.notes.push_back({ note, start });
+        ramp.leftTick = std::min(ramp.leftTick, note->tick().ticks());
+        ramp.rightTick = std::max(ramp.rightTick, note->tick().ticks());
     }
 
     const bool movesLeft = kind == HandleKind::RampLeft;
-    for (const auto& [staffIdx, notes] : notesByStaff) {
-        int leftTick = std::numeric_limits<int>::max();
-        int rightTick = std::numeric_limits<int>::min();
-        for (const auto& [note, start] : notes) {
-            leftTick = std::min(leftTick, note->tick().ticks());
-            rightTick = std::max(rightTick, note->tick().ticks());
-        }
-
-        // A column's velocity: its tallest bar's
-        int leftStart = 0;
-        int rightStart = 0;
-        for (const auto& [note, start] : notes) {
-            if (note->tick().ticks() == leftTick) {
-                leftStart = std::max(leftStart, start);
+    double minCanvasY = 0.0;
+    double maxCanvasY = 0.0;
+    for (auto& [staffIdx, ramp] : ramps) {
+        for (const auto& [note, start] : ramp.notes) {
+            if (note->tick().ticks() == ramp.leftTick && (!ramp.leftNote || start > ramp.leftStart)) {
+                ramp.leftNote = note;
+                ramp.leftStart = start;
             }
-            if (note->tick().ticks() == rightTick) {
-                rightStart = std::max(rightStart, start);
+            if (note->tick().ticks() == ramp.rightTick && (!ramp.rightNote || start > ramp.rightStart)) {
+                ramp.rightNote = note;
+                ramp.rightStart = start;
             }
         }
+        widenVelocityLimits(movesLeft ? ramp.leftNote : ramp.rightNote, movesLeft ? ramp.leftStart : ramp.rightStart,
+                            minCanvasY, maxCanvasY);
+    }
+    deltaCanvasY = std::clamp(deltaCanvasY, minCanvasY, maxCanvasY);
 
-        const int moved = std::clamp((movesLeft ? leftStart : rightStart) + deltaVelocity, MIN_DRAGGABLE_VELOCITY,
+    for (const auto& [staffIdx, ramp] : ramps) {
+        const Note* movedNote = movesLeft ? ramp.leftNote : ramp.rightNote;
+        const int movedStart = movesLeft ? ramp.leftStart : ramp.rightStart;
+        const int moved = std::clamp(movedStart + velocityDelta(movedNote, deltaCanvasY), MIN_DRAGGABLE_VELOCITY,
                                      MAX_DRAGGABLE_VELOCITY);
-        const int leftVelocity = movesLeft ? moved : std::clamp(leftStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY);
-        const int rightVelocity = movesLeft ? std::clamp(rightStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY) : moved;
+        const int leftVelocity = movesLeft ? moved : std::clamp(ramp.leftStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY);
+        const int rightVelocity = movesLeft ? std::clamp(ramp.rightStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY) : moved;
 
-        for (const auto& [note, start] : notes) {
+        for (const auto& [note, start] : ramp.notes) {
             int velocity = moved;
-            if (rightTick > leftTick) {
-                const double position = static_cast<double>(note->tick().ticks() - leftTick) / (rightTick - leftTick);
+            if (ramp.rightTick > ramp.leftTick) {
+                const double position = static_cast<double>(note->tick().ticks() - ramp.leftTick) / (ramp.rightTick - ramp.leftTick);
                 velocity = static_cast<int>(std::lround(leftVelocity + (rightVelocity - leftVelocity) * position));
             }
             changes.push_back({ note, std::clamp(velocity, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY) });

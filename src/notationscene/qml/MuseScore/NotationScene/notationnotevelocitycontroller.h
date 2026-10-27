@@ -151,8 +151,13 @@ private:
     std::vector<mu::engraving::Note*> handleTargetNotes() const;
     void onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed);
     void onHandleDragCancelled();
-    // The label: the value shown next to the handle
-    std::vector<VelocityChange> handleChanges(HandleKind kind, int deltaVelocity, QString& label) const;
+    // deltaCanvasY: the mouse's displacement since the press; label: the value shown next to the handle
+    std::vector<VelocityChange> handleChanges(HandleKind kind, double deltaCanvasY, QString& label) const;
+    // The canvas height of a note's bar from velocity 0 to 127 (negative: upwards), 0 without a bar
+    double velocitySpan(const mu::engraving::Note* note) const;
+    int velocityDelta(const mu::engraving::Note* note, double deltaCanvasY) const;
+    // Widens [minCanvasY, maxCanvasY] to the displacements that take the note from start to the minimum/maximum
+    void widenVelocityLimits(const mu::engraving::Note* note, int start, double& minCanvasY, double& maxCanvasY) const;
     bool isGestureActive() const;
     void rebuildIfDeferredByGesture();
     // Cmd+click on a bar: a small field next to it to type the note's velocity (and the other selected notes')

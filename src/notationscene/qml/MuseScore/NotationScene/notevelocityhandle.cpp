@@ -29,9 +29,7 @@ using namespace mu::notation;
 
 constexpr static qreal HANDLE_SQUARE_SIZE_PX = 9.0;
 
-// A little larger than the square, easier to grab; wider to the right while dragging, for the value label (not
-// before: the item's whole area has the handle's cursor)
-constexpr static qreal HANDLE_ITEM_SIZE_PX = 19.0; // also fits the label's height
+// Wider to the right while dragging, for the value label (not before: the item's whole area has the handle's cursor)
 constexpr static qreal HANDLE_DRAG_WIDTH_PX = 60.0;
 
 constexpr static qreal HANDLE_LABEL_FONT_PX = 11.0;
@@ -44,8 +42,8 @@ NoteVelocityHandle::NoteVelocityHandle(QQuickItem* parent)
     : QQuickPaintedItem(parent)
 {
     setAcceptedMouseButtons(Qt::LeftButton);
-    setWidth(HANDLE_ITEM_SIZE_PX);
-    setHeight(HANDLE_ITEM_SIZE_PX);
+    setWidth(SIZE_PX);
+    setHeight(SIZE_PX);
     setCursor(Qt::ArrowCursor);
 }
 
@@ -73,13 +71,13 @@ void NoteVelocityHandle::setLabel(const QString& label)
 
 void NoteVelocityHandle::setCenter(const QPointF& center)
 {
-    setX(center.x() - HANDLE_ITEM_SIZE_PX / 2.0);
-    setY(center.y() - HANDLE_ITEM_SIZE_PX / 2.0);
+    setX(center.x() - SIZE_PX / 2.0);
+    setY(center.y() - SIZE_PX / 2.0);
 }
 
 QRectF NoteVelocityHandle::squareRect() const
 {
-    const qreal offset = (HANDLE_ITEM_SIZE_PX - HANDLE_SQUARE_SIZE_PX) / 2.0;
+    const qreal offset = (SIZE_PX - HANDLE_SQUARE_SIZE_PX) / 2.0;
     return QRectF(offset, offset, HANDLE_SQUARE_SIZE_PX, HANDLE_SQUARE_SIZE_PX);
 }
 
@@ -101,7 +99,7 @@ void NoteVelocityHandle::paint(QPainter* painter)
     const QSize textSize = QFontMetrics(font).size(Qt::TextSingleLine, m_label);
     const qreal chipWidth = textSize.width() + 2 * HANDLE_LABEL_PADDING_X_PX;
     const qreal chipHeight = textSize.height() + 2 * HANDLE_LABEL_PADDING_Y_PX;
-    const QRectF chipRect(squareRect().right() + HANDLE_LABEL_GAP_PX, (HANDLE_ITEM_SIZE_PX - chipHeight) / 2.0, chipWidth, chipHeight);
+    const QRectF chipRect(squareRect().right() + HANDLE_LABEL_GAP_PX, (SIZE_PX - chipHeight) / 2.0, chipWidth, chipHeight);
 
     painter->setBrush(m_valueLabelBgColor);
     painter->drawRoundedRect(chipRect, HANDLE_LABEL_CORNER_RADIUS_PX, HANDLE_LABEL_CORNER_RADIUS_PX);
@@ -135,7 +133,7 @@ void NoteVelocityHandle::mouseReleaseEvent(QMouseEvent* e)
     }
     emit dragged(e->scenePosition().y() - m_pressSceneY, true);
     m_pressed = false;
-    setWidth(HANDLE_ITEM_SIZE_PX);
+    setWidth(SIZE_PX);
     update();
 }
 
@@ -143,7 +141,7 @@ void NoteVelocityHandle::mouseUngrabEvent()
 {
     if (m_pressed) {
         m_pressed = false;
-        setWidth(HANDLE_ITEM_SIZE_PX);
+        setWidth(SIZE_PX);
         emit dragCancelled();
         update();
     }
