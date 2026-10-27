@@ -147,7 +147,7 @@ AutomationCurve mu::engraving::curveWithValues(const AutomationCurve& existing, 
 }
 
 AutomationPointEdits mu::engraving::editsWithinRanges(const AutomationCurve& existing, const AutomationCurve& result,
-                                                     const std::vector<std::pair<utick_t, utick_t> >& ranges)
+                                                      const std::vector<UtickRange>& ranges)
 {
     const auto isInRanges = [&ranges](utick_t utick) {
         return std::any_of(ranges.cbegin(), ranges.cend(), [utick](const auto& range) {

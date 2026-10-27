@@ -184,6 +184,7 @@ private:
     void previewStroke(const SysStaffKey& key);
     void commitStroke(const SysStaffKey& key);
     void cancelStroke(const SysStaffKey& key);
+    void abortStroke();
     //! NOTE: tilting: the offset grows linearly from the fixed end of each curve's selected points (none) to the moved
     //! one (all of it), so the shape of the curve is kept
     void setGroupDragWeights(HandleKind kind);

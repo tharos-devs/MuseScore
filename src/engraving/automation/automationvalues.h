@@ -41,6 +41,7 @@ std::map<utick_t, double> thinnedValues(const std::map<utick_t, double>& values,
 AutomationCurve curveWithValues(const AutomationCurve& existing, const std::map<utick_t, double>& values, bool joinAfter);
 
 //! NOTE: the edits that turn existing into result within these utick ranges (both ends included)
+using UtickRange = std::pair<utick_t, utick_t>;
 AutomationPointEdits editsWithinRanges(const AutomationCurve& existing, const AutomationCurve& result,
-                                       const std::vector<std::pair<utick_t, utick_t> >& ranges);
+                                       const std::vector<UtickRange>& ranges);
 }

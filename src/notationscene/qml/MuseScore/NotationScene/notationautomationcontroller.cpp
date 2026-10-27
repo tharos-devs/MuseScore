@@ -714,6 +714,11 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::interactionFinished, [this]() {
         cancelGroupDrag();
         m_groupDragAborted = false;
+        // Likewise for a stroke not completed (it never is past its gesture)
+        if (m_stroke && !m_stroke->aborted) {
+            cancelStroke(m_stroke->key());
+        }
+        m_stroke.reset();
     });
 
     QObject::connect(polyline, &muse::uicomponents::PolylinePlot::pointValueEditRequested,
@@ -1132,6 +1137,7 @@ void NotationAutomationController::onCurrentNotationChanged()
         // systems without ScoreChanges
         currentNotation()->notationChanged().onReceive(this, [this](const muse::RectF&) {
             if (m_layoutSignature.refresh(score())) {
+                abortStroke(); // its system may be gone
                 scheduleRebuild();
             }
         }, Asyncable::Mode::SetReplace /* FIXME */);
@@ -1170,6 +1176,8 @@ void NotationAutomationController::scheduleRebuild()
 
 void NotationAutomationController::mergePendingScoreChanges(const mu::engraving::ScoreChanges& changes)
 {
+    abortStroke();
+
     const bool firstChange = !m_pendingScoreState.hasChanges;
     m_pendingScoreState.hasChanges = true;
     m_pendingScoreState.structural = m_pendingScoreState.structural || isStructuralChange(changes);
@@ -1878,10 +1886,11 @@ void NotationAutomationController::onHandleDragCancelled()
 }
 
 void NotationAutomationController::onFreehandDrawn(const SysStaffKey& key, const QPointF& from, const QPointF& to, bool completed,
-                                                  qreal minX, qreal maxX)
+                                                   qreal minX, qreal maxX)
 {
-    // The first stroke of a gesture (one stroke from the press, on a single system)
-    if (!m_stroke || !(m_stroke->key() == key)) {
+    // The first stroke of a gesture (one stroke from the press, on a single system). Systems are told apart by address,
+    // never read: the stroke's one may be gone
+    if (!m_stroke || m_stroke->system != key.system || m_stroke->staffIdx != key.staffIdx) {
         m_stroke = Stroke { key.system, key.staffIdx, {}, isRecordingPreviewShown() };
     }
 
@@ -2044,6 +2053,19 @@ void NotationAutomationController::cancelStroke(const SysStaffKey& key)
     }
 }
 
+//! NOTE: the curves or the score changed during a stroke (e.g. an undo from the keyboard): what it drew may no longer
+//! fit, and its system may be gone (never read here) - the rest of the gesture is dropped, and the curves are rebuilt
+//! (the stroke's preview goes)
+void NotationAutomationController::abortStroke()
+{
+    if (!m_stroke || m_stroke->aborted) {
+        return;
+    }
+    m_stroke->aborted = true;
+    m_stroke->samples.clear();
+    scheduleRebuild();
+}
+
 void NotationAutomationController::mergePendingChanges(const mu::engraving::AutomationChanges& changes)
 {
     // The curves changed under a group drag (e.g. an undo from the keyboard, a MIDI CC take being recorded): the
@@ -2053,13 +2075,7 @@ void NotationAutomationController::mergePendingChanges(const mu::engraving::Auto
         cancelGroupDrag();
         m_groupDragAborted = !m_handleDragging; // a handle's drag sees it by itself (see onHandleDragged())
     }
-    if (m_stroke && !m_stroke->aborted) {
-        m_stroke->aborted = true;
-        m_stroke->samples.clear();
-        if (m_stavesToLinesMap.find(m_stroke->key()) != m_stavesToLinesMap.end()) {
-            updateStaffPoints(m_stroke->key()); // the stroke's preview goes
-        }
-    }
+    abortStroke();
 
     if (changes.isFullReset) {
         m_pendingChanges.isFullReset = true;
