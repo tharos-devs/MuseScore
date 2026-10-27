@@ -99,6 +99,7 @@ private:
     double xForFrequency(double frequency) const;
     double frequencyForX(double x) const;
     double yForDb(double db) const;
+    double yForCurveDb(double db) const;
     double dbForY(double y) const;
     QPointF bandPoint(size_t band) const;
     int bandAt(const QPointF& pos) const;

@@ -36,6 +36,7 @@ using namespace muse::audio;
 // the curve is the same at any sample rate in the audible range: one is enough to draw it
 static constexpr double DISPLAY_SAMPLE_RATE = 48000.0;
 static constexpr double DB_RANGE = 24.0;
+static constexpr double CURVE_DB_LIMIT = 4 * DB_RANGE;
 static constexpr double POINT_RADIUS = 8.0;
 static constexpr double POINT_HIT_RADIUS = 12.0;
 
@@ -195,8 +196,13 @@ double EqCurveView::frequencyForX(double x) const
 
 double EqCurveView::yForDb(double db) const
 {
+    return yForCurveDb(std::clamp(db, -DB_RANGE, DB_RANGE));
+}
+
+double EqCurveView::yForCurveDb(double db) const
+{
     const QRectF rect = plotRect();
-    return rect.center().y() - std::clamp(db, -DB_RANGE, DB_RANGE) / DB_RANGE * rect.height() / 2.0;
+    return rect.center().y() - db / DB_RANGE * rect.height() / 2.0;
 }
 
 double EqCurveView::dbForY(double y) const
@@ -297,8 +303,11 @@ void EqCurveView::paintCurve(QPainter* painter) const
     QPainterPath curve;
     for (int i = 0; i <= steps; ++i) {
         const double x = rect.left() + rect.width() * i / steps;
-        const double db = eq::responseDb(filters, frequencyForX(x), DISPLAY_SAMPLE_RATE);
-        const QPointF point(x, yForDb(db));
+        // beyond the scale the curve leaves the plot instead of running flat along its edge
+        // (e.g. a pass filter's slope); bounded so that an infinite attenuation stays drawable
+        const double db = std::clamp(eq::responseDb(filters, frequencyForX(x), DISPLAY_SAMPLE_RATE),
+                                     -CURVE_DB_LIMIT, CURVE_DB_LIMIT);
+        const QPointF point(x, yForCurveDb(db));
         if (i == 0) {
             curve.moveTo(point);
         } else {
@@ -320,6 +329,8 @@ void EqCurveView::paintCurve(QPainter* painter) const
 
     QColor fill = color;
     fill.setAlphaF(color.alphaF() * 0.2);
+    painter->save();
+    painter->setClipRect(rect);
     painter->setPen(Qt::NoPen);
     painter->setBrush(fill);
     painter->drawPath(area);
@@ -327,6 +338,7 @@ void EqCurveView::paintCurve(QPainter* painter) const
     painter->setBrush(Qt::NoBrush);
     painter->setPen(QPen(color, m_editable ? 2.0 : 1.5));
     painter->drawPath(curve);
+    painter->restore();
 }
 
 void EqCurveView::paintBandPoints(QPainter* painter) const
