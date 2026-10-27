@@ -874,7 +874,29 @@ muse::RectF NotationNoteInput::cursorRect() const
     }
 
     const InputState& inputState = score()->inputState();
-    const Segment* segment = inputState.segment();
+    const track_idx_t track = inputState.track() == muse::nidx ? 0 : inputState.track();
+
+    return cursorRect(inputState.segment(), track, inputState.string(), inputState.beyondScore());
+}
+
+muse::RectF NotationNoteInput::cursorRect(const Position& pos, int string) const
+{
+    if (!isNoteInputMode() || !pos.segment) {
+        return {};
+    }
+
+    const track_idx_t track = pos.staffIdx * VOICES + score()->inputState().voice();
+    const double snappedX = pos.hasSnappedTick && pos.snappedTick != pos.segment->tick()
+                            ? pos.segment->measure()->pagePos().x() + pos.segment->measure()->xPosForTick(pos.snappedTick)
+                            : -1.0;
+
+    return cursorRect(pos.segment, track, string, pos.beyondScore, snappedX);
+}
+
+//! snappedX: page x of a caret grid position inside the segment's chord or rest (< 0: none)
+muse::RectF NotationNoteInput::cursorRect(const Segment* segment, track_idx_t track, int string, bool beyondScore,
+                                          double snappedX) const
+{
     if (!segment) {
         return {};
     }
@@ -884,7 +906,6 @@ muse::RectF NotationNoteInput::cursorRect() const
         return {};
     }
 
-    const track_idx_t track = inputState.track() == muse::nidx ? 0 : inputState.track();
     const staff_idx_t staffIdx = track2staff(track);
 
     const Staff* staff = score()->staff(staffIdx);
@@ -894,7 +915,7 @@ muse::RectF NotationNoteInput::cursorRect() const
 
     const double globalSpatium = score()->style().spatium();
 
-    const StaffType* staffType = staff->staffType(inputState.tick());
+    const StaffType* staffType = staff->staffType(segment->tick());
     const bool isTabStaff = staffType->isTabStaff();
     const double localSpatium = staffType->spatium();
 
@@ -912,9 +933,12 @@ muse::RectF NotationNoteInput::cursorRect() const
     double w = segmentContentRect.width() > 0 ? segmentContentRect.width() : defaultWidth;
     double h = 0.0;
 
-    if (inputState.beyondScore()) {
+    if (beyondScore) {
         const Measure* lastMeasure = score()->lastMeasure();
         x = lastMeasure->pageBoundingRect().right() + globalSpatium;
+        w = defaultWidth;
+    } else if (snappedX >= 0.0) {
+        x = snappedX;
         w = defaultWidth;
     }
 
@@ -943,7 +967,7 @@ muse::RectF NotationNoteInput::cursorRect() const
     const double yOffset = staffType->yoffset().val() * localSpatium;
     y += yOffset;
 
-    const int inputStateStringsCount = inputState.string();
+    const int inputStateStringsCount = string;
     const int instrumentStringsCount = static_cast<int>(staff->part()->instrument()->stringData()->strings());
 
     const double lineDist = staffType->lineDistance().val() * localSpatium;

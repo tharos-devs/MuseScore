@@ -78,6 +78,7 @@ public:
     static std::pair<Note*, Note*> repitchReplaceNote(Transaction& tx, Score* score, Chord* chord, const NoteVal& nval,
                                                       bool forceAccidental = false);
 
+    static int clickedLine(const Position& pos);
     static muse::Ret putNote(Transaction& tx, Score* score, const muse::PointF& pos, bool replace, bool insert);
     static muse::Ret putNote(Transaction& tx, Score* score, const Position& pos, bool replace);
     static muse::Ret repitchNote(Transaction& tx, Score* score, const Position& pos, bool replace);

@@ -38,6 +38,8 @@ public:
     NoteInputCursor(const muse::modularity::ContextPtr& iocCtx, bool isThinLine = false);
 
     void paint(muse::draw::Painter* painter);
+    //! Fill and left line of the cursor, for any rect (e.g. the hover on tab staves)
+    void paintRect(muse::draw::Painter* painter, const muse::RectF& rect);
 
 private:
     INotationNoteInputPtr currentNoteInput() const;

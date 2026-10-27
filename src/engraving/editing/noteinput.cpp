@@ -736,6 +736,16 @@ std::pair<Note*, Note*> NoteInput::repitchReplaceNote(Transaction&, Score* score
 //    mouse click in state NoteType::ENTRY
 //---------------------------------------------------------
 
+//  calculate actual clicked line from staffType offset and stepOffset
+int NoteInput::clickedLine(const Position& pos)
+{
+    const StaffType* staffType = pos.segment->score()->staff(pos.staffIdx)->staffType(pos.segment->tick());
+    const int stepOffset = staffType->stepOffset();
+    const double stYOffset = staffType->yoffset().val();
+    const double lineDist = staffType->lineDistance().val();
+    return pos.line - (stepOffset + 2 * stYOffset / lineDist);
+}
+
 Ret NoteInput::putNote(Transaction& tx, Score* score, const PointF& pos, bool replace, bool insert)
 {
     Position p;
@@ -764,12 +774,7 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const PointF& pos, bool re
     // it is not safe to call repitchNote() if p is on a TAB staff
     bool isTablature = posScore->staff(p.staffIdx)->isTabStaff(p.segment->tick());
 
-    //  calculate actual clicked line from staffType offset and stepOffset
-    Staff* ss = posScore->staff(p.staffIdx);
-    int stepOffset = ss->staffType(p.segment->tick())->stepOffset();
-    double stYOffset = ss->staffType(p.segment->tick())->yoffset().val();
-    double lineDist = ss->staffType(p.segment->tick())->lineDistance().val();
-    p.line -= stepOffset + 2 * stYOffset / lineDist;
+    p.line = clickedLine(p);
 
     if (posScore->inputState().usingNoteEntryMethod(NoteEntryMethod::REPITCH) && !isTablature) {
         return repitchNote(tx, posScore, p, replace);
