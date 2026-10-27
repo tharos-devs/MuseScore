@@ -69,6 +69,8 @@ signals:
 
 private:
     void updateItems();
+    static void useToggleCommand(const muse::uicomponents::MenuItemList& items);
+    static void uncheckAll(const muse::uicomponents::MenuItemList& items);
 
     ReplacedMenuItems m_replacedItems;
     muse::uicomponents::MenuItem* makeMidiCcMenu();
