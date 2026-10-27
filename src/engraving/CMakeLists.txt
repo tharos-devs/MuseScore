@@ -377,6 +377,8 @@ target_sources(engraving PRIVATE
     automation/automationtypes_fwd.h
     automation/automationdata.cpp
     automation/automationdata.h
+    automation/automationvalues.cpp
+    automation/automationvalues.h
     automation/internal/automationrw.cpp
     automation/internal/automationrw.h
     automation/internal/scoreautomationcontroller.cpp

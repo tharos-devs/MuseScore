@@ -39,6 +39,7 @@
 
 #include "engraving/iengravingconfiguration.h" // IWYU pragma: keep
 #include "engraving/automation/automationdata.h"
+#include "engraving/automation/automationvalues.h"
 #include "engraving/automation/dynamicvalues.h"
 #include "engraving/automation/tempovalues.h"
 #include "engraving/dom/masterscore.h"
@@ -402,6 +403,28 @@ static bool isBendable(AutomationType type)
     return false;
 }
 
+//! NOTE: the curves that can be drawn freehand - not Dynamics (it follows the score's markings) nor Tempo (its markings'
+//! points can't be drawn over)
+static bool isFreehandDrawable(AutomationType type)
+{
+    switch (type) {
+    case AutomationType::MidiCC:
+    case AutomationType::Volume:
+    case AutomationType::Pan:
+        return true;
+    case AutomationType::Dynamics:
+    case AutomationType::Tempo:
+    case AutomationType::Unknown:
+        break;
+    }
+
+    return false;
+}
+
+//! NOTE: a drawn value is only kept as a point where the straight line between its neighbours would be more than this
+//! away from it, in display range (as for a recorded MIDI CC take: 2 MIDI steps)
+static constexpr double FREEHAND_THINNING_TOLERANCE = 2.0 / 127.0;
+
 // Also the reference the area under the line is filled from - MIDI CCs keep 0, so it's always filled from the bottom
 static qreal defaultValueFor(AutomationType type)
 {
@@ -545,6 +568,7 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
     polyline->setPoints(pointsForPolyline);
     // Typed values (Cmd+click): not on dynamics, placed by dragging, drawn to their levels
     polyline->setPointValueEditEnabled(curveKey.type != AutomationType::Dynamics && curveKey.type != AutomationType::Unknown);
+    polyline->setFreehandDrawEnabled(isFreehandDrawable(curveKey.type));
     applyPointFlags(polyline, key);
     applyPolylineStyle(polyline, key);
     polyline->setVisible(false);
@@ -714,6 +738,14 @@ muse::uicomponents::PolylinePlot* NotationAutomationController::createPolylineFo
         if (completed) {
             requestSegmentBend(key, segmentIdx, value);
         }
+    });
+
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::freehandDrawn,
+                     [this, key, minX, maxX](const QPointF& from, const QPointF& to, bool completed) {
+        onFreehandDrawn(key, from, to, completed, minX, maxX);
+    });
+    QObject::connect(polyline, &muse::uicomponents::PolylinePlot::freehandDrawCancelled, [this, key]() {
+        cancelStroke(key);
     });
 
     return polyline;
@@ -921,6 +953,13 @@ void NotationAutomationController::applyPolylineColors(PolylinePlot* polyline, c
     applyPolylineColorsUnderLine(polyline, key);
 }
 
+QColor NotationAutomationController::editedAreaColor() const
+{
+    QColor color = engravingConfiguration()->selectionColor(mu::engraving::VOICES).toQColor();
+    color.setAlpha(POLYLINE_EDITED_AREA_ALPHA);
+    return color;
+}
+
 void NotationAutomationController::applyPolylineColorsUnderLine(PolylinePlot* polyline, const SysStaffKey& key) const
 {
     IF_ASSERT_FAILED(polyline) {
@@ -938,8 +977,7 @@ void NotationAutomationController::applyPolylineColorsUnderLine(PolylinePlot* po
     QColor generatedColor = allVoicesColor;
     generatedColor.setAlpha(POLYLINE_GENERATED_AREA_ALPHA);
 
-    QColor editedColor = allVoicesColor;
-    editedColor.setAlpha(POLYLINE_EDITED_AREA_ALPHA);
+    const QColor editedColor = editedAreaColor();
 
     const QVector<PointData>& pointsData = pointsDataIt->second;
 
@@ -1245,6 +1283,7 @@ void NotationAutomationController::rebuildAllPolylines()
     m_pointsDataByStaff.clear();
     m_layoutSignature.refresh(score());
     m_groupDrag = GroupDrag(); // its polylines are gone
+    m_stroke.reset();
 
     if (!score()) {
         // Happens on close...
@@ -1838,6 +1877,173 @@ void NotationAutomationController::onHandleDragCancelled()
     updateSelectionHandles();
 }
 
+void NotationAutomationController::onFreehandDrawn(const SysStaffKey& key, const QPointF& from, const QPointF& to, bool completed,
+                                                  qreal minX, qreal maxX)
+{
+    // The first stroke of a gesture (one stroke from the press, on a single system)
+    if (!m_stroke || !(m_stroke->key() == key)) {
+        m_stroke = Stroke { key.system, key.staffIdx, {}, isRecordingPreviewShown() };
+    }
+
+    if (m_stroke->aborted) {
+        if (completed) {
+            m_stroke.reset();
+        }
+        return;
+    }
+
+    const SysStaff* sysStaff = key.system->staff(key.staffIdx);
+    if (!sysStaff) {
+        return;
+    }
+    const muse::RectF staffCanvasRect = sysStaff->bbox().translated(key.system->canvasPos());
+
+    // From the previous mouse position to this one: whatever was drawn in between before (going back) goes
+    std::optional<int> ticks[2];
+    QPointF points[2] = { from, to };
+    for (int i = 0; i < 2; ++i) {
+        points[i] = QPointF(std::clamp(points[i].x(), minX, maxX), std::clamp(points[i].y(), 0.0, 1.0));
+        ticks[i] = automationTickFromCanvasX(key.system, staffCanvasRect, points[i].x());
+    }
+    if (ticks[0] && ticks[1]) {
+        std::map<int, QPointF>& samples = m_stroke->samples;
+        // Only strictly in between: on the same tick (e.g. a vertical move), there's nothing (and no valid range)
+        if (*ticks[0] != *ticks[1]) {
+            samples.erase(samples.upper_bound(std::min(*ticks[0], *ticks[1])), samples.lower_bound(std::max(*ticks[0], *ticks[1])));
+        }
+        samples.insert_or_assign(*ticks[0], points[0]);
+        samples.insert_or_assign(*ticks[1], points[1]);
+    }
+
+    if (completed) {
+        commitStroke(key);
+    } else {
+        previewStroke(key);
+    }
+}
+
+//! NOTE: the curve as it will be: the stroke in place of the points it passes over, a step on each side. Its own points
+//! aren't shown, only its line
+void NotationAutomationController::previewStroke(const SysStaffKey& key)
+{
+    const auto linesIt = m_stavesToLinesMap.find(key);
+    const auto pointsDataIt = m_pointsDataByStaff.find(key);
+    if (!m_stroke || linesIt == m_stavesToLinesMap.end() || linesIt->second.empty() || pointsDataIt == m_pointsDataByStaff.end()) {
+        return;
+    }
+    PolylinePlot* polyline = *linesIt->second.begin();
+    const QVector<PointData>& pointsData = pointsDataIt->second;
+    const std::map<int, QPointF>& samples = m_stroke->samples;
+    if (samples.size() < 2) {
+        updateStaffPoints(key); // a click: the curve as it is
+        return;
+    }
+
+    const int firstTick = samples.cbegin()->first;
+    const int lastTick = samples.crbegin()->first;
+
+    // The curve's line at x, as drawn (bends aside) - where the stroke joins it
+    const auto curveYAt = [&pointsData](qreal x, qreal fallback) {
+        if (pointsData.isEmpty()) {
+            return fallback;
+        }
+        if (x <= pointsData.front().qPointF.x()) {
+            return pointsData.front().qPointF.y();
+        }
+        for (int i = 1; i < pointsData.size(); ++i) {
+            const QPointF& a = pointsData.at(i - 1).qPointF;
+            const QPointF& b = pointsData.at(i).qPointF;
+            if (x <= b.x()) {
+                return b.x() > a.x() ? a.y() + (b.y() - a.y()) * (x - a.x()) / (b.x() - a.x()) : b.y();
+            }
+        }
+        return pointsData.back().qPointF.y();
+    };
+
+    QVector<QPointF> strokePoints;
+    strokePoints.reserve(static_cast<int>(samples.size()) + 2);
+    strokePoints.push_back({ samples.cbegin()->second.x(), curveYAt(samples.cbegin()->second.x(), samples.cbegin()->second.y()) });
+    for (const auto& [tick, point] : samples) {
+        strokePoints.push_back(point);
+    }
+    strokePoints.push_back({ samples.crbegin()->second.x(), curveYAt(samples.crbegin()->second.x(), samples.crbegin()->second.y()) });
+
+    QVector<QPointF> points;
+    QVector<bool> hidden;
+    bool strokeInserted = false;
+    const auto insertStroke = [&]() {
+        for (const QPointF& point : strokePoints) {
+            points.push_back(point);
+            hidden.push_back(true);
+        }
+        strokeInserted = true;
+    };
+    for (const PointData& pointData : pointsData) {
+        if (!pointData.outside && pointData.tick >= firstTick && pointData.tick <= lastTick) {
+            continue; // replaced
+        }
+        if (!strokeInserted && pointData.tick > lastTick) {
+            insertStroke();
+        }
+        points.push_back(pointData.qPointF);
+        hidden.push_back(pointData.outside);
+    }
+    if (!strokeInserted) {
+        insertStroke();
+    }
+
+    polyline->setPoints(points);
+    polyline->setHiddenPoints(hidden);
+    polyline->setColorsUnderLine(QVector<QColor>(points.size() + 1, editedAreaColor()));
+    polyline->update();
+}
+
+void NotationAutomationController::commitStroke(const SysStaffKey& key)
+{
+    const Stroke stroke = std::move(*m_stroke);
+    m_stroke.reset();
+
+    const Staff* staff = score() ? score()->staff(key.staffIdx) : nullptr;
+    if (!staff || !automation() || !automationData() || stroke.samples.size() < 2 || isRecordingPreviewShown()) {
+        updateStaffPoints(key); // nothing drawn (e.g. a click): the curve as it is
+        return;
+    }
+
+    const AutomationType type = currentAutomationType();
+    const AutomationCurveKey curveKey = currentCurveKeyFor(staff);
+
+    // Thinned on the display values: drawn at the same precision all over the lane, whatever its scale
+    std::map<mu::engraving::utick_t, double> displayValues;
+    for (const auto& [tick, point] : stroke.samples) {
+        displayValues[utickForTick(tick)] = 1.0 - point.y();
+    }
+
+    std::map<mu::engraving::utick_t, double> values;
+    for (const auto& [utick, display] : mu::engraving::thinnedValues(displayValues, FREEHAND_THINNING_TOLERANCE)) {
+        values[utick] = automationValueFromDisplay(type, display);
+    }
+
+    const mu::engraving::AutomationCurve& existing = automationData()->curve(curveKey);
+    const mu::engraving::AutomationCurve result = mu::engraving::curveWithValues(existing, values, true /*joinAfter*/);
+    mu::engraving::AutomationPointEdits edits
+        = mu::engraving::editsWithinRanges(existing, result, { { values.cbegin()->first, values.crbegin()->first } });
+    if (edits.empty()) {
+        updateStaffPoints(key);
+        return;
+    }
+
+    // One undo step; the curves are redrawn from the result
+    editAutomationPoints(curveKey, edits);
+}
+
+void NotationAutomationController::cancelStroke(const SysStaffKey& key)
+{
+    m_stroke.reset();
+    if (m_stavesToLinesMap.find(key) != m_stavesToLinesMap.end()) {
+        updateStaffPoints(key);
+    }
+}
+
 void NotationAutomationController::mergePendingChanges(const mu::engraving::AutomationChanges& changes)
 {
     // The curves changed under a group drag (e.g. an undo from the keyboard, a MIDI CC take being recorded): the
@@ -1846,6 +2052,13 @@ void NotationAutomationController::mergePendingChanges(const mu::engraving::Auto
     if (m_groupDrag.active) {
         cancelGroupDrag();
         m_groupDragAborted = !m_handleDragging; // a handle's drag sees it by itself (see onHandleDragged())
+    }
+    if (m_stroke && !m_stroke->aborted) {
+        m_stroke->aborted = true;
+        m_stroke->samples.clear();
+        if (m_stavesToLinesMap.find(m_stroke->key()) != m_stavesToLinesMap.end()) {
+            updateStaffPoints(m_stroke->key()); // the stroke's preview goes
+        }
     }
 
     if (changes.isFullReset) {
