@@ -304,6 +304,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Mixer: the Metronome channel's title now has the right-click Edit color… / Reset color menu, like its Track list row; its color was only editable from the Track list (2026-10-27).
 - Channel EQ curve (Mixer channel, Track list channel strip, EQ editor): a high-pass or low-pass slope now leaves the graph at its bottom edge instead of running on as a flat line at -24 dB (2026-10-27).
 - Toolbar Automation button's dropdown: no option is checked any more while the automation overlay is hidden, picking the checked option hides the overlay (like the button), and clicking the button closes the open dropdown (2026-10-27).
 - Fixed the Audio sync window's audio missing from audio and score video (MP4) exports: an "Include the Audio track" checkbox in the export's audio options (shown when a reference audio is loaded, saved in the score) adds it, as heard through the Master; the export waits for it to be decoded or transposed. The attached video MP4 export always includes it (2026-10-26).
