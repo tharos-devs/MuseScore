@@ -27,6 +27,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <qqmlintegration.h>
 
 #include "async/asyncable.h"
@@ -324,6 +325,11 @@ public:
     //! the first empty slot (nothing if this channel already has newMeta)
     void applyFxChange(const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta);
 
+    //! NOTE: the other selected channels of this one's panel (see ChannelEditUndo::connectPickedChanges()): a VST3
+    //! instrument picked as this channel's sound goes to them too, after one sound flags warning for all
+    using SoundChangePeersGetter = std::function<QList<QPointer<MixerChannelItem> >()>;
+    void setSoundChangePeers(const SoundChangePeersGetter& peers);
+
     //! NOTE: for MixerPanelModel's undo/redo of a user's aux-send or FX choice
     ChannelAuxSendsState auxSendsState() const;
     void restoreAuxSendsState(const ChannelAuxSendsState& state);
@@ -510,7 +516,8 @@ protected:
     void openEditor(AbstractAudioResourceItem* item, const muse::rcommand::CommandQuery& command);
     void closeEditor(AbstractAudioResourceItem* item);
 
-    bool askAboutChangingSound();
+    bool askAboutChangingSound(const engraving::InstrumentTrackIdSet& instrumentTrackIds);
+    void changeSound(InputResourceItem* item, const muse::audio::AudioResourceMeta& newMeta);
 
     void subscribeOnAutomationChanges();
     void updateAutomatedControlParams();
@@ -523,6 +530,7 @@ protected:
 
     muse::audio::TrackId m_trackId = -1;
     engraving::InstrumentTrackId m_instrumentTrackId;
+    SoundChangePeersGetter m_soundChangePeers;
     muse::audio::aux_channel_idx_t m_auxBusIndex = 0;
 
     project::AudioInputParams m_inputParams;

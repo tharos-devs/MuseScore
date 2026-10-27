@@ -54,7 +54,8 @@ public:
     static void connectContinuousChanges(MixerChannelItem* item, QObject* context, const UndoStackGetter& undoStack);
 
     //! NOTE: an effect (or "No effect") picked in a slot, and a send slot pointed at another bus (or "No aux send"):
-    //! on a selected instrument channel, applied to the other selected ones too, as one undo step
+    //! on a selected instrument channel, applied to the other selected ones too, as one undo step. Also a VST3
+    //! instrument picked as a selected instrument channel's sound (see MixerChannelItem::setSoundChangePeers())
     static void connectPickedChanges(MixerChannelItem* item, QObject* context, const UndoStackGetter& undoStack,
                                      const ChannelsGetter& channels);
 

@@ -127,6 +127,9 @@ void ChannelEditUndo::connectPickedChanges(MixerChannelItem* item, QObject* cont
         return others;
     };
 
+    //! NOTE: not undoable, like a sound picked on one channel
+    item->setSoundChangePeers(otherSelectedInstruments);
+
     QObject::connect(item, &MixerChannelItem::fxChangedByUser, context,
                      [item, context, undoStack, otherSelectedInstruments](const QString& oldResourceId,
                                                                           const AudioResourceMeta& newMeta) {
