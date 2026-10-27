@@ -113,6 +113,8 @@ qt_add_qml_module(notationscene_qml
         notevelocitygeometry.h
         notevelocityoverlay.cpp
         notevelocityoverlay.h
+        notevelocityhandle.cpp
+        notevelocityhandle.h
         articulationmapcolors.h
         articulationmapeditormodel.cpp
         articulationmapeditormodel.h
