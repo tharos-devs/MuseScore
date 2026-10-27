@@ -812,6 +812,11 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const Position& p, bool re
         return make_ret(Ret::Code::UnknownError);
     }
 
+    // in TABs, the clicked string becomes the input string (fret digits then go to it)
+    if (nval.string != INVALID_STRING_INDEX) {
+        is.setString(nval.string);
+    }
+
     // warn and delete MeasureRepeat if necessary
     Measure* m = is.segment()->measure();
     staff_idx_t staffIdx = track2staff(is.track());
