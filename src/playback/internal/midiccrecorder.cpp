@@ -24,6 +24,7 @@
 #include <cmath>
 #include <vector>
 
+#include "engraving/automation/automationvalues.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/part.h"
 #include "engraving/dom/repeatlist.h"
@@ -58,107 +59,6 @@ static constexpr int PREVIEW_REFRESH_INTERVAL_MS = 40;
 //! far before it, is a jump (a seek, a loop...) - not just the report correcting the previous refined position
 static constexpr double POSITION_JUMP_FORWARD_SECS = 0.5;
 static constexpr double POSITION_JUMP_BACKWARD_SECS = 0.1;
-
-static AutomationPoint takePoint(double value)
-{
-    AutomationPoint point;
-    point.value.outValue = value;
-    point.value.inValue = AutomationPoint::ExplicitArrival { point.value.outValue, AutomationPoint::Ease::none() };
-    point.generated = false;
-    return point;
-}
-
-//! NOTE: the value a curve plays at a utick (the first point's value applies before it)
-static double curveValueAt(const AutomationCurve& curve, int utick)
-{
-    if (curve.empty()) {
-        return 0.;
-    }
-
-    auto next = curve.upper_bound(utick);
-    if (next == curve.cbegin()) {
-        return next->second.value.outValue;
-    }
-
-    const auto it = std::prev(next);
-    if (next == curve.cend() || it->first == utick) {
-        return it->second.value.outValue;
-    }
-
-    const real_t t = real_t(utick - it->first) / real_t(next->first - it->first);
-    return mpe::evaluateAt(next->second.value, it->second.value.outValue, t);
-}
-
-namespace {
-struct TakePoint {
-    int utick = 0;
-    double value = 0.;
-};
-
-void thinPoints(const std::vector<TakePoint>& points, size_t from, size_t to, std::vector<bool>& keep)
-{
-    if (to <= from + 1) {
-        return;
-    }
-
-    const TakePoint& a = points[from];
-    const TakePoint& b = points[to];
-
-    size_t farthest = from;
-    double maxDistance = 0.;
-
-    for (size_t i = from + 1; i < to; ++i) {
-        const double t = b.utick == a.utick ? 0. : double(points[i].utick - a.utick) / double(b.utick - a.utick);
-        const double distance = std::abs(points[i].value - (a.value + t * (b.value - a.value)));
-        if (distance > maxDistance) {
-            maxDistance = distance;
-            farthest = i;
-        }
-    }
-
-    if (maxDistance <= THINNING_TOLERANCE) {
-        return;
-    }
-
-    keep[farthest] = true;
-    thinPoints(points, from, farthest, keep);
-    thinPoints(points, farthest, to, keep);
-}
-
-std::vector<TakePoint> takePoints(const std::map<int, double>& values)
-{
-    std::vector<TakePoint> points;
-    points.reserve(values.size());
-    for (const auto& [utick, value] : values) {
-        points.push_back({ utick, value });
-    }
-    return points;
-}
-
-//! NOTE: Ramer-Douglas-Peucker on the values: drops the points a straight line already plays
-std::vector<TakePoint> thinned(const std::map<int, double>& values)
-{
-    std::vector<TakePoint> points = takePoints(values);
-
-    if (points.size() <= 2) {
-        return points;
-    }
-
-    std::vector<bool> keep(points.size(), false);
-    keep.front() = true;
-    keep.back() = true;
-    thinPoints(points, 0, points.size() - 1, keep);
-
-    std::vector<TakePoint> result;
-    for (size_t i = 0; i < points.size(); ++i) {
-        if (keep[i]) {
-            result.push_back(points[i]);
-        }
-    }
-
-    return result;
-}
-}
 
 MidiCcRecorder::MidiCcRecorder(const modularity::ContextPtr& iocCtx)
     : Contextable(iocCtx)
@@ -479,33 +379,10 @@ AutomationCurve MidiCcRecorder::curveWithTake(const AutomationCurve& existing, c
         }
 
         // "Touch": the curve is only replaced within the segment, and joins it with a step on each side, so
-        // that it keeps its own shape outside of it
-        const bool hasCurve = !result.empty();
-        const double valueBefore = curveValueAt(result, fromUtick);
-        const double valueAfter = curveValueAt(result, toUtick);
-
-        result.erase(result.lower_bound(fromUtick), result.upper_bound(toUtick));
-
-        const std::vector<TakePoint> points = isFinal ? thinned(segment) : takePoints(segment);
-
-        // While recording, the segment being recorded isn't over yet: it doesn't join the curve back after its
-        // last value (that would draw a step right at the playback position)
+        // that it keeps its own shape outside of it. While recording, the segment being recorded isn't over yet: it
+        // doesn't join the curve back after its last value (that would draw a step right at the playback position)
         const bool isOngoing = !isFinal && segmentIdx == segments.size() - 1;
-
-        for (size_t i = 0; i < points.size(); ++i) {
-            AutomationPoint point = takePoint(points[i].value);
-
-            if (hasCurve && i == 0) {
-                point.value.inValue = AutomationPoint::ExplicitArrival { valueBefore, AutomationPoint::Ease::none() };
-            }
-
-            // A single-point segment keeps its value afterwards: there's no movement to end
-            if (hasCurve && !isOngoing && i == points.size() - 1 && points.size() > 1) {
-                point.value.outValue = valueAfter;
-            }
-
-            result.insert({ points[i].utick, point });
-        }
+        result = curveWithValues(result, isFinal ? thinnedValues(segment, THINNING_TOLERANCE) : segment, !isOngoing);
     }
 
     return result;
@@ -578,24 +455,8 @@ void MidiCcRecorder::commitTake()
             continue;
         }
 
-        const auto isInRanges = [&ranges](int utick) {
-            return std::any_of(ranges.cbegin(), ranges.cend(), [utick](const auto& range) {
-                return utick >= range.first && utick <= range.second;
-            });
-        };
-
-        // Only the ranges the take covers change: whatever the curve had there goes, the take's points come
-        AutomationPointEdits edits;
-        for (const auto& [utick, point] : existing) {
-            if (isInRanges(utick) && result.find(utick) == result.cend()) {
-                edits.push_back({ utick, AutomationPointEdit::ErasePoint {} });
-            }
-        }
-        for (const auto& [utick, point] : result) {
-            if (isInRanges(utick)) {
-                edits.push_back({ utick, AutomationPointEdit::SetPoint { point } });
-            }
-        }
+        // Only the ranges the take covers change
+        AutomationPointEdits edits = editsWithinRanges(existing, result, ranges);
 
         editsByCurve.emplace_back(key, std::move(edits));
 

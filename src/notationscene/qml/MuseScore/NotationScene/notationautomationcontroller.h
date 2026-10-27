@@ -147,6 +147,7 @@ private:
     void applyPolylineColors(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     // TODO: apply within a range? (for efficiency)
     void applyPolylineColorsUnderLine(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
+    QColor editedAreaColor() const; // under the line of the user's own points
     void applyPointFlags(muse::uicomponents::PolylinePlot* polyline, const SysStaffKey& key) const;
     bool requestSegmentBend(const SysStaffKey& key, int segmentIndex, qreal value);
 
@@ -177,6 +178,13 @@ private:
     bool hasHandleTargets() const;
     void onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed);
     void onHandleDragCancelled();
+
+    // Freehand drawing (Alt+drag on a curve's staff): the stroke replaces the curve where it passes
+    void onFreehandDrawn(const SysStaffKey& key, const QPointF& from, const QPointF& to, bool completed, qreal minX, qreal maxX);
+    void previewStroke(const SysStaffKey& key);
+    void commitStroke(const SysStaffKey& key);
+    void cancelStroke(const SysStaffKey& key);
+    void abortStroke();
     //! NOTE: tilting: the offset grows linearly from the fixed end of each curve's selected points (none) to the moved
     //! one (all of it), so the shape of the curve is kept
     void setGroupDragWeights(HandleKind kind);
@@ -252,5 +260,14 @@ private:
     bool m_handleAborted = false; // the curves changed during the handle's drag: the rest of it is dropped
     // Likewise for a drag of a point of the group (see mergePendingChanges())
     bool m_groupDragAborted = false;
+
+    struct Stroke {
+        const System* system = nullptr;
+        staff_idx_t staffIdx = muse::nidx;
+        std::map<int /*tick*/, QPointF> samples; // where the mouse went, in the polyline's coordinates: the last one wins
+        bool aborted = false; // the curves changed meanwhile: the rest of the gesture is dropped
+        SysStaffKey key() const { return SysStaffKey { system, staffIdx }; }
+    };
+    std::optional<Stroke> m_stroke;
 };
 }
