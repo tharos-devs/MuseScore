@@ -22,11 +22,13 @@
 
 #include "notationnotevelocitycontroller.h"
 
+#include "notevelocityhandle.h"
 #include "notevelocityoverlay.h"
 #include "valueeditorpopup.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "async/async.h"
 #include "global/containers.h"
@@ -71,6 +73,18 @@ constexpr static qint64 AUDITION_MIN_INTERVAL_MS = 200;
 constexpr static double BAR_HALF_WIDTH_SP = 0.45;
 constexpr static double BAND_V_PADDING_SP = 0.3;
 
+// The value label chip needs to stay legible against whatever the score's own background currently is (light/dark/
+// high-contrast paper, or a user-customized color) - picking its colors from that background's luminance, rather than
+// hardcoding per theme, keeps it correct even for a custom paper color that doesn't match either preset.
+static std::pair<QColor, QColor> valueLabelColors(const QColor& background)
+{
+    const double luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue();
+    if (luminance > 128.0) {
+        return { QColor(40, 40, 40, 235), QColor(255, 255, 255) };
+    }
+    return { QColor(235, 235, 235, 235), QColor(20, 20, 20) };
+}
+
 NotationNoteVelocityController::NotationNoteVelocityController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx)
     : muse::Contextable(iocCtx), m_overlaysParent(overlaysParent)
 {
@@ -87,6 +101,7 @@ void NotationNoteVelocityController::init()
         return;
     }
 
+    createSelectionHandles();
     onCurrentNotationChanged();
 
     noteVelocity()->editModeEnabledChanged().onNotify(this, [this]() {
@@ -123,6 +138,10 @@ void NotationNoteVelocityController::onCurrentNotationChanged()
                 m_paintAborted = true;
                 m_paintedVelocities.clear();
                 m_paintUnheard.reset();
+            }
+            if (m_handleDragging) {
+                m_handleAborted = true;
+                m_handleStartVelocities.clear();
             }
             scheduleRebuild();
         }, Asyncable::Mode::SetReplace);
@@ -201,15 +220,14 @@ void NotationNoteVelocityController::rebuildIfDeferredByGesture()
 
 void NotationNoteVelocityController::rebuildAllOverlays()
 {
-    for (const auto& [key, data] : m_overlaysByStaff) {
-        if (data.overlay->isDragging()) {
-            // Deleting an overlay that currently holds the mouse grab (mid-drag) would drop the
-            // in-progress edit and risk delivering the next mouse event to a freed item - wait
-            // for the drag to finish instead of rebuilding out from under it (once, at its end:
-            // rescheduling every event loop turn until then would spin the CPU).
-            m_rebuildDeferredByGesture = true;
-            return;
-        }
+    if (isGestureActive()) {
+        // Deleting an overlay that currently holds the mouse grab (mid-drag) would drop the
+        // in-progress edit and risk delivering the next mouse event to a freed item - wait
+        // for the drag to finish instead of rebuilding out from under it (once, at its end:
+        // rescheduling every event loop turn until then would spin the CPU). A handle's gesture
+        // also keeps the notes of the bars.
+        m_rebuildDeferredByGesture = true;
+        return;
     }
 
     m_noteLocations.clear();
@@ -221,6 +239,8 @@ void NotationNoteVelocityController::rebuildAllOverlays()
             delete data.overlay;
         }
         m_overlaysByStaff.clear();
+        m_selectionAreas.clear();
+        updateHandlesGeometry();
         return;
     }
 
@@ -246,6 +266,7 @@ void NotationNoteVelocityController::rebuildAllOverlays()
     m_overlaysByStaff = std::move(newOverlays);
 
     updateOverlaysGeometry();
+    updateSelectionHandles();
 }
 
 void NotationNoteVelocityController::createOverlayForStaff(const System* system, staff_idx_t staffIdx, OverlaysMap& newOverlays)
@@ -408,17 +429,9 @@ void NotationNoteVelocityController::applyOverlayColors(NoteVelocityOverlay* ove
     overlay->setModifiedFillColor(QColor(235, 140, 40, 230));
     overlay->setBorderColor(QColor(50, 130, 100, 255));
 
-    // The value-label chip needs to stay legible against whatever the score's own background
-    // currently is (light/dark/high-contrast paper, or a user-customized color) - picking its
-    // colors from that background's luminance, rather than hardcoding per theme, keeps it correct
-    // even for a custom paper color that doesn't match either preset.
-    const QColor background = notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white);
-    const double luminance = 0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue();
-    if (luminance > 128.0) {
-        overlay->setValueLabelColors(QColor(40, 40, 40, 235), QColor(255, 255, 255));
-    } else {
-        overlay->setValueLabelColors(QColor(235, 235, 235, 235), QColor(20, 20, 20));
-    }
+    const auto [labelBackground, labelText]
+        = valueLabelColors(notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
+    overlay->setValueLabelColors(labelBackground, labelText);
 }
 
 void NotationNoteVelocityController::updateOverlaysGeometry()
@@ -437,6 +450,8 @@ void NotationNoteVelocityController::updateOverlaysGeometry()
         data.overlay->setX(screenRect.x());
         data.overlay->setY(screenRect.y());
     }
+
+    updateHandlesGeometry();
 }
 
 void NotationNoteVelocityController::updateSelectionHighlight()
@@ -465,6 +480,8 @@ void NotationNoteVelocityController::updateSelectionHighlight()
             }
         }
     }
+
+    updateSelectionHandles();
 }
 
 void NotationNoteVelocityController::setViewMatrix(const muse::draw::Transform& viewMatrix)
@@ -809,6 +826,256 @@ void NotationNoteVelocityController::revertPreviews(const std::vector<Note*>& no
             previewBarHeight(locIt->second, displayedVelocity(note));
         }
     }
+}
+
+void NotationNoteVelocityController::createSelectionHandles()
+{
+    IF_ASSERT_FAILED(m_overlaysParent) {
+        return;
+    }
+
+    const QColor color = notationConfiguration() ? notationConfiguration()->selectionColor() : QColor(Qt::blue);
+    const auto [labelBackground, labelText]
+        = valueLabelColors(notationConfiguration() ? notationConfiguration()->backgroundColor() : QColor(Qt::white));
+
+    for (HandleKind kind : { HandleKind::RampLeft, HandleKind::Shift, HandleKind::RampRight }) {
+        NoteVelocityHandle* handle = new NoteVelocityHandle(m_overlaysParent);
+        handle->setZ(1.0); // above the bars
+        handle->setColor(color);
+        handle->setValueLabelColors(labelBackground, labelText);
+        handle->setVisible(false);
+
+        QObject::connect(handle, &NoteVelocityHandle::dragged, [this, kind](qreal deltaYPx, bool completed) {
+            onHandleDragged(kind, deltaYPx, completed);
+        });
+        QObject::connect(handle, &NoteVelocityHandle::dragCancelled, [this]() {
+            onHandleDragCancelled();
+        });
+
+        m_handles[static_cast<size_t>(kind)] = handle;
+    }
+}
+
+void NotationNoteVelocityController::updateSelectionHandles()
+{
+    if (m_handleDragging) {
+        return;
+    }
+
+    m_selectionAreas.clear();
+
+    // Only for a range selection with bars in it
+    const INotationPtr notation = currentNotation();
+    const INotationSelectionPtr selection = notation && notation->interaction() ? notation->interaction()->selection() : nullptr;
+    if (noteVelocity() && noteVelocity()->isEditModeEnabled() && selection && selection->isRange() && selection->range()
+        && !handleTargetNotes().empty()) {
+        m_selectionAreas = selection->range()->boundingArea();
+    }
+
+    updateHandlesGeometry();
+}
+
+void NotationNoteVelocityController::updateHandlesGeometry()
+{
+    const bool visible = noteVelocity() && noteVelocity()->isEditModeEnabled() && !m_selectionAreas.empty();
+
+    for (NoteVelocityHandle* handle : m_handles) {
+        if (handle) {
+            handle->setVisible(visible);
+        }
+    }
+    if (!visible || !m_handles.front()) {
+        return;
+    }
+
+    // On the frame's top edge: the ramp handles at its corners (the right one on the frame's last system, when it
+    // spans several), the middle one in the middle of its first system
+    const muse::RectF first = m_viewMatrix.map(m_selectionAreas.front());
+    const muse::RectF last = m_viewMatrix.map(m_selectionAreas.back());
+    m_handles[static_cast<size_t>(HandleKind::RampLeft)]->setCenter(QPointF(first.left(), first.top()));
+    m_handles[static_cast<size_t>(HandleKind::Shift)]->setCenter(QPointF(first.center().x(), first.top()));
+    m_handles[static_cast<size_t>(HandleKind::RampRight)]->setCenter(QPointF(last.right(), last.top()));
+}
+
+std::vector<Note*> NotationNoteVelocityController::handleTargetNotes() const
+{
+    // The selected notes that have a bar (not a tie continuation, a hidden staff...)
+    std::vector<Note*> notes;
+    for (Note* note : selectedNotes()) {
+        if (muse::contains(m_noteLocations, note)) {
+            notes.push_back(note);
+        }
+    }
+    return notes;
+}
+
+bool NotationNoteVelocityController::isGestureActive() const
+{
+    for (const auto& [key, data] : m_overlaysByStaff) {
+        if (data.overlay->isDragging()) {
+            return true;
+        }
+    }
+    for (const NoteVelocityHandle* handle : m_handles) {
+        if (handle && handle->isDragging()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void NotationNoteVelocityController::onHandleDragged(HandleKind kind, qreal deltaYPx, bool completed)
+{
+    m_handleDragging = !completed;
+    if (m_handleAborted) {
+        m_handleAborted = !completed;
+        if (completed) {
+            rebuildIfDeferredByGesture();
+        }
+        return;
+    }
+
+    // On press: the notes and their velocities, the gesture's base
+    if (m_handleStartVelocities.empty()) {
+        for (Note* note : handleTargetNotes()) {
+            m_handleStartVelocities[note] = displayedVelocity(note);
+        }
+    }
+    if (m_handleStartVelocities.empty()) {
+        if (completed) {
+            rebuildIfDeferredByGesture();
+        }
+        return;
+    }
+
+    // The mouse's displacement as a velocity, on the scale of the bars (the same for all the bars of a score)
+    const auto locIt = m_noteLocations.find(m_handleStartVelocities.begin()->first);
+    const auto dataIt = locIt != m_noteLocations.end() ? m_overlaysByStaff.find(locIt->second.key) : m_overlaysByStaff.end();
+    IF_ASSERT_FAILED(dataIt != m_overlaysByStaff.end() && static_cast<size_t>(locIt->second.rectIndex) < dataIt->second.notes.size()) {
+        return;
+    }
+    const NoteVelocityYRange& yRange = dataIt->second.notes.at(locIt->second.rectIndex).yRange;
+    const double span = yRange.y127 - yRange.y0;
+    const double scale = m_viewMatrix.m22();
+    const int deltaVelocity = std::abs(span) < 1e-9 || std::abs(scale) < 1e-9
+                              ? 0 : static_cast<int>(std::lround(deltaYPx / scale / span * 127.0));
+
+    QString label;
+    const std::vector<VelocityChange> changes = withTieChains(handleChanges(kind, deltaVelocity, label));
+    m_handles[static_cast<size_t>(kind)]->setLabel(label);
+
+    if (!completed) {
+        for (const VelocityChange& change : changes) {
+            const auto changeLocIt = m_noteLocations.find(change.note);
+            if (changeLocIt != m_noteLocations.end()) {
+                previewBarHeight(changeLocIt->second, change.velocity);
+            }
+        }
+        return;
+    }
+
+    m_handleStartVelocities.clear();
+    rebuildIfDeferredByGesture();
+
+    // One undo step; unchanged notes are skipped there
+    commitVelocities(changes);
+}
+
+void NotationNoteVelocityController::onHandleDragCancelled()
+{
+    std::vector<Note*> notes;
+    for (const auto& [note, velocity] : m_handleStartVelocities) {
+        notes.push_back(note);
+    }
+    m_handleStartVelocities.clear();
+    m_handleDragging = false;
+    m_handleAborted = false;
+    rebuildIfDeferredByGesture();
+
+    // Back to the notes' real (unchanged) values, like a cancelled drag
+    revertPreviews(notes);
+}
+
+std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::handleChanges(HandleKind kind,
+                                                                                                            int deltaVelocity,
+                                                                                                            QString& label) const
+{
+    std::vector<VelocityChange> changes;
+    label.clear();
+
+    if (kind == HandleKind::Shift) {
+        // Every note moves by the same amount, each clamped on its own - like dragging a selected bar. Past the
+        // amount that puts every note at the minimum/maximum, nothing changes anymore: the amount (and the label)
+        // stops there
+        int minStart = MAX_DRAGGABLE_VELOCITY;
+        int maxStart = MIN_DRAGGABLE_VELOCITY;
+        for (const auto& [note, start] : m_handleStartVelocities) {
+            minStart = std::min(minStart, start);
+            maxStart = std::max(maxStart, start);
+        }
+        deltaVelocity = std::clamp(deltaVelocity, MIN_DRAGGABLE_VELOCITY - maxStart, MAX_DRAGGABLE_VELOCITY - minStart);
+
+        // The label: the highest velocity, a value like the bars' (an amount could exceed 127)
+        int highest = 0;
+        for (const auto& [note, start] : m_handleStartVelocities) {
+            const int velocity = deltaVelocity == 0 ? start : std::clamp(start + deltaVelocity, MIN_DRAGGABLE_VELOCITY,
+                                                                         MAX_DRAGGABLE_VELOCITY);
+            changes.push_back({ note, velocity });
+            highest = std::max(highest, velocity);
+        }
+        label = QString::number(highest);
+        return changes;
+    }
+
+    // A straight line on each staff, from its first column's velocity to its last one's, the moved end following the
+    // mouse; the notes in between take the line's value at their time, all the notes of a chord alike
+    std::map<staff_idx_t, std::vector<std::pair<Note*, int> > > notesByStaff;
+    for (const auto& [note, start] : m_handleStartVelocities) {
+        notesByStaff[note->staffIdx()].push_back({ note, start });
+    }
+
+    const bool movesLeft = kind == HandleKind::RampLeft;
+    for (const auto& [staffIdx, notes] : notesByStaff) {
+        int leftTick = std::numeric_limits<int>::max();
+        int rightTick = std::numeric_limits<int>::min();
+        for (const auto& [note, start] : notes) {
+            leftTick = std::min(leftTick, note->tick().ticks());
+            rightTick = std::max(rightTick, note->tick().ticks());
+        }
+
+        // A column's velocity: its tallest bar's
+        int leftStart = 0;
+        int rightStart = 0;
+        for (const auto& [note, start] : notes) {
+            if (note->tick().ticks() == leftTick) {
+                leftStart = std::max(leftStart, start);
+            }
+            if (note->tick().ticks() == rightTick) {
+                rightStart = std::max(rightStart, start);
+            }
+        }
+
+        const int moved = std::clamp((movesLeft ? leftStart : rightStart) + deltaVelocity, MIN_DRAGGABLE_VELOCITY,
+                                     MAX_DRAGGABLE_VELOCITY);
+        const int leftVelocity = movesLeft ? moved : std::clamp(leftStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY);
+        const int rightVelocity = movesLeft ? std::clamp(rightStart, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY) : moved;
+
+        for (const auto& [note, start] : notes) {
+            int velocity = moved;
+            if (rightTick > leftTick) {
+                const double position = static_cast<double>(note->tick().ticks() - leftTick) / (rightTick - leftTick);
+                velocity = static_cast<int>(std::lround(leftVelocity + (rightVelocity - leftVelocity) * position));
+            }
+            changes.push_back({ note, std::clamp(velocity, MIN_DRAGGABLE_VELOCITY, MAX_DRAGGABLE_VELOCITY) });
+        }
+
+        // The label: the moved end's value on the first staff
+        if (label.isEmpty()) {
+            label = QString::number(moved);
+        }
+    }
+
+    return changes;
 }
 
 std::vector<NotationNoteVelocityController::VelocityChange> NotationNoteVelocityController::withTieChains(
