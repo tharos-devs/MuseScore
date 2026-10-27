@@ -213,6 +213,26 @@ void MixerPanelModel::resetSoundTrackColor(MixerChannelItem* item)
     setSoundTrackColor(item, QColor());
 }
 
+void MixerPanelModel::setMetronomeColor(MixerChannelItem* item, const QColor& color)
+{
+    applyMetronomeColor(item, color, muse::TranslatableString("undoableAction", "Change Mixer channel color"));
+}
+
+void MixerPanelModel::resetMetronomeColor(MixerChannelItem* item)
+{
+    applyMetronomeColor(item, QColor(), muse::TranslatableString("undoableAction", "Reset Mixer channel color"));
+}
+
+void MixerPanelModel::applyMetronomeColor(MixerChannelItem* item, const QColor& color, const muse::TranslatableString& actionName)
+{
+    if (!item || item->type() != MixerChannelItem::Type::Metronome) {
+        return;
+    }
+
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), { { item->instrumentTrackId(), std::nullopt } }, color,
+                              actionName);
+}
+
 void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName)
 {
     std::vector<ChannelColorChange::Target> targets;
@@ -1014,7 +1034,7 @@ void MixerPanelModel::setupConnections()
                 } else if (item->type() == MixerChannelItem::Type::PrimaryInstrument
                            || item->type() == MixerChannelItem::Type::SecondaryInstrument
                            || item->type() == MixerChannelItem::Type::Metronome) {
-                    //! NOTE: the metronome's is changed from the Track list's Metronome row
+                    //! NOTE: the metronome's is changed from its Mixer channel or the Track list's Metronome row
                     const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
                     if (audioSettings()->trackHasExistingOutputParams(trackId)) {
                         color = audioSettings()->trackOutputParams(trackId).color;

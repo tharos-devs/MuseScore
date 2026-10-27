@@ -67,10 +67,11 @@ MixerPanelSection {
         //! NOTE: a sound track's (video, reference audio) color menu applies to it alone (it can't be selected), see
         //! MixerPanelModel::setSoundTrackColor()
         readonly property bool isSoundTrack: channelItem.isSoundTrack
+        //! NOTE: the metronome's color menu applies to it alone too, see MixerPanelModel::setMetronomeColor()
+        readonly property bool isMetronome: channelItem.type === MixerChannelItem.Metronome
 
         function resolveLabelColor() {
-            //! NOTE: the metronome's color is chosen in the Track list (see TrackListModel::setMetronomeColor())
-            if ((content.isColorable || content.isSoundTrack || channelItem.type === MixerChannelItem.Metronome) && channelItem.hasCustomColor) {
+            if ((content.isColorable || content.isSoundTrack || content.isMetronome) && channelItem.hasCustomColor) {
                 return channelItem.color
             }
 
@@ -101,7 +102,7 @@ MixerPanelSection {
         function buildContextMenuItems() {
             let items = []
 
-            if (content.isSoundTrack) {
+            if (content.isSoundTrack || content.isMetronome) {
                 items.push({ id: "editColor", title: qsTrc("playback", "Edit color…") })
                 items.push({ id: "resetColor", title: qsTrc("playback", "Reset color"), enabled: content.channelItem.hasCustomColor })
             }
@@ -432,7 +433,7 @@ MixerPanelSection {
                 //! NOTE: isColorable already covers Aux channels (see its definition above),
                 //! so this single guard also gates the FX/Group/rename/delete context menu -
                 //! no separate isAux-only branch is needed here
-                if (content.isSoundTrack) {
+                if (content.isSoundTrack || content.isMetronome) {
                     if (mouse.button === Qt.RightButton) {
                         contextMenuLoader.items = content.buildContextMenuItems()
                         contextMenuLoader.show(Qt.point(mouse.x, mouse.y))
@@ -475,6 +476,10 @@ MixerPanelSection {
                     root.model.setSoundTrackColor(content.channelItem, color)
                     return
                 }
+                if (content.isMetronome) {
+                    root.model.setMetronomeColor(content.channelItem, color)
+                    return
+                }
                 root.model.setColorForSelectedChannels(color)
                 root.model.clearSelection()
             }
@@ -491,6 +496,10 @@ MixerPanelSection {
                 } else if (itemId === "resetColor") {
                     if (content.isSoundTrack) {
                         root.model.resetSoundTrackColor(content.channelItem)
+                        return
+                    }
+                    if (content.isMetronome) {
+                        root.model.resetMetronomeColor(content.channelItem)
                         return
                     }
                     root.model.resetColorForSelectedChannels()
