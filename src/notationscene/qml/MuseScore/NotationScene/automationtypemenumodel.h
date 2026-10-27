@@ -27,7 +27,7 @@
 #include "menuitemsutils.h"
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "notation/inotationconfiguration.h"
 #include "engraving/automation/automationtypes.h"
 
@@ -50,7 +50,7 @@ class AutomationTypeMenuModel : public muse::uicomponents::AbstractMenuModel
     Q_PROPERTY(QString currentIconSuffix READ currentIconSuffix NOTIFY currentTitleChanged)
 
     muse::GlobalInject<INotationConfiguration> notationConfiguration;
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
 
 public:
     Q_INVOKABLE void init();
@@ -69,6 +69,8 @@ signals:
 
 private:
     void updateItems();
+    static void useToggleCommand(const muse::uicomponents::MenuItemList& items);
+    static void uncheckAll(const muse::uicomponents::MenuItemList& items);
 
     ReplacedMenuItems m_replacedItems;
     muse::uicomponents::MenuItem* makeMidiCcMenu();

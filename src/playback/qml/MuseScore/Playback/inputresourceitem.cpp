@@ -165,10 +165,7 @@ void InputResourceItem::handleMenuItem(const QString& menuItemId)
                 continue;
             }
 
-            if (m_currentInputParams.resourceMeta == resourceMeta) {
-                continue;
-            }
-
+            //! NOTE: also the current sound: it may go to the other selected channels (see MixerChannelItem::changeSound())
             emit inputParamsChangeRequested(resourceMeta);
             return;
         }
@@ -190,7 +187,7 @@ void InputResourceItem::setParams(const audio::AudioInputParams& newParams)
     emit hasNativeEditorSupportChanged();
 }
 
-void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
+void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta, bool launchEditor)
 {
     requestToCloseNativeEditorView();
 
@@ -206,7 +203,9 @@ void InputResourceItem::setParamsRecourceMeta(const AudioResourceMeta& newMeta)
     emit hasNativeEditorSupportChanged();
     emit inputParamsChanged();
 
-    requestToLaunchNativeEditorView();
+    if (launchEditor) {
+        requestToLaunchNativeEditorView();
+    }
 }
 
 //! NOTE Submenu of the current sound's line: where a VST3 instrument receives its MIDI

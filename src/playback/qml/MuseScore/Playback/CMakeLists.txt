@@ -181,3 +181,8 @@ fixup_qml_module_dependencies(playback_qml)
 target_include_directories(playback_qml PRIVATE
     audiosync
 )
+
+target_link_libraries(playback_qml PRIVATE
+    muse::uicomponents_qml
+    notationscene_qml
+)

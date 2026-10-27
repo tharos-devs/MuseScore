@@ -57,6 +57,7 @@ public:
     virtual void showShadowNoteForMidiPitch(const uint8_t pitch) = 0;
     virtual void hideShadowNote() = 0;
     virtual muse::RectF shadowNoteRect() const = 0;
+    virtual muse::RectF tabHoverCursorRect() const = 0;
     virtual muse::RectF previewMeasureRect() const = 0;
     virtual muse::async::Channel</*visible*/ bool> shadowNoteChanged() const = 0;
 
@@ -176,6 +177,7 @@ public:
     virtual void startEditGrip(const muse::PointF& pos) = 0;
     virtual void startEditGrip(EngravingItem* element, mu::engraving::Grip grip) = 0;
     virtual void endEditGrip() = 0;
+    virtual bool isStartEndGripSelected() const = 0;
 
     virtual bool isEditingElement() const = 0;
     virtual muse::async::Notification isEditingElementChanged() const = 0;

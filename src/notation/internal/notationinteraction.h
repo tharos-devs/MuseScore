@@ -86,6 +86,7 @@ public:
     void showShadowNoteForMidiPitch(const uint8_t pitch) override;
     void hideShadowNote() override;
     muse::RectF shadowNoteRect() const override;
+    muse::RectF tabHoverCursorRect() const override;
     muse::RectF previewMeasureRect() const override;
     muse::async::Channel</*visible*/ bool> shadowNoteChanged() const override;
 
@@ -189,6 +190,7 @@ public:
 
     // Grip edit
     bool isGripEditStarted() const override;
+    bool isStartEndGripSelected() const override;
     bool isHitGrip(const muse::PointF& pos) const override;
     void startEditGrip(const muse::PointF& pos) override;
     void startEditGrip(EngravingItem* element, mu::engraving::Grip grip) override;
@@ -381,6 +383,7 @@ private:
         mu::engraving::Position position;
     };
 
+    void showTabHoverCursor(const mu::engraving::Position& position);
     bool doShowShadowNote(mu::engraving::ShadowNote& note, ShadowNoteParams& params);
 
     bool needStartEditGrip(QKeyEvent* event) const;
@@ -557,6 +560,7 @@ private:
 
     PreviewMeasure m_previewMeasure;
     muse::async::Channel</*visible*/ bool> m_shadowNoteChanged;
+    muse::RectF m_tabHoverCursorRect;
 
     std::shared_ptr<NotationSelection> m_selection = nullptr;
 

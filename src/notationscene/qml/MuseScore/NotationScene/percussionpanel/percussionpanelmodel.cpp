@@ -47,6 +47,9 @@
 #include "project/inotationproject.h" // IWYU pragma: keep
 #include "project/iprojectaudiosettings.h"
 
+#include "notationscene/notationcommands.h"
+#include "palette/palettecommands.h"
+
 static const QString PAD_NAMES_CODE("percussion-pad-names");
 static const QString NOTATION_PREVIEW_CODE("percussion-notation-preview");
 static const QString SET_COLUMNS_CODE("percussion-set-columns");
@@ -54,9 +57,9 @@ static const QString EDIT_LAYOUT_CODE("percussion-edit-layout");
 static const QString RESET_LAYOUT_CODE("percussion-reset-layout");
 
 using namespace muse;
-using namespace muse::actions;
 using namespace muse::ui;
 using namespace mu::notation;
+using namespace mu::palette;
 
 static const char* EDIT_DRUM_PAD_URI = "musescore://notation/editdrumpad";
 
@@ -223,7 +226,7 @@ void PercussionPanelModel::init()
 
     onCurrentNotationChanged();
 
-    globalContext()->currentNotationChanged().onNotify(this, [this] {
+    projectSession()->currentNotationChanged().onNotify(this, [this] {
         onCurrentNotationChanged();
     });
 }
@@ -463,7 +466,7 @@ int PercussionPanelModel::noteNamesMiddleCOctave() const
         return drumkit::noteNamesMiddleCOctave(nullptr);
     }
 
-    return drumkit::noteNamesMiddleCOctave(drumkit::articulationMap(globalContext()->currentMasterNotation(),
+    return drumkit::noteNamesMiddleCOctave(drumkit::articulationMap(projectSession()->masterNotation(),
                                                                     { instAndPart.second->id(), instAndPart.first->id() }));
 }
 
@@ -937,12 +940,12 @@ std::pair<mu::engraving::Instrument*, mu::engraving::Part*> PercussionPanelModel
 
 const mu::project::IProjectAudioSettingsPtr PercussionPanelModel::audioSettings() const
 {
-    return globalContext()->currentProject() ? globalContext()->currentProject()->audioSettings() : nullptr;
+    return projectSession()->project() ? projectSession()->project()->audioSettings() : nullptr;
 }
 
 const INotationPtr PercussionPanelModel::notation() const
 {
-    return globalContext()->currentNotation();
+    return projectSession()->currentNotation();
 }
 
 const INotationInteractionPtr PercussionPanelModel::interaction() const

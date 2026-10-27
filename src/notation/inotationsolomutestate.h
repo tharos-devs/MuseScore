@@ -56,6 +56,9 @@ public:
     virtual const SoloMuteState& trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const = 0;
     virtual void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId, const SoloMuteState& state) = 0;
     virtual void removeTrackSoloMuteState(const engraving::InstrumentTrackId& trackId) = 0;
+    //! NOTE: when the project is opened, the states of the parts that aren't in the score any more go (a removed
+    //! part's state is kept during the session, for an undo to bring it back)
+    virtual void removeMissingParts(const std::vector<muse::ID>& partIds) = 0;
     virtual muse::async::Channel<engraving::InstrumentTrackId, SoloMuteState> trackSoloMuteStateChanged() const = 0;
 };
 

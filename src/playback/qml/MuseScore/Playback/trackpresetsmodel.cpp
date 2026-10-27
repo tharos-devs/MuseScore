@@ -131,7 +131,7 @@ void TrackPresetsModel::load(const QString& partId, const QString& instrumentId)
     });
 
     //! NOTE: the instruments' sounds and colors, changed here or elsewhere
-    if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
+    if (const project::INotationProjectPtr project = projectSession()->project()) {
         project->audioSettings()->settingsChanged().onNotify(this, [this]() {
             updateInstrumentSounds();
         });
@@ -148,7 +148,7 @@ void TrackPresetsModel::reloadInstruments()
 {
     m_instruments.clear();
 
-    const notation::IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const notation::IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     if (!masterNotation) {
         return;
     }
@@ -269,7 +269,7 @@ void TrackPresetsModel::loadSoundFontPresets(const AudioResourceMetaList& resour
 
 void TrackPresetsModel::updateInstrumentSounds()
 {
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const project::INotationProjectPtr project = projectSession()->project();
     const project::IProjectAudioSettingsPtr settings = project ? project->audioSettings() : nullptr;
     if (!settings) {
         return;

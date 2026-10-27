@@ -455,23 +455,12 @@ void NotationSelection::moveSelection(MoveDirection d, MoveSelectionType type)
         return;
     }
 
-    if (type != MoveSelectionType::String) {
-        IF_ASSERT_FAILED(MoveDirection::Left == d || MoveDirection::Right == d) {
-            return;
-        }
-    } else {
-        IF_ASSERT_FAILED(MoveDirection::Up == d || MoveDirection::Down == d) {
-            return;
-        }
+    IF_ASSERT_FAILED(MoveDirection::Left == d || MoveDirection::Right == d) {
+        return;
     }
 
     if (MoveSelectionType::EngravingItem == type) {
         moveElementSelection(d);
-        return;
-    }
-
-    if (MoveSelectionType::String == type) {
-        moveStringSelection(d);
         return;
     }
 
@@ -486,7 +475,6 @@ void NotationSelection::moveSelection(MoveDirection d, MoveSelectionType type)
         case MoveSelectionType::Track:     return QString("track");
         case MoveSelectionType::Frame:     return QString("frame");
         case MoveSelectionType::System:    return QString("system");
-        case MoveSelectionType::String:   return QString();
         }
         return QString();
     };
@@ -553,7 +541,6 @@ void NotationSelection::addToSelection(MoveDirection d, MoveSelectionType type)
     case MoveSelectionType::EngravingItem:
     case MoveSelectionType::Frame:
     case MoveSelectionType::System:
-    case MoveSelectionType::String:
     case MoveSelectionType::Undefined:
         break;
     }
@@ -644,34 +631,6 @@ void NotationSelection::moveElementSelection(MoveDirection d)
 
     if (toEl->needStartEditingAfterSelecting()) {
         m_interaction->startEditElement(toEl);
-    }
-}
-
-void NotationSelection::moveStringSelection(MoveDirection d)
-{
-    mu::engraving::InputState& is = score()->inputState();
-    mu::engraving::Staff* staff = score()->staff(track2staff(is.track()));
-    int instrStrgs = static_cast<int>(staff->part()->stringData(is.tick(), staff->idx())->strings());
-    int delta = (staff->staffType(is.tick())->upsideDown() ? -1 : 1);
-
-    if (MoveDirection::Up == d) {
-        delta = -delta;
-    }
-
-    int strg = is.string() + delta;
-    if (strg >= 0 && strg < instrStrgs && strg != is.string()) {
-        is.setString(strg);
-
-        const ChordRest* chordRest = is.cr();
-        if (chordRest && chordRest->isChord()) {
-            const Chord* chord = toChord(chordRest);
-
-            for (Note* note : chord->notes()) {
-                if (note->string() == strg) {
-                    select({ note }, SelectType::SINGLE);
-                }
-            }
-        }
     }
 }
 

@@ -25,6 +25,7 @@
 #include "engraving/automation/internal/scoreautomationcontroller.h"
 
 #include "engraving/dom/measure.h"
+#include "engraving/dom/part.h"
 #include "engraving/dom/repeatlist.h"
 #include "engraving/dom/staff.h"
 
@@ -156,6 +157,78 @@ void EditAutomationPoints::flip()
     }
 
     m_pointStates = std::move(previousStates);
+}
+
+EditAutomationCurves::EditAutomationCurves(Score* score, ScoreAutomationController* controller, AutomationCurveStates curves)
+    : m_score(score), m_controller(controller), m_curves(std::move(curves))
+{
+    assert(score && controller);
+}
+
+std::optional<ChangedRange> EditAutomationCurves::changedRange() const
+{
+    return m_changedRange;
+}
+
+//! NOTE: the whole duration of the curves' staves (the part's for an instrument curve, e.g. Volume), all the staves
+//! for a score curve
+static std::optional<ChangedRange> curvesChangedRange(const Score* score, const AutomationCurveStates& curves)
+{
+    const Measure* lastMeasure = score->lastMeasure();
+    if (!lastMeasure || score->nstaves() == 0) {
+        return std::nullopt;
+    }
+
+    staff_idx_t staffFrom = muse::nidx;
+    staff_idx_t staffTo = muse::nidx;
+    auto includeStaves = [&](staff_idx_t from, staff_idx_t to) {
+        staffFrom = staffFrom == muse::nidx ? from : std::min(staffFrom, from);
+        staffTo = staffTo == muse::nidx ? to : std::max(staffTo, to);
+    };
+
+    for (const auto& [key, curve] : curves) {
+        if (const std::optional<muse::ID> staffId = key.staffId()) {
+            for (staff_idx_t i = 0; i < score->nstaves(); ++i) {
+                if (score->staff(i)->id() == *staffId) {
+                    includeStaves(i, i);
+                    break;
+                }
+            }
+        } else if (const std::optional<InstrumentTrackId> trackId = key.trackId()) {
+            const Part* part = score->partById(trackId->partId);
+            if (part && part->nstaves() > 0) {
+                const staff_idx_t firstStaff = part->staff(0)->idx();
+                includeStaves(firstStaff, firstStaff + part->nstaves() - 1);
+            }
+        } else {
+            includeStaves(0, score->nstaves() - 1);
+        }
+    }
+
+    if (staffFrom == muse::nidx) {
+        return std::nullopt;
+    }
+
+    return ChangedRange { Fraction(0, 1), lastMeasure->endTick(), staffFrom, staffTo };
+}
+
+void EditAutomationCurves::flip()
+{
+    IF_ASSERT_FAILED(m_controller && m_controller->automationData()) {
+        return;
+    }
+
+    m_changedRange = curvesChangedRange(m_score, m_curves);
+
+    const AutomationCurveMap& current = m_controller->automationData()->curves();
+    AutomationCurveStates previous;
+    for (const auto& [key, curve] : m_curves) {
+        const auto it = current.find(key);
+        previous[key] = it != current.cend() ? std::optional(it->second) : std::nullopt;
+    }
+
+    m_controller->setCurves(m_curves);
+    m_curves = std::move(previous);
 }
 
 EditCustomMidiCcs::EditCustomMidiCcs(Score* score, ScoreAutomationController* controller, std::vector<uint8_t> controllers)

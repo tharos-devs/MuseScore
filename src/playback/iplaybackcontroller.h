@@ -45,7 +45,24 @@ class Segment;
 }
 
 namespace mu::playback {
-class IPlaybackController : MODULE_CONTEXT_INTERFACE
+//! NOTE We need to get the current state: playing position, status
+//! But direct manage (play, seek..) is bad idea, need send commands (to playback controller)
+//! So, this interface limits the playback controller interface so that it cannot be misused.
+class IPlaybackState : MODULE_CONTEXT_INTERFACE
+{
+    INTERFACE_ID(IPlaybackState)
+
+public:
+    virtual ~IPlaybackState() = default;
+
+    virtual bool isPlaying() const = 0;
+    virtual muse::async::Channel<bool> isPlayingChanged() const = 0;
+
+    virtual muse::audio::secs_t playbackPosition() const = 0;
+    virtual muse::async::Channel<muse::audio::secs_t> playbackPositionChanged() const = 0;
+};
+
+class IPlaybackController : public IPlaybackState
 {
     INTERFACE_ID(IPlaybackController)
 
@@ -57,9 +74,6 @@ public:
 
     virtual bool isPlayAllowed() const = 0;
     virtual muse::async::Channel<bool> isPlayAllowedChanged() const = 0;
-
-    virtual bool isPlaying() const = 0;
-    virtual muse::async::Channel<bool> isPlayingChanged() const = 0;
 
     virtual muse::Ret togglePlay() = 0;
     virtual muse::Ret play(bool showErrors = true) = 0;
@@ -149,6 +163,10 @@ public:
     virtual project::AudioOutputParams referenceAudioOutputParams() const = 0;
     virtual void setReferenceAudioOutputParams(const project::AudioOutputParams& params) = 0;
     virtual bool isReferenceAudioForceMuted() const = 0;
+    //! NOTE Same as isVideoTrackReady(), for the reference audio. True if there's no reference audio.
+    virtual bool isReferenceAudioTrackReady() const = 0;
+    //! NOTE Whether the reference audio is mixed into exports ("Include the Audio track")
+    virtual bool isReferenceAudioIncludedInExport() const = 0;
     //! NOTE (muted, forceMute), same meaning as trackMuteStateChanged()
     virtual muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const = 0;
 
@@ -175,6 +193,11 @@ public:
     //! NOTE: a Group bus's Solo set by the user also goes to the channels routed to it (tracks, the video, the reference audio, and the
     //! Group buses feeding it with their own channels): soloing skips a muted one, un-soloing applies to all
     virtual void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) = 0;
+
+    //! NOTE: stave sharing - a shared part's track is a group: no sound of its own, its origin parts' tracks are
+    //! routed to it. A Solo set by the user on it also goes to them (soloing skips a muted one)
+    virtual bool isSharedGroupTrack(const engraving::InstrumentTrackId& trackId) const = 0;
+    virtual void setSharedGroupSourcesSolo(const engraving::InstrumentTrackId& groupTrackId, bool solo) = 0;
 
     //! NOTE: fires whenever updateSoloMuteStates()/updateAuxMuteStates() actually resends new
     //! (muted, forceMute) control params to the engine for a track/bus - including for a

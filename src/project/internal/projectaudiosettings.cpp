@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -194,7 +195,7 @@ void ProjectAudioSettings::removeAuxOutputParams(aux_channel_idx_t index)
     m_auxSortOrderMap.erase(index);
 
     //! NOTE: out of its Track list folder: a new bus later created at this index isn't in it
-    const String busKey = u"aux:" + String::number(static_cast<int>(index));
+    const String busKey = trackListAuxKey(index);
     for (TrackListFolder& folder : m_trackListFolders) {
         muse::remove(folder.members, busKey);
         if (folder.before == busKey) {
@@ -468,6 +469,31 @@ void ProjectAudioSettings::removeTrackParams(const InstrumentTrackId& partId)
     if (outSearch != m_trackOutputParamsMap.end()) {
         m_trackOutputParamsMap.erase(outSearch);
         m_settingsChanged.notify();
+    }
+}
+
+void ProjectAudioSettings::removeMissingParts(const std::vector<muse::ID>& partIds)
+{
+    const auto isMissingTrack = [&partIds](const auto& pair) {
+        return !muse::contains(partIds, pair.first.partId);
+    };
+    std::erase_if(m_trackInputParamsMap, isMissingTrack);
+    std::erase_if(m_trackOutputParamsMap, isMissingTrack);
+
+    std::set<String> partKeys;
+    for (const muse::ID& partId : partIds) {
+        partKeys.insert(trackListPartKey(partId));
+    }
+
+    const auto isMissingPart = [&partKeys](const String& key) {
+        return key.startsWith(u"part:") && !muse::contains(partKeys, key);
+    };
+
+    for (TrackListFolder& folder : m_trackListFolders) {
+        muse::remove_if(folder.members, isMissingPart);
+        if (isMissingPart(folder.before)) {
+            folder.before = String();
+        }
     }
 }
 

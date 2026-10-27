@@ -177,7 +177,7 @@ void TimelineView::componentComplete()
     };
 
     auto initTimeline = [this, updateView, timeline] {
-        INotationPtr notation = globalContext()->currentNotation();
+        INotationPtr notation = projectSession()->currentNotation();
         timeline->setNotation(notation);
 
         updateView();
@@ -201,7 +201,7 @@ void TimelineView::componentComplete()
         }
     };
 
-    globalContext()->currentNotationChanged().onNotify(this, [initTimeline]() {
+    projectSession()->currentNotationChanged().onNotify(this, [initTimeline]() {
         initTimeline();
     });
 

@@ -133,7 +133,7 @@ void NotationArticulationMapController::init()
         }
     }, Asyncable::Mode::SetReplace);
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onCurrentNotationChanged();
     }, Asyncable::Mode::SetReplace);
 }
@@ -264,7 +264,7 @@ void NotationArticulationMapController::createOverlayForStaff(const System* syst
     }
 
     const ArticulationMapDataConstPtr mapData = articulationMaps()->data();
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationPlaybackPtr playback = masterNotation ? masterNotation->playback() : nullptr;
     if (!mapData || mapData->maps().empty() || !playback) {
         return;
@@ -709,9 +709,9 @@ std::optional<ArticulationChoices> NotationArticulationMapController::articulati
     };
 
     if (const std::optional<instrumenteditor::Target> target
-            = instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), trackId)) {
+            = instrumenteditor::target(projectSession()->project(), playbackController().get(), trackId)) {
         choices.openInstrumentEditor = [this, target = *target]() {
-            instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), target);
+            instrumenteditor::dispatch(commandDispatcher().get(), projectSession()->project(), target);
         };
     }
 
@@ -992,13 +992,13 @@ void NotationArticulationMapController::onDragCancelled(const SysStaffKey& key, 
 
 INotationArticulationMapsPtr NotationArticulationMapController::articulationMaps() const
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     return masterNotation ? masterNotation->articulationMaps() : nullptr;
 }
 
 INotationPtr NotationArticulationMapController::currentNotation() const
 {
-    return globalContext()->currentNotation();
+    return projectSession()->currentNotation();
 }
 
 Score* NotationArticulationMapController::score() const

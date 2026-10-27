@@ -51,27 +51,38 @@ void NoteInputCursor::paint(muse::draw::Painter* painter)
     const Color fillColor = configuration()->selectionColor(state.voice());
     const RectF cursorRect = noteInput->cursorRect();
 
+    paintRect(painter, cursorRect);
+
+    if (state.staff() && state.staffGroup() == StaffGroup::TAB) {
+        drawInputStringMarks(*state.staff()->staffType(state.tick()), painter, state.string(), fillColor, cursorRect);
+    }
+}
+
+void NoteInputCursor::paintRect(muse::draw::Painter* painter, const RectF& rect)
+{
+    const INotationNoteInputPtr noteInput = currentNoteInput();
+    if (!noteInput) {
+        return;
+    }
+
+    const NoteInputState& state = noteInput->state();
+    const Color fillColor = configuration()->selectionColor(state.voice());
+
     if (!m_isThinLine) {
         Color cursorRectColor = fillColor;
         cursorRectColor.setAlpha(configuration()->cursorOpacity());
-        painter->fillRect(cursorRect, cursorRectColor);
+        painter->fillRect(rect, cursorRectColor);
     }
 
     if (!state.staff()) {
         return;
     }
 
-    const StaffType* staffType = state.staff()->staffType(state.tick());
-    const double spatium = staffType->spatium();
+    const double spatium = state.staff()->staffType(state.tick())->spatium();
     const int leftLineWidth = 0.14 * spatium;
 
-    const RectF leftLine(cursorRect.topLeft().x(), cursorRect.topLeft().y(), leftLineWidth, cursorRect.height());
-    const Color lineColor = fillColor;
-    painter->fillRect(leftLine, lineColor);
-
-    if (state.staffGroup() == StaffGroup::TAB) {
-        drawInputStringMarks(*staffType, painter, state.string(), fillColor, cursorRect);
-    }
+    const RectF leftLine(rect.topLeft().x(), rect.topLeft().y(), leftLineWidth, rect.height());
+    painter->fillRect(leftLine, fillColor);
 }
 
 /// In TAB's, draws the marks within the input 'blue cursor' required to
@@ -131,7 +142,7 @@ static void drawInputStringMarks(const StaffType& staffType, muse::draw::Painter
 
 INotationNoteInputPtr NoteInputCursor::currentNoteInput() const
 {
-    auto notation = globalContext()->currentNotation();
+    auto notation = projectSession()->currentNotation();
     if (!notation) {
         return nullptr;
     }

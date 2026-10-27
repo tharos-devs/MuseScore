@@ -94,6 +94,14 @@ static std::optional<size_t> findSegmentIndex(const std::vector<RepeatSegmentInf
 
 ScoreAutomationController::StaffRange::StaffRange(const Score* score, staff_idx_t staffIdxFrom, staff_idx_t staffIdxTo)
 {
+    //! NOTE No staff left (e.g. every instrument removed): an empty range (from > to), not nstaves() - 1 wrapping around
+    //! to the largest index, which made the loops over the range never end
+    if (score->nstaves() == 0) {
+        from = 1;
+        to = 0;
+        return;
+    }
+
     const staff_idx_t lastStaffIdx = score->nstaves() - 1;
 
     if (staffIdxFrom == muse::nidx) {
@@ -461,6 +469,21 @@ void ScoreAutomationController::setCustomMidiCcs(const std::vector<uint8_t>& con
     }
 
     m_automationData->setCustomMidiCcs(controllers);
+}
+
+void ScoreAutomationController::setCurves(const AutomationCurveStates& curves)
+{
+    IF_ASSERT_FAILED(m_automationData) {
+        return;
+    }
+
+    //! NOTE: an empty curve is removed (see AutomationData::replaceCurves())
+    AutomationCurveMap changed;
+    for (const auto& [key, curve] : curves) {
+        changed[key] = curve ? *curve : AutomationCurve();
+    }
+
+    m_automationData->replaceCurves(changed);
 }
 
 void ScoreAutomationController::editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits)

@@ -46,7 +46,7 @@ class NotationUndoRedoCoordinator
 {
 public:
     //! NOTE: must be called as soon as a document becomes current (e.g. on
-    //! globalContext()->currentNotationChanged()), NOT lazily from undo()/redo() -
+    //! projectSession()->currentNotationChanged()), NOT lazily from undo()/redo() -
     //! the log below is only ever appended to by observing stackChanged(), so any
     //! push that happens before this document's subscriptions exist is invisible to
     //! it forever. Idempotent - safe to call again for the same still-open document.

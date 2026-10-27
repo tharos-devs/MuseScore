@@ -34,6 +34,7 @@
 #include "notation/imasternotation.h"
 #include "notation/inotationplayback.h"
 #include "notation/inotationarticulationmaps.h"
+#include "notation/inotationparts.h"
 #include "project/inotationproject.h"
 #include "project/iprojectaudiosettings.h"
 #include "global/io/fileinfo.h"
@@ -630,7 +631,7 @@ void ArticulationMapEditorModel::newMap()
 //! attached by Apply or OK
 void ArticulationMapEditorModel::removeTargetTrackMap()
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!m_targetTrack || !maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
         return;
@@ -863,7 +864,7 @@ std::optional<InstrumentTrackId> ArticulationMapEditorModel::targetTrackToUpdate
         return std::nullopt;
     }
 
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!maps || !maps->data() || !maps->data()->map(*m_targetTrack)) {
         return std::nullopt;
@@ -941,25 +942,29 @@ void ArticulationMapEditorModel::setTargetTrack(const QString& partId, const QSt
         return;
     }
 
-    const bool subscribed = m_targetTrack.has_value();
     m_targetTrack = engraving::InstrumentTrackId { muse::ID(part), String::fromQString(instrumentId) };
 
     // a track without a map yet (New…) gets the edited one only through Apply or OK
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     m_editsTargetTrackMap = maps && maps->data() && maps->data()->map(*m_targetTrack);
 
     emit targetTrackChanged();
 
-    if (!subscribed) {
+    if (!m_trackChangesSubscribed) {
+        m_trackChangesSubscribed = true;
         //! NOTE: the track's sound changed, or its window was opened/closed (from here or elsewhere)
         playbackController()->trackAdded().onReceive(this, [this](muse::audio::TrackId) {
+            reattachTargetTrack();
             updateInstrumentEditorState();
         });
         playbackController()->trackRemoved().onReceive(this, [this](muse::audio::TrackId) {
+            if (closeIfTargetPartRemoved()) {
+                return;
+            }
             updateInstrumentEditorState();
         });
-        if (const project::INotationProjectPtr project = globalContext()->currentProject()) {
+        if (const project::INotationProjectPtr project = projectSession()->project()) {
             project->audioSettings()->trackInputParamsChanged().onReceive(this, [this](const engraving::InstrumentTrackId&) {
                 updateInstrumentEditorState();
             });
@@ -982,7 +987,7 @@ std::optional<instrumenteditor::Target> ArticulationMapEditorModel::instrumentEd
         return std::nullopt;
     }
 
-    return instrumenteditor::target(globalContext()->currentProject(), playbackController().get(), *m_targetTrack);
+    return instrumenteditor::target(projectSession()->project(), playbackController().get(), *m_targetTrack);
 }
 
 void ArticulationMapEditorModel::updateInstrumentEditorState()
@@ -1020,7 +1025,7 @@ void ArticulationMapEditorModel::sendArticulation(int row)
         return;
     }
 
-    const project::INotationProjectPtr project = globalContext()->currentProject();
+    const project::INotationProjectPtr project = projectSession()->project();
     if (!project || !project->masterNotation() || playbackController()->isPlaying()) {
         return;
     }
@@ -1039,12 +1044,56 @@ void ArticulationMapEditorModel::openInstrumentEditor()
         return;
     }
 
-    instrumenteditor::dispatch(actionsDispatcher().get(), globalContext()->currentProject(), *target);
+    instrumenteditor::dispatch(commandDispatcher().get(), projectSession()->project(), *target);
 }
 
 void ArticulationMapEditorModel::apply()
 {
     applyToTrack();
+}
+
+//! NOTE: the edited track's part removed: nothing can be applied to it any more. Closed, unless the map has unsaved
+//! changes: then it stays open without a track, to be saved to a file (or its changes discarded on close)
+bool ArticulationMapEditorModel::closeIfTargetPartRemoved()
+{
+    if (!m_targetTrack) {
+        return false;
+    }
+
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    if (masterNotation && masterNotation->parts()->part(m_targetTrack->partId)) {
+        return false;
+    }
+
+    if (m_isDirty) {
+        m_detachedTargetTrack = m_targetTrack;
+        m_targetTrack.reset();
+        m_editsTargetTrackMap = false;
+        emit targetTrackChanged();
+        updateInstrumentEditorState();
+        return true;
+    }
+
+    emit closeAccepted();
+    return true;
+}
+
+//! NOTE: the part of a track this editor was detached from (see closeIfTargetPartRemoved()) brought back, e.g. by an
+//! undo: the editor is its again
+void ArticulationMapEditorModel::reattachTargetTrack()
+{
+    if (!m_detachedTargetTrack || m_targetTrack) {
+        return;
+    }
+
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    if (!masterNotation || !masterNotation->parts()->part(m_detachedTargetTrack->partId)) {
+        return;
+    }
+
+    const engraving::InstrumentTrackId trackId = *m_detachedTargetTrack;
+    m_detachedTargetTrack.reset();
+    setTargetTrack(QString::number(trackId.partId.toUint64()), trackId.instrumentId.toQString());
 }
 
 void ArticulationMapEditorModel::applyAndClose()
@@ -1090,7 +1139,7 @@ bool ArticulationMapEditorModel::applyToTrack()
 //! a map yet, opened from its "New…" menu item, gets it attached)
 void ArticulationMapEditorModel::reloadTracksUsingFile(const io::path_t& path, const std::optional<InstrumentTrackId>& alsoTrack)
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationArticulationMapsPtr maps = masterNotation ? masterNotation->articulationMaps() : nullptr;
     if (!maps || !maps->data()) {
         return;

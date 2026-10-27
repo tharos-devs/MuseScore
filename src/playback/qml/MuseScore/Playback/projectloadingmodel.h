@@ -32,10 +32,10 @@
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
 
-#include "actions/iactionsdispatcher.h"
+#include "rcommand/icommanddispatcher.h"
 #include "audio/main/iplayback.h"
 #include "audioplugins/iaudiopluginsmainthreadtasks.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "playback/iplaybackcontroller.h"
 
 namespace mu::playback {
@@ -54,8 +54,8 @@ class ProjectLoadingModel : public QObject, public muse::async::Asyncable, publi
     muse::GlobalInject<muse::audioplugins::IAudioPluginsMainThreadTasks> pluginsMainThreadTasks;
     muse::ContextInject<muse::audio::IPlayback> audioPlayback = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 
 public:
     explicit ProjectLoadingModel(QObject* parent = nullptr);

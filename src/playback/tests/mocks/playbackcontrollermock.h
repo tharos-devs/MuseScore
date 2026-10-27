@@ -31,14 +31,17 @@ class PlaybackControllerMock : public IPlaybackController
 {
 public:
 
+    MOCK_METHOD(bool, isPlaying, (), (const, override));
+    MOCK_METHOD(muse::async::Channel<bool>, isPlayingChanged, (), (const, override));
+
+    MOCK_METHOD(muse::audio::secs_t, playbackPosition, (), (const, override));
+    MOCK_METHOD(muse::async::Channel<muse::audio::secs_t>, playbackPositionChanged, (), (const, override));
+
     MOCK_METHOD(bool, isPlaybackInited, (), (const, override));
     MOCK_METHOD(muse::async::Channel<bool>, playbackInitedChanged, (), (const, override));
 
     MOCK_METHOD(bool, isPlayAllowed, (), (const, override));
     MOCK_METHOD(muse::async::Channel<bool>, isPlayAllowedChanged, (), (const, override));
-
-    MOCK_METHOD(bool, isPlaying, (), (const, override));
-    MOCK_METHOD(muse::async::Channel<bool>, isPlayingChanged, (), (const, override));
 
     MOCK_METHOD(muse::Ret, togglePlay, (), (override));
     MOCK_METHOD(muse::Ret, play, (bool), (override));
@@ -75,6 +78,8 @@ public:
     MOCK_METHOD(bool, isTrackForceMuted, (const engraving::InstrumentTrackId&), (const, override));
     MOCK_METHOD(bool, isAuxForceMuted, (muse::audio::aux_channel_idx_t), (const, override));
     MOCK_METHOD(void, setGroupBusSourcesSolo, (muse::audio::aux_channel_idx_t, bool), (override));
+    MOCK_METHOD(bool, isSharedGroupTrack, (const engraving::InstrumentTrackId&), (const, override));
+    MOCK_METHOD(void, setSharedGroupSourcesSolo, (const engraving::InstrumentTrackId&, bool), (override));
     MOCK_METHOD((muse::async::Channel<engraving::InstrumentTrackId, bool, bool>), trackMuteStateChanged, (), (const, override));
     MOCK_METHOD((muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool>), auxMuteStateChanged, (), (const, override));
 
@@ -109,6 +114,8 @@ public:
     MOCK_METHOD(project::AudioOutputParams, referenceAudioOutputParams, (), (const, override));
     MOCK_METHOD(void, setReferenceAudioOutputParams, (const project::AudioOutputParams&), (override));
     MOCK_METHOD(bool, isReferenceAudioForceMuted, (), (const, override));
+    MOCK_METHOD(bool, isReferenceAudioTrackReady, (), (const, override));
+    MOCK_METHOD(bool, isReferenceAudioIncludedInExport, (), (const, override));
     MOCK_METHOD((muse::async::Channel<bool, bool>), referenceAudioMuteStateChanged, (), (const, override));
     MOCK_METHOD(ReferenceAudioDecodeState, referenceAudioDecodeState, (), (const, override));
     MOCK_METHOD(muse::async::Notification, referenceAudioDecodeStateChanged, (), (const, override));

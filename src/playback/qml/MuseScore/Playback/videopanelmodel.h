@@ -32,7 +32,7 @@
 #include <QVariantList>
 
 #include "async/asyncable.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "modularity/ioc.h"
 
 #include "notation/inotationplayback.h"
@@ -71,7 +71,7 @@ class VideoPanelModel : public QObject, public muse::Contextable, public muse::a
 
     QML_ELEMENT
 
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
     muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::GlobalInject<IPlaybackConfiguration> configuration;
 

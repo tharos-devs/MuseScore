@@ -33,6 +33,7 @@
 #include "engraving/types/types.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
+#include "playback/iplaybackcontroller.h"
 
 namespace mu::playback {
 //! NOTE: an undoable color change of instrument tracks and aux buses (Mixer, Track list). Made on the project's
@@ -46,7 +47,10 @@ public:
         std::optional<muse::audio::aux_channel_idx_t> auxIndex; //! NOTE: set for an aux bus
     };
 
+    //! NOTE: an undo/redo changes the same bus even when it was removed then brought back (another index), never another
+    //! bus that got its index since
     static void apply(const project::IProjectAudioSettingsPtr& settings, const project::IProjectUndoStackPtr& undoStack,
-                      const std::vector<Target>& targets, const QColor& color, const muse::TranslatableString& actionName);
+                      const std::shared_ptr<IPlaybackController>& playbackController, const std::vector<Target>& targets,
+                      const QColor& color, const muse::TranslatableString& actionName);
 };
 }

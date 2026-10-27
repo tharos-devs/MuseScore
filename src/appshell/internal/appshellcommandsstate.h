@@ -35,6 +35,7 @@
 #include "interactive/iinteractive.h"
 #include "iappshellstate.h"
 #include "iappshellcommandscontroller.h"
+#include "project/iprojectsession.h"
 
 namespace mu::appshell {
 class AppshellCommandsState : public muse::rcommand::IModuleCommandsState, public muse::Contextable, public muse::async::Asyncable
@@ -46,6 +47,7 @@ class AppshellCommandsState : public muse::rcommand::IModuleCommandsState, publi
     muse::ContextInject<muse::dock::IDockWindowProvider> dockWindowProvider = { this };
     muse::ContextInject<IAppshellCommandsController> commandsController = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
 public:
     AppshellCommandsState(const muse::modularity::ContextPtr& ctx)
         : muse::Contextable(ctx) {}
@@ -63,6 +65,9 @@ private:
     void updateCommandStates(const std::vector<muse::rcommand::Command>& commands = {});
 
     bool isProjectPage() const;
+
+    void listenProjectVideoSettings();
+    muse::rcommand::CommandState videoCommandState(const muse::rcommand::Command& command) const;
 
     muse::rcommand::IModuleCommandsRegisterPtr m_moduleRegister;
     std::map<muse::rcommand::Command, muse::rcommand::CommandState> m_commandStates;

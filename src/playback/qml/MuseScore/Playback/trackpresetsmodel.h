@@ -30,7 +30,7 @@
 
 #include "async/asyncable.h"
 #include "modularity/ioc.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "audio/main/iplayback.h"
 
@@ -82,7 +82,7 @@ class TrackPresetsModel : public QObject, public muse::Contextable, public muse:
     Q_PROPERTY(QString selectedItemDetails READ selectedItemDetails NOTIFY selectionChanged)
     Q_PROPERTY(bool canApplySelectedItem READ canApplySelectedItem NOTIFY selectionChanged)
 
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
 

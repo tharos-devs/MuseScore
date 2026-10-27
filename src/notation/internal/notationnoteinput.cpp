@@ -21,6 +21,8 @@
  */
 #include "notationnoteinput.h"
 
+#include <algorithm>
+
 #include "engraving/dom/articulation.h"
 #include "engraving/dom/chord.h"
 #include "engraving/dom/drumset.h"
@@ -325,6 +327,9 @@ EngravingItem* NotationNoteInput::resolveNoteInputStartPosition() const
 
 bool NotationNoteInput::shouldSetupInputNote() const
 {
+    if (!score()->inputState().isValid()) {
+        return false;
+    }
     return usingNoteInputMethod(NoteInputMethod::BY_DURATION)
            || usingNoteInputMethod(NoteInputMethod::RHYTHM);
 }
@@ -339,8 +344,12 @@ void NotationNoteInput::setupInputNote()
         return;
     }
 
-    const Fraction tick = is.tick();
     Staff* staff = is.staff();
+    IF_ASSERT_FAILED(staff) {
+        return;
+    }
+
+    const Fraction tick = is.tick();
     NoteVal nval;
 
     if (staff->isTabStaff(tick)) {
@@ -684,6 +693,56 @@ bool NotationNoteInput::moveInputPosOnGrid(bool forward)
     return true;
 }
 
+void NotationNoteInput::moveInputString(bool up)
+{
+    TRACEFUNC;
+
+    InputState& is = score()->inputState();
+    const Staff* staff = score()->staff(track2staff(is.track()));
+    if (!staff || !staff->isTabStaff(is.tick())) {
+        return;
+    }
+
+    const int instrStrgs = static_cast<int>(staff->part()->stringData(is.tick(), staff->idx())->strings());
+    if (instrStrgs <= 0) {
+        return;
+    }
+
+    int delta = (staff->staffType(is.tick())->upsideDown() ? -1 : 1);
+    if (up) {
+        delta = -delta;
+    }
+
+    //! NOTE: the input string is kept when the input moves to another staff, which may have fewer strings:
+    //! bring it back within this instrument's strings
+    const int strg = std::clamp(is.string() + delta, 0, instrStrgs - 1);
+    if (strg == is.string()) {
+        return;
+    }
+
+    is.setString(strg);
+    selectInputStringNote();
+
+    //! NOTE: the cursor shows the input string: redraw it, also when no note gets selected
+    notifyAboutStateChanged();
+}
+
+void NotationNoteInput::selectInputStringNote()
+{
+    const InputState& is = score()->inputState();
+    const ChordRest* chordRest = is.cr();
+    if (!chordRest || !chordRest->isChord()) {
+        return;
+    }
+
+    for (Note* note : toChord(chordRest)->notes()) {
+        if (note->string() == is.string()) {
+            m_interaction->select({ note }, SelectType::SINGLE);
+            return;
+        }
+    }
+}
+
 void NotationNoteInput::setRestMode(bool rest)
 {
     InputState& is = score()->inputState();
@@ -815,7 +874,29 @@ muse::RectF NotationNoteInput::cursorRect() const
     }
 
     const InputState& inputState = score()->inputState();
-    const Segment* segment = inputState.segment();
+    const track_idx_t track = inputState.track() == muse::nidx ? 0 : inputState.track();
+
+    return cursorRect(inputState.segment(), track, inputState.string(), inputState.beyondScore());
+}
+
+muse::RectF NotationNoteInput::cursorRect(const Position& pos, int string) const
+{
+    if (!isNoteInputMode() || !pos.segment) {
+        return {};
+    }
+
+    const track_idx_t track = pos.staffIdx * VOICES + score()->inputState().voice();
+    const double snappedX = pos.hasSnappedTick && pos.snappedTick != pos.segment->tick()
+                            ? pos.segment->measure()->pagePos().x() + pos.segment->measure()->xPosForTick(pos.snappedTick)
+                            : -1.0;
+
+    return cursorRect(pos.segment, track, string, pos.beyondScore, snappedX);
+}
+
+//! snappedX: page x of a caret grid position inside the segment's chord or rest (< 0: none)
+muse::RectF NotationNoteInput::cursorRect(const Segment* segment, track_idx_t track, int string, bool beyondScore,
+                                          double snappedX) const
+{
     if (!segment) {
         return {};
     }
@@ -825,7 +906,6 @@ muse::RectF NotationNoteInput::cursorRect() const
         return {};
     }
 
-    const track_idx_t track = inputState.track() == muse::nidx ? 0 : inputState.track();
     const staff_idx_t staffIdx = track2staff(track);
 
     const Staff* staff = score()->staff(staffIdx);
@@ -835,7 +915,7 @@ muse::RectF NotationNoteInput::cursorRect() const
 
     const double globalSpatium = score()->style().spatium();
 
-    const StaffType* staffType = staff->staffType(inputState.tick());
+    const StaffType* staffType = staff->staffType(segment->tick());
     const bool isTabStaff = staffType->isTabStaff();
     const double localSpatium = staffType->spatium();
 
@@ -853,9 +933,12 @@ muse::RectF NotationNoteInput::cursorRect() const
     double w = segmentContentRect.width() > 0 ? segmentContentRect.width() : defaultWidth;
     double h = 0.0;
 
-    if (inputState.beyondScore()) {
+    if (beyondScore) {
         const Measure* lastMeasure = score()->lastMeasure();
         x = lastMeasure->pageBoundingRect().right() + globalSpatium;
+        w = defaultWidth;
+    } else if (snappedX >= 0.0) {
+        x = snappedX;
         w = defaultWidth;
     }
 
@@ -884,7 +967,7 @@ muse::RectF NotationNoteInput::cursorRect() const
     const double yOffset = staffType->yoffset().val() * localSpatium;
     y += yOffset;
 
-    const int inputStateStringsCount = inputState.string();
+    const int inputStateStringsCount = string;
     const int instrumentStringsCount = static_cast<int>(staff->part()->instrument()->stringData()->strings());
 
     const double lineDist = staffType->lineDistance().val() * localSpatium;

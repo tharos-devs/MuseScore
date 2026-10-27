@@ -27,7 +27,6 @@
 #include "rcommand/icommandsregister.h"
 #include "rcommand/icommandsstate.h"
 #include "interactive/iinteractiveuriregister.h"
-#include "ui/iuiactionsregister.h"
 
 #include "internal/playbackcontroller.h"
 #include "internal/midiccrecorder.h"
@@ -36,13 +35,11 @@
 #include "internal/playbackconfiguration.h"
 #include "internal/soundprofilesrepository.h"
 #include "internal/knownaudiopluginsconfigurator.h"
-#include "internal/playbackuiactions.h"
 #include "internal/playbackcommandscontroller.h"
 
 using namespace mu::playback;
 using namespace muse;
 using namespace muse::modularity;
-using namespace muse::actions;
 
 static const std::string mname("playback");
 
@@ -93,11 +90,11 @@ void PlaybackContext::registerExports()
     m_playbackController = std::make_shared<PlaybackController>(iocContext());
     m_midiCcRecorder = std::make_shared<MidiCcRecorder>(iocContext());
     m_soundProfileRepo = std::make_shared<SoundProfilesRepository>(iocContext());
-    m_playbackUiActions = std::make_shared<PlaybackUiActions>(m_playbackController, iocContext());
 
     ioc()->registerExport<IPlaybackCommandsController>(mname, m_commandsController);
     ioc()->registerExport<IPlaybackController>(mname, m_playbackController);
     ioc()->registerExport<IMidiCcRecorder>(mname, m_midiCcRecorder);
+    ioc()->registerExport<IPlaybackState>(mname, m_playbackController);
     ioc()->registerExport<ISoundProfilesRepository>(mname, m_soundProfileRepo);
 }
 
@@ -106,11 +103,6 @@ void PlaybackContext::resolveImports()
     auto cs = ioc()->resolve<muse::rcommand::ICommandsState>(mname);
     if (cs) {
         cs->reg(std::make_shared<PlaybackCommandsState>(iocContext()));
-    }
-
-    auto ar = ioc()->resolve<muse::ui::IUiActionsRegister>(mname);
-    if (ar) {
-        ar->reg(m_playbackUiActions);
     }
 }
 
@@ -123,7 +115,6 @@ void PlaybackContext::onInit(const IApplication::RunMode& mode)
         return;
     }
 
-    m_playbackUiActions->init();
     m_soundProfileRepo->init();
     m_midiCcRecorder->init();
 }

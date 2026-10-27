@@ -29,8 +29,7 @@
 
 #include "modularity/ioc.h"
 #include "async/asyncable.h"
-#include "actions/actiontypes.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "engraving/types/types.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationconfiguration.h"
@@ -66,7 +65,7 @@ class PlaybackController : public IPlaybackController, public muse::async::Async
     muse::GlobalInject<muse::audio::IAudioConfiguration> audioConfiguration;
     muse::ContextInject<ISoundProfilesRepository> profilesRepo = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<muse::tours::IToursService> tours = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
 #ifdef MUSE_MODULE_VST
@@ -80,14 +79,20 @@ public:
     void init();
     void deinit();
 
+    // IPlaybackState
+    bool isPlaying() const override;
+    muse::async::Channel<bool> isPlayingChanged() const override;
+
+    muse::audio::secs_t playbackPosition() const override;
+    muse::async::Channel<muse::audio::secs_t> playbackPositionChanged() const override;
+    // --------------
+
+    // IPlaybackController
     bool isPlaybackInited() const override;
     muse::async::Channel<bool> playbackInitedChanged() const override;
 
     bool isPlayAllowed() const override;
     muse::async::Channel<bool> isPlayAllowedChanged() const override;
-
-    bool isPlaying() const override;
-    muse::async::Channel<bool> isPlayingChanged() const override;
 
     muse::Ret togglePlay() override;
     muse::Ret play(bool showErrors = true) override;
@@ -141,6 +146,8 @@ public:
     bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
     bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
     void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) override;
+    bool isSharedGroupTrack(const engraving::InstrumentTrackId& trackId) const override;
+    void setSharedGroupSourcesSolo(const engraving::InstrumentTrackId& groupTrackId, bool solo) override;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
@@ -157,6 +164,8 @@ public:
     project::AudioOutputParams referenceAudioOutputParams() const override;
     void setReferenceAudioOutputParams(const project::AudioOutputParams& params) override;
     bool isReferenceAudioForceMuted() const override;
+    bool isReferenceAudioTrackReady() const override;
+    bool isReferenceAudioIncludedInExport() const override;
     muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const override;
     ReferenceAudioDecodeState referenceAudioDecodeState() const override;
     muse::async::Notification referenceAudioDecodeStateChanged() const override;
@@ -196,8 +205,6 @@ public:
 
     void setIsExportingAudio(bool exporting) override;
     void refreshAudioPluginStates() override;
-
-    bool canReceiveAction(const muse::actions::ActionCode& code) const;
 
     const std::map<muse::audio::TrackId, muse::audio::AudioResourceMeta>& onlineSounds() const override;
     muse::async::Notification onlineSoundsChanged() const override;
@@ -292,8 +299,11 @@ private:
                   const TrackAddFinished& onFinished);
     void doAddTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
                     const TrackAddFinished& onFinished);
+    void doAddGroupTrack(const engraving::InstrumentTrackId& instrumentTrackId, const std::string& title, bool projectHadNoAudioSettings,
+                         const TrackAddFinished& onFinished);
     void addAuxTrack(muse::audio::aux_channel_idx_t index, bool projectHadNoAudioSettings, bool isProjectLoad,
                      const TrackAddFinished& onFinished);
+    void updateTrackOutputs();
     muse::audio::aux_channel_idx_t resolveFreeAuxBusIndex() const;
     //! NOTE: permanently pins this bus's display number on first call (a no-op if already
     //! assigned) - see IProjectAudioSettings::auxDisplayNumber()'s doc comment
@@ -311,6 +321,7 @@ private:
                                                   const project::AudioOutputParams& outParams, bool rebuildVolume = true,
                                                   bool rebuildPan = true);
     void removeTrack(const engraving::InstrumentTrackId& instrumentTrackId);
+    void refreshTrackAudioPluginStates(const engraving::InstrumentTrackId& instrumentTrackId, muse::audio::TrackId trackId);
 
     void onAutomationDataChanged(const notation::AutomationChanges& changes);
     void resendAutomatedControlParams(std::optional<engraving::InstrumentTrackIdSet> volumeTrackIds = std::nullopt,
@@ -330,6 +341,7 @@ private:
 
     muse::async::Channel<bool> m_isPlayAllowedChanged;
     muse::async::Channel<bool> m_isPlayingChanged;
+    muse::async::Channel<muse::audio::secs_t> m_playbackPositionChanged;
     muse::async::Channel<bool> m_loopEnabledChanged;
     muse::async::Notification m_totalPlayTimeChanged;
     muse::async::Notification m_currentTempoChanged;
@@ -367,6 +379,11 @@ private:
     //! isTrackForceMuted() does for instrument tracks (see buildAuxChannelItem())
     std::map<muse::audio::aux_channel_idx_t, bool> m_lastAppliedAuxForceMute;
     std::map<muse::audio::TrackId, std::tuple<bool, bool, bool> > m_lastAppliedInstrumentMuteSoloState;
+
+    //! NOTE: the engine group track each track is routed to (see updateTrackOutputs()), as last sent to the engine
+    std::map<muse::audio::TrackId, muse::audio::TrackId> m_trackOutputs;
+    //! NOTE: stave sharing - the group track (the shared part's) of each origin part's track
+    std::map<engraving::InstrumentTrackId, engraving::InstrumentTrackId> m_sharedGroupTrackIds;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> m_trackMuteStateChanged;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> m_auxMuteStateChanged;

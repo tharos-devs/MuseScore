@@ -33,6 +33,7 @@
 
 #include "engraving/dom/factory.h"
 #include "engraving/dom/masterscore.h"
+#include "engraving/dom/sharedpart.h"
 #include "engraving/dom/stafftext.h"
 #include "engraving/dom/utils.h"
 
@@ -121,18 +122,18 @@ void PlaybackController::init()
     m_referenceAudioSlot = makeSoundTrackSlot([]() { return muse::trc("playback", "Audio"); },
                                               [this]() { return referenceAudioOutputParams(); });
 
-    globalContext()->currentNotationChanged().onNotify(this, [this]() {
+    projectSession()->currentNotationChanged().onNotify(this, [this]() {
         onNotationChanged();
 
         setupPlaybackIfNeed();
     });
 
-    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+    projectSession()->projectChanged().onNotify(this, [this]() {
         if (m_isPlaybackInited) {
             resetPlayback();
         }
 
-        m_needSetupPlayback = globalContext()->currentProject() != nullptr;
+        m_needSetupPlayback = projectSession()->project() != nullptr;
 
         if (m_needSetupPlayback) {
             m_loadingProgress.start();
@@ -251,6 +252,19 @@ bool PlaybackController::isPlaying() const
 Channel<bool> PlaybackController::isPlayingChanged() const
 {
     return m_isPlayingChanged;
+}
+
+muse::audio::secs_t PlaybackController::playbackPosition() const
+{
+    if (!currentPlayer()) {
+        return 0;
+    }
+    return currentPlayer()->playbackPosition();
+}
+
+muse::async::Channel<muse::audio::secs_t> PlaybackController::playbackPositionChanged() const
+{
+    return m_playbackPositionChanged;
 }
 
 bool PlaybackController::isPaused() const
@@ -446,7 +460,24 @@ void PlaybackController::setTrackSoloMuteState(const InstrumentTrackId& trackId,
         return;
     }
 
+    const bool muteChanged = m_notation->soloMuteState()->trackSoloMuteState(trackId).mute != state.mute;
+
     m_notation->soloMuteState()->setTrackSoloMuteState(trackId, state);
+
+    //! NOTE: stave sharing - muting a shared part's group mutes its origin parts too, unmuting unmutes them
+    if (muteChanged && isSharedGroupTrack(trackId)) {
+        for (const auto& [sourceTrackId, groupTrackId] : m_sharedGroupTrackIds) {
+            if (groupTrackId != trackId) {
+                continue;
+            }
+
+            SoloMuteState sourceState = trackSoloMuteState(sourceTrackId);
+            if (sourceState.mute != state.mute) {
+                sourceState.mute = state.mute;
+                setTrackSoloMuteState(sourceTrackId, sourceState);
+            }
+        }
+    }
 }
 
 bool PlaybackController::isTrackForceMuted(const InstrumentTrackId& instrumentTrackId) const
@@ -462,6 +493,28 @@ bool PlaybackController::isTrackForceMuted(const InstrumentTrackId& instrumentTr
     }
 
     return std::get<2>(stateIt->second);
+}
+
+bool PlaybackController::isSharedGroupTrack(const InstrumentTrackId& trackId) const
+{
+    const INotationPartsPtr parts = masterNotationParts();
+    const Part* part = parts ? parts->part(trackId.partId) : nullptr;
+    return part && part->isSharedPart();
+}
+
+void PlaybackController::setSharedGroupSourcesSolo(const InstrumentTrackId& groupTrackId, bool solo)
+{
+    for (const auto& [sourceTrackId, trackGroupId] : m_sharedGroupTrackIds) {
+        if (trackGroupId != groupTrackId) {
+            continue;
+        }
+
+        SoloMuteState state = trackSoloMuteState(sourceTrackId);
+        if (state.solo != solo && !(solo && state.mute)) {
+            state.solo = solo;
+            setTrackSoloMuteState(sourceTrackId, state);
+        }
+    }
 }
 
 bool PlaybackController::isAuxForceMuted(aux_channel_idx_t index) const
@@ -519,6 +572,10 @@ void PlaybackController::setGroupBusSourcesSolo(aux_channel_idx_t index, bool so
         if (state.solo != solo && !(solo && state.mute)) {
             state.solo = solo;
             setTrackSoloMuteState(instrumentTrackId, state);
+        }
+
+        if (isSharedGroupTrack(instrumentTrackId)) {
+            setSharedGroupSourcesSolo(instrumentTrackId, solo);
         }
     }
 
@@ -769,6 +826,18 @@ INotationInteractionPtr PlaybackController::interaction() const
     return m_notation ? m_notation->interaction() : nullptr;
 }
 
+//! NOTE: stave sharing hides the origin parts behind their shared part, but they are the ones that sound: only
+//! their own visibility counts. A shared part is the group they are routed to: hiding it (not turning it off,
+//! which only changes the notation) mutes them through it
+static bool isPartHiddenForPlayback(const Part* part)
+{
+    if (part->isSharedPart() || part->sharedPart()) {
+        return !part->getProperty(mu::engraving::Pid::VISIBLE).toBool();
+    }
+
+    return !part->show();
+}
+
 uint64_t PlaybackController::notationPlaybackKey() const
 {
     return reinterpret_cast<uint64_t>(notationPlayback().get());
@@ -776,7 +845,7 @@ uint64_t PlaybackController::notationPlaybackKey() const
 
 void PlaybackController::onNotationChanged()
 {
-    setNotation(globalContext()->currentNotation());
+    setNotation(projectSession()->currentNotation());
 }
 
 void PlaybackController::onPartChanged(const Part* part)
@@ -792,14 +861,14 @@ void PlaybackController::onPartChanged(const Part* part)
 
     for (const InstrumentTrackId& instrumentTrackId : part->instrumentTrackIdList()) {
         auto soloMuteState = trackSoloMuteState(instrumentTrackId);
-        soloMuteState.mute = !part->show();
+        soloMuteState.mute = isPartHiddenForPlayback(part);
         setTrackSoloMuteState(instrumentTrackId, soloMuteState);
     }
 
     if (part->hasChordSymbol()) {
         InstrumentTrackId chordSymbolsTrackId = notationPlayback()->chordSymbolsTrackId(part->id());
         auto chordsSoloMuteState = trackSoloMuteState(chordSymbolsTrackId);
-        chordsSoloMuteState.mute = !part->show();
+        chordsSoloMuteState.mute = isPartHiddenForPlayback(part);
         setTrackSoloMuteState(chordSymbolsTrackId, chordsSoloMuteState);
     }
 }
@@ -1049,11 +1118,12 @@ void PlaybackController::doResume()
 
 void PlaybackController::onPlaybackStatusChanged()
 {
+    const bool playing = isPlaying();
+    m_isPlayingChanged.send(playing);
+
     if (!notationPlayback()) {
         return;
     }
-
-    bool playing = isPlaying();
 
     //! NOTE: the engine handles a seek before the play that follows it, so the position is already the start one here
     if (playing) {
@@ -1073,14 +1143,6 @@ void PlaybackController::onPlaybackStatusChanged()
         bool shouldSendOnScoreChange = playing || muse::contains(onlineSounds, pair.second);
         notationPlayback()->setSendEventsOnScoreChange(pair.first, shouldSendOnScoreChange);
     }
-
-    //! NOTE: this is the only place isPlaying()'s underlying state actually changes, but
-    //! isPlayingChanged() had no emitter at all - nothing ever called .send() on it, so every
-    //! subscriber (e.g. MixerPanelModel's meter reset on stop) was permanently dead code. Most
-    //! noticeable stopping mid-playback: unlike reaching a natural silent ending (where the
-    //! last real signal values already decay to near-silence on their own), an abrupt Stop
-    //! leaves every meter frozen at its last live reading with nothing to reset it
-    m_isPlayingChanged.send(playing);
 }
 
 secs_t PlaybackController::playbackStartSecs() const
@@ -1107,6 +1169,23 @@ InstrumentTrackIdSet PlaybackController::instrumentTrackIdSetForRangePlayback() 
     std::vector<const Part*> selectedParts = selectionRange()->selectedParts();
     Fraction startTick = selectionRange()->startTick();
     int startTicks = startTick.ticks();
+
+    //! NOTE: stave sharing - a shared stave plays through its origin parts and its group: selecting one selects them all
+    std::vector<const Part*> sharingParts;
+    for (const Part* part : selectedParts) {
+        if (part->isSharedPart()) {
+            const std::vector<Part*>& originParts = engraving::toSharedPart(part)->originParts();
+            sharingParts.insert(sharingParts.end(), originParts.begin(), originParts.end());
+        } else if (part->sharedPart()) {
+            sharingParts.push_back(part->sharedPart());
+        }
+    }
+
+    for (const Part* part : sharingParts) {
+        if (!muse::contains(selectedParts, part)) {
+            selectedParts.push_back(part);
+        }
+    }
 
     InstrumentTrackIdSet result;
 
@@ -1326,7 +1405,7 @@ void PlaybackController::disableLoop()
 
 mu::project::IProjectAudioSettingsPtr PlaybackController::audioSettings() const
 {
-    INotationProjectPtr project = globalContext()->currentProject();
+    INotationProjectPtr project = projectSession()->project();
     IF_ASSERT_FAILED(project) {
         return nullptr;
     }
@@ -1336,16 +1415,16 @@ mu::project::IProjectAudioSettingsPtr PlaybackController::audioSettings() const
 
 mu::project::IProjectVideoSettingsPtr PlaybackController::videoSettings() const
 {
-    if (!globalContext()->currentProject()) {
+    if (!projectSession()->project()) {
         return nullptr;
     }
 
-    return globalContext()->currentProject()->videoSettings();
+    return projectSession()->project()->videoSettings();
 }
 
 void PlaybackController::updateMasterControlParams()
 {
-    if (!globalContext()->currentProject() || !playback()) {
+    if (!projectSession()->project() || !playback()) {
         return;
     }
 
@@ -1516,11 +1595,11 @@ void PlaybackController::updateVideoMuteState(bool hasSolo)
 
 mu::project::IProjectAudioSyncSettingsPtr PlaybackController::audioSyncSettings() const
 {
-    if (!globalContext()->currentProject()) {
+    if (!projectSession()->project()) {
         return nullptr;
     }
 
-    return globalContext()->currentProject()->audioSyncSettings();
+    return projectSession()->project()->audioSyncSettings();
 }
 
 TrackId PlaybackController::referenceAudioTrackId() const
@@ -1554,6 +1633,18 @@ void PlaybackController::setReferenceAudioOutputParams(const AudioOutputParams& 
 bool PlaybackController::isReferenceAudioForceMuted() const
 {
     return m_referenceAudioSlot && m_referenceAudioSlot->isForceMuted();
+}
+
+bool PlaybackController::isReferenceAudioTrackReady() const
+{
+    return !m_referenceAudioSlot || m_referenceAudioSlot->isReady();
+}
+
+bool PlaybackController::isReferenceAudioIncludedInExport() const
+{
+    IProjectAudioSyncSettingsPtr audioSyncSettingsPtr = audioSyncSettings();
+    return audioSyncSettingsPtr && audioSyncSettingsPtr->referenceAudio().isValid()
+           && audioSyncSettingsPtr->referenceAudio().includeInExport;
 }
 
 muse::async::Channel<bool, bool> PlaybackController::referenceAudioMuteStateChanged() const
@@ -1676,12 +1767,19 @@ void PlaybackController::updateReferenceAudioMuteState(bool hasSolo)
 
 void PlaybackController::resetPlayback()
 {
-    if (currentPlayer()) {
-        currentPlayer()->playbackPositionChanged().disconnect(this);
-        currentPlayer()->playbackStatusChanged().disconnect(this);
+    auto player = m_player;
 
-        currentPlayer()->stop();
-        currentPlayer()->seek(0 /*newPosition*/);
+    m_player = nullptr;
+    m_currentTick = 0;
+
+    if (player) {
+        player->playbackPositionChanged().disconnect(this);
+        player->playbackStatusChanged().disconnect(this);
+
+        player->stop();
+        player->seek(0);
+        m_playbackPositionChanged.send(0);
+        m_isPlayingChanged.send(false);
     }
 
     playback()->clearSources();
@@ -1697,11 +1795,12 @@ void PlaybackController::resetPlayback()
 
     m_seqAsyncReceiver.async_disconnectAll();
 
-    m_currentTick = 0;
     m_playStartSecs.reset();
 
     m_instrumentTrackIdMap.clear();
     m_auxTrackIdMap.clear();
+    m_trackOutputs.clear();
+    m_sharedGroupTrackIds.clear();
     //! NOTE: an engine round-trip still pending from the previous notation must not keep its index
     //! reserved for the next one - its callbacks are then ignored (see the playbackKey checks)
     m_pendingAuxIndices.clear();
@@ -1719,9 +1818,6 @@ void PlaybackController::resetPlayback()
         m_referenceAudioSlot->reset();
     }
 
-    m_player = nullptr;
-    globalContext()->setCurrentPlayer(nullptr);
-
     m_onlineSoundsController->reset();
 }
 
@@ -1735,6 +1831,15 @@ void PlaybackController::addTrack(const InstrumentTrackId& instrumentTrackId, bo
 
     const Part* part = masterNotationParts()->part(instrumentTrackId.partId);
     if (!part) {
+        return;
+    }
+
+    //! NOTE: a shared part (stave sharing) only shows the notes of its origin parts, which play them: its track is
+    //! the group they are routed to (see updateTrackOutputs())
+    if (part->isSharedPart()) {
+        if (instrumentTrackId.instrumentId == part->instrument()->id() && !notationPlayback()->isChordSymbolsTrack(instrumentTrackId)) {
+            doAddGroupTrack(instrumentTrackId, part->partName().toStdString(), projectHadNoAudioSettings, onFinished);
+        }
         return;
     }
 
@@ -1809,17 +1914,34 @@ void PlaybackController::doAddTrack(const InstrumentTrackId& instrumentTrackId, 
     trackParams.auxSends = originParams.auxSends;
     trackParams.control = trackControlParams(instrumentTrackId, originParams);
 
+    struct {
+        uint64_t playbackKey;
+        InstrumentTrackId instrumentTrackId;
+        bool projectHadNoAudioSettings;
+        AudioOutputParams originParams;
+        TrackAddFinished onFinished;
+        AudioResourceMeta originMeta;
+    } tctx = { playbackKey, instrumentTrackId, projectHadNoAudioSettings, originParams, onFinished,  originMeta };
+
     playback()->addTrack(title, std::move(playbackData), trackParams)
-    .onResolve(this, [=](const TrackId trackId, const TrackParams& appliedParams) {
+    .onResolve(this, [this, tctx](const TrackId trackId, const TrackParams& appliedParams) {
         //! NOTE It may be that while we were adding a track, the notation was already closed (or opened another)
         //! This situation can be if the notation was opened and immediately closed.
-        if (notationPlaybackKey() != playbackKey) {
+        if (notationPlaybackKey() != tctx.playbackKey) {
             return;
         }
 
+        // context variables
+        const InstrumentTrackId instrumentTrackId = tctx.instrumentTrackId;
+        const bool projectHadNoAudioSettings = tctx.projectHadNoAudioSettings;
+        const AudioOutputParams& originParams = tctx.originParams;
+        const TrackAddFinished onFinished = tctx.onFinished;
+        const AudioResourceMeta& originMeta = tctx.originMeta;
+
         m_instrumentTrackIdMap.insert({ instrumentTrackId, trackId });
 
-        const bool trackNewlyAdded = projectHadNoAudioSettings || !audioSettings()->trackHasExistingOutputParams(instrumentTrackId);
+        const bool trackNewlyAdded = projectHadNoAudioSettings
+                                     || !audioSettings()->trackHasExistingOutputParams(instrumentTrackId);
 
         auto appliedOutParams = originParams;
         appliedOutParams.fxChain = appliedParams.fxChain;
@@ -1856,6 +1978,105 @@ void PlaybackController::doAddTrack(const InstrumentTrackId& instrumentTrackId, 
     });
 
     m_loadingTrackCount++;
+}
+
+void PlaybackController::doAddGroupTrack(const InstrumentTrackId& instrumentTrackId, const std::string& title,
+                                         bool projectHadNoAudioSettings, const TrackAddFinished& onFinished)
+{
+    IF_ASSERT_FAILED(notationPlayback() && playback()) {
+        return;
+    }
+
+    AudioOutputParams originParams = trackOutputParams(instrumentTrackId);
+
+    TrackParams trackParams;
+    trackParams.fxChain = originParams.fxChain;
+    trackParams.auxSends = originParams.auxSends;
+    trackParams.control = trackControlParams(instrumentTrackId, originParams);
+
+    struct {
+        uint64_t playbackKey;
+        InstrumentTrackId instrumentTrackId;
+        bool projectHadNoAudioSettings;
+        AudioOutputParams originParams;
+        TrackAddFinished onFinished;
+    } tctx = { notationPlaybackKey(), instrumentTrackId, projectHadNoAudioSettings, originParams, onFinished };
+
+    playback()->addGroupTrack(title, trackParams)
+    .onResolve(this, [this, tctx](const TrackId trackId, const TrackParams& appliedParams) {
+        if (notationPlaybackKey() != tctx.playbackKey) {
+            return;
+        }
+
+        m_instrumentTrackIdMap.insert({ tctx.instrumentTrackId, trackId });
+
+        AudioOutputParams appliedOutParams = tctx.originParams;
+        appliedOutParams.fxChain = appliedParams.fxChain;
+        audioSettings()->setTrackOutputParams(tctx.instrumentTrackId, appliedOutParams, !tctx.projectHadNoAudioSettings);
+
+        updateSoloMuteStates();
+
+        tctx.onFinished();
+
+        m_trackAdded.send(trackId);
+    })
+    .onReject(this, [onFinished](int code, const std::string& msg) {
+        LOGE() << "can't add a new group track, code: [" << code << "] " << msg;
+
+        onFinished();
+    });
+
+    m_loadingTrackCount++;
+}
+
+//! NOTE: stave sharing - the tracks of the parts that share a stave are routed to the shared part's group track
+void PlaybackController::updateTrackOutputs()
+{
+    if (!playback() || !notationPlayback() || !masterNotationParts()) {
+        return;
+    }
+
+    std::map<TrackId, TrackId> outputs;
+    m_sharedGroupTrackIds.clear();
+
+    for (const Part* part : masterNotationParts()->partList()) {
+        const SharedPart* sharedPart = part->sharedPart();
+        if (!sharedPart) {
+            continue;
+        }
+
+        const InstrumentTrackId groupTrackId { sharedPart->id(), sharedPart->instrument()->id() };
+        auto groupIt = m_instrumentTrackIdMap.find(groupTrackId);
+        if (groupIt == m_instrumentTrackIdMap.end()) {
+            continue;
+        }
+
+        InstrumentTrackIdSet sourceTrackIds = part->instrumentTrackIdSet();
+        sourceTrackIds.insert(notationPlayback()->chordSymbolsTrackId(part->id()));
+
+        for (const InstrumentTrackId& sourceTrackId : sourceTrackIds) {
+            auto sourceIt = m_instrumentTrackIdMap.find(sourceTrackId);
+            if (sourceIt != m_instrumentTrackIdMap.end()) {
+                outputs[sourceIt->second] = groupIt->second;
+                m_sharedGroupTrackIds[sourceTrackId] = groupTrackId;
+            }
+        }
+    }
+
+    for (const auto& [trackId, groupTrackId] : m_trackOutputs) {
+        if (!muse::contains(outputs, trackId)) {
+            playback()->setTrackOutput(trackId, INVALID_TRACK_ID);
+        }
+    }
+
+    for (const auto& [trackId, groupTrackId] : outputs) {
+        auto it = m_trackOutputs.find(trackId);
+        if (it == m_trackOutputs.end() || it->second != groupTrackId) {
+            playback()->setTrackOutput(trackId, groupTrackId);
+        }
+    }
+
+    m_trackOutputs = std::move(outputs);
 }
 
 void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoAudioSettings, bool isProjectLoad,
@@ -1916,14 +2137,27 @@ void PlaybackController::addAuxTrack(aux_channel_idx_t index, bool projectHadNoA
 
     uint64_t playbackKey = notationPlaybackKey();
 
+    struct {
+        uint64_t playbackKey;
+        aux_channel_idx_t index;
+        bool projectHadNoAudioSettings;
+        AudioOutputParams originParams;
+        TrackAddFinished onFinished;
+    } tctx = { playbackKey, index, projectHadNoAudioSettings, originParams, onFinished };
+
     playback()->addAuxTrack(title, trackParams)
-    .onResolve(this, [this, playbackKey, index, onFinished, originParams, projectHadNoAudioSettings](const TrackId trackId,
-                                                                                                     const TrackParams& appliedParams) {
+    .onResolve(this, [this, tctx](const TrackId trackId, const TrackParams& appliedParams) {
         //! NOTE It may be that while we were adding a track, the notation was already closed (or opened another)
         //! This situation can be if the notation was opened and immediately closed.
-        if (notationPlaybackKey() != playbackKey) {
+        if (notationPlaybackKey() != tctx.playbackKey) {
             return;
         }
+
+        // context variables
+        const aux_channel_idx_t index = tctx.index;
+        const bool projectHadNoAudioSettings = tctx.projectHadNoAudioSettings;
+        const AudioOutputParams& originParams = tctx.originParams;
+        const TrackAddFinished onFinished = tctx.onFinished;
 
         m_pendingAuxIndices.erase(index);
 
@@ -2282,15 +2516,14 @@ void PlaybackController::removeTrack(const InstrumentTrackId& instrumentTrackId)
         return;
     }
 
-    playback()->removeTrack(search->second);
-    audioSettings()->removeTrackParams(instrumentTrackId);
+    //! NOTE: its plugins' current state, for an undo to bring them back as they were (see below)
+    refreshTrackAudioPluginStates(instrumentTrackId, search->second);
 
-    m_masterNotation->notation()->soloMuteState()->removeTrackSoloMuteState(instrumentTrackId);
-    for (const IExcerptNotationPtr& excerpt : m_masterNotation->excerpts()) {
-        if (const INotationPtr& notation = excerpt->notation()) {
-            notation->soloMuteState()->removeTrackSoloMuteState(instrumentTrackId);
-        }
-    }
+    playback()->removeTrack(search->second);
+
+    //! NOTE: the track's sound, effects, color and solo/mute state are kept, for an undo of the part's removal to bring
+    //! it back as it was; they go when the project is opened (see IProjectAudioSettings::removeMissingParts()). A part
+    //! added in the meantime never gets this id (see Score::newPartId())
 
     m_onlineSoundsController->removeOnlineTrack(search->second);
 
@@ -2304,6 +2537,8 @@ void PlaybackController::removeTrack(const InstrumentTrackId& instrumentTrackId)
 
     m_instrumentTrackIdMap.erase(instrumentTrackId);
     m_automatedControlParamsCache.erase(instrumentTrackId);
+
+    updateTrackOutputs();
 }
 
 void PlaybackController::onTrackNewlyAdded(const InstrumentTrackId& instrumentTrackId)
@@ -2315,7 +2550,7 @@ void PlaybackController::onTrackNewlyAdded(const InstrumentTrackId& instrumentTr
             }
 
             const Part* part = notation->parts()->part(instrumentTrackId.partId);
-            const bool shouldMute = !part || !part->show();
+            const bool shouldMute = !part || isPartHiddenForPlayback(part);
 
             const INotationSoloMuteState::SoloMuteState soloMuteState = { shouldMute, /*solo*/ false };
             notation->soloMuteState()->setTrackSoloMuteState(instrumentTrackId, soloMuteState);
@@ -2328,7 +2563,6 @@ void PlaybackController::setupPlayback()
     playback()->removeAllTracks();
 
     m_player = playback()->player();
-    globalContext()->setCurrentPlayer(m_player);
 
     if (!notationPlayback()) {
         return;
@@ -2556,6 +2790,11 @@ void PlaybackController::setupTracks()
         removeTrack(instrumentTrackId);
     });
 
+    //! NOTE: parts joining or leaving a shared part change the routing to its group track
+    masterNotationParts()->sharedPartsChanged().onNotify(this, [this]() {
+        updateSoloMuteStates();
+    }, Asyncable::Mode::SetReplace);
+
     NotifyList<const Part*> partList = masterNotationParts()->partList();
 
     //! HACK - ideally we would use "this" (PlaybackController) instead of m_seqAsyncReceiver for the following
@@ -2591,6 +2830,8 @@ void PlaybackController::setupTracks()
 void PlaybackController::setupPlayer()
 {
     currentPlayer()->playbackPositionChanged().onReceive(this, [this](const audio::secs_t pos) {
+        m_playbackPositionChanged.send(pos);
+
         m_currentTick = notationPlayback()->secToTick(pos);
 
         updateCurrentTempo();
@@ -2620,6 +2861,8 @@ void PlaybackController::updateSoloMuteStates()
     }
 
     TRACEFUNC;
+
+    updateTrackOutputs();
 
     InstrumentTrackIdSet existingTrackIdSet = notationPlayback()->existingTrackIdSet();
     bool hasSolo = false;
@@ -2664,6 +2907,17 @@ void PlaybackController::updateSoloMuteStates()
     //! A track's own force-mute only depends on its own Solo: soloing a group bus solos
     //! the tracks routed to it (see MixerPanelModel::setChannelSolo()), so one the user
     //! then un-soloes must go silent, not play on through its soloed group bus.
+    //! NOTE: stave sharing - a shared part's group track is the only way to master of its origin parts: it stays
+    //! audible while one of them is soloed (soloing the group solos them, see setSharedGroupSourcesSolo())
+    InstrumentTrackIdSet audibleSharedGroupTrackIds;
+    if (hasSolo) {
+        for (const auto& [sourceTrackId, groupTrackId] : m_sharedGroupTrackIds) {
+            if (m_notation->soloMuteState()->trackSoloMuteState(sourceTrackId).solo) {
+                audibleSharedGroupTrackIds.insert(groupTrackId);
+            }
+        }
+    }
+
     std::vector<aux_channel_idx_t> audibleGroupBuses;
     if (hasSolo) {
         for (const auto& pair : m_auxTrackIdMap) {
@@ -2688,6 +2942,10 @@ void PlaybackController::updateSoloMuteStates()
             }
 
             addAudibleGroupBuses(trackOutputParams(instrumentTrackId).auxSends);
+        }
+
+        for (const InstrumentTrackId& groupTrackId : audibleSharedGroupTrackIds) {
+            addAudibleGroupBuses(trackOutputParams(groupTrackId).auxSends);
         }
 
         if (isVideoSoloed) {
@@ -2723,7 +2981,7 @@ void PlaybackController::updateSoloMuteStates()
         AudioOutputParams params = trackOutputParams(instrumentTrackId);
 
         // 2. Evaluate "force mute" (disabling the mute button)
-        bool shouldForceMute = hasSolo && !soloMuteState.solo;
+        bool shouldForceMute = hasSolo && !soloMuteState.solo && !muse::contains(audibleSharedGroupTrackIds, instrumentTrackId);
         if (notationPlayback()->isChordSymbolsTrack(instrumentTrackId) && !shouldForceMute) {
             shouldForceMute = !notationConfiguration()->isPlayChordSymbolsEnabled();
         }
@@ -3006,6 +3264,63 @@ void PlaybackController::setMasterNotation(notation::IMasterNotationPtr masterNo
     }
 }
 
+#ifdef MUSE_MODULE_VST
+using PluginStateReader = std::function<std::optional<AudioUnitConfig>(const AudioFxParams&, AudioFxChainOrder)>;
+
+static bool refreshFxChainStates(AudioFxChain& chain, const PluginStateReader& readState)
+{
+    bool changed = false;
+    for (auto& [chainOrder, fxParams] : chain) {
+        if (!isResourceType(fxParams.resourceMeta, AudioResourceType::VstPlugin)) {
+            continue;
+        }
+        const std::optional<AudioUnitConfig> state = readState(fxParams, chainOrder);
+        if (state && *state != fxParams.configuration) {
+            fxParams.configuration = *state;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+static PluginStateReader trackFxStateReader(const std::shared_ptr<muse::vst::IVstPluginStateProvider>& provider, TrackId trackId)
+{
+    return [provider, trackId](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
+        return provider->fxPluginState(fxParams.resourceMeta.id, trackId, chainOrder);
+    };
+}
+
+#endif
+
+//! NOTE: no settings-changed notification: these are saved right after (or kept for an undo, see removeTrack()), and a
+//! plugin's state may differ byte-wise on every read even when nothing changed (e.g. Kontakt)
+void PlaybackController::refreshTrackAudioPluginStates(const InstrumentTrackId& instrumentTrackId, TrackId trackId)
+{
+#ifdef MUSE_MODULE_VST
+    project::IProjectAudioSettingsPtr settings = audioSettings();
+    if (!settings || !vstPluginStateProvider()) {
+        return;
+    }
+
+    AudioInputParams inParams = settings->trackInputParams(instrumentTrackId);
+    if (inParams.type() == AudioSourceType::Vsti) {
+        const std::optional<AudioUnitConfig> state = vstPluginStateProvider()->instrumentPluginState(inParams.resourceMeta.id, trackId);
+        if (state && *state != inParams.configuration) {
+            inParams.configuration = *state;
+            settings->setTrackInputParams(instrumentTrackId, inParams, false /*notifySettingsChanged*/);
+        }
+    }
+
+    AudioOutputParams outParams = settings->trackOutputParams(instrumentTrackId);
+    if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), trackId))) {
+        settings->setTrackOutputParams(instrumentTrackId, outParams, false /*notifySettingsChanged*/);
+    }
+#else
+    UNUSED(instrumentTrackId);
+    UNUSED(trackId);
+#endif
+}
+
 void PlaybackController::refreshAudioPluginStates()
 {
 #ifdef MUSE_MODULE_VST
@@ -3014,72 +3329,36 @@ void PlaybackController::refreshAudioPluginStates()
         return;
     }
 
-    //! NOTE: no settings-changed notification: these are saved right after, and a plugin's state may differ
-    //! byte-wise on every read even when nothing changed (e.g. Kontakt)
-    using StateReader = std::function<std::optional<AudioUnitConfig>(const AudioFxParams&, AudioFxChainOrder)>;
-    const auto refreshFxChain = [](AudioFxChain& chain, const StateReader& readState) {
-        bool changed = false;
-        for (auto& [chainOrder, fxParams] : chain) {
-            if (!isResourceType(fxParams.resourceMeta, AudioResourceType::VstPlugin)) {
-                continue;
-            }
-            const std::optional<AudioUnitConfig> state = readState(fxParams, chainOrder);
-            if (state && *state != fxParams.configuration) {
-                fxParams.configuration = *state;
-                changed = true;
-            }
-        }
-        return changed;
-    };
-
-    const auto trackFxState = [this](TrackId trackId) -> StateReader {
-        return [this, trackId](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
-            return vstPluginStateProvider()->fxPluginState(fxParams.resourceMeta.id, trackId, chainOrder);
-        };
-    };
-
     for (const auto& [instrumentTrackId, trackId] : m_instrumentTrackIdMap) {
-        AudioInputParams inParams = settings->trackInputParams(instrumentTrackId);
-        if (inParams.type() == AudioSourceType::Vsti) {
-            const std::optional<AudioUnitConfig> state = vstPluginStateProvider()->instrumentPluginState(inParams.resourceMeta.id, trackId);
-            if (state && *state != inParams.configuration) {
-                inParams.configuration = *state;
-                settings->setTrackInputParams(instrumentTrackId, inParams, false /*notifySettingsChanged*/);
-            }
-        }
-
-        AudioOutputParams outParams = settings->trackOutputParams(instrumentTrackId);
-        if (refreshFxChain(outParams.fxChain, trackFxState(trackId))) {
-            settings->setTrackOutputParams(instrumentTrackId, outParams, false /*notifySettingsChanged*/);
-        }
+        refreshTrackAudioPluginStates(instrumentTrackId, trackId);
     }
 
     for (const auto& [auxIdx, trackId] : m_auxTrackIdMap) {
         AudioOutputParams outParams = settings->auxOutputParams(auxIdx);
-        if (refreshFxChain(outParams.fxChain, trackFxState(trackId))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), trackId))) {
             settings->setAuxOutputParams(auxIdx, outParams, false /*notifySettingsChanged*/);
         }
     }
 
     if (videoTrackId() != INVALID_TRACK_ID) {
         AudioOutputParams outParams = settings->videoOutputParams();
-        if (refreshFxChain(outParams.fxChain, trackFxState(videoTrackId()))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), videoTrackId()))) {
             settings->setVideoOutputParams(outParams, false /*notifySettingsChanged*/);
         }
     }
 
     if (referenceAudioTrackId() != INVALID_TRACK_ID) {
         AudioOutputParams outParams = settings->referenceAudioOutputParams();
-        if (refreshFxChain(outParams.fxChain, trackFxState(referenceAudioTrackId()))) {
+        if (refreshFxChainStates(outParams.fxChain, trackFxStateReader(vstPluginStateProvider(), referenceAudioTrackId()))) {
             settings->setReferenceAudioOutputParams(outParams, false /*notifySettingsChanged*/);
         }
     }
 
     AudioOutputParams masterParams = settings->masterAudioOutputParams();
-    const StateReader masterFxState = [this](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
+    const PluginStateReader masterFxState = [this](const AudioFxParams& fxParams, AudioFxChainOrder chainOrder) {
         return vstPluginStateProvider()->masterFxPluginState(fxParams.resourceMeta.id, chainOrder);
     };
-    if (refreshFxChain(masterParams.fxChain, masterFxState)) {
+    if (refreshFxChainStates(masterParams.fxChain, masterFxState)) {
         settings->setMasterAudioOutputParams(masterParams, false /*notifySettingsChanged*/);
     }
 #endif
@@ -3097,15 +3376,6 @@ void PlaybackController::setIsExportingAudio(bool exporting)
     if (exporting && notationPlayback()) {
         notationPlayback()->sendEventsForChangedTracks();
     }
-}
-
-bool PlaybackController::canReceiveAction(const muse::actions::ActionCode&) const
-{
-    if (!m_masterNotation || !m_masterNotation->hasParts()) {
-        return false;
-    }
-
-    return !interactive() || interactive()->currentUri().val != NOTATION_REVIEW_PAGE_URI;
 }
 
 const std::map<TrackId, AudioResourceMeta>& PlaybackController::onlineSounds() const

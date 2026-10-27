@@ -24,7 +24,7 @@
 
 #include "channeleditundo.h"
 
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "translation.h"
 
 #include "project/inotationproject.h"
@@ -43,14 +43,14 @@ namespace {
 struct SoundTrackServices : public muse::Contextable
 {
     muse::ContextInject<IPlaybackController> controller = { this };
-    muse::ContextInject<mu::context::IGlobalContext> context = { this };
+    muse::ContextInject<mu::project::IProjectSession> context = { this };
 
     explicit SoundTrackServices(const muse::modularity::ContextPtr& ctx)
         : muse::Contextable(ctx) {}
 
     INotationProjectPtr project() const
     {
-        return context()->currentProject();
+        return context()->project();
     }
 
     IProjectVideoSettingsPtr videoSettings() const

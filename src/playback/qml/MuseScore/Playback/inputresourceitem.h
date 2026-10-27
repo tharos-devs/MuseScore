@@ -59,7 +59,7 @@ public:
 
     const muse::audio::AudioInputParams& params() const;
     void setParams(const muse::audio::AudioInputParams& newParams);
-    void setParamsRecourceMeta(const muse::audio::AudioResourceMeta& newMeta);
+    void setParamsRecourceMeta(const muse::audio::AudioResourceMeta& newMeta, bool launchEditor = true);
     void setDelayMs(int delayMs);
 
     QString title() const override;

@@ -37,6 +37,9 @@ public:
     bool isPlaybackInited() const override;
     muse::async::Channel<bool> playbackInitedChanged() const override;
 
+    muse::audio::secs_t playbackPosition() const override;
+    muse::async::Channel<muse::audio::secs_t> playbackPositionChanged() const override;
+
     muse::Ret togglePlay() override;
     muse::Ret play(bool showErrors = true) override;
     muse::Ret playFromSelection(bool showErrors = true) override;
@@ -89,6 +92,8 @@ public:
     bool isTrackForceMuted(const engraving::InstrumentTrackId& trackId) const override;
     bool isAuxForceMuted(muse::audio::aux_channel_idx_t index) const override;
     void setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t index, bool solo) override;
+    bool isSharedGroupTrack(const engraving::InstrumentTrackId& trackId) const override;
+    void setSharedGroupSourcesSolo(const engraving::InstrumentTrackId& groupTrackId, bool solo) override;
 
     muse::async::Channel<engraving::InstrumentTrackId, bool, bool> trackMuteStateChanged() const override;
     muse::async::Channel<muse::audio::aux_channel_idx_t, bool, bool> auxMuteStateChanged() const override;
@@ -105,6 +110,8 @@ public:
     project::AudioOutputParams referenceAudioOutputParams() const override;
     void setReferenceAudioOutputParams(const project::AudioOutputParams& params) override;
     bool isReferenceAudioForceMuted() const override;
+    bool isReferenceAudioTrackReady() const override;
+    bool isReferenceAudioIncludedInExport() const override;
     muse::async::Channel<bool, bool> referenceAudioMuteStateChanged() const override;
     ReferenceAudioDecodeState referenceAudioDecodeState() const override;
     muse::async::Notification referenceAudioDecodeStateChanged() const override;

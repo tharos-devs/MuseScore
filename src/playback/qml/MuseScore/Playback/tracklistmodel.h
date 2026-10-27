@@ -41,7 +41,7 @@
 #endif
 
 #include "audio/main/iplayback.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "project/iprojectaudiosettings.h"
 #include "project/iprojectundostack.h"
 #include "interactive/iinteractive.h"
@@ -113,7 +113,7 @@ class TrackListModel : public QAbstractListModel, public QQmlParserStatus, publi
 
     muse::ContextInject<IPlaybackController> controller = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::GlobalInject<IPlaybackConfiguration> playbackConfiguration;
 #ifdef MUSE_MODULE_VST

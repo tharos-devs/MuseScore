@@ -57,7 +57,7 @@ void PartTreeItem::init(const notation::Part* masterPart)
     }
 
     bool visible = m_partExists && part->getProperty(Pid::VISIBLE).toBool();
-    bool enabled = !(part->sharedPart() && part->sharedPart()->enabled());
+    bool enabled = !isHiddenBySharedPart(part);
 
     setId(part->id());
 
@@ -73,6 +73,13 @@ void PartTreeItem::init(const notation::Part* masterPart)
 
     m_part = part;
     m_ignoreVisibilityChange = false;
+}
+
+//! NOTE: stave sharing - a part shown by its shared part can't be shown on its own. Not in a part (excerpt), which
+//! never has the score's shared staves: there, a part of the score not added yet shows as its score's one
+bool PartTreeItem::isHiddenBySharedPart(const Part* part) const
+{
+    return m_partExists && part->sharedPart() && part->sharedPart()->enabled();
 }
 
 const Part* PartTreeItem::part() const
@@ -92,7 +99,7 @@ void PartTreeItem::onScoreChanged(const mu::engraving::ScoreChanges&)
     m_ignoreVisibilityChange = true;
     setIsVisible(m_partExists && m_part->getProperty(Pid::VISIBLE).toBool());
     if (!m_part->isSharedPart()) {
-        setIsEnabled(!(m_part->sharedPart() && m_part->sharedPart()->enabled()));
+        setIsEnabled(!isHiddenBySharedPart(m_part));
     }
     m_ignoreVisibilityChange = false;
 }

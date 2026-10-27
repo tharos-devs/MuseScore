@@ -29,18 +29,21 @@
 #include <QSplitter>
 #include <QTimer>
 
+#include "async/asyncable.h"
+
 #include "modularity/ioc.h"
 #include "ui/iuiconfiguration.h"
 #include "notation/inotation.h"
 #include "project/iprojectvideosettings.h"
 #include "project/iprojectaudiosettings.h"
+#include "project/iprojectsession.h"
 #include "async/asyncable.h"
-#include "context/iglobalcontext.h"
-#include "actions/iactionsdispatcher.h"
 #include "interactive/iinteractive.h"
 #include "playback/iplaybackcontroller.h"
 #include "playback/iplaybackconfiguration.h"
+#include "playback/iplaybackcontroller.h"
 #include "notationscene/inotationsceneconfiguration.h"
+#include "rcommand/icommanddispatcher.h"
 
 #include "timelinevideothumbnails.h"
 
@@ -136,10 +139,11 @@ class Timeline : public QGraphicsView, public muse::Contextable, public muse::as
     muse::GlobalInject<muse::ui::IUiConfiguration> uiConfiguration;
     muse::GlobalInject<INotationSceneConfiguration> configuration;
     muse::GlobalInject<playback::IPlaybackConfiguration> playbackConfiguration;
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
     muse::ContextInject<muse::IInteractive> interactive = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
+    muse::ContextInject<playback::IPlaybackState> playbackState = { this };
 
 public:
     //! NOTE: the measure width, from the panel's "…" menu ("Zoom" submenu)

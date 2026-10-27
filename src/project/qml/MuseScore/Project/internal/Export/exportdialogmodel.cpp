@@ -31,6 +31,7 @@
 #include "notation/imasternotation.h"
 #include "notation/inotation.h"
 #include "project/inotationproject.h"
+#include "project/iprojectaudiosyncsettings.h"
 #include "project/iprojectvideosettings.h"
 
 #include "translation.h"
@@ -299,7 +300,7 @@ void ExportDialogModel::selectSavedNotations()
 
 IMasterNotationPtr ExportDialogModel::masterNotation() const
 {
-    return context()->currentMasterNotation();
+    return context()->masterNotation();
 }
 
 bool ExportDialogModel::isMainNotation(INotationPtr notation) const
@@ -495,7 +496,7 @@ bool ExportDialogModel::exportScores()
     std::optional<iex::videoexport::VideoSource> videoSource;
     iex::videoexport::AttachedVideo attachedVideo;
     if (m_selectedExportType.id == ATTACHED_VIDEO_EXPORT_TYPE_ID && hasAttachedVideo()) {
-        const VideoAttachmentSettings& attachment = context()->currentProject()->videoSettings()->attachment();
+        const VideoAttachmentSettings& attachment = context()->project()->videoSettings()->attachment();
         videoSource = iex::videoexport::VideoSource::AttachedVideo;
         attachedVideo.path = attachment.path.toStdString();
         attachedVideo.offsetMs = attachment.offsetMs;
@@ -743,7 +744,7 @@ void ExportDialogModel::setFFmpegDir(const QString& dir)
 
 bool ExportDialogModel::hasAttachedVideo() const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     return project && project->videoSettings() && project->videoSettings()->attachment().isValid();
 }
 
@@ -764,7 +765,7 @@ bool ExportDialogModel::isAttachedVideoExportAvailable() const
 
 bool ExportDialogModel::includeVideoAudio() const
 {
-    return hasAttachedVideo() && context()->currentProject()->videoSettings()->attachment().includeAudioInExport;
+    return hasAttachedVideo() && context()->project()->videoSettings()->attachment().includeAudioInExport;
 }
 
 void ExportDialogModel::setIncludeVideoAudio(bool include)
@@ -775,11 +776,37 @@ void ExportDialogModel::setIncludeVideoAudio(bool include)
 
     //! NOTE Stored in the project (like the other video settings), so the choice is kept for the next export;
     //! the video's sound track reads it when rendering offline (see PlaybackController::videoSourceParams())
-    updateVideoAttachment(context()->currentProject()->videoSettings(), [include](VideoAttachmentSettings& attachment) {
+    updateVideoAttachment(context()->project()->videoSettings(), [include](VideoAttachmentSettings& attachment) {
         attachment.includeAudioInExport = include;
     });
 
     emit includeVideoAudioChanged();
+}
+
+bool ExportDialogModel::hasReferenceAudio() const
+{
+    INotationProjectPtr project = context()->project();
+    return project && project->audioSyncSettings() && project->audioSyncSettings()->referenceAudio().isValid();
+}
+
+bool ExportDialogModel::includeReferenceAudio() const
+{
+    return hasReferenceAudio() && context()->project()->audioSyncSettings()->referenceAudio().includeInExport;
+}
+
+void ExportDialogModel::setIncludeReferenceAudio(bool include)
+{
+    if (!hasReferenceAudio() || includeReferenceAudio() == include) {
+        return;
+    }
+
+    //! NOTE Stored in the project like the video's choice; the reference audio's sound track reads it when
+    //! rendering offline (see PlaybackController::onReferenceAudioChanged())
+    updateReferenceAudio(context()->project()->audioSyncSettings(), [include](ReferenceAudioSettings& referenceAudio) {
+        referenceAudio.includeInExport = include;
+    });
+
+    emit includeReferenceAudioChanged();
 }
 
 QVariantList ExportDialogModel::availableAttachedVideoAudioFormats() const

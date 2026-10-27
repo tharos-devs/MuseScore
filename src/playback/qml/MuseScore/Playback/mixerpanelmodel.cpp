@@ -106,6 +106,14 @@ void MixerPanelModel::init()
         reload();
     });
 
+    //! NOTE: solo/mute states are per notation (score/part): show the new current one's. Queued, once the playback
+    //! controller (which the channels read them from) has switched to it too
+    context()->currentNotationChanged().onNotify(this, [this]() {
+        QTimer::singleShot(0, this, [this]() {
+            reload();
+        });
+    });
+
     m_auxBusEditor = AuxBusEditor::shared(iocContext());
 
     controller()->trackAdded().onReceive(this, [this](const TrackId trackId) {
@@ -205,6 +213,26 @@ void MixerPanelModel::resetSoundTrackColor(MixerChannelItem* item)
     setSoundTrackColor(item, QColor());
 }
 
+void MixerPanelModel::setMetronomeColor(MixerChannelItem* item, const QColor& color)
+{
+    applyMetronomeColor(item, color, muse::TranslatableString("undoableAction", "Change Mixer channel color"));
+}
+
+void MixerPanelModel::resetMetronomeColor(MixerChannelItem* item)
+{
+    applyMetronomeColor(item, QColor(), muse::TranslatableString("undoableAction", "Reset Mixer channel color"));
+}
+
+void MixerPanelModel::applyMetronomeColor(MixerChannelItem* item, const QColor& color, const muse::TranslatableString& actionName)
+{
+    if (!item || item->type() != MixerChannelItem::Type::Metronome) {
+        return;
+    }
+
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), { { item->instrumentTrackId(), std::nullopt } }, color,
+                              actionName);
+}
+
 void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const muse::TranslatableString& actionName)
 {
     std::vector<ChannelColorChange::Target> targets;
@@ -222,7 +250,7 @@ void MixerPanelModel::applyColorToSelectedChannels(const QColor& color, const mu
     }
 
     //! NOTE: the items pick the new colors up from the audio settings (see setupConnections())
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), targets, color, actionName);
 }
 
 bool MixerPanelModel::dropFx(MixerChannelItem* source, int sourceIndex, MixerChannelItem* target, int insertIndex, bool duplicate)
@@ -1006,7 +1034,7 @@ void MixerPanelModel::setupConnections()
                 } else if (item->type() == MixerChannelItem::Type::PrimaryInstrument
                            || item->type() == MixerChannelItem::Type::SecondaryInstrument
                            || item->type() == MixerChannelItem::Type::Metronome) {
-                    //! NOTE: the metronome's is changed from the Track list's Metronome row
+                    //! NOTE: the metronome's is changed from its Mixer channel or the Track list's Metronome row
                     const engraving::InstrumentTrackId& trackId = item->instrumentTrackId();
                     if (audioSettings()->trackHasExistingOutputParams(trackId)) {
                         color = audioSettings()->trackOutputParams(trackId).color;
@@ -1219,7 +1247,9 @@ MixerChannelItem* MixerPanelModel::buildInstrumentChannelItem(const TrackId trac
         type = MixerChannelItem::Type::Metronome;
     }
 
-    MixerChannelItem* item = new MixerChannelItem(this, type, false /*outputOnly*/, trackId);
+    //! NOTE: a shared part's track (stave sharing) is a group, without a sound of its own
+    const bool outputOnly = controller()->isSharedGroupTrack(instrumentTrackId);
+    MixerChannelItem* item = new MixerChannelItem(this, type, outputOnly, trackId);
     item->setPanelSection(m_navigationSection);
     item->bindInstrumentTrack(instrumentTrackId);
 
@@ -1480,7 +1510,7 @@ void MixerPanelModel::updateAuxSendItemCount()
 
 INotationProjectPtr MixerPanelModel::currentProject() const
 {
-    return context()->currentProject();
+    return context()->project();
 }
 
 IProjectAudioSettingsPtr MixerPanelModel::audioSettings() const

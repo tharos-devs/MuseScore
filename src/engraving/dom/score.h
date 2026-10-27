@@ -947,6 +947,9 @@ private:
     FBox* findFretBox() const;
 
     MasterScore* m_masterScore = nullptr;
+    //! NOTE: the last ids given (see newStaffId(), newPartId())
+    mutable muse::ID m_lastNewStaffId = 0;
+    mutable muse::ID m_lastNewPartId = 0;
     std::list<MuseScoreView*> m_viewer;
     Excerpt* m_excerpt = nullptr;
 

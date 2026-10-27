@@ -37,6 +37,7 @@
 #include "iengravingcontextconfiguration.h" // IWYU pragma: keep
 #include "ipalettescoreprovider.h"
 
+#include "articulationmap/articulationmapdata.h"
 #include "editing/addremoveelement.h"
 #include "editing/editclef.h"
 #include "editing/editkeysig.h"
@@ -1468,7 +1469,7 @@ void Score::removeElement(EngravingItem* element)
         if (endNote) {
             endNote->setGhost(false);
             endNote->setVisible(true);
-            const StringData* stringData = endNote->part()->stringData(endNote->tick(), endNote->staffIdx());
+            const StringData* stringData = endNote->originPart()->stringData(endNote->tick(), endNote->staffIdx());
             int endFret = stringData->fret(endNote->pitch(), endNote->string(), endNote->staff());
             endNote->setFret(endFret);
         }
@@ -2200,6 +2201,27 @@ void Score::cmdRemovePart(Part* part)
     Transaction& tx = transactionManager()->currentOrDummyTransaction();
     EditStaveSharing::handleRemovePart(tx, part);
 
+    //! NOTE The part's articulation maps and automation curves go with it (undone with it): kept, they would be saved,
+    //! and a part added after the file is reopened can get the same id (see newPartId()). Its staves' curves go in
+    //! undoRemoveStaff(). Before its staves are removed: the changed range of these edits is the part's staves
+    if (isMaster()) {
+        if (const ArticulationMapDataConstPtr data = articulationMapData()) {
+            EditArticulationMapChanges changes;
+            for (const auto& [trackId, map] : data->maps()) {
+                if (trackId.partId == part->id()) {
+                    changes.maps[trackId] = std::nullopt;
+                }
+            }
+            masterScore()->editArticulationMap(changes);
+        }
+
+        const ID partId = part->id();
+        masterScore()->removeAutomationCurves([partId](const AutomationCurveKey& key) {
+            const std::optional<InstrumentTrackId> trackId = key.trackId();
+            return trackId && trackId->partId == partId;
+        });
+    }
+
     staff_idx_t sidx = staffIdx(part);
     size_t n = part->nstaves();
 
@@ -2269,6 +2291,10 @@ void Score::removePart(Part* part)
 
     m_parts.erase(m_parts.begin() + index);
     markInstrumentsAsPrimary(m_parts);
+
+    //! NOTE: its id stays given (see newPartId()), also when it was read from the file
+    ID& lastNewPartId = static_cast<const Score*>(masterScore())->m_lastNewPartId;
+    lastNewPartId = std::max(lastNewPartId, part->id());
 
     if (m_excerpt) {
         for (Part* excerptPart : m_excerpt->parts()) {
@@ -2371,26 +2397,48 @@ void Score::updateStavesNumberForSystems()
     }
 }
 
+//! NOTE: never an id given before (during this session), even to a staff removed since: a staff added in place of
+//! a removed one must not get its id, so nothing kept for the removed staff (e.g. in the undo history, or not
+//! cleaned up yet) can apply to it
 ID Score::newStaffId() const
 {
-    ID maxId = 0;
+    //! NOTE: one counter for the master score and its excerpts
+    ID& lastNewStaffId = static_cast<const Score*>(masterScore())->m_lastNewStaffId;
+    ID maxId = lastNewStaffId;
 
-    for (const Staff* staff : score()->staves()) {
+    for (const Staff* staff : staves()) {
         maxId = std::max(maxId, staff->id());
     }
-
-    return maxId + 1;
-}
-
-ID Score::newPartId() const
-{
-    ID maxId = 0;
-
-    for (const Part* part : score()->parts()) {
-        maxId = std::max(maxId, part->id());
+    if (!isMaster()) {
+        for (const Staff* staff : masterScore()->staves()) {
+            maxId = std::max(maxId, staff->id());
+        }
     }
 
-    return maxId + 1;
+    lastNewStaffId = maxId + 1;
+    return lastNewStaffId;
+}
+
+//! NOTE: never an id given before (during this session), like newStaffId(): what is kept for a removed part (e.g.
+//! its sound, color or Track list folder, until playback finds it removed, or in the undo history) must not apply
+//! to a part added in its place (e.g. a replaced instrument)
+ID Score::newPartId() const
+{
+    //! NOTE: one counter for the master score and its excerpts
+    ID& lastNewPartId = static_cast<const Score*>(masterScore())->m_lastNewPartId;
+    ID maxId = lastNewPartId;
+
+    for (const Part* part : parts()) {
+        maxId = std::max(maxId, part->id());
+    }
+    if (!isMaster()) {
+        for (const Part* part : masterScore()->parts()) {
+            maxId = std::max(maxId, part->id());
+        }
+    }
+
+    lastNewPartId = maxId + 1;
+    return lastNewPartId;
 }
 
 //---------------------------------------------------------
@@ -2399,6 +2447,10 @@ ID Score::newPartId() const
 
 void Score::removeStaff(Staff* staff)
 {
+    //! NOTE: its id stays given (see newStaffId()), also when it was read from the file
+    ID& lastNewStaffId = static_cast<const Score*>(masterScore())->m_lastNewStaffId;
+    lastNewStaffId = std::max(lastNewStaffId, staff->id());
+
     staff_idx_t idx = staff->idx();
     for (auto i = staff->score()->spanner().cbegin(); i != staff->score()->spanner().cend(); ++i) {
         Spanner* s = i->second;

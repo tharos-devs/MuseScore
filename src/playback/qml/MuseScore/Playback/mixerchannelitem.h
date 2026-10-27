@@ -27,14 +27,14 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <qqmlintegration.h>
 
 #include "async/asyncable.h"
 
 #include "modularity/ioc.h"
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
 #include "rcommand/icommanddispatcher.h"
+#include "project/iprojectsession.h"
 #include "interactive/iinteractive.h"
 #include "iplaybackconfiguration.h"
 #include "iplaybackcontroller.h"
@@ -124,10 +124,9 @@ class MixerChannelItem : public QObject, public muse::async::Asyncable, public m
     muse::GlobalInject<IPlaybackConfiguration> configuration;
     muse::GlobalInject<notation::INotationConfiguration> notationConfiguration;
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> dispatcher = { this };
-    muse::ContextInject<context::IGlobalContext> context = { this };
-    muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
+    muse::ContextInject<project::IProjectSession> context = { this };
+    muse::ContextInject<IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::audio::IPlayback> playback = { this };
 
 public:
@@ -326,6 +325,11 @@ public:
     //! the first empty slot (nothing if this channel already has newMeta)
     void applyFxChange(const QString& oldResourceId, const muse::audio::AudioResourceMeta& newMeta);
 
+    //! NOTE: the other selected channels of this one's panel (see ChannelEditUndo::connectPickedChanges()): a VST3
+    //! instrument picked as this channel's sound goes to them too, after one sound flags warning for all
+    using SoundChangePeersGetter = std::function<QList<QPointer<MixerChannelItem> >()>;
+    void setSoundChangePeers(const SoundChangePeersGetter& peers);
+
     //! NOTE: for MixerPanelModel's undo/redo of a user's aux-send or FX choice
     ChannelAuxSendsState auxSendsState() const;
     void restoreAuxSendsState(const ChannelAuxSendsState& state);
@@ -509,10 +513,11 @@ protected:
     //! bus is reassigned via the dropdown
     int resolveNewBlankAuxSendItemOrder(const QMap<int, AuxSendItem*>& items) const;
 
-    void openEditor(AbstractAudioResourceItem* item, const muse::actions::ActionQuery& action);
+    void openEditor(AbstractAudioResourceItem* item, const muse::rcommand::CommandQuery& command);
     void closeEditor(AbstractAudioResourceItem* item);
 
-    bool askAboutChangingSound();
+    bool askAboutChangingSound(const engraving::InstrumentTrackIdSet& instrumentTrackIds);
+    void changeSound(InputResourceItem* item, const muse::audio::AudioResourceMeta& newMeta);
 
     void subscribeOnAutomationChanges();
     void updateAutomatedControlParams();
@@ -525,6 +530,7 @@ protected:
 
     muse::audio::TrackId m_trackId = -1;
     engraving::InstrumentTrackId m_instrumentTrackId;
+    SoundChangePeersGetter m_soundChangePeers;
     muse::audio::aux_channel_idx_t m_auxBusIndex = 0;
 
     project::AudioInputParams m_inputParams;

@@ -60,6 +60,8 @@ public:
     void update(const ScoreChanges& changes);
 
     void editPoints(const AutomationCurveKey& key, AutomationPointEdits& edits);
+    //! NOTE: writes or removes whole curves, the others are kept
+    void setCurves(const AutomationCurveStates& curves);
 
     std::vector<uint8_t> customMidiCcs() const;
     void setCustomMidiCcs(const std::vector<uint8_t>& controllers);

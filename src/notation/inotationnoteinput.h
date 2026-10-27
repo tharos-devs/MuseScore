@@ -27,6 +27,10 @@
 
 #include "types/noteinputtypes.h"
 
+namespace mu::engraving {
+struct Position;
+}
+
 namespace mu::notation {
 class INotationNoteInput
 {
@@ -70,6 +74,8 @@ public:
     virtual void setInputNotes(const engraving::NoteValList& notes) = 0;
     virtual void moveInputNotes(bool up, engraving::UpDownMode mode) = 0;
     virtual bool moveInputPosOnGrid(bool forward) = 0;
+    virtual void moveInputString(bool up) = 0;
+    virtual void selectInputStringNote() = 0;
 
     virtual void setRestMode(bool rest) = 0;
     virtual void setAccidental(engraving::AccidentalType accidentalType) = 0;
@@ -79,6 +85,8 @@ public:
     virtual void setCurrentTrack(engraving::track_idx_t trackIndex) = 0;
 
     virtual muse::RectF cursorRect() const = 0;
+    //! The cursor's rect at a position given by Score::getPosition (string: physical TAB string)
+    virtual muse::RectF cursorRect(const engraving::Position& pos, int string) const = 0;
 
     virtual muse::async::Notification noteAdded() const = 0;
     virtual muse::async::Notification stateChanged() const = 0;

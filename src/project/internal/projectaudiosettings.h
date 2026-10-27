@@ -95,6 +95,7 @@ public:
 
     const TrackListFolders& trackListFolders() const override;
     void setTrackListFolders(const TrackListFolders& folders) override;
+    void removeMissingParts(const std::vector<muse::ID>& partIds) override;
 
     const playback::SoundProfileName& activeSoundProfile() const override;
     void setActiveSoundProfile(const playback::SoundProfileName& profileName) override;

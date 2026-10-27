@@ -28,9 +28,8 @@
 #include <QPointer>
 #include <QQuickItem>
 
-#include "actions/iactionsdispatcher.h"
 #include "async/asyncable.h"
-#include "context/iglobalcontext.h"
+#include "project/iprojectsession.h"
 #include "modularity/ioc.h"
 #include "notation/inotationarticulationmaps.h"
 #include "notation/notationtypes.h"
@@ -48,10 +47,9 @@ class ArticulationMapOverlay;
 //! chord plays (see ArticulationMapOverlay), and lets the user place/move/remove articulation marks
 class NotationArticulationMapController : public muse::Contextable, public muse::async::Asyncable
 {
-    muse::ContextInject<mu::context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<mu::project::IProjectSession> projectSession = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
     muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
 
 public:
     NotationArticulationMapController(QQuickItem* overlaysParent, const muse::modularity::ContextPtr& iocCtx);

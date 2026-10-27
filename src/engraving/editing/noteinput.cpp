@@ -500,8 +500,9 @@ Note* NoteInput::addPitch(Transaction& tx, Score* score, NoteVal& nval, bool add
         Segment* seg = score->setNoteRest(
             is.segment(), track, nval, duration, stemDirection, /* forceAccidental */ false, is.articulationIds(), /* rhythmic */ false,
             externalInputState);
-        if (seg) {
-            note = toChord(seg->element(track))->upNote();
+        EngravingItem* chordItem = seg ? seg->element(track) : nullptr;
+        if (chordItem && chordItem->isChord()) {
+            note = toChord(chordItem)->upNote();
         }
     }
 
@@ -735,6 +736,16 @@ std::pair<Note*, Note*> NoteInput::repitchReplaceNote(Transaction&, Score* score
 //    mouse click in state NoteType::ENTRY
 //---------------------------------------------------------
 
+//  calculate actual clicked line from staffType offset and stepOffset
+int NoteInput::clickedLine(const Position& pos)
+{
+    const StaffType* staffType = pos.segment->score()->staff(pos.staffIdx)->staffType(pos.segment->tick());
+    const int stepOffset = staffType->stepOffset();
+    const double stYOffset = staffType->yoffset().val();
+    const double lineDist = staffType->lineDistance().val();
+    return pos.line - (stepOffset + 2 * stYOffset / lineDist);
+}
+
 Ret NoteInput::putNote(Transaction& tx, Score* score, const PointF& pos, bool replace, bool insert)
 {
     Position p;
@@ -763,12 +774,7 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const PointF& pos, bool re
     // it is not safe to call repitchNote() if p is on a TAB staff
     bool isTablature = posScore->staff(p.staffIdx)->isTabStaff(p.segment->tick());
 
-    //  calculate actual clicked line from staffType offset and stepOffset
-    Staff* ss = posScore->staff(p.staffIdx);
-    int stepOffset = ss->staffType(p.segment->tick())->stepOffset();
-    double stYOffset = ss->staffType(p.segment->tick())->yoffset().val();
-    double lineDist = ss->staffType(p.segment->tick())->lineDistance().val();
-    p.line -= stepOffset + 2 * stYOffset / lineDist;
+    p.line = clickedLine(p);
 
     if (posScore->inputState().usingNoteEntryMethod(NoteEntryMethod::REPITCH) && !isTablature) {
         return repitchNote(tx, posScore, p, replace);
@@ -809,6 +815,11 @@ Ret NoteInput::putNote(Transaction& tx, Score* score, const Position& p, bool re
     NoteVal nval = noteValForPosition(score, p, is.accidentalType(), error);
     if (error) {
         return make_ret(Ret::Code::UnknownError);
+    }
+
+    // in TABs, the clicked string becomes the input string (fret digits then go to it)
+    if (nval.string != INVALID_STRING_INDEX) {
+        is.setString(nval.string);
     }
 
     // warn and delete MeasureRepeat if necessary
@@ -1119,8 +1130,20 @@ Ret NoteInput::insertChordByInsertingTime(Transaction& tx, Score* score, const P
         Measure* m = lscore->tick2measure(tick);
         tx.push(new ChangeMeasureLen(m, targetMeasureLen));
         Segment* scoreSeg = m->tick2segment(tick);
+        // tuplets store their tick: move those from the insertion on with their segments
+        std::set<Tuplet*> tuplets;
         for (Segment* s = scoreSeg; s; s = s->next()) {
+            if (s->isChordRestType()) {
+                for (EngravingItem* e : s->elist()) {
+                    for (Tuplet* t = e ? toChordRest(e)->tuplet() : nullptr; t && t->tick() >= tick; t = t->tuplet()) {
+                        tuplets.insert(t);
+                    }
+                }
+            }
             s->undoChangeProperty(Pid::TICK, s->rtick() + len);
+        }
+        for (Tuplet* t : tuplets) {
+            t->undoChangeProperty(Pid::TICK, t->tick() + len);
         }
     }
 

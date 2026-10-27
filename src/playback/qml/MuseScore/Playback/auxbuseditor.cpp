@@ -59,7 +59,7 @@ AuxBusEditor::AuxBusEditor(const muse::modularity::ContextPtr& iocCtx)
     });
 
     //! NOTE: a request the engine refused never comes back
-    context()->currentProjectChanged().onNotify(this, [this]() {
+    context()->projectChanged().onNotify(this, [this]() {
         m_requestedAuxBusCount[0] = m_requestedAuxBusCount[1] = 0;
         m_pendingAuxAssignTrackIds.clear();
         m_pendingAuxRedo.reset();
@@ -68,12 +68,12 @@ AuxBusEditor::AuxBusEditor(const muse::modularity::ContextPtr& iocCtx)
 
 IProjectAudioSettingsPtr AuxBusEditor::audioSettings() const
 {
-    return context()->currentProject() ? context()->currentProject()->audioSettings() : nullptr;
+    return context()->project() ? context()->project()->audioSettings() : nullptr;
 }
 
 IProjectUndoStackPtr AuxBusEditor::projectUndoStack() const
 {
-    return context()->currentProject() ? context()->currentProject()->undoStack() : nullptr;
+    return context()->project() ? context()->project()->undoStack() : nullptr;
 }
 
 muse::async::Channel<aux_channel_idx_t, TrackId> AuxBusEditor::auxBusAdded() const

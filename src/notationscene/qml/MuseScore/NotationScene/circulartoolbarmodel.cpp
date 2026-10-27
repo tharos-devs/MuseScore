@@ -51,8 +51,8 @@ void CircularToolbarModel::prepareOpening()
     m_replacedItems.deleteAll();
     updateLastMidiCc();
 
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
-    const bool hasVstInstrument = masterNotation && midicc::hasVstInstrument(globalContext()->currentProject(),
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    const bool hasVstInstrument = masterNotation && midicc::hasVstInstrument(projectSession()->project(),
                                                                              masterNotation->masterScore());
 
     const auto withId = [](MenuItem* item, const QString& id) {
@@ -114,7 +114,7 @@ void CircularToolbarModel::handleMenuItem(const QString& itemId)
 //! NOTE: the score's other MIDI CCs, and "Other MIDI CC…" to pick one
 MenuItem* CircularToolbarModel::makeMoreMidiCcMenu(bool enabled)
 {
-    const IMasterNotationPtr masterNotation = globalContext()->currentMasterNotation();
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
     const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
 
     const MenuItemList items = midicc::makeMenuItems(
@@ -141,7 +141,7 @@ bool CircularToolbarModel::focusedStaffHasArticulationMap() const
 
 std::optional<InstrumentTrackId> CircularToolbarModel::actionsTrackId() const
 {
-    const INotationPtr notation = globalContext()->currentNotation();
+    const INotationPtr notation = projectSession()->currentNotation();
     if (!notation) {
         return std::nullopt;
     }

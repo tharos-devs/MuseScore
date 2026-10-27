@@ -24,8 +24,6 @@
 
 #include <vector>
 
-#include "actions/actiontypes.h"
-#include "rcommand/actiontocommand.h"
 #include "rcommand/commandtypes.h"
 #include "audio/common/audiotypes.h"
 
@@ -46,18 +44,6 @@ using namespace muse;
 using namespace muse::rcommand;
 using namespace muse::audio;
 using namespace mu::playback;
-
-static rcommand::CommandQuery mixerSectionToggle(const rcommand::Command& command, const actions::ActionData& args)
-{
-    rcommand::CommandQuery q(command);
-    if (args.empty()) {
-        return q;
-    }
-
-    std::string section = str_conv(static_cast<MixerSectionType>(args.arg<int>(0)));
-    q.addParam("section", Val(section));
-    return q;
-}
 
 void PlaybackCommandsController::init()
 {
@@ -107,41 +93,6 @@ void PlaybackCommandsController::init()
         midiCcRecorder()->toggleArmed();
         return muse::make_ok();
     });
-
-    // compat
-    {
-        static std::vector<ActionToCommand> actionToCommand = {
-            { "play", PLAY_TOGGLE_COMMAND, {} },
-            { "play-from-selection", PLAY_SELECTION_COMMAND, {} },
-            { "pause", PAUSE_COMMAND, {} },
-            { "pause-and-select", PAUSE_AND_SELECT_COMMAND, {} },
-            { "stop", STOP_COMMAND, {} },
-            { "rewind", REWIND_COMMAND, {} },
-            { "loop", LOOP_TOGGLE_COMMAND, {} },
-            { "loop-in", LOOP_IN_COMMAND, {} },
-            { "loop-out", LOOP_OUT_COMMAND, {} },
-            { "metronome", METRONOME_TOGGLE_COMMAND, {} },
-            { "playback-setup", OPEN_PLAYBACK_SETUP_COMMAND, {} },
-            { "midi-on", MIDI_TOGGLE_COMMAND, {} },
-            { MIDI_START_NOTE_INPUT_ACTION_CODE, MIDI_START_NOTE_INPUT_TOGGLE_COMMAND, {} },
-            { "midi-input-written-pitch", MIDI_INPUT_WRITTEN_PITCH_COMMAND, {} },
-            { "midi-input-sounding-pitch", MIDI_INPUT_SOUNDING_PITCH_COMMAND, {} },
-            { "repeats", REPEATS_TOGGLE_COMMAND, {} },
-            { "play-chord-symbols", CHORDSYMBOLS_TOGGLE_COMMAND, {} },
-            { "toggle-hear-playback-when-editing", HEAR_PLAYBACK_WHEN_EDITING_TOGGLE_COMMAND, {} },
-            { "pan", PAN_TOGGLE_COMMAND, {} },
-            { "countin", COUNTIN_TOGGLE_COMMAND, {} },
-            { "playback-stop-stays-at-position", STOP_STAYS_AT_POSITION_COMMAND, {} },
-            { "playback-stop-returns-to-start", STOP_RETURNS_TO_START_COMMAND, {} },
-            { "toggle-record-midicc", MIDI_CC_RECORD_TOGGLE_COMMAND, {} },
-            { "reload-playback-cache", RELOAD_PLAYBACK_CACHE_COMMAND, {} },
-            { "clear-online-sounds-cache", CLEAR_ONLINESOUNDS_CACHE_COMMAND, {} },
-            { "toggle-mixer-section", TOGGLE_MIXER_SECTION_COMMAND, mixerSectionToggle },
-            { "toggle-mixer-condensed-view", TOGGLE_MIXER_CONDENSED_VIEW_COMMAND, {} },
-        };
-
-        registerActionToCommand(this, actionToCommand, dispatcher(), actionsDispatcher());
-    }
 }
 
 muse::Ret PlaybackCommandsController::rewind(const muse::rcommand::Params& params)
@@ -152,7 +103,7 @@ muse::Ret PlaybackCommandsController::rewind(const muse::rcommand::Params& param
 
 muse::Ret PlaybackCommandsController::loadReferenceAudio()
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     if (!project) {
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
@@ -163,7 +114,7 @@ muse::Ret PlaybackCommandsController::loadReferenceAudio()
 
 muse::Ret PlaybackCommandsController::removeReferenceAudio()
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     if (!project || !project->audioSyncSettings()) {
         return muse::make_ret(muse::Ret::Code::NotSupported);
     }
@@ -174,7 +125,7 @@ muse::Ret PlaybackCommandsController::removeReferenceAudio()
 
 muse::Ret PlaybackCommandsController::toggleAudioSync()
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     notation::INotationAutomationPtr automation = project && project->masterNotation() ? project->masterNotation()->automation() : nullptr;
     if (!automation) {
         return muse::make_ret(muse::Ret::Code::NotSupported);
@@ -186,10 +137,10 @@ muse::Ret PlaybackCommandsController::toggleAudioSync()
 
 muse::Ret PlaybackCommandsController::addAudioSyncPointAtPlayback()
 {
-    project::INotationProjectPtr project = globalContext()->currentProject();
+    project::INotationProjectPtr project = projectSession()->project();
     notation::IMasterNotationPtr masterNotation = project ? project->masterNotation() : nullptr;
     notation::INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
-    context::IPlaybackStatePtr playbackState = globalContext()->playbackState();
+    auto playbackState = playbackController();
     const engraving::Score* score = masterNotation ? masterNotation->masterScore() : nullptr;
     project::IProjectAudioSyncSettingsPtr audioSyncSettings = project ? project->audioSyncSettings() : nullptr;
     if (!automation || !automation->isAudioSyncEnabled() || !playbackState || !score || !audioSyncSettings

@@ -58,6 +58,7 @@
 #include "../dom/linkedobjects.h"
 #include "../dom/lyrics.h"
 #include "../dom/marker.h"
+#include "../automation/automationtypes.h"
 #include "../dom/masterscore.h"
 #include "../dom/measure.h"
 #include "../dom/measurerepeat.h"
@@ -2663,7 +2664,7 @@ void Score::removeChordRest(ChordRest* cr, bool clearSegment)
         }
         doUndoRemoveElement(static_cast<EngravingItem*>(e));
         if (clearSegment) {
-            Segment* s = cr->segment();
+            Segment* s = toChordRest(e)->segment();
             if (segments.find(s) == segments.end()) {
                 segments.insert(s);
             }
@@ -3853,6 +3854,16 @@ void Score::undoRemoveStaff(Staff* staff)
     const staff_idx_t staffIndex = staff->idx();
     assert(staffIndex != muse::nidx);
 
+    //! NOTE The staff's automation curves go with it (undone with it): kept, they would be saved, and a staff added
+    //! after the file is reopened can get the same id (see newStaffId()). Here, for every way a staff is removed
+    if (isMaster()) {
+        const ID staffId = staff->id();
+        masterScore()->removeAutomationCurves([staffId](const AutomationCurveKey& key) {
+            const std::optional<ID> keyStaffId = key.staffId();
+            return keyStaffId && *keyStaffId == staffId;
+        });
+    }
+
     std::vector<Spanner*> spannersToRemove;
 
     for (auto it = m_spanner.cbegin(); it != m_spanner.cend(); ++it) {
@@ -4393,7 +4404,7 @@ void Score::undoAddElement(EngravingItem* element, bool addToLinkedStaves, bool 
             if (ne->isStringTunings()) {
                 StringTunings* stringTunings = toStringTunings(ne);
                 if (stringTunings->stringData()->isNull()) {
-                    const StringData* stringData = stringTunings->part()->stringData(tick, staff->idx());
+                    const StringData* stringData = stringTunings->originPart()->stringData(tick, staff->idx());
                     int frets = stringData->frets();
                     std::vector<mu::engraving::instrString> stringList = stringData->stringList();
 

@@ -36,6 +36,7 @@ public:
     MOCK_METHOD(void, showShadowNoteForMidiPitch, (const uint8_t), (override));
     MOCK_METHOD(void, hideShadowNote, (), (override));
     MOCK_METHOD(muse::RectF, shadowNoteRect, (), (const, override));
+    MOCK_METHOD(muse::RectF, tabHoverCursorRect, (), (const, override));
     MOCK_METHOD(muse::RectF, previewMeasureRect, (), (const, override));
     MOCK_METHOD(muse::async::Channel<bool>, shadowNoteChanged, (), (const, override));
 
@@ -124,6 +125,7 @@ public:
 
     MOCK_METHOD(muse::async::Channel<ScoreConfigType>, scoreConfigChanged, (), (const, override));
     MOCK_METHOD(bool, isGripEditStarted, (), (const, override));
+    MOCK_METHOD(bool, isStartEndGripSelected, (), (const, override));
     MOCK_METHOD(bool, isHitGrip, (const muse::PointF&), (const, override));
     MOCK_METHOD(void, startEditGrip, (const muse::PointF&), (override));
     MOCK_METHOD(void, startEditGrip, (EngravingItem*, mu::engraving::Grip), (override));

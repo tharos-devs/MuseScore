@@ -98,8 +98,12 @@ void EditStaveSharing::toggleStaveSharing(Transaction& tx, Score* score, bool on
 {
     score->undoChangeStyleVal(Sid::enableStaveSharing, on);
 
+    //! NOTE: turning stave sharing off removes the shared parts (and their group in the Mixer) instead of
+    //! only hiding them; each shared part keeps its own on/off switch to hide it
     if (on && score->sharedParts().empty()) {
         cmdCreateSharedStaves(tx, score);
+    } else if (!on) {
+        cmdRemoveSharedStaves(score);
     }
 
     score->setBracketsAndBarlines();
@@ -234,7 +238,8 @@ SharedPart* EditStaveSharing::createSharedPart(Score* score, size_t idx, const I
     return sharedPart;
 }
 
-void EditStaveSharing::addStaffToSharedPart(SharedPart* sharedPart, const KeyList& keyList, const StaffType* staffType)
+void EditStaveSharing::addStaffToSharedPart(SharedPart* sharedPart, const Part* originPart, const KeyList& keyList,
+                                            const StaffType* staffType)
 {
     Staff* staff = Factory::createStaff(sharedPart);
     staff->setStaffType(Fraction(0, 1), *staffType);
@@ -244,7 +249,7 @@ void EditStaveSharing::addStaffToSharedPart(SharedPart* sharedPart, const KeyLis
     staff->setScore(score);
 
     staff_idx_t relStaffIdx = sharedPart->nstaves();
-    staff->setDefaultClefType(sharedPart->instrument()->clefType(relStaffIdx));
+    staff->setDefaultClefType(originPart->instrument()->clefType(0));
 
     score->undoInsertStaff(staff, relStaffIdx);
 
@@ -256,7 +261,7 @@ void EditStaveSharing::connectSharedPart(Transaction& tx, SharedPart* sharedPart
 {
     Score* score = originPart->score();
     tx.push(new ConnectSharedPart(sharedPart, originPart));
-    addStaffToSharedPart(sharedPart, score->keyList(), originPart->staff(0)->staffType());
+    addStaffToSharedPart(sharedPart, originPart, score->keyList(), originPart->staff(0)->staffType());
 }
 
 void EditStaveSharing::disconnectSharedPart(Transaction& tx, SharedPart* sharedPart, Part* originPart)

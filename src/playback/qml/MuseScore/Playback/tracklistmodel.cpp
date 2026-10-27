@@ -384,7 +384,7 @@ void TrackListModel::rebuildMetronomeChannelItem()
     MixerChannelItem* oldItem = m_metronomeChannelItem;
     m_metronomeChannelItem = nullptr;
 
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     const INotationPlaybackPtr notationPlayback = project ? project->masterNotation()->playback() : nullptr;
     if (notationPlayback && controller()->isPlaybackInited()) {
         const InstrumentTrackId& metronomeTrackId = notationPlayback->metronomeTrackId();
@@ -532,16 +532,20 @@ MixerChannelItem* TrackListModel::buildChannelItem(const PartTracks& tracks)
         return item;
     }
 
-    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, false /*outputOnly*/, tracks.trackId);
+    //! NOTE: a shared part's track (stave sharing) is a group, without a sound of its own
+    const bool outputOnly = controller()->isSharedGroupTrack(tracks.instrumentTrackId);
+    MixerChannelItem* item = new MixerChannelItem(this, MixerChannelItem::Type::PrimaryInstrument, outputOnly, tracks.trackId);
     item->bindInstrumentTrack(tracks.instrumentTrackId);
 
     connectGlobalMuteSolo(item);
     connectMixerControls(item, tracks);
     //! NOTE: the sound changed: whether it's a VST instrument (articulation map button) and has a window
-    connect(item->inputResourceItem(), &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
-        updateRowStates();
-        updateColumns();
-    });
+    if (InputResourceItem* sound = item->inputResourceItem()) {
+        connect(sound, &InputResourceItem::hasNativeEditorSupportChanged, this, [this]() {
+            updateRowStates();
+            updateColumns();
+        });
+    }
 
     //! NOTE: the row is the whole part: its other instruments' tracks follow its mute and solo
     const std::vector<InstrumentTrackId> otherTrackIds = tracks.otherInstrumentTrackIds;
@@ -864,13 +868,13 @@ void TrackListModel::applyMetronomeColor(const QColor& color, const Translatable
         return;
     }
 
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), { { m_metronomeChannelItem->instrumentTrackId(), std::nullopt } },
-                              color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(),
+                              { { m_metronomeChannelItem->instrumentTrackId(), std::nullopt } }, color, actionName);
 }
 
 void TrackListModel::chooseVideoFile()
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     const IProjectVideoSettingsPtr settings = project ? project->videoSettings() : nullptr;
     if (!settings) {
         return;
@@ -900,7 +904,7 @@ void TrackListModel::chooseVideoFile()
 
 void TrackListModel::chooseReferenceAudioFile()
 {
-    if (const INotationProjectPtr project = context()->currentProject()) {
+    if (const INotationProjectPtr project = context()->project()) {
         audiosync::chooseReferenceAudio(interactive().get(), playbackConfiguration().get(), controller().get(), project);
     }
 }
@@ -950,7 +954,7 @@ void TrackListModel::applyTrackColor(int displayRow, const QColor& color, const 
         }
     }
 
-    ChannelColorChange::apply(audioSettings(), projectUndoStack(), targets, color, actionName);
+    ChannelColorChange::apply(audioSettings(), projectUndoStack(), controller(), targets, color, actionName);
 }
 
 void TrackListModel::selectRow(int displayRow, bool toggle, bool range)
@@ -1280,10 +1284,10 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
 String TrackListModel::channelKey(const PartTracks& tracks)
 {
     if (tracks.auxIndex) {
-        return u"aux:" + String::number(static_cast<int>(*tracks.auxIndex));
+        return project::trackListAuxKey(*tracks.auxIndex);
     }
 
-    return u"part:" + String::fromStdString(std::to_string(tracks.instrumentTrackId.partId.toUint64()));
+    return project::trackListPartKey(tracks.instrumentTrackId.partId);
 }
 
 //! NOTE: the rows outside folders in the score's order (then the buses), each folder before the row it's anchored to
@@ -1887,12 +1891,12 @@ INotationPtr TrackListModel::currentNotation() const
 
 IProjectAudioSettingsPtr TrackListModel::audioSettings() const
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     return project ? project->audioSettings() : nullptr;
 }
 
 IProjectUndoStackPtr TrackListModel::projectUndoStack() const
 {
-    const INotationProjectPtr project = context()->currentProject();
+    const INotationProjectPtr project = context()->project();
     return project ? project->undoStack() : nullptr;
 }

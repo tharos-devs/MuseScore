@@ -38,6 +38,7 @@
 #include "engraving/dom/excerpt.h"
 #include "engraving/dom/masterscore.h"
 #include "engraving/dom/measure.h"
+#include "engraving/dom/part.h"
 #include "engraving/dom/measurebase.h"
 #include "engraving/dom/page.h"
 #include "engraving/dom/repeatlist.h"
@@ -122,6 +123,17 @@ void NotationProject::setupProject()
     m_projectVideoSettings = std::make_shared<ProjectVideoSettings>();
     m_projectAudioSyncSettings = std::make_shared<ProjectAudioSyncSettings>();
     m_projectUndoStack = std::make_shared<ProjectUndoStack>();
+}
+
+//! NOTE: what is kept for a removed part (its sound, solo/mute state...) goes when the project is opened, see
+//! IProjectAudioSettings::removeMissingParts()
+static std::vector<muse::ID> scorePartIds(const MasterScore* masterScore)
+{
+    std::vector<muse::ID> partIds;
+    for (const Part* part : masterScore->parts()) {
+        partIds.push_back(part->id());
+    }
+    return partIds;
 }
 
 Ret NotationProject::load(const muse::io::path_t& path, const OpenParams& openParams, const std::string& format_)
@@ -246,6 +258,8 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
             m_projectAudioSettings->makeDefault();
             tryCompatAudio = true;
         }
+
+        m_projectAudioSettings->removeMissingParts(scorePartIds(masterScore));
     }
 
     // Load video settings
@@ -288,6 +302,12 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
         muse::io::path_t ePath = u"Excerpts/" + excerpt->fileName() + u"/";
         excerptNotation->viewState()->read(reader, ePath);
         excerptNotation->soloMuteState()->read(reader, ePath);
+    }
+
+    const std::vector<muse::ID> partIds = scorePartIds(masterScore);
+    m_masterNotation->notation()->soloMuteState()->removeMissingParts(partIds);
+    for (const IExcerptNotationPtr& excerpt : m_masterNotation->excerpts()) {
+        excerpt->notation()->soloMuteState()->removeMissingParts(partIds);
     }
 
     // Apply compat audio settings (needs to be done after notations are created)
@@ -570,7 +590,7 @@ Ret NotationProject::save(const muse::io::path_t& path, SaveMode saveMode, bool 
                 }
             }
             if (timestampsUpdated) {
-                globalContext()->currentNotation()->notationChanged().send(muse::RectF());
+                projectSession()->currentNotation()->notationChanged().send(muse::RectF());
             }
         }
     } break;
@@ -875,7 +895,7 @@ Ret NotationProject::doSave(const muse::io::path_t& path, engraving::MscIoMode i
 //! (e.g. Kontakt's solo/mute). Only the current project's plugins are loaded
 void NotationProject::refreshAudioPluginStates()
 {
-    if (globalContext() && globalContext()->currentProject().get() == this && playbackController()) {
+    if (projectSession() && projectSession()->project().get() == this && playbackController()) {
         playbackController()->refreshAudioPluginStates();
     }
 }

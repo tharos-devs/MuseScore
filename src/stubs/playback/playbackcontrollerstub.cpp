@@ -53,6 +53,16 @@ muse::async::Channel<bool> PlaybackControllerStub::playbackInitedChanged() const
     return {};
 }
 
+muse::audio::secs_t PlaybackControllerStub::playbackPosition() const
+{
+    return 0.0;
+}
+
+muse::async::Channel<muse::audio::secs_t> PlaybackControllerStub::playbackPositionChanged() const
+{
+    return {};
+}
+
 muse::Ret PlaybackControllerStub::togglePlay()
 {
     return muse::make_ok();
@@ -293,6 +303,16 @@ bool PlaybackControllerStub::isReferenceAudioForceMuted() const
     return false;
 }
 
+bool PlaybackControllerStub::isReferenceAudioTrackReady() const
+{
+    return true;
+}
+
+bool PlaybackControllerStub::isReferenceAudioIncludedInExport() const
+{
+    return false;
+}
+
 muse::async::Channel<bool, bool> PlaybackControllerStub::referenceAudioMuteStateChanged() const
 {
     static muse::async::Channel<bool, bool> channel;
@@ -321,6 +341,15 @@ bool PlaybackControllerStub::isAuxForceMuted(muse::audio::aux_channel_idx_t) con
 }
 
 void PlaybackControllerStub::setGroupBusSourcesSolo(muse::audio::aux_channel_idx_t, bool)
+{
+}
+
+bool PlaybackControllerStub::isSharedGroupTrack(const engraving::InstrumentTrackId&) const
+{
+    return false;
+}
+
+void PlaybackControllerStub::setSharedGroupSourcesSolo(const engraving::InstrumentTrackId&, bool)
 {
 }
 

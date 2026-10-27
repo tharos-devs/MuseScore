@@ -55,7 +55,7 @@ void AudioSyncChannelModel::load()
         }
     });
 
-    globalContext()->currentProjectChanged().onNotify(this, [this]() {
+    projectSession()->projectChanged().onNotify(this, [this]() {
         onProjectChanged();
     });
 
@@ -98,7 +98,7 @@ void AudioSyncChannelModel::rebuild()
         m_item->subscribeOnTrackAudioSignalChanges();
 
         soundTrack->connectItem(m_item, this, [this]() { return playback().get(); }, [this]() {
-            project::INotationProjectPtr project = globalContext()->currentProject();
+            project::INotationProjectPtr project = projectSession()->project();
             return project ? project->undoStack() : nullptr;
         });
     }

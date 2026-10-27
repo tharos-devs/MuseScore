@@ -231,8 +231,7 @@ enum class MoveSelectionType : unsigned char
     Measure,
     Track,
     Frame,
-    System,
-    String // TAB Staff
+    System
 };
 
 enum class ExpandSelectionMode : unsigned char

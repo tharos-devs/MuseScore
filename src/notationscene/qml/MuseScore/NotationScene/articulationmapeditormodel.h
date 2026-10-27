@@ -40,8 +40,8 @@
 #include "global/io/ifilesystem.h"
 #include "ui/iuiconfiguration.h"
 #include "interactive/iinteractive.h"
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
+#include "rcommand/icommanddispatcher.h"
+#include "project/iprojectsession.h"
 #include "playback/iplaybackcontroller.h"
 
 #include "instrumenteditor.h"
@@ -112,9 +112,9 @@ class ArticulationMapEditorModel : public QAbstractListModel, public muse::Conte
     Q_PROPERTY(QVariantList colorGradientPreviews READ colorGradientPreviews CONSTANT)
 
     muse::ContextInject<muse::IInteractive> interactive = { this };
-    muse::ContextInject<context::IGlobalContext> globalContext = { this };
+    muse::ContextInject<project::IProjectSession> projectSession = { this };
     muse::ContextInject<playback::IPlaybackController> playbackController = { this };
-    muse::ContextInject<muse::actions::IActionsDispatcher> actionsDispatcher = { this };
+    muse::ContextInject<muse::rcommand::ICommandDispatcher> commandDispatcher = { this };
 #ifdef MUSE_MODULE_VST
     muse::GlobalInject<muse::vst::IVstPluginStateProvider> vstPluginStateProvider;
 #endif
@@ -288,6 +288,8 @@ private:
 
     std::optional<instrumenteditor::Target> instrumentEditorTarget() const;
     void updateInstrumentEditorState();
+    bool closeIfTargetPartRemoved();
+    void reattachTargetTrack();
 
     void loadFile(const muse::io::path_t& path);
     void setFile(const engraving::ArticulationMapParser::Result& file, const muse::io::path_t& path);
@@ -346,6 +348,9 @@ private:
     const Node* m_selectionAnchor = nullptr; // the start of a Shift+click range
 
     std::optional<engraving::InstrumentTrackId> m_targetTrack;
+    //! NOTE: the track the editor was detached from when its part was removed (see closeIfTargetPartRemoved())
+    std::optional<engraving::InstrumentTrackId> m_detachedTargetTrack;
+    bool m_trackChangesSubscribed = false;
     //! NOTE The edited map is the target track's own (opened from it, not replaced by New/Open since): saved, it
     //! updates that track, even when saved to another file (e.g. its original file is no longer there)
     bool m_editsTargetTrackMap = false;

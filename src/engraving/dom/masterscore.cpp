@@ -73,6 +73,9 @@ MasterScore::MasterScore(const muse::modularity::ContextPtr& iocCtx, std::weak_p
     m_undoStack   = new UndoStack();
     m_sigmap      = new TimeSigMap();
     m_automationController = new ScoreAutomationController();
+    //! NOTE: also for a score not read from a file (e.g. a new score made from the chosen instruments): its tracks
+    //! can be given maps, and what listens to the maps' changes needs them from the start
+    m_articulationMapData = std::make_shared<ArticulationMapData>();
     m_expandedRepeatList  = new RepeatList(this);
     m_nonExpandedRepeatList = new RepeatList(this);
     setMasterScore(this);
@@ -231,6 +234,25 @@ void MasterScore::setCustomMidiCcs(const std::vector<uint8_t>& controllers)
     }
 
     undo(new EditCustomMidiCcs(this, m_automationController, controllers));
+}
+
+void MasterScore::removeAutomationCurves(const std::function<bool(const AutomationCurveKey&)>& matches)
+{
+    const AutomationDataConstPtr data = m_automationController->automationData();
+    if (!data) {
+        return;
+    }
+
+    AutomationCurveStates curves;
+    for (const auto& [key, curve] : data->curves()) {
+        if (matches(key)) {
+            curves[key] = std::nullopt;
+        }
+    }
+
+    if (!curves.empty()) {
+        undo(new EditAutomationCurves(this, m_automationController, std::move(curves)));
+    }
 }
 
 ArticulationMapDataConstPtr MasterScore::articulationMapData() const

@@ -124,8 +124,40 @@ void AutomationTypeMenuModel::updateItems()
         newItems << makeSeparator() << midiCcMenu;
     }
 
+    useToggleCommand(newItems);
+
+    // The checkmark shows the curve being edited: none while the automation overlay is hidden
+    const IMasterNotationPtr masterNotation = projectSession()->masterNotation();
+    const INotationAutomationPtr automation = masterNotation ? masterNotation->automation() : nullptr;
+    if (!automation || !automation->isAutomationModeEnabled()) {
+        uncheckAll(newItems);
+    }
+
     setItems(newItems);
     m_replacedItems.add(oldItems);
+}
+
+//! NOTE: picking the curve already shown hides the automation overlay, like the button itself - see
+//! NotationActionController::toggleAutomationType() (the MIDI CC items come from the shared midicc helpers, which select)
+void AutomationTypeMenuModel::useToggleCommand(const MenuItemList& items)
+{
+    for (MenuItem* item : items) {
+        const muse::rcommand::CommandQuery query = item->commandQuery();
+        if (query.uri() == SELECT_AUTOMATION_TYPE_COMMAND && item->checkable()) {
+            muse::rcommand::CommandQuery toggleQuery(TOGGLE_AUTOMATION_TYPE_COMMAND);
+            toggleQuery.setParams(query.params());
+            item->setCommandQuery(toggleQuery);
+        }
+        useToggleCommand(item->subitems());
+    }
+}
+
+void AutomationTypeMenuModel::uncheckAll(const MenuItemList& items)
+{
+    for (MenuItem* item : items) {
+        item->setChecked(false);
+        uncheckAll(item->subitems());
+    }
 }
 
 MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()
@@ -136,7 +168,7 @@ MenuItem* AutomationTypeMenuModel::makeMidiCcMenu()
     },
         [this](const muse::rcommand::CommandQuery& query, const TranslatableString& title) { return makeMenuItem(query, title); },
         [this]() { return makeSeparator(); },
-        notationConfiguration().get(), globalContext()->currentMasterNotation(), globalContext()->currentProject(), "midi-cc",
+        notationConfiguration().get(), projectSession()->masterNotation(), projectSession()->project(), "midi-cc",
         false /*withDeleteItem: only in the staff context menu*/);
 }
 

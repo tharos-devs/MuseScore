@@ -53,7 +53,7 @@ void VideoPanelModel::load()
 {
     listenPlaybackState();
 
-    context()->currentProjectChanged().onNotify(this, [this]() {
+    context()->projectChanged().onNotify(this, [this]() {
         listenCurrentProject();
         emit videoSettingsChanged();
     });
@@ -479,8 +479,8 @@ QVariantList VideoPanelModel::hitPoints() const
 
 bool VideoPanelModel::scorePlaying() const
 {
-    context::IPlaybackStatePtr playbackState = context()->playbackState();
-    return playbackState && playbackState->playbackStatus() == muse::audio::PlaybackStatus::Running;
+    auto playbackState = playbackController();
+    return playbackState && playbackState->isPlaying();
 }
 
 int VideoPanelModel::scorePlaybackPositionMs() const
@@ -527,7 +527,7 @@ int VideoPanelModel::loopEndMs() const
 
 int VideoPanelModel::tickToVideoPositionMs(int tick) const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     if (!project || !project->masterNotation() || !project->masterNotation()->masterScore()) {
         return -1;
     }
@@ -537,7 +537,7 @@ int VideoPanelModel::tickToVideoPositionMs(int tick) const
 
 notation::INotationPlaybackPtr VideoPanelModel::notationPlayback() const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     if (!project || !project->masterNotation()) {
         return nullptr;
     }
@@ -547,7 +547,7 @@ notation::INotationPlaybackPtr VideoPanelModel::notationPlayback() const
 
 IProjectVideoSettingsPtr VideoPanelModel::videoSettings() const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     return project ? project->videoSettings() : nullptr;
 }
 
@@ -581,7 +581,7 @@ QVariantMap VideoPanelModel::hitPointToMap(const VideoHitPointSettings& hitPoint
 
 QString VideoPanelModel::musicalPositionText(int videoPositionMs) const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     if (!project || !project->masterNotation() || !project->masterNotation()->masterScore()) {
         return QString();
     }
@@ -606,7 +606,7 @@ QVariantList VideoPanelModel::measurePositions() const
 {
     QVariantList result;
 
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     if (!project || !project->masterNotation() || !project->masterNotation()->masterScore()) {
         return result;
     }
@@ -629,7 +629,7 @@ QVariantList VideoPanelModel::measurePositions() const
 
 int VideoPanelModel::scoreEndVideoPositionMs() const
 {
-    INotationProjectPtr project = context()->currentProject();
+    INotationProjectPtr project = context()->project();
     if (!project || !project->masterNotation() || !project->masterNotation()->masterScore()) {
         return -1;
     }
@@ -675,7 +675,7 @@ void VideoPanelModel::listenCurrentProject()
         //! for edits that don't touch measure positions at all. Only re-emit
         //! when the cheap measure-count/last-measure-end proxy actually changed.
         notation->notationChanged().onReceive(this, [this](const muse::RectF&) {
-            INotationProjectPtr project = context()->currentProject();
+            INotationProjectPtr project = context()->project();
             const engraving::Score* score = (project && project->masterNotation()) ? project->masterNotation()->masterScore() : nullptr;
             const size_t measureCount = score ? score->nmeasures() : 0;
             const int scoreEndTick = (score && score->lastMeasure()) ? score->lastMeasure()->endTick().ticks() : -1;
@@ -693,7 +693,7 @@ void VideoPanelModel::listenCurrentProject()
 
 void VideoPanelModel::listenPlaybackState()
 {
-    context::IPlaybackStatePtr playbackState = context()->playbackState();
+    auto playbackState = playbackController();
     if (!playbackState) {
         return;
     }
@@ -703,7 +703,7 @@ void VideoPanelModel::listenPlaybackState()
         m_scorePlaybackPositionMs = initialPositionMs;
     }
 
-    playbackState->playbackStatusChanged().onReceive(this, [this](muse::audio::PlaybackStatus) {
+    playbackState->isPlayingChanged().onReceive(this, [this](bool) {
         emit playbackSyncChanged();
     });
 

@@ -23,8 +23,8 @@
 
 #include <optional>
 
-#include "actions/iactionsdispatcher.h"
-#include "actions/actiontypes.h"
+#include "rcommand/icommanddispatcher.h"
+#include "vst/vstcommands.h"
 #include "audio/common/audiotypes.h"
 #include "playback/iplaybackcontroller.h"
 #include "project/inotationproject.h"
@@ -61,14 +61,14 @@ inline std::optional<Target> target(const project::INotationProjectPtr& project,
 }
 
 //! NOTE: operation is "open" or "close"
-inline void dispatch(muse::actions::IActionsDispatcher* dispatcher, const project::INotationProjectPtr& project, const Target& target,
+inline void dispatch(muse::rcommand::ICommandDispatcher* dispatcher, const project::INotationProjectPtr& project, const Target& target,
                      const std::string& operation = "open")
 {
     if (!dispatcher) {
         return;
     }
 
-    muse::actions::ActionQuery query("action://vst/instrument_editor");
+    muse::rcommand::CommandQuery query(muse::vst::VST_OPEN_INSTRUMENT_EDITOR_COMMAND);
     query.addParam("trackId", muse::Val(target.trackId));
     query.addParam("resourceId", muse::Val(target.resourceId));
     query.addParam("operation", muse::Val(operation));
