@@ -1892,9 +1892,7 @@ InputResourceItem* MixerChannelItem::buildInputResourceItem()
     InputResourceItem* newItem = new InputResourceItem(this);
 
     connect(newItem, &InputResourceItem::inputParamsChangeRequested, this, [this, newItem](const AudioResourceMeta& newMeta) {
-        if (askAboutChangingSound()) {
-            newItem->setParamsRecourceMeta(newMeta);
-        }
+        changeSound(newItem, newMeta);
     });
 
     connect(newItem, &InputResourceItem::inputParamsChanged, this, [this, newItem]() {
@@ -2427,13 +2425,60 @@ void MixerChannelItem::closeEditor(AbstractAudioResourceItem* item)
     item->setEditorCommand({});
 }
 
-bool MixerChannelItem::askAboutChangingSound()
+void MixerChannelItem::changeSound(InputResourceItem* item, const AudioResourceMeta& newMeta)
+{
+    //! NOTE: only a VST3 instrument goes to the other selected channels: the other sounds are each instrument's own
+    QList<QPointer<MixerChannelItem> > peers;
+    if (isResourceType(newMeta, AudioResourceType::VstPlugin) && m_soundChangePeers) {
+        for (const QPointer<MixerChannelItem>& peer : m_soundChangePeers()) {
+            if (peer && peer->m_inputResourceItem && peer->m_inputResourceItem->params().resourceMeta != newMeta) {
+                peers.push_back(peer);
+            }
+        }
+    }
+
+    //! NOTE: a channel already having this sound keeps it, with its settings
+    const bool changeOwn = item->params().resourceMeta != newMeta;
+    if (!changeOwn && peers.isEmpty()) {
+        return;
+    }
+
+    engraving::InstrumentTrackIdSet instrumentTrackIds;
+    if (changeOwn) {
+        instrumentTrackIds.insert(m_instrumentTrackId);
+    }
+    for (const QPointer<MixerChannelItem>& peer : std::as_const(peers)) {
+        instrumentTrackIds.insert(peer->m_instrumentTrackId);
+    }
+
+    if (!askAboutChangingSound(instrumentTrackIds)) {
+        return;
+    }
+
+    if (changeOwn) {
+        item->setParamsRecourceMeta(newMeta);
+    }
+
+    //! NOTE: only the clicked channel's editor opens
+    for (const QPointer<MixerChannelItem>& peer : std::as_const(peers)) {
+        if (peer && peer->m_inputResourceItem) {
+            peer->m_inputResourceItem->setParamsRecourceMeta(newMeta, false /*launchEditor*/);
+        }
+    }
+}
+
+void MixerChannelItem::setSoundChangePeers(const SoundChangePeersGetter& peers)
+{
+    m_soundChangePeers = peers;
+}
+
+bool MixerChannelItem::askAboutChangingSound(const engraving::InstrumentTrackIdSet& instrumentTrackIds)
 {
     if (!configuration()->needToShowResetSoundFlagsWhenChangeSoundWarning()) {
         return true;
     }
 
-    if (!notationPlayback()->hasSoundFlags({ m_instrumentTrackId })) {
+    if (!notationPlayback()->hasSoundFlags(instrumentTrackIds)) {
         return true;
     }
 
