@@ -5,6 +5,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 ## Features
 
 ### 2026-10-27
+- Tablature note input: hovering a tablature shows where a click puts its note, as a rectangle drawn like the note input cursor (no fret number) on the string and position the click would use; it covers the whole staff in rest input and follows the rhythmic grid in caret input.
 - Mixer and Track list: with several tracks selected, picking a VST3 instrument in the Sound menu of one of them loads it on every selected track. A track already having this VST3 keeps it, with its settings; one warning covers all the tracks whose sound flags would be reset, and only the clicked track's plugin window opens. Other sounds (MuseSounds, SoundFonts) are still picked track by track.
 
 ### 2026-10-26
