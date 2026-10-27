@@ -24,6 +24,7 @@
 
 #include <array>
 #include <map>
+#include <memory>
 #include <optional>
 #include <unordered_set>
 #include <QElapsedTimer>
@@ -39,6 +40,7 @@
 #include "layoutsignature.h"
 #include "playback/iplaybackcontroller.h"
 #include "notevelocitygeometry.h"
+#include "selectionframehandle.h"
 
 namespace mu::engraving {
 struct ScoreChanges;
@@ -46,7 +48,6 @@ struct ScoreChanges;
 
 namespace mu::notation {
 class NoteVelocityOverlay;
-class NoteVelocityHandle;
 
 class NotationNoteVelocityController : public muse::Contextable, public muse::async::Asyncable
 {
@@ -123,12 +124,9 @@ private:
         int pitch = 0;
     };
 
-    // The handles on the range selection's frame: left corner, middle, right corner
-    enum class HandleKind {
-        RampLeft,
-        Shift,
-        RampRight,
-    };
+    // The handles on the range selection's frame: left corner = ramp from the right end, middle = shift, right corner =
+    // ramp from the left end
+    using HandleKind = SelectionFrameHandles::Kind;
 
     using OverlaysMap = std::map<SysStaffKey, StaffOverlayData>;
     using NoteLocationMap = std::map<mu::engraving::Note*, NoteLocation>;
@@ -210,8 +208,7 @@ private:
     };
     std::optional<UnheardChange> m_paintUnheard; // the last change, not auditioned yet (throttled)
 
-    std::array<NoteVelocityHandle*, 3> m_handles {}; // indexed by HandleKind
-    std::vector<muse::RectF> m_selectionAreas; // the range selection's frame, one rect per system, in canvas coordinates
+    std::unique_ptr<SelectionFrameHandles> m_handles;
 
     // The current handle gesture (see onHandleDragged()): the notes it changes, with their velocities on press
     std::map<mu::engraving::Note*, int> m_handleStartVelocities;
