@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 
 #include "async/async.h"
 #include "global/containers.h"
@@ -251,10 +252,14 @@ void NotationNoteVelocityController::rebuildAllOverlays()
     // no notes anymore, and can be deleted.
     OverlaysMap newOverlays;
 
+    // Looked up for every bar: a set, not the selection's vector, and read once for all the staves
+    const std::vector<Note*> selectedList = selectedNotes();
+    const std::unordered_set<const Note*> selected(selectedList.begin(), selectedList.end());
+
     for (const System* system : score()->systems()) {
         staff_idx_t staffIdx = system->firstVisibleStaff();
         while (staffIdx != muse::nidx) {
-            createOverlayForStaff(system, staffIdx, newOverlays);
+            createOverlayForStaff(system, staffIdx, selected, newOverlays);
             staffIdx = system->nextVisibleStaff(staffIdx);
         }
     }
@@ -269,7 +274,8 @@ void NotationNoteVelocityController::rebuildAllOverlays()
     updateSelectionHandles();
 }
 
-void NotationNoteVelocityController::createOverlayForStaff(const System* system, staff_idx_t staffIdx, OverlaysMap& newOverlays)
+void NotationNoteVelocityController::createOverlayForStaff(const System* system, staff_idx_t staffIdx,
+                                                           const std::unordered_set<const Note*>& selected, OverlaysMap& newOverlays)
 {
     IF_ASSERT_FAILED(system && m_overlaysParent && score()) {
         return;
@@ -338,8 +344,6 @@ void NotationNoteVelocityController::createOverlayForStaff(const System* system,
 
     const muse::RectF overlayCanvasRect(staffCanvasRect.x(), minY, staffCanvasRect.width(), maxY - minY);
 
-    const std::vector<Note*> selected = selectedNotes();
-
     QVector<NoteVelocityOverlay::RectData> rects;
     rects.reserve(static_cast<int>(entries.size()));
 
@@ -351,7 +355,7 @@ void NotationNoteVelocityController::createOverlayForStaff(const System* system,
         const int velocity = displayedVelocity(entry.note);
         const double initialTopY = canvasYFromVelocity(entry.yRange, velocity);
         rect.yTopN = (initialTopY - overlayCanvasRect.y()) / overlayCanvasRect.height();
-        rect.selected = muse::contains(selected, entry.note);
+        rect.selected = selected.count(entry.note) > 0;
         rect.userModified = entry.note->userVelocity() != 0;
         rect.velocity = velocity;
         rects.push_back(rect);
@@ -460,7 +464,9 @@ void NotationNoteVelocityController::updateSelectionHighlight()
         return;
     }
 
-    const std::vector<Note*> selected = selectedNotes();
+    // Looked up for every bar: a set, not the selection's vector
+    const std::vector<Note*> selectedList = selectedNotes();
+    const std::unordered_set<const Note*> selected(selectedList.begin(), selectedList.end());
 
     for (const auto& [key, data] : m_overlaysByStaff) {
         const QVector<NoteVelocityOverlay::RectData>& rects = data.overlay->rects();
@@ -472,7 +478,7 @@ void NotationNoteVelocityController::updateSelectionHighlight()
         // notes - update just those rects in place instead of copying the whole vector out and
         // back regardless of how many actually changed.
         for (int i = 0; i < rects.size(); ++i) {
-            const bool isSelected = muse::contains(selected, data.notes.at(i).note);
+            const bool isSelected = selected.count(data.notes.at(i).note) > 0;
             if (rects.at(i).selected != isSelected) {
                 NoteVelocityOverlay::RectData rect = rects.at(i);
                 rect.selected = isSelected;

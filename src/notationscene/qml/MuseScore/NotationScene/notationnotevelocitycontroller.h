@@ -25,6 +25,7 @@
 #include <array>
 #include <map>
 #include <optional>
+#include <unordered_set>
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QQuickItem>
@@ -133,7 +134,8 @@ private:
     using NoteLocationMap = std::map<mu::engraving::Note*, NoteLocation>;
 
     void rebuildAllOverlays();
-    void createOverlayForStaff(const System* system, staff_idx_t staffIdx, OverlaysMap& newOverlays);
+    void createOverlayForStaff(const System* system, staff_idx_t staffIdx, const std::unordered_set<const mu::engraving::Note*>& selected,
+                               OverlaysMap& newOverlays);
     void updateOverlaysGeometry();
     void updateSelectionHighlight();
     void applyOverlayColors(NoteVelocityOverlay* overlay) const;
