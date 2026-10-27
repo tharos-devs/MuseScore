@@ -458,6 +458,8 @@ void NotationInteraction::showShadowNoteForPosition(const PointF& pos)
     const mu::engraving::InputState& inputState = score()->inputState();
     mu::engraving::ShadowNote& shadowNote = *score()->shadowNote();
 
+    m_tabHoverCursorRect = RectF();
+
     ShadowNoteParams params;
     if (!score()->getPosition(&params.position, pos, inputState.voice())) {
         shadowNote.setVisible(false);
@@ -468,7 +470,7 @@ void NotationInteraction::showShadowNoteForPosition(const PointF& pos)
     //! NOTE: No notehead preview on tab staves: the mouse keeps the default cursor
     const Staff* staff = score()->staff(params.position.staffIdx);
     if (staff && staff->isTabStaff(params.position.segment->tick())) {
-        hideShadowNote();
+        showTabHoverCursor(params.position);
         return;
     }
 
@@ -482,6 +484,8 @@ void NotationInteraction::showShadowNoteForPosition(const PointF& pos)
 
 void NotationInteraction::showShadowNoteForMidiPitch(const uint8_t pitch)
 {
+    m_tabHoverCursorRect = RectF();
+
     const mu::engraving::InputState& inputState = score()->inputState();
     mu::engraving::ShadowNote& shadowNote = *score()->shadowNote();
 
@@ -513,6 +517,38 @@ void NotationInteraction::showShadowNoteForMidiPitch(const uint8_t pitch)
 
     const bool show = doShowShadowNote(shadowNote, params);
     m_shadowNoteChanged.send(show);
+}
+
+//! On tab staves, the hover shows a note input cursor where a click puts its note
+void NotationInteraction::showTabHoverCursor(const Position& position)
+{
+    Position pos = position;
+    pos.line = NoteInput::clickedLine(pos);
+
+    bool error = false;
+    const NoteVal nval = NoteInput::noteValForPosition(score(), pos, AccidentalType::NONE, error);
+    const RectF rect = error ? RectF() : m_noteInput->cursorRect(pos, nval.string);
+    if (!rect.isValid()) {
+        hideShadowNote();
+        return;
+    }
+
+    //! NOTE: The shadow note stays "visible" (without symbol, so not drawn): it keeps the hover
+    //! refreshed after layout changes and the preview measure shown beyond the score
+    const InputState& inputState = score()->inputState();
+    ShadowNote& shadowNote = *score()->shadowNote();
+    shadowNote.setVisible(true);
+    shadowNote.setTick(pos.segment->tick());
+    shadowNote.setStaffIdx(pos.staffIdx);
+    shadowNote.setState(SymId::noSym, inputState.duration(), inputState.rest(), pos.beyondScore);
+
+    m_tabHoverCursorRect = rect;
+    m_shadowNoteChanged.send(/*visible*/ true);
+}
+
+RectF NotationInteraction::tabHoverCursorRect() const
+{
+    return m_tabHoverCursorRect;
 }
 
 bool NotationInteraction::doShowShadowNote(ShadowNote& shadowNote, ShadowNoteParams& params)
@@ -625,12 +661,17 @@ bool NotationInteraction::doShowShadowNote(ShadowNote& shadowNote, ShadowNotePar
 
 void NotationInteraction::hideShadowNote()
 {
+    m_tabHoverCursorRect = RectF();
     score()->shadowNote()->setVisible(false);
     m_shadowNoteChanged.send(/*visible*/ false);
 }
 
 RectF NotationInteraction::shadowNoteRect() const
 {
+    if (m_tabHoverCursorRect.isValid()) {
+        return m_tabHoverCursorRect;
+    }
+
     const ShadowNote* note = score()->shadowNote();
     if (!note) {
         return RectF();

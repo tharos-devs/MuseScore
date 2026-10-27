@@ -1093,12 +1093,18 @@ void AbstractNotationPaintView::paint(QPainter* qp)
 
     const INotationNoteInputPtr noteInput = notationNoteInput();
     if (noteInput->isNoteInputMode() && !publishMode()) {
-        if (noteInput->usingNoteInputMethod(NoteInputMethod::CARET)
-            || (noteInput->usingNoteInputMethod(NoteInputMethod::BY_DURATION)
-                && !notationConfiguration()->useNoteInputCursorInInputByDuration())) {
-            m_ruler->paint(painter, noteInput->state());
-        } else {
+        const bool isCursorPainted = !(noteInput->usingNoteInputMethod(NoteInputMethod::CARET)
+                                       || (noteInput->usingNoteInputMethod(NoteInputMethod::BY_DURATION)
+                                           && !notationConfiguration()->useNoteInputCursorInInputByDuration()));
+        if (isCursorPainted) {
             m_noteInputCursor->paint(painter);
+        } else {
+            m_ruler->paint(painter, noteInput->state());
+        }
+
+        const RectF tabHoverRect = notationInteraction()->tabHoverCursorRect();
+        if (tabHoverRect.isValid() && !(isCursorPainted && tabHoverRect == noteInput->cursorRect())) {
+            m_noteInputCursor->paintRect(painter, tabHoverRect);
         }
     }
 

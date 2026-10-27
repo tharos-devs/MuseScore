@@ -94,6 +94,7 @@ public:
     void setCurrentTrack(track_idx_t trackIndex) override;
 
     muse::RectF cursorRect() const override;
+    muse::RectF cursorRect(const engraving::Position& pos, int string) const override;
 
     muse::async::Notification noteAdded() const override;
     muse::async::Notification stateChanged() const override;
@@ -101,6 +102,8 @@ public:
     void setGetViewRectFunc(const std::function<muse::RectF()>& func);
 
 private:
+    muse::RectF cursorRect(const engraving::Segment* segment, engraving::track_idx_t track, int string, bool beyondScore,
+                           double snappedX = -1.0) const;
     mu::engraving::Score* score() const;
 
     void applyNoteValueChange(const muse::TranslatableString& actionName, const std::function<void(mu::engraving::Transaction&)>& change);
