@@ -262,6 +262,9 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes contributed back to stock MuseScore
 
+- Fixed a tablature's lines getting darker and thicker in note input as the mouse moved over a measure with fret numbers or rests (as if a second staff were drawn over it): lines broken by fret numbers and rests were redrawn over the whole measure at each mouse move. Same for barlines and slurs broken by other elements (2026-10-27).
+- Fixed clicking a string of a tablature in note input: the 0 was added on the clicked string but the input cursor stayed on the previous one, where the typed frets then went. The cursor now goes to the clicked string (2026-10-27).
+- Tablature note input: hovering a tablature no longer shows a standard notehead at the mouse (2026-10-27).
 - Fixed the Mixer showing the previous tab's Solo/Mute after switching between the score and a part (e.g. a Solo lit in a part that has none, both instruments then heard); it now shows the current one's, like the Track list (2026-10-26).
 - Fixed stave sharing in parts: a score's shared stave was listed in a part's Layout panel, an instrument hidden behind it couldn't be added to the part (its eye greyed out) and, added, was taken as hidden there (2026-10-26).
 - Fixed Up/Down in tablature note input: the cursor stayed on its string when no note was on the next one (the next fret still went to the new string), and could get stuck on a string that the staff doesn't have after moving from a guitar to a bass staff (2026-10-26).
