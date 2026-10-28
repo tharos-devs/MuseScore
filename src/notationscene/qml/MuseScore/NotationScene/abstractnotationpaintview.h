@@ -383,7 +383,7 @@ private:
 
     muse::secs_t m_lastPlaybackPosition = 0.;
     qint64 m_lastPlaybackPositionUpdateTimeNs = 0;
-    QTimer m_updatePlaybackCursorInterpolatedTimer;
+    bool m_isPlaybackCursorTicking = false;
     QElapsedTimer m_elapsedTimer;
 };
 }

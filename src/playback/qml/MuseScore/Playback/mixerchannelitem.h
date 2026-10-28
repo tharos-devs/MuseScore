@@ -465,6 +465,7 @@ protected:
     notation::INotationPlaybackPtr notationPlayback() const;
 
     void setAudioChannelVolumePressure(const muse::audio::audioch_t chNum, const float newValue);
+    void applyPendingChannelPressures();
 
     void applyMuteToOutputParams(const bool isMuted);
 
@@ -560,6 +561,9 @@ protected:
 
     float m_leftChannelPressure = 0.0;
     float m_rightChannelPressure = 0.0;
+    //! NOTE: the levels received since the last tick of the playback cursors' clock
+    std::optional<float> m_pendingLeftChannelPressure;
+    std::optional<float> m_pendingRightChannelPressure;
 
     muse::ui::NavigationPanel* m_panel = nullptr;
 
