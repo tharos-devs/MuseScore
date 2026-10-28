@@ -355,7 +355,7 @@ private:
     void ensurePlaybackCursorVisible(qreal x);
 
     QGraphicsLineItem* m_playbackCursorItem = nullptr;
-    QTimer m_playbackCursorTimer;
+    bool m_isPlaybackCursorTicking = false;
     QElapsedTimer m_elapsedTimer;
     muse::audio::secs_t m_lastPlaybackPosition = 0;
     qint64 m_lastPlaybackPositionUpdateTimeNs = 0;

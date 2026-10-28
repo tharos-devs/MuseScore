@@ -34,6 +34,7 @@
 #include "notation/inotationarticulationmaps.h"
 #include "notation/inotationautomation.h"
 #include "notation/inotationplayback.h"
+#include "notation/utilities/playbackuiclock.h"
 
 #include "project/inotationproject.h"
 
@@ -133,6 +134,16 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
     m_rightChannelPressure(MIN_DISPLAYED_DBFS)
 {
     allChannelItems().push_back(this);
+
+    //! NOTE: the levels received are shown at the playback cursors' ticks, so that they don't make frames of their own
+    m_channelPressuresTickCall = new notation::PlaybackUiTickCall(this, [this]() {
+        applyPendingChannelPressures();
+    });
+
+    //! NOTE: the same for the fader and the knob following the volume/pan curves
+    m_automatedControlParamsTickCall = new notation::PlaybackUiTickCall(this, [this]() {
+        updateAutomatedControlParams();
+    });
 
     if (!m_outputOnly) {
         m_inputResourceItem = buildInputResourceItem();
@@ -1820,7 +1831,7 @@ void MixerChannelItem::subscribeOnAutomationChanges()
 
     //! NOTE: the curves move the fader and the knob as the playback position goes (playing, seeking, stopping)
     playbackController()->playbackPositionChanged().onReceive(this, [this](secs_t) {
-        updateAutomatedControlParams();
+        m_automatedControlParamsTickCall->request();
     });
 }
 
@@ -1875,14 +1886,33 @@ void MixerChannelItem::setDisplayedGain(int gain)
 void MixerChannelItem::setAudioChannelVolumePressure(const audio::audioch_t chNum, const float newValue)
 {
     if (chNum == 0) {
-        setLeftChannelPressure(newValue);
+        m_pendingLeftChannelPressure = newValue;
     } else {
-        setRightChannelPressure(newValue);
+        m_pendingRightChannelPressure = newValue;
+    }
+
+    m_channelPressuresTickCall->request();
+}
+
+void MixerChannelItem::applyPendingChannelPressures()
+{
+    if (m_pendingLeftChannelPressure) {
+        setLeftChannelPressure(*m_pendingLeftChannelPressure);
+        m_pendingLeftChannelPressure.reset();
+    }
+
+    if (m_pendingRightChannelPressure) {
+        setRightChannelPressure(*m_pendingRightChannelPressure);
+        m_pendingRightChannelPressure.reset();
     }
 }
 
 void MixerChannelItem::resetAudioChannelsVolumePressure()
 {
+    m_pendingLeftChannelPressure.reset();
+    m_pendingRightChannelPressure.reset();
+    m_channelPressuresTickCall->cancel();
+
     setLeftChannelPressure(MIN_DISPLAYED_DBFS);
     setRightChannelPressure(MIN_DISPLAYED_DBFS);
 }

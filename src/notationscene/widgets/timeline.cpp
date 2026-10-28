@@ -30,6 +30,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
+#include <QSignalBlocker>
 
 #include <algorithm>
 #include <cmath>
@@ -64,6 +65,7 @@
 #include "notation/inotationselection.h"
 #include "notation/inotationundostack.h" // IWYU pragma: keep
 #include "notation/utilities/partutilities.h"
+#include "notation/utilities/playbackuiclock.h"
 
 #include "instrumentsscene/instrumentscommands.h"
 
@@ -2568,7 +2570,9 @@ void Timeline::changeSelection(SelState)
 {
     TRACEFUNC;
 
-    scene()->blockSignals(true);
+    //! NOTE: unblocked on every return (the early one below left the scene's signals blocked for good, see
+    //! TimelineView::connectChangeSignals())
+    const QSignalBlocker sceneSignalsBlocker(scene());
     scene()->clearSelection();
 
     QRectF selectionRect = _selectionPath.boundingRect();
@@ -2659,7 +2663,6 @@ void Timeline::changeSelection(SelState)
     _oldSelectionRect = selectionRect;
 
     _metaValue = false;
-    scene()->blockSignals(false);
 }
 
 //---------------------------------------------------------
@@ -3777,10 +3780,11 @@ void Timeline::initPlaybackCursor()
 {
     m_elapsedTimer.start();
 
-    //! NOTE: same interpolation rate as the score's cursor
-    m_playbackCursorTimer.setInterval(23);
-    connect(&m_playbackCursorTimer, &QTimer::timeout, this, [this]() {
-        updatePlaybackCursor();
+    //! NOTE: the score's cursor's clock, so that both cursors (and the meters) move in the same frames
+    connect(PlaybackUiClock::instance(), &PlaybackUiClock::tick, this, [this]() {
+        if (m_isPlaybackCursorTicking) {
+            updatePlaybackCursor();
+        }
     });
 
     m_lastPlaybackPosition = playbackState()->playbackPosition();
@@ -3789,7 +3793,7 @@ void Timeline::initPlaybackCursor()
         m_lastPlaybackPosition = secs;
         m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
 
-        if (!m_playbackCursorTimer.isActive()) {
+        if (!m_isPlaybackCursorTicking) {
             updatePlaybackCursor();
         }
     });
@@ -3805,9 +3809,11 @@ void Timeline::onPlaybackStatusChanged()
     m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
 
     if (playbackState()->isPlaying()) {
-        m_playbackCursorTimer.start();
+        m_isPlaybackCursorTicking = true;
+        PlaybackUiClock::instance()->addUser(this);
     } else {
-        m_playbackCursorTimer.stop();
+        m_isPlaybackCursorTicking = false;
+        PlaybackUiClock::instance()->removeUser(this);
     }
 
     updatePlaybackCursor();
@@ -3842,7 +3848,7 @@ void Timeline::updatePlaybackCursor()
     }
 
     muse::audio::secs_t secs = m_lastPlaybackPosition;
-    const bool playing = m_playbackCursorTimer.isActive();
+    const bool playing = m_isPlaybackCursorTicking;
     if (playing) {
         secs += (m_elapsedTimer.nsecsElapsed() - m_lastPlaybackPositionUpdateTimeNs) / 1e9;
     }

@@ -25,6 +25,9 @@
 #include <QApplication>
 #include <QQuickWindow>
 #include <QSplitter>
+#include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QScrollBar>
 #include <QTimer>
 
 #include "log.h"
@@ -32,6 +35,7 @@
 #include "notation/inotationundostack.h"
 #include "project/inotationproject.h"
 #include "notationscene/widgets/timeline.h"
+#include "notationscene/widgets/timelinevideothumbnails.h"
 
 namespace mu::notation {
 class TimelineAdapter : public QSplitter, public muse::uicomponents::IDisplayableWidget
@@ -126,34 +130,98 @@ private:
 
 using namespace mu::notation;
 
+//! NOTE: at most 30 fps
+static constexpr int MIN_DRAW_INTERVAL_MS = 32;
+
+//! NOTE: in case a change of the Timeline reaches none of the signals of connectChangeSignals()
+static constexpr int REFRESH_INTERVAL_MS = 1000;
+
 TimelineView::TimelineView(QQuickItem* parent)
     : WidgetView(parent), muse::Contextable(muse::iocCtxForQmlObject(this))
 {
     m_drawTimer.setSingleShot(true);
-    m_drawTimer.setInterval(32); // 30 fps
-
     connect(&m_drawTimer, &QTimer::timeout, this, &TimelineView::doDraw);
+
+    m_refreshTimer.setInterval(REFRESH_INTERVAL_MS);
+    connect(&m_refreshTimer, &QTimer::timeout, this, &TimelineView::markDirty);
+    m_refreshTimer.start();
+
+    connect(this, &QQuickItem::visibleChanged, this, &TimelineView::markDirty);
+    connect(this, &QQuickItem::widthChanged, this, &TimelineView::markDirty);
+    connect(this, &QQuickItem::heightChanged, this, &TimelineView::markDirty);
 
     doDraw();
 }
 
-void TimelineView::doDraw()
+//! NOTE: the Timeline's widget is never shown (it's drawn into an image, see doDraw()), so it doesn't tell when it
+//! needs to be drawn again: its image used to be drawn again 30 times a second, whatever changed, which cost about
+//! a tenth of a CPU core with the Timeline open, even when stopped. It's now drawn again when its scenes change
+//! (items, hover, playback cursor), when it scrolls, when video pictures are decoded, after the events it gets and
+//! when the score changes
+void TimelineView::markDirty()
 {
-    if (isVisible()) {
-        m_dpr =  window() ? window()->devicePixelRatio() : 1.0;
+    m_dirty = true;
 
-        m_image = QImage(width() * m_dpr, height() * m_dpr, QImage::Format_ARGB32_Premultiplied);
-        m_image.setDevicePixelRatio(m_dpr);
-        m_image.fill(Qt::transparent);
-
-        if (qWidget()) {
-            qWidget()->render(&m_image, QPoint(), QRegion(), QWidget::DrawWindowBackground | QWidget::DrawChildren);
-        }
-
-        update();
+    if (m_drawTimer.isActive()) {
+        return;
     }
 
-    m_drawTimer.start();
+    const qint64 elapsedMs = m_sinceLastDraw.isValid() ? m_sinceLastDraw.elapsed() : MIN_DRAW_INTERVAL_MS;
+    m_drawTimer.start(static_cast<int>(std::max<qint64>(0, MIN_DRAW_INTERVAL_MS - elapsedMs)));
+}
+
+void TimelineView::connectChangeSignals()
+{
+    if (!qWidget()) {
+        return;
+    }
+
+    for (QGraphicsView* view : qWidget()->findChildren<QGraphicsView*>()) {
+        if (view->scene()) {
+            connect(view->scene(), &QGraphicsScene::changed, this, &TimelineView::markDirty, Qt::UniqueConnection);
+        }
+        connect(view->horizontalScrollBar(), &QScrollBar::valueChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
+        connect(view->verticalScrollBar(), &QScrollBar::valueChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
+    }
+
+    //! NOTE: the video row is a widget, not a scene item: a picture decoded later only updates it
+    for (TimelineVideoThumbnails* thumbnails : qWidget()->findChildren<TimelineVideoThumbnails*>()) {
+        connect(thumbnails, &TimelineVideoThumbnails::thumbnailsChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
+    }
+}
+
+void TimelineView::doDraw()
+{
+    connectChangeSignals();
+
+    if (!isVisible() || !m_dirty) {
+        return;
+    }
+
+    m_dirty = false;
+    m_sinceLastDraw.restart();
+
+    m_dpr =  window() ? window()->devicePixelRatio() : 1.0;
+
+    m_image = QImage(width() * m_dpr, height() * m_dpr, QImage::Format_ARGB32_Premultiplied);
+    m_image.setDevicePixelRatio(m_dpr);
+    m_image.fill(Qt::transparent);
+
+    if (qWidget()) {
+        qWidget()->render(&m_image, QPoint(), QRegion(), QWidget::DrawWindowBackground | QWidget::DrawChildren);
+    }
+
+    update();
+}
+
+bool TimelineView::event(QEvent* event)
+{
+    const bool handled = WidgetView::event(event);
+    if (handled) {
+        markDirty();
+    }
+
+    return handled;
 }
 
 void TimelineView::paint(QPainter* painter)
@@ -169,7 +237,7 @@ void TimelineView::componentComplete()
     m_timeline = timeline;
 
     auto updateView = [this, timeline]() {
-        update();
+        markDirty();
 
         if (timeline) {
             timeline->updateView();

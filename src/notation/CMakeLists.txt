@@ -129,6 +129,8 @@ target_sources(notation PRIVATE
 
     utilities/partutilities.cpp
     utilities/partutilities.h
+    utilities/playbackuiclock.cpp
+    utilities/playbackuiclock.h
     utilities/scorerangeutilities.cpp
     utilities/scorerangeutilities.h
 )

@@ -1,0 +1,113 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ * MuseScore-Studio-CLA-applies
+ *
+ * MuseScore Studio
+ * Music Composition & Notation
+ *
+ * Copyright (C) 2026 MuseScore Limited and others
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "playbackuiclock.h"
+
+using namespace mu::notation;
+
+//! NOTE: ~43 FPS, the score's playback cursor's former rate (1024 buffer + 44100)
+static constexpr int TICK_INTERVAL_MS = 23;
+
+PlaybackUiClock* PlaybackUiClock::instance()
+{
+    //! NOTE: never deleted, so that it's still there for its users destroyed when the app quits
+    static PlaybackUiClock* clock = new PlaybackUiClock(nullptr);
+    return clock;
+}
+
+PlaybackUiClock::PlaybackUiClock(QObject* parent)
+    : QObject(parent)
+{
+    m_timer.setInterval(TICK_INTERVAL_MS);
+    connect(&m_timer, &QTimer::timeout, this, &PlaybackUiClock::tick);
+}
+
+void PlaybackUiClock::addUser(const QObject* user)
+{
+    if (m_users.contains(user)) {
+        return;
+    }
+
+    m_users.insert(user);
+    connect(user, &QObject::destroyed, this, &PlaybackUiClock::onUserDestroyed);
+
+    //! NOTE: not restarted when already ticking: the users share its ticks
+    if (!m_timer.isActive()) {
+        m_timer.start();
+    }
+}
+
+void PlaybackUiClock::removeUser(const QObject* user)
+{
+    if (!m_users.remove(user)) {
+        return;
+    }
+
+    disconnect(user, &QObject::destroyed, this, &PlaybackUiClock::onUserDestroyed);
+
+    if (m_users.isEmpty()) {
+        m_timer.stop();
+    }
+}
+
+void PlaybackUiClock::onUserDestroyed(QObject* user)
+{
+    m_users.remove(user);
+
+    if (m_users.isEmpty()) {
+        m_timer.stop();
+    }
+}
+
+PlaybackUiTickCall::PlaybackUiTickCall(QObject* parent, std::function<void()> func)
+    : QObject(parent), m_func(std::move(func))
+{
+    connect(PlaybackUiClock::instance(), &PlaybackUiClock::tick, this, [this]() {
+        if (!m_requested) {
+            return;
+        }
+
+        m_requested = false;
+        PlaybackUiClock::instance()->removeUser(this);
+        m_func();
+    });
+}
+
+void PlaybackUiTickCall::request()
+{
+    if (m_requested) {
+        return;
+    }
+
+    m_requested = true;
+    PlaybackUiClock::instance()->addUser(this);
+}
+
+void PlaybackUiTickCall::cancel()
+{
+    if (!m_requested) {
+        return;
+    }
+
+    m_requested = false;
+    PlaybackUiClock::instance()->removeUser(this);
+}

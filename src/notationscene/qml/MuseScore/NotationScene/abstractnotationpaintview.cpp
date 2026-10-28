@@ -55,6 +55,7 @@
 #include "notation/inotationselection.h"
 #include "notation/inotationstyle.h"
 #include "notation/inotationviewstate.h"
+#include "notation/utilities/playbackuiclock.h"
 
 #include "log.h"
 
@@ -101,8 +102,11 @@ AbstractNotationPaintView::AbstractNotationPaintView(QQuickItem* parent)
         m_autoScrollEnabled = true;
     });
 
-    connect(&m_updatePlaybackCursorInterpolatedTimer, &QTimer::timeout, this, [this]() {
-        updatePlaybackCursorInterpolated();
+    //! NOTE: the clock shared with the Timeline's cursor and the meters, so that they move in the same frames
+    connect(PlaybackUiClock::instance(), &PlaybackUiClock::tick, this, [this]() {
+        if (m_isPlaybackCursorTicking) {
+            updatePlaybackCursorInterpolated();
+        }
     });
 }
 
@@ -2034,9 +2038,11 @@ void AbstractNotationPaintView::onPlayingChanged()
         m_lastPlaybackPosition = playbackState()->playbackPosition();
         m_lastPlaybackPositionUpdateTimeNs = m_elapsedTimer.nsecsElapsed();
         updatePlaybackCursorInterpolated();
-        m_updatePlaybackCursorInterpolatedTimer.start(23); // ~43 FPS (1024 buffer + 44100)
+        m_isPlaybackCursorTicking = true;
+        PlaybackUiClock::instance()->addUser(this);
     } else {
-        m_updatePlaybackCursorInterpolatedTimer.stop();
+        m_isPlaybackCursorTicking = false;
+        PlaybackUiClock::instance()->removeUser(this);
         scheduleRedraw();
     }
 }
