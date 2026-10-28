@@ -306,6 +306,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Less CPU when stopped: the audio effects (VST effects on the tracks and the Master) are no longer processed while they only get silence, once their reverb/delay tails are over; they start again at the first sound, as in a DAW. A VST effect on the Master used to cost as much stopped as playing (2026-10-28).
 - Less CPU during playback, especially with the Track list or the Mixer open: the meters, the playback toolbar's time and measure/beat fields and the faders following volume/pan curves now move at the score cursor's ticks (as does the Timeline's cursor) instead of at their own times, so the window is redrawn about 45 times a second instead of at each screen refresh (about 67): about 40% less rendering with the Track list and its channel strip open. The time field is also only updated when the tenth of a second it shows changes. Nothing changes on screen (2026-10-28).
 - Linux AppImage (x86_64): now runs on Linux systems older than Ubuntu 24.04 (e.g. Deepin 25, Debian 12, Ubuntu 22.04, Mint 21), which refused to start it ("CXXABI_1.3.15 not found"). It's now built on Ubuntu 22.04 with GCC 12 instead of Ubuntu 24.04 with GCC 14; the ARM64 AppImage is unchanged (2026-10-28).
 - Mixer: the Metronome channel's title now has the right-click Edit color… / Reset color menu, like its Track list row; its color was only editable from the Track list (2026-10-27).
