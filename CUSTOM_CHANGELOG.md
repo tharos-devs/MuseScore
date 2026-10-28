@@ -306,6 +306,7 @@ Custom features and notable fixes built on top of upstream MuseScore, since this
 
 ## Fixes (custom-only)
 
+- Linux AppImage (x86_64): now runs on Linux systems older than Ubuntu 24.04 (e.g. Deepin 25, Debian 12, Ubuntu 22.04, Mint 21), which refused to start it ("CXXABI_1.3.15 not found"). It's now built on Ubuntu 22.04 with GCC 12 instead of Ubuntu 24.04 with GCC 14; the ARM64 AppImage is unchanged (2026-10-28).
 - Mixer: the Metronome channel's title now has the right-click Edit color… / Reset color menu, like its Track list row; its color was only editable from the Track list (2026-10-27).
 - Channel EQ curve (Mixer channel, Track list channel strip, EQ editor): a high-pass or low-pass slope now leaves the graph at its bottom edge instead of running on as a flat line at -24 dB (2026-10-27).
 - Toolbar Automation button's dropdown: no option is checked any more while the automation overlay is hidden, picking the checked option hides the overlay (like the button), and clicking the button closes the open dropdown (2026-10-27).
