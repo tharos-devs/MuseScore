@@ -30,6 +30,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
+#include <QSignalBlocker>
 
 #include <algorithm>
 #include <cmath>
@@ -2569,7 +2570,9 @@ void Timeline::changeSelection(SelState)
 {
     TRACEFUNC;
 
-    scene()->blockSignals(true);
+    //! NOTE: unblocked on every return (the early one below left the scene's signals blocked for good, see
+    //! TimelineView::connectChangeSignals())
+    const QSignalBlocker sceneSignalsBlocker(scene());
     scene()->clearSelection();
 
     QRectF selectionRect = _selectionPath.boundingRect();
@@ -2660,7 +2663,6 @@ void Timeline::changeSelection(SelState)
     _oldSelectionRect = selectionRect;
 
     _metaValue = false;
-    scene()->blockSignals(false);
 }
 
 //---------------------------------------------------------

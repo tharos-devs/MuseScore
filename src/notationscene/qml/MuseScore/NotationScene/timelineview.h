@@ -24,6 +24,7 @@
 
 #include <memory>
 
+#include <QElapsedTimer>
 #include <QImage>
 #include <QTimer>
 #include <qqmlintegration.h>
@@ -53,15 +54,24 @@ public:
 
 private slots:
     void doDraw();
+    void markDirty();
 
 private:
 
+    bool event(QEvent* event) override;
     void paint(QPainter* painter) override;
     void componentComplete() override;
+
+    void connectChangeSignals();
 
     std::shared_ptr<TimelineAdapter> m_timeline;
     qreal m_dpr = 1.0; // device pixel ratio
     QImage m_image;
     QTimer m_drawTimer;
+
+    //! NOTE: the image is drawn again only when the Timeline changed, see markDirty()
+    bool m_dirty = true;
+    QElapsedTimer m_sinceLastDraw;
+    QTimer m_refreshTimer;
 };
 }
