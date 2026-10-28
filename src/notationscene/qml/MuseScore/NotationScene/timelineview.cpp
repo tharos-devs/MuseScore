@@ -35,6 +35,7 @@
 #include "notation/inotationundostack.h"
 #include "project/inotationproject.h"
 #include "notationscene/widgets/timeline.h"
+#include "notationscene/widgets/timelinevideothumbnails.h"
 
 namespace mu::notation {
 class TimelineAdapter : public QSplitter, public muse::uicomponents::IDisplayableWidget
@@ -155,7 +156,8 @@ TimelineView::TimelineView(QQuickItem* parent)
 //! NOTE: the Timeline's widget is never shown (it's drawn into an image, see doDraw()), so it doesn't tell when it
 //! needs to be drawn again: its image used to be drawn again 30 times a second, whatever changed, which cost about
 //! a tenth of a CPU core with the Timeline open, even when stopped. It's now drawn again when its scenes change
-//! (items, hover, playback cursor), when it scrolls, after the events it gets and when the score changes
+//! (items, hover, playback cursor), when it scrolls, when video pictures are decoded, after the events it gets and
+//! when the score changes
 void TimelineView::markDirty()
 {
     m_dirty = true;
@@ -180,6 +182,11 @@ void TimelineView::connectChangeSignals()
         }
         connect(view->horizontalScrollBar(), &QScrollBar::valueChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
         connect(view->verticalScrollBar(), &QScrollBar::valueChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
+    }
+
+    //! NOTE: the video row is a widget, not a scene item: a picture decoded later only updates it
+    for (TimelineVideoThumbnails* thumbnails : qWidget()->findChildren<TimelineVideoThumbnails*>()) {
+        connect(thumbnails, &TimelineVideoThumbnails::thumbnailsChanged, this, &TimelineView::markDirty, Qt::UniqueConnection);
     }
 }
 

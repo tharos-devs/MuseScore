@@ -22,8 +22,6 @@
 
 #include "playbackuiclock.h"
 
-#include <QCoreApplication>
-
 using namespace mu::notation;
 
 //! NOTE: ~43 FPS, the score's playback cursor's former rate (1024 buffer + 44100)
@@ -31,7 +29,8 @@ static constexpr int TICK_INTERVAL_MS = 23;
 
 PlaybackUiClock* PlaybackUiClock::instance()
 {
-    static PlaybackUiClock* clock = new PlaybackUiClock(qApp);
+    //! NOTE: never deleted, so that it's still there for its users destroyed when the app quits
+    static PlaybackUiClock* clock = new PlaybackUiClock(nullptr);
     return clock;
 }
 
