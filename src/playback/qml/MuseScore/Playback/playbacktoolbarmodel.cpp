@@ -29,6 +29,7 @@
 #include "ui/view/musicalsymbolcodes.h"
 #include "playback/playbacktypes.h"
 #include "playback/playbackcommands.h"
+#include "notation/utilities/playbackuiclock.h"
 
 #include "ui/toolconfig.h"
 
@@ -87,8 +88,14 @@ void PlaybackToolBarModel::setupConnections()
         updatePlayItem();
     });
 
+    //! NOTE: at the playback cursors' ticks, so that the fields don't make frames of their own
+    m_playPositionTickCall = new notation::PlaybackUiTickCall(this, [this]() {
+        updatePlayPosition(m_pendingPlaybackPositionSecs);
+    });
+
     playbackController()->playbackPositionChanged().onReceive(this, [this](secs_t secs) {
-        updatePlayPosition(secs);
+        m_pendingPlaybackPositionSecs = secs;
+        m_playPositionTickCall->request();
     });
 
     playbackController()->totalPlayTimeChanged().onNotify(this, [this]() {
@@ -262,6 +269,26 @@ void PlaybackToolBarModel::updatePlayPosition(secs_t secs)
 
     m_playbackPositionSecs = secs;
     emit playPositionChanged();
+
+    //! NOTE: the time field shows tenths of a second (see PlaybackToolBarActions.qml): its QTime, a JS Date in QML,
+    //! is costly to convert, so only when they change
+    const int64_t playTimeTenths = muse::secs_to_msecs(secs).raw() / 100;
+    if (m_shownPlayTimeTenths != playTimeTenths) {
+        m_shownPlayTimeTenths = playTimeTenths;
+        emit playTimeChanged();
+    }
+
+    const std::array<int, 4> shown = shownMeasureBeat();
+    if (m_shownMeasureBeat != shown) {
+        m_shownMeasureBeat = shown;
+        emit measureBeatChanged();
+    }
+}
+
+std::array<int, 4> PlaybackToolBarModel::shownMeasureBeat() const
+{
+    const MeasureBeat beat = measureBeat();
+    return { beat.measureIndex, beat.maxMeasureIndex, static_cast<int>(beat.beat), beat.maxBeatIndex };
 }
 
 void PlaybackToolBarModel::rewind(secs_t secs)

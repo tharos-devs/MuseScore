@@ -50,6 +50,10 @@
 #include "auxsenditem.h"
 #include "auxsenditemlistmodel.h"
 
+namespace mu::notation {
+class PlaybackUiTickCall;
+}
+
 namespace mu::playback {
 //! NOTE: a channel's aux sends as a whole - their params and the bus each slot targets, in slot order -
 //! captured and restored by MixerPanelModel's undo of a user's aux-send choice
@@ -564,6 +568,8 @@ protected:
     //! NOTE: the levels received since the last tick of the playback cursors' clock
     std::optional<float> m_pendingLeftChannelPressure;
     std::optional<float> m_pendingRightChannelPressure;
+    notation::PlaybackUiTickCall* m_channelPressuresTickCall = nullptr;
+    notation::PlaybackUiTickCall* m_automatedControlParamsTickCall = nullptr;
 
     muse::ui::NavigationPanel* m_panel = nullptr;
 

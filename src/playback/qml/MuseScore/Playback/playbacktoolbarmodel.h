@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "rcommand/commandtypes.h"
 #include "uicomponents/qml/Muse/UiComponents/abstractmenumodel.h"
 
@@ -29,6 +31,10 @@
 #include "iplaybackcontroller.h"
 #include "iplaybackconfiguration.h"
 #include "notation/inotationconfiguration.h"
+
+namespace mu::notation {
+class PlaybackUiTickCall;
+}
 
 namespace mu::playback {
 class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
@@ -41,12 +47,12 @@ class PlaybackToolBarModel : public muse::uicomponents::AbstractMenuModel
 
     Q_PROPERTY(QTime maxPlayTime READ maxPlayTime NOTIFY maxPlayTimeChanged)
 
-    Q_PROPERTY(QTime playTime READ playTime WRITE setPlayTime NOTIFY playPositionChanged)
+    Q_PROPERTY(QTime playTime READ playTime WRITE setPlayTime NOTIFY playTimeChanged)
     Q_PROPERTY(qreal playPosition READ playPosition WRITE setPlayPosition NOTIFY playPositionChanged)
-    Q_PROPERTY(int measureNumber READ measureNumber WRITE setMeasureNumber NOTIFY playPositionChanged)
-    Q_PROPERTY(int maxMeasureNumber READ maxMeasureNumber NOTIFY playPositionChanged)
-    Q_PROPERTY(int beatNumber READ beatNumber WRITE setBeatNumber NOTIFY playPositionChanged)
-    Q_PROPERTY(int maxBeatNumber READ maxBeatNumber NOTIFY playPositionChanged)
+    Q_PROPERTY(int measureNumber READ measureNumber WRITE setMeasureNumber NOTIFY measureBeatChanged)
+    Q_PROPERTY(int maxMeasureNumber READ maxMeasureNumber NOTIFY measureBeatChanged)
+    Q_PROPERTY(int beatNumber READ beatNumber WRITE setBeatNumber NOTIFY measureBeatChanged)
+    Q_PROPERTY(int maxBeatNumber READ maxBeatNumber NOTIFY measureBeatChanged)
 
     Q_PROPERTY(QVariant tempo READ tempo NOTIFY tempoChanged)
     Q_PROPERTY(qreal tempoMultiplier READ tempoMultiplier WRITE setTempoMultiplier NOTIFY tempoChanged)
@@ -92,6 +98,8 @@ signals:
     void returnToStartOnStopChanged();
     void maxPlayTimeChanged();
     void playPositionChanged();
+    void playTimeChanged();
+    void measureBeatChanged();
     void tempoChanged();
 
 private:
@@ -109,11 +117,20 @@ private:
     void updatePlayItem();
 
     void updatePlayPosition(muse::audio::secs_t secs);
+    std::array<int, 4> shownMeasureBeat() const;
 
     void rewind(muse::audio::secs_t secs);
     void rewindToBeat(const engraving::MeasureBeat& beat);
 
     bool m_isToolbarFloating = false;
     muse::secs_t m_playbackPositionSecs = 0.0;
+
+    //! NOTE: the position received during playback is shown at the playback cursors' ticks (see setupConnections())
+    muse::secs_t m_pendingPlaybackPositionSecs = 0.0;
+    notation::PlaybackUiTickCall* m_playPositionTickCall = nullptr;
+
+    //! NOTE: what the time and measure/beat fields show, notified only when it changes
+    int64_t m_shownPlayTimeTenths = 0;
+    std::array<int, 4> m_shownMeasureBeat = {};
 };
 }

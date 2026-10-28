@@ -136,8 +136,13 @@ MixerChannelItem::MixerChannelItem(QObject* parent, Type type, bool outputOnly, 
     allChannelItems().push_back(this);
 
     //! NOTE: the levels received are shown at the playback cursors' ticks, so that they don't make frames of their own
-    connect(notation::PlaybackUiClock::instance(), &notation::PlaybackUiClock::tick, this, [this]() {
+    m_channelPressuresTickCall = new notation::PlaybackUiTickCall(this, [this]() {
         applyPendingChannelPressures();
+    });
+
+    //! NOTE: the same for the fader and the knob following the volume/pan curves
+    m_automatedControlParamsTickCall = new notation::PlaybackUiTickCall(this, [this]() {
+        updateAutomatedControlParams();
     });
 
     if (!m_outputOnly) {
@@ -1826,7 +1831,7 @@ void MixerChannelItem::subscribeOnAutomationChanges()
 
     //! NOTE: the curves move the fader and the knob as the playback position goes (playing, seeking, stopping)
     playbackController()->playbackPositionChanged().onReceive(this, [this](secs_t) {
-        updateAutomatedControlParams();
+        m_automatedControlParamsTickCall->request();
     });
 }
 
@@ -1886,7 +1891,7 @@ void MixerChannelItem::setAudioChannelVolumePressure(const audio::audioch_t chNu
         m_pendingRightChannelPressure = newValue;
     }
 
-    notation::PlaybackUiClock::instance()->addUser(this);
+    m_channelPressuresTickCall->request();
 }
 
 void MixerChannelItem::applyPendingChannelPressures()
@@ -1900,15 +1905,13 @@ void MixerChannelItem::applyPendingChannelPressures()
         setRightChannelPressure(*m_pendingRightChannelPressure);
         m_pendingRightChannelPressure.reset();
     }
-
-    notation::PlaybackUiClock::instance()->removeUser(this);
 }
 
 void MixerChannelItem::resetAudioChannelsVolumePressure()
 {
     m_pendingLeftChannelPressure.reset();
     m_pendingRightChannelPressure.reset();
-    notation::PlaybackUiClock::instance()->removeUser(this);
+    m_channelPressuresTickCall->cancel();
 
     setLeftChannelPressure(MIN_DISPLAYED_DBFS);
     setRightChannelPressure(MIN_DISPLAYED_DBFS);

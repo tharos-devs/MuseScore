@@ -26,6 +26,8 @@
 #include <QSet>
 #include <QTimer>
 
+#include <functional>
+
 namespace mu::notation {
 //! NOTE: the one clock of what moves on screen during playback: the score's and the Timeline's playback cursors,
 //! the Mixer's and the Track list's meters. With a timer each, their updates came at unrelated times and each one
@@ -51,5 +53,20 @@ private:
 
     QTimer m_timer;
     QSet<const QObject*> m_users;
+};
+
+//! NOTE: a call made at the playback UI clock's next tick, once however many times it was requested since the last
+//! one (e.g. a meter showing the last level received)
+class PlaybackUiTickCall : public QObject
+{
+public:
+    PlaybackUiTickCall(QObject* parent, std::function<void()> func);
+
+    void request();
+    void cancel();
+
+private:
+    std::function<void()> m_func;
+    bool m_requested = false;
 };
 }

@@ -78,3 +78,37 @@ void PlaybackUiClock::onUserDestroyed(QObject* user)
         m_timer.stop();
     }
 }
+
+PlaybackUiTickCall::PlaybackUiTickCall(QObject* parent, std::function<void()> func)
+    : QObject(parent), m_func(std::move(func))
+{
+    connect(PlaybackUiClock::instance(), &PlaybackUiClock::tick, this, [this]() {
+        if (!m_requested) {
+            return;
+        }
+
+        m_requested = false;
+        PlaybackUiClock::instance()->removeUser(this);
+        m_func();
+    });
+}
+
+void PlaybackUiTickCall::request()
+{
+    if (m_requested) {
+        return;
+    }
+
+    m_requested = true;
+    PlaybackUiClock::instance()->addUser(this);
+}
+
+void PlaybackUiTickCall::cancel()
+{
+    if (!m_requested) {
+        return;
+    }
+
+    m_requested = false;
+    PlaybackUiClock::instance()->removeUser(this);
+}
